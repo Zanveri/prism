@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { VaultLock } from "@/app/_components/vault-lock";
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { defaultPreferences, preferencesStore } from "@/app/settings/_lib/preferences";
+import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { claimWorkspaceRestore, onTabArrived, reportWorkspace, tellWindows, withdrawWorkspace } from "@/lib/api/bridge";
@@ -23,13 +25,15 @@ import { forgetExcept, rememberTransferred } from "./tab-memory";
 import { moveTab, shiftTab } from "./tab-order";
 import { withConnection } from "./tab-connection";
 import { withDatabase } from "./tab-database";
+import { newTabPlace, placeOf, withResultPlace } from "./result-place";
 import { readTransfer } from "./tab-transfer";
 import { unsavedEdits } from "./unsaved-edits";
 import { createQueryRunner, isPersonBusy, type QueryRunner } from "./use-query-runner";
 import { connectExports, exportTracker } from "./data-export/data-exports";
 import { connectLoads, loadTracker } from "./data-import/data-imports";
 import { createLockHandles } from "./workbench-lock";
-import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type TableView } from "./workbench-model";
+import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type ResultPlace, type TableView } from "./workbench-model";
+import { resultPlaceCopy } from "./result-place.copy";
 import { workbenchCopy } from "./workbench.copy";
 import { getWorkspace } from "./workspace.service";
 import { createWorkspaceReporter } from "./workspace-reporter";
@@ -46,7 +50,20 @@ type WorkbenchState = {
   setTableView: (tabId: string, view: TableView) => void;
   /** Fecha a aba e a sessão dela (RN-SESSAO-004). */
   closeTab: (tabId: string) => void;
+  /** A aba fica ativa, na vista da consulta (a aba do resultado dela, se tem, deixa de ser a ativa). */
   setActiveTab: (tabId: string) => void;
+  /**
+   * RN-ABAS-012: a aba do resultado da aba ativa é a entrada ativa da faixa. Ela não é uma aba da lista: `activeTabId` continua sendo o da aba dela (a
+   * barra de status, a conexão da aba, a ativa gravada), e só o painel que aparece muda. Falso quando o resultado da aba ativa não está numa aba.
+   */
+  resultActive: boolean;
+  /** A aba fica ativa na vista pedida: a da consulta, ou a aba do resultado dela (só quando o resultado está numa aba). */
+  showEntry: (tabId: string, view: "query" | "result") => void;
+  /**
+   * RN-ABAS-011 e 014: troca o lugar do resultado da aba de consulta (no painel, numa aba ou numa janela) sem executar nada: o executor, a sessão, o cursor e
+   * as pendências são os mesmos. Com o resultado saindo da aba, a aba do resultado deixa de ser a ativa, e a da consulta fica no lugar dela.
+   */
+  setResultPlace: (tabId: string, place: ResultPlace) => void;
   /** RN-ABAS-001: põe a aba na posição da faixa onde a marca de soltar estava (a posição de antes de ela sair do lugar). */
   reorderTab: (tabId: string, insertAt: number) => void;
   /** RN-ABAS-001: Ctrl+Shift+PageUp e PageDown, uma posição, sem dar a volta. */
@@ -160,6 +177,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const [tabs, setTabs] = useState<QueryTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  // RN-ABAS-012: a aba (de consulta) cuja aba do resultado é a entrada ativa da faixa. Vale só enquanto ela é a ativa e o resultado dela está numa aba: outra
+  // aba ativa (o clique, a aba nova, a que fechou) a desfaz, num ajuste durante a renderização, e voltar àquela aba volta à consulta.
+  const [resultTabId, setResultTabId] = useState<string | null>(null);
+  if (resultTabId !== null && resultTabId !== activeTabId) setResultTabId(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   // O número só cresce: fechar "consulta-2.sql" não faz a próxima aba reaproveitar o nome.
   const nextNumber = useRef(1);
@@ -376,9 +397,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     loadTracker.vaultClosed();
   };
 
+  // RN-ABAS-016 e RN-CONFIG-010: a aba de consulta nova nasce no lugar da preferência, lida na hora (mudar a preferência não muda as abas abertas).
   const openQueryTab = useCallback(
-    (connectionId: string, sql = "", database?: string) => addTab({ id: crypto.randomUUID(), title: `consulta-${nextNumber.current++}.sql`, connectionId, ...inDatabase(database), sessionId: null, sql }),
-    [addTab],
+    (connectionId: string, sql = "", database?: string) =>
+      addTab({ id: crypto.randomUUID(), title: `consulta-${nextNumber.current++}.sql`, connectionId, ...inDatabase(database), sessionId: null, sql, resultPlace: newTabPlace(resultPlacePreference(queryClient)) }),
+    [addTab, queryClient],
   );
 
   const openScriptTab = useCallback(
@@ -388,9 +411,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
       // RN-SCRIPT-010: a aba lembra a pasta em que o script estava quando ela o abriu.
       const ref: ScriptRef = { id: script.id, name: script.name, savedSql: script.sql, ...place.saved, ...(script.folderID === null ? {} : { folderId: script.folderID }), dirty: false };
-      addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: ref });
+      addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: ref, resultPlace: newTabPlace(resultPlacePreference(queryClient)) });
     },
-    [tabs, addTab],
+    [tabs, addTab, queryClient],
   );
 
   // O que uma aba soltou fecha na API em segundo plano (cancela o que rodava e fecha a sessão, RN-SESSAO-004), pelo cache de mutações sem ficar nele; a falha
@@ -482,11 +505,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const adopted = readTransfer(raw);
       if (adopted === null) return;
 
-      const { tab, selection, state, memory } = adopted;
+      const { tab, selection, state, memory, resultWindowLost, values } = adopted;
       if (runners.has(tab.id)) return;
+      // RN-ABAS-016: a janela do resultado da aba não fechou a tempo na janela de origem, e o resultado chegou no painel.
+      if (resultWindowLost) toast.warning(resultPlaceCopy.windowFailed);
 
       rememberTransferred(tab.id, selection === null ? memory : { ...memory, selection });
-      runners.set(tab.id, createRunner(tab, { state, sessionId: tab.sessionId }));
+      // RN-VAR-023: os valores das variáveis vão com a aba para a janela que a recebe.
+      runners.set(tab.id, createRunner(tab, { state, sessionId: tab.sessionId, values }));
       setTabs((current) => {
         const at = index === undefined ? current.length : Math.min(index, current.length);
         return [...current.slice(0, at), tab, ...current.slice(at)];
@@ -496,7 +522,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const numbered = /^consulta-(\d+)\.sql$/.exec(tab.title);
       if (numbered !== null) nextNumber.current = Math.max(nextNumber.current, Number(numbered[1]) + 1);
     },
-    [createRunner, runners],
+    [createRunner, runners, toast],
   );
 
   // RN-ABAS-005: esta área de trabalho está montada (o cofre aberto) e pronta para receber abas; ao desmontar (sair do cofre), deixa de estar, e o
@@ -649,14 +675,29 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     reporter.urgent();
   }, [source, reporter]);
 
+  const showEntry = useCallback((tabId: string, view: "query" | "result") => {
+    setActiveTabId(tabId);
+    setResultTabId(view === "result" ? tabId : null);
+  }, []);
+  const setActiveTab = useCallback((tabId: string) => showEntry(tabId, "query"), [showEntry]);
+
+  const setResultPlace = useCallback((tabId: string, place: ResultPlace) => {
+    setTabs((current) => withResultPlace(current, tabId, place));
+    if (place !== "tab") setResultTabId((current) => (current === tabId ? null : current));
+  }, []);
+
+  // A aba do resultado é a ativa só com o resultado da aba ativa numa aba (o lugar pode ter mudado, a aba pode ter ido embora).
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  const resultActive = resultTabId !== null && activeTab !== undefined && placeOf(activeTab) === "tab";
+
   const setNodeOpen = useCallback((key: string, open: boolean) => setExpanded((current) => (current.has(key) === open ? current : new Set(open ? [...current, key] : [...current].filter((other) => other !== key)))), []);
 
   const disconnecting = disconnectMutation.isPending ? disconnectMutation.variables : null;
   const { mutate: disconnect } = disconnectMutation;
 
   const value = useMemo<WorkbenchState>(
-    () => ({ tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab: setActiveTabId, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose }),
-    [tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose],
+    () => ({ tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose }),
+    [tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose],
   );
 
   return (
@@ -671,6 +712,12 @@ export function useWorkbench(): WorkbenchState {
   const context = useContext(WorkbenchContext);
   if (context === null) throw new Error("useWorkbench precisa de um <WorkbenchProvider> acima na árvore.");
   return context;
+}
+
+/** RN-CONFIG-010: o lugar do resultado das abas novas, nas preferências do usuário do cofre aberto (a sessão que o guard já buscou), lido na hora. */
+function resultPlacePreference(queryClient: QueryClient): ResultPlace {
+  const userName = queryClient.getQueryData(sessionQuery.queryKey)?.userName;
+  return (userName === undefined || userName === null ? defaultPreferences : preferencesStore.get(userName)).results.resultPlace;
 }
 
 /** O texto do editor da aba agora (`liveEditors`): a cópia da aba chega com atraso. */

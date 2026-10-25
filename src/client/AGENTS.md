@@ -13,7 +13,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ## Layout
 
 ```
-electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
+electron/        main.ts, preload.ts, api-process.ts, dbeaver-source.ts e dbeaver-messages.ts (a procura e a cópia do DBeaver), app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
 src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
@@ -71,10 +71,10 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
-- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5 e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
+- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
   recarrega é o menu padrão de desenvolvimento (Recarregar Ctrl+R, Forçar recarga Ctrl+Shift+R, Tela cheia F11), e o app empacotado do Windows e do
   Linux não tem menu, e o do macOS não tem Recarregar. Mesmo assim, cada janela ignora o menu para essas teclas: o `before-input-event` de
-  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5 e F11 com qualquer
+  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5, F6 e F11 com qualquer
   modificador, Ctrl+R e Cmd+R com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria também da página):
   ela só não vai ao menu, e a tela a recebe como qualquer outra. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
   F11 abriu o "Filtrar" (e não a tela cheia), e Ctrl+R e Ctrl+Shift+R não recarregaram a página (um marcador em `window` sobreviveu).
@@ -107,17 +107,17 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
   Os três (o `before-quit`, o `stopApi` e o "Reiniciar") soltam antes os destinos das exportações de dados (`transferDesk.releaseAll`), o que interrompe a
   entrega em andamento e apaga a cópia pela metade (RN-EXPORT-023), e os arquivos das importações de dados (`transferSource.releaseAll`), o que interrompe a
-  cópia do arquivo e apaga o que a API ainda não tomou (RN-IMPORT-018).
+  cópia do arquivo e apaga o que a API ainda não tomou (RN-IMPORT-018), e as cópias do DBeaver (`dbeaverSource.releaseAll`, RN-DBEAVER-006).
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
   `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `verification` (a vez da verificação
   periódica entre as janelas; ver "Verificação periódica e Só as conectadas"), `workspace` (ver "Abas que voltam na
   próxima entrada"), `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima) e `transfers` (o destino e a entrega das
-  exportações de dados e o arquivo das importações, abaixo). Os canais da API são
+  exportações de dados e o arquivo das importações, abaixo) e `dbeaver` (a procura e a cópia do DBeaver, abaixo). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
   os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
   passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`; os das exportações de dados, `prism:transfer-destination`, `prism:transfer-deliver`,
   `prism:transfer-copy`, `prism:transfer-reveal` e `prism:transfer-release`; os do arquivo das importações de dados, `prism:transfer-source`,
-  `prism:transfer-source-status` e `prism:transfer-source-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
+  `prism:transfer-source-status` e `prism:transfer-source-release`; os da cópia do DBeaver, `prism:dbeaver-source` e `prism:dbeaver-source-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
   lê (`windowIdFromArgv`, em `app-version.ts`, com teste). A primeira é a da abertura (`createMainWindow`, pelo `startUp`); as outras só nascem no
@@ -134,7 +134,9 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   (`setPermissionRequestHandler`, pelo `details.requestingUrl`) e o da consulta (`setPermissionCheckHandler`, pela origem), com a mesma regra
   (`permissionAllowed`): só `clipboard-sanitized-write` e `clipboard-read` (copiar e colar) e `local-fonts` (a lista das fontes, em
   Configurações › Aparência), e só para a origem da tela (`rendererOrigin`: `app://prism`, ou o servidor do Vite em desenvolvimento). O resto é
-  negado, mesmo para o app. **Web API nova que pede permissão** (a tela passa a usar geolocalização, notificação…): entra em `appPermissions`,
+  negado, mesmo para o app. **A janela do resultado** (RN-ABAS-017) é reconhecida pelo `webContents` (`isResultContents`, pelo `id`), e não pelo endereço
+  (`about:blank`, com a origem herdada ou nula): `permissionAllowed(…, isResultWindow)` dá a ela só a área de transferência (`resultWindowPermissions`); a
+  consulta sem `webContents` vale a regra da origem. **Web API nova que pede permissão** (a tela passa a usar geolocalização, notificação…): entra em `appPermissions`,
   ou falha calada. Conferido no Electron sob Xvfb: `local-fonts` sai `granted` sem gesto da pessoa (quem responde é o tratador da consulta, e a API não precisa pedir), copiar e
   colar funcionam, e `geolocation` e `notifications` saem `denied`.
 - **O destino das exportações de dados** (RN-EXPORT-019 e 020; `electron/transfer-desk.ts`, sem Electron, com teste em pastas temporárias de
@@ -172,6 +174,28 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   desconhecido, respondem `missing`. A janela que recarrega, cai ou fecha solta os dela; a saída e o reinício, todos. O log leva só o `fileId`, o
   tamanho e a duração. A tela confere cada resposta com o mesmo schema (`chooseImportSource`, `importSourceStatus`, `releaseImportSource`, em
   `lib/api/bridge.ts`), e a ponte de desenvolvimento responde que importar só funciona no app.
+- **A procura e a cópia do DBeaver** (RN-DBEAVER-004 a 006; `electron/dbeaver-source.ts`, sem Electron, com teste em pastas temporárias de verdade e uma
+  pasta pessoal falsa; as mensagens em `electron/dbeaver-messages.ts`, `zod` dos dois lados). **O processo principal é o dono de todo caminho, e não lê o
+  conteúdo dos arquivos: só os copia**; quem os lê e decifra as senhas é a API, pelo `sourceId`. `prism:dbeaver-source` recebe só `{ mode: "find" | "choose" }`
+  (`.strict()`). `find` procura nas pastas de dados do sistema (`dbeaverRoots`, pura: `DBEAVER_DATA` sozinha; `%APPDATA%\DBeaverData`; `~/Library/DBeaverData`; no
+  Linux o Flatpak, o Snap, `~/.local/share/DBeaverData` e, só quando esta não existe, a antiga `.DBeaverData`), cada uma resolvida uma vez com `realpath` (o
+  `current` do Snap é um atalho), com `workspace6` também resolvido; vale a pasta cujo `data-sources*.json` foi alterado por último, com o `General` primeiro e
+  os outros projetos pela ordem dos nomes. `choose` abre o diálogo de pasta (`openDirectory` e `showHiddenFiles`, escritos em `main.ts`, o título em
+  `dbeaverDialogTitle`, começando na primeira pasta de dados que existe ou na pessoal) e descobre o que a pasta é pelo que tem dentro: a de dados, um
+  workspace, um projeto ou a própria `.dbeaver`; nada disso é `notDbeaver`. Listar uma pasta passa de 1.000 entradas: não é do DBeaver. **Só se copiam** os
+  cinco arquivos esperados da `.dbeaver` de cada projeto (`data-sources[-<sufixo>].json`, `credentials-config[-<sufixo>].json`, `project-settings.json`; o
+  sufixo de 1 a 64 caracteres), com os limites de 50 projetos, 41 arquivos por projeto, 5 MiB por arquivo e 32 MiB no total conferidos ANTES de qualquer
+  cópia (`tooLarge`), a pasta `transfers` aceitando gravação (`notWritable`) e o espaço da cópia mais 64 MiB (`noSpace`). **Atalho não se segue**: o projeto, a
+  `.dbeaver` ou o arquivo que é atalho recusa tudo com `unreadable` e a frase do atalho (`symlinkMessage`); a abertura é `O_RDONLY | O_NOFOLLOW`, conferida pelo
+  `fstat` do descritor contra o `lstat` (arquivo comum, mesmo dispositivo e `inode`: o arquivo trocado no meio do caminho é recusado, e o teste o troca pelo
+  `beforeOpen`), lida até 5 MiB (o que cresceu para ali). Vai tudo para `transfers/<sourceId>.dbeaver.part/` (a pasta 0700, uma subpasta 0700 por projeto, `1`,
+  `2`…, os arquivos 0600 com `fsync` e o `manifest.json` por último) e a pasta inteira é renomeada no fim: a API nunca vê uma cópia pela metade. A resposta é
+  `found { sourceId, where, projects }` ou `notFound`, `canceled`, `notDbeaver`, `tooLarge`, `notWritable`, `noSpace`, `unreadable { message }` (a frase inteira,
+  pelo código do sistema, sem caminho). **Uma cópia por janela**: um novo `find` solta a anterior, o `choose` desistido não solta nada, e o pedido que termina
+  depois de a janela ser solta ou de outro mais novo da mesma janela apaga a cópia que fez e responde `canceled`. `prism:dbeaver-source-release`
+  (`{ sourceId }`) apaga a cópia da própria janela (a de outra, ou um id desconhecido, não faz nada). O log leva só o `sourceId`, o `where`, as contagens e a
+  duração, nunca um caminho nem um nome. A tela confere cada resposta com o mesmo schema (`requestDbeaverSource`, `releaseDbeaverSource` e `dbeaverAvailable`, em
+  `lib/api/bridge.ts`), e a ponte de desenvolvimento diz que importar do DBeaver só funciona no app.
 - **A pasta de dados pela ponte** (RN-CONFIG-001): `getDataFolder()` não leva argumento, e o processo principal responde
   `app.getPath("userData")`, só para a tela mostrar em Configurações > Sobre. Ela não abre nem troca pasta (o `channels.test.ts` confere que
   a ponte não oferece isso), e a tela valida a resposta (`readDataFolder`, em `lib/api/bridge.ts`: texto não vazio, senão `null`); fora do
@@ -210,8 +234,10 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   origem: a `font-family` as acha pelo nome no computador, sem baixar nada, e o `font-src 'self'` não as vê.
 - O script que aplica o tema antes da primeira pintura é um **arquivo** (`public/theme-boot.js`, clássico, no `<head>`, sem
   `defer`): a política recusa script em linha, e um módulo deixaria a página pintar antes dele (ver "Configurações").
-- `will-navigate` é cancelado; em desenvolvimento passa só a recarga da própria página. Abrir
-  janela é sempre negado. As rotas são em hash, que não é navegação.
+- A navegação (`will-navigate`, `will-frame-navigate` e `will-redirect`), o `webview` e a abertura de janelas são negados em TODO `webContents` desde o
+  nascimento (`app.on("web-contents-created")`, `main.ts`); em desenvolvimento passa só a recarga da própria página das janelas do app
+  (`navigationAllowed`, `web-lockdown.ts`). A **única** abertura é a da janela do resultado (ver "O resultado no painel, numa aba ou numa janela"). As
+  rotas são em hash, que não é navegação.
 
 ## Marca, ícone e abertura (RN-MARCA-001 a 006)
 
@@ -783,6 +809,19 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   abre, esquerda fecha, Enter abre a aba da tabela ou da visão, Shift+F10 e a tecla de menu abrem o menu; só uma linha entra
   no Tab. A largura do navegador é ajustável (arrastar a divisória ou setas nela, de 200 a 640 px; 320 px de saída, para os nomes de
   coluna caberem inteiros).
+- **Ir ao item pelas primeiras letras** (RN-ARVORE-009, pedido do dono, como no DBeaver; vale para esta árvore e para a da seção Scripts): digitar um
+  caractere imprimível (sem Ctrl, Alt nem Cmd, fora da composição de um acento) leva o foco E a escolha ao próximo item visível que começa por ele, com a
+  volta ao começo; os digitados até 1 s depois do anterior se juntam num texto (o primeiro item, a partir do atual incluído, que começa pelo texto todo), e
+  a mesma letra repetida percorre um a um os que começam por ela. A lógica é uma só e pura, `_lib/type-ahead.ts` (`typeAheadStep`, `isTypeAheadKey`, a janela
+  `typeAheadWindow`; compara pelo `fold` da busca: sem caixa e sem acento), com teste de tabela; `useTypeAhead` (`_lib/use-type-ahead.ts`) guarda o texto num
+  `useRef` e o que o indicador mostra num estado que some 1 s depois da última tecla; `typeAheadLabels` e `scriptTreeLabels` dão os nomes das linhas à vista
+  (a de Carregando… e a de erro, sem nome). Só as linhas à vista contam (com o "Filtrar objetos", as que ele mostra): nada se expande nem se busca. Na
+  `NavigatorList` o salto passa por `focusRow`, que pede a rolagem da lista virtual e tenta o foco a cada quadro até a linha existir (no meio-tempo o foco espera na própria árvore, com o destino em `pendingFocus`, para a linha de origem que sai da janela não o deixar cair no `body`; o `onKeyDown` da árvore segue o texto a partir desse destino, e a tecla desse intervalo não se perde); na `ScriptsTreeView` o
+  gancho vem da `ScriptsSection` (`typeAhead`, opcional: a árvore continua só desenhando) e o `focus()` rola a seção. O Espaço só entra no meio do texto (sozinho
+  é da linha); as teclas de antes (setas, Home, End, Enter, F2, Delete, Shift+F10, a tecla de menu) e o Ctrl+F não mudam. O `TypeAheadIndicator`
+  (`type-ahead-indicator.tsx`) é o cantinho sobre a lista ("Ir para: bat", sem tirar espaço dela; na seção Scripts, uma faixa `sticky` sem altura) e a região
+  `aria-live="polite"` sempre montada, que só anuncia o "Nenhum item começa com “xyz”". Testes: `type-ahead.test.ts`, `use-type-ahead.test.ts`,
+  `navigator.type-ahead.test.ts` (a `NavigatorList` com a lista virtual de mentira), `scripts-section.type-ahead.test.ts` e `type-ahead-indicator.test.ts`.
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
   na barra do editor, "Explicar plano", "Formatar", o esquema da aba e a transação (a barra tem Executar e Cancelar,
   seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
@@ -842,16 +881,51 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 
 - **A ordem** (`_lib/tab-order.ts`, puro e testado): `moveTab(tabs, id, insertAt)` com a posição de ANTES de a aba sair do lugar (a marca de
   soltar), `shiftTab` (Ctrl+Shift+PageUp e PageDown na aba ativa, sem dar a volta, `tabMoveShortcut`, tratado em `WorkbenchTabs` como o Ctrl+W),
-  `dropIndex` (pela metade de cada aba) e `isOutsideWindow`. O provedor tem `reorderTab` e `shiftTab`. A ordem vale na próxima entrada (RN-ABAS-006, ver
+  `dropIndex` (pela metade de cada aba), `dragKindOf` e os dois tipos do arraste (abaixo). O provedor tem `reorderTab` e `shiftTab`. A ordem vale na próxima entrada (RN-ABAS-006, ver
   "Abas que voltam na próxima entrada").
-- **O arrasto é o do HTML** (`draggable` na moldura de cada aba, `data-tab-id`), com o tipo `application/x-prism-tab` e o dado `{ windowId, tabId }`
-  (`writeTabDrag`/`readTabDrag`, conferido: qualquer programa pode soltar algo na faixa). A faixa aceita só esse tipo, mostra a marca de soltar
-  (`data-drop` `before`/`after`, uma sombra interna da cor de destaque) e, solta, ou muda de lugar (veio desta janela) ou pede a aba à janela de
-  origem (`prism:windows-request-tab`; o centro manda `prism:windows-give-tab` a ela, e ela a leva pelo caminho de sempre, na posição pedida).
-  A janela sem abas não tem faixa: o lugar vazio dela recebe a aba solta. O fim do arrasto (`dragend`) com `dropEffect` `none` e o ponto fora da
-  janela leva a aba a uma janela nova ali. **Entre janelas o Chromium às vezes diz `none` mesmo quando a outra aceitou**: por isso o centro
-  recusa a janela nova quando o ponto está em cima de outra janela do Prism (`overWindow`, sem aviso), e quem leva a aba é o pedido da faixa de
-  lá. Solta fora da faixa de outra janela, a aba fica onde estava.
+- **O arrasto é o do HTML** (`draggable` na moldura de cada aba, `data-tab-id`) e carrega o dado `{ windowId, tabId }` (`writeTabDrag`/`readTabDrag`,
+  conferido: qualquer programa pode soltar algo na faixa). **Os dois tipos** (`tab-order.ts`): `tabDragType` (`application/x-prism-tab`), a aba de consulta
+  e a de tabela, que a faixa e o véu de qualquer janela do Prism aceitam; e `resultTabDragType` (`application/x-prism-result-tab`), a aba do resultado
+  (RN-ABAS-012), que só a faixa e o véu da janela de origem aceitam (as outras a reconhecem e a recusam). `dragKindOf(types)` diz `"tab"`, `"result"` ou
+  `null` (texto, arquivo) já pelo `dataTransfer.types`, que o Chromium mostra no `dragenter` e no `dragover`; o conteúdo, só no `drop`. `dragTypeOf(kind)`
+  é o tipo que cada um escreve. Quem arrasta a aba do resultado (fluxos B e C) escreve o mesmo dado com `resultTabDragType`, chama `drag.begin(id, "result")` e
+  termina pelo mesmo caminho (`endTabDrag` com `kind: "result"`, `onDragEnd` do `WorkbenchTabs`).
+- **O arraste de uma aba desta janela** (`_lib/tab-drag.ts`, puro e testado): `createTabDragSession()` guarda o arraste (`begin` no `dragstart`, na hora;
+  o aviso a quem desenha sai depois, num `setTimeout` de 0, porque o Chromium cancela o arraste cujo elemento muda no próprio `dragstart`), a marca de quem
+  recebeu a soltura (`mark("strip" | "veil")`), `finish()` no `dragend` (devolve o que se sabe e solta o que esperava), `whenIdle(tabId, run)` (o
+  `detachTab` da aba que outra janela recebeu espera o fim do arraste: o Chromium não avisa o fim do arraste de um elemento que saiu da página) e
+  `subscribe`/`getSnapshot`. `veilFor({ kind, fromHere, onlyTab, available })` devolve a frase e se a soltura vale (`null`: sem véu, como a aba do resultado de
+  outra janela e o navegador de desenvolvimento); `isOnlyTab` (a aba e a do resultado dela contam como uma) e `dragEndRequest(ended, event, { windowId, onlyTab })`
+  monta o `TabDragEnd` do `dragend` (`null` na soltura na faixa, fora do Electron e na aba única). O `WorkbenchTabs` cria a sessão, passa-a à faixa (`drag`,
+  `onDragEnd`) e ao véu, e `handleDragEnd` faz: `drag.finish()`, `dragEndRequest`, `endTabDrag` (`lib/api/bridge.ts`, que devolve `{ action: "none" }` para a
+  resposta que não confere e para a ponte que não responde) e, com `newWindow`, o `latestMove` de sempre com o `at` que o processo principal leu; a aba do
+  resultado (`kind: "result"`) não vai a outra janela de abas: o `at` abre o resultado na janela dele (`changePlace(tabId, "window", "drag", at)`).
+- **O véu** (`_components/tab-drag-veil.tsx`, `TabDragVeil`): `fixed inset-0 z-40`, borda tracejada de 2 px no acento, a frase no meio da área das abas (a
+  `ref` do `section` do `WorkbenchTabs`), `aria-hidden`. A faixa é `relative z-50` e tem `data-tab-strip` (`tabStripAttribute`, `isInTabStrip`, pelo `nodeType`
+  e não pelo `instanceof`: o elemento pode ser de outro documento, RN-ABAS-017), e o que cai nela é dela. A raiz da página (`ownerDocument` da área) escuta
+  `dragenter`, `dragover`, `dragleave` e `drop` na captura e para a propagação antes do editor, da grade e dos campos (soltar a aba no `.cm-content` não escreve
+  nada); um contador de entradas e saídas evita o pisca; `dragend` e o primeiro `pointermove` depois do arraste apagam um véu que ficou. No `drop` da aba desta
+  janela o véu só marca (`mark("veil")`) e o pedido sai no `dragend`; no da aba de outra janela chama `onReceive` (`requestTab`, ela entra no fim da faixa).
+- **O fim do arraste é decidido por quem recebeu a soltura, não pelo `dropEffect`**, e o ponto é o do ponteiro lido pelo processo principal.
+  `prism:windows-drag-end` (`preload.ts`: `windows.endDrag`; `main.ts`: `hub.endDrag`) leva `tabDragEndSchema` (`tabId`, `kind`, `dropped: "veil" | "none"`,
+  `effect`, `at`, `inPage`) e responde `tabDragEndReplySchema` (`none` ou `newWindow` com `at`), ambos em `window-messages.ts`. `endDrag` (`window-hub.ts`):
+  `dropped: "veil"` abre a janela nova no ponteiro; sem soltura, com o ponteiro dentro da janela de origem ou sobre outra janela do Prism (`windowAt`),
+  nada; fora delas, abre. **A espera pela outra janela**: a aba de consulta e a de tabela esperam `dragClaimWaitMs` (200 ms) que outra janela diga que a
+  recebeu (`requestTab` grava a reivindicação por `fromId:tabId`, que vale `claimMemoryMs`, 2 s, e que o fim do arraste lê e apaga, antes ou depois da
+  espera); a aba do resultado nenhuma outra janela recebe, então não espera. `cursorPoint` (`screen.getCursorScreenPoint()`, em pixels independentes da
+  densidade), `escapeEndsWithoutEffect` e `wait` são dependências do centro (testáveis); o `moveTab` não recusa mais a janela nova sobre outra janela
+  (`overWindow` saiu) e passa `normalBounds()` da origem a `createWindow`. **O Esc**: no Linux com o X11 a sonda S-ABAS-1 mostrou que a soltura fora das
+  janelas vem com `move` e o Esc com `none` (`escapeEndsWithoutEffect`); nas outras plataformas o Esc fora das janelas vale como a soltura e abre a janela
+  nova (a alternativa, um arraste próprio pelos eventos do ponteiro, é decisão do dono, seção 39). **O Wayland** (`isWaylandSession`, `platform.ts`, com
+  teste: o `--ozone-platform` vence, depois o `--ozone-platform-hint` e a `ELECTRON_OZONE_PLATFORM_HINT`, `auto` com a sessão Wayland): `cursorPoint` devolve
+  `null`, vale o `at` do `dragend` (e `inPage` para o Esc), sem ponto a janela abre `cascade` (32 px) abaixo e à direita da de origem, e `settleBounds` não
+  reaplica os limites (o sistema escolhe o lugar). **O lugar da janela nova** (`newWindowBounds`): canto de cima à esquerda no ponto, no monitor do
+  ponteiro, no tamanho da origem sem maximizar, trazida para a área útil e nunca abaixo de `appWindowMinimum` (1024×700); `createAppWindow(bounds)` aplica os
+  limites de novo ao nascer e antes de aparecer e confere com `boundsMatch` (`settleBounds`, que registra a divergência), por causa do Windows com monitores de
+  escalas diferentes. A janela do resultado (RN-ABAS-013) tem o lugar dela (`placeResultWindow`, com o ponto da soltura da aba do resultado) e confere os limites do
+  mesmo modo, aplicando-os de novo depois de criada (`adoptResultWindow`).
+- A faixa mede 28 px (RN-ABAS-009): botões de 24 px de largura com ícones `size-3.5`, aba `h-7` com o X de 20 px (`size-5`) numa área de clique de 24 px e o
+  selo do ambiente de 16 px (`ShownEnvironmentPill` aceita `className`); as abas dos scripts e a barra do resultado seguem a mesma altura (`result-bar.ts`).
 - **O menu da aba** ganhou o grupo `moveMenu`: "Mover para nova janela" e "Mover para a janela…" (apagado sem outra janela; abre, no mesmo
   ponto, a lista das outras, pedida ao centro ao abrir o menu, com o número e o resumo que cada uma dá de si, `prism:windows-describe`). Fora do
   Electron o grupo não aparece.
@@ -897,6 +971,32 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
   `window.prism.windows.id`. Para provar que nada foi executado de novo, conte as linhas `ExecuteAsync` do log da API (`<dados>/logs/`); o
   "Carregar mais" aparece como `FetchNextAsync` na MESMA sessão.
 
+## Voltar e Avançar entre as abas (RN-ABAS-018)
+
+Pedido do dono, como no DBeaver: o botão "voltar" do mouse levava às Configurações, porque o Chromium andava no histórico das ROTAS da janela (`createHashRouter`) e a
+entrada anterior era a delas. A janela de abas passou a ter o histórico das ABAS, e nenhum botão nem tecla anda pelo das rotas.
+
+- **A conta é pura** (`_lib/tab-history.ts`, com teste de tabela): `recordTab` (uma entrada por mudança de aba ativa, a mesma duas vezes seguidas é uma só, no máximo 50, a
+  ativação depois de voltar descarta o que está à frente), `pruneHistory` (tira a aba que fechou ou foi para outra janela e junta as iguais que ficam lado a lado) e
+  `stepHistory` (Voltar e Avançar, depois de podar; sem entrada para ir, `tabId` nulo). O histórico é só memória, zera no bloqueio, e não vai ao espaço de trabalho.
+  `mouseHistoryAction` (botões 3 e 4 do `MouseEvent`) e `keyHistoryAction` (Alt+←/→ no Windows e no Linux, Cmd+[ e Cmd+] no macOS, e onde cada um vale conforme o foco) estão no
+  mesmo arquivo.
+- **O controlador** (`_lib/tab-history-controller.ts`, sem React): guarda o histórico e decide o que cada botão e tecla faz em cada tela (`HistoryScreen`): na área de trabalho,
+  ativa a aba; nas Configurações, o Voltar volta à área de trabalho (`navigate`, como o "Voltar" da página) e o Avançar não faz nada; nas outras telas, nada. Com um diálogo, menu ou lista
+  aberta, ou o cofre bloqueado, nada age (no mouse, vale o que havia ao APERTAR o botão: o menu e a lista fecham no `pointerdown` de qualquer botão, e ao soltar já não estariam no DOM;
+  `onPointerDown` guarda isso). `focusKindOf` separa o editor de SQL (`data-sql-editor`, posto nos atributos do conteúdo do CodeMirror), os campos de texto
+  (`input`, `textarea`, o que é editável, também o filtro) e o resto.
+- **O gancho** (`_lib/use-tab-history.ts`, montado por `TabHistory`, em `_components/tab-history.tsx`, ao lado do `SettingsShortcut` em `routes.tsx`): observa `activeTabId` e as abas
+  da janela do provedor (poda e registra, nessa ordem), zera quando a época do bloqueio muda, ativa a aba por `setActiveTab` (o caminho do clique na faixa) e põe o foco no
+  elemento da aba depois de ativa (`takeFocus`, como o clique deixa). **Os ouvintes (`keydown`, `pointerdown` e `mouseup`) são da fase de captura da `window`**: as setas são de muitos componentes (a faixa de abas, a
+  grade, as árvores, o CodeMirror), e nenhum confere o Alt; na bolha a tecla já teria sido gasta por quem tem o foco (sob o Xvfb, o Alt+→ com o foco numa aba andava para a aba do lado
+  e o histórico não via a tecla). A tecla tratada leva `preventDefault` e `stopPropagation`, então o Alt+← do CodeMirror não chega a valer; por isso não há tecla no mapa do editor.
+- **O Chromium não pode navegar** (`app/_lib/history-buttons.ts`, ligado por `HistoryButtonsGuard`, em `app.tsx` ao lado do roteador, valendo no login, no desbloqueio e em toda tela): `mousedown`, `mouseup` e `auxclick` dos botões 3 e 4 levam
+  `preventDefault` na captura. O gancho age no `mouseup`.
+- **Como conferir sob o Xvfb**: `xdotool click 8` é o "voltar" e `click 9` o "avançar", com o ponteiro sobre a janela (o `mousemove` do `xdotool` não andou neste Xvfb: `XWarpPointer`
+  com `ctypes`); `xdotool key alt+Left` e `alt+Right` são as teclas. As abas das sondas foram trocadas pelo `click()` do protocolo de depuração (o clique esquerdo de verdade do `xdotool` não ativou a aba nas tentativas), e para ver o defeito de antes basta abrir Configurações, fechá-las pelo "Voltar" da página e apertar o "voltar" do mouse: a rota ia para `#/settings`, e agora
+  nada muda na rota. Não conferido: o Windows (o `app-command` `browser-backward` que o Chromium pode receber do sistema; o processo principal não trata nada) e o macOS.
+
 ## Abas que voltam na próxima entrada (RN-ABAS-006)
 
 Seção 24 da especificação (issue 2 do repositório público). As abas de TODAS as janelas vão para o cofre do usuário pela API (`PUT api/user/workspace`, ver o
@@ -904,8 +1004,8 @@ guia da API) e voltam na janela principal na próxima entrada. **Nada vai ao `lo
 suas abas ao processo principal, que junta as de todas e grava.
 
 - **O que vai e o que volta** (`_lib/saved-workspace.ts`, puro e testado). Vai, de cada aba de consulta, o texto do editor DESTE instante (`liveEditors`), a
-  conexão, o banco, o script de onde veio e a marca de mudança não salva (`isScriptDirty`, pelo texto, pela conexão e pelo banco); de cada aba de tabela, a conexão, o banco, o esquema,
-  a tabela e a vista; e a ordem e a ativa. O título não vai (a consulta volta com o número seguinte da janela, o script com o nome que tem hoje), nem a sessão,
+  conexão, o banco, o script de onde veio, a marca de mudança não salva (`isScriptDirty`, pelo texto, pela conexão e pelo banco) e o lugar do resultado (`resultPlace`, ver
+  "O resultado no painel, numa aba ou numa janela"); de cada aba de tabela, a conexão, o banco, o esquema, a tabela e a vista; e a ordem e a ativa. O título não vai (a consulta volta com o número seguinte da janela, o script com o nome que tem hoje), nem a sessão,
   o resultado, o cursor e as alterações não salvas da grade. O texto acima de 1 MB em bytes de UTF-8 não vai: a aba vai vazia com `sqlTooLarge`, e volta vazia
   com o aviso (`restoredEmpty`). Volta (`restoreWorkspace`): ids novos, sem sessão, a aba de um script ligada a ele (o SQL salvo dele é lido pela rota do item
   só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), na conexão em que estava e lembrando o lugar com que o
@@ -958,6 +1058,144 @@ suas abas ao processo principal, que junta as de todas e grava.
   SQL diz que o que fecha não volta na próxima entrada (`confirmClose.description`).
 - **Em aberto, à espera do dono**: sem nenhuma conexão cadastrada, a área de trabalho mostra o primeiro uso (RN-NAV-007) por cima das abas que
   voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada.
+
+## O resultado no painel, numa aba ou numa janela (seção 39: RN-ABAS-011 a 016, RN-CONFIG-010, RN-PAINEL-001)
+
+**A área de resultado de uma aba é UMA só, e o que muda com o lugar é só onde ela está na página.** Ela continua sendo desenhada pela aba de consulta
+(`QueryTabPanel`: o mesmo executor, as mesmas pendências, a mesma grade, o mesmo filtro), por um portal do React numa raiz própria (`ResultHost`,
+`_components/result-host.tsx`: um `div` criado uma vez por aba, `data-result-host`), e é essa raiz que muda de pai: o lugar do painel (um `div` da aba, abaixo do
+editor), o painel da aba do resultado (`ResultTabPanel`, em `workbench-tabs.tsx`) ou a raiz da janela do resultado (quem a abrir). Os lugares de fora do painel se
+registram em `resultSlots` (`_lib/result-slots.ts`, pelo id da aba e pelo lugar). Mudar de pai não desmonta nada: a seleção, as larguras, o zoom da grade, a aba do
+script escolhida, o filtro e as pendências ficam, e o executor nem fica sabendo. Na árvore do React a área continua dentro da aba de consulta, então as teclas dela
+(F5, Alt+X, Ctrl+S, o F6) e as da faixa (Ctrl+W, Ctrl+Shift+PageUp e PageDown) sobem até lá como subiam (por isso a área vai dentro do `div` do `onKeyDown` da
+aba). **Não troque o portal por renderizar a área num lugar ou noutro**: o React a desmontaria a cada troca (um portal com outro contêiner é outra fibra), e a
+rolagem, a seleção e as larguras sairiam junto.
+
+- **O que o elemento perde ao sair da página, a raiz devolve.** A rolagem: o Chromium zera o `scrollTop` de um elemento que sai da página e volta; a raiz guarda a
+  de cada elemento de dentro a cada `scroll` (na fase de captura, porque quando ela sai o elemento já não tem caixa para ler) e a devolve quando volta a ter
+  caixa (um `ResizeObserver` na raiz), também quando o lugar novo ainda está escondido (a aba do resultado não ativa) e só aparece depois. O foco: quem troca o
+  lugar pede o foco em `resultFocus` (o resultado, o botão, o editor), e quem desenha o lugar o leva quando pode (a raiz, depois de chegar e ter caixa; o editor, no
+  `useLayoutEffect` da aba, quando ele está à vista). O campo de edição de uma célula aberto é confirmado antes (`releaseFocusIn`: o `blur` sai pelo caminho de
+  sempre; o Chromium não avisa o `blur` de quem sai da página). `releaseFocusIn` acha a raiz também no documento da janela do resultado, e a própria raiz
+  (`ResultHost`) tira o foco de dentro antes de mudar de documento e quando fica sem lugar: o Ctrl+W na janela do resultado e o fechar pelo sistema não
+  passam por um clique.
+- **O modelo** (`_lib/result-place.ts`, puro e testado): `resultPlace` é da aba de consulta (`QueryTab.resultPlace`, sem ele o painel; a aba de tabela não tem),
+  e `placeOf` diz o que vale. A aba do resultado **não é uma aba da lista**: `stripEntries` a põe na faixa logo depois da dela, e o provedor guarda só qual é a
+  entrada ativa (`resultActive`, `showEntry`; `activeTabId` continua o da aba da consulta, para a barra de status, a ativa gravada, o "Mover para a janela…" e a
+  pergunta de erro do script). Por isso o par anda junto sem código nenhum (o Ctrl+Shift+PageUp move a aba, e a do resultado é derivada), "Fechar as outras" e a
+  contagem da pergunta de fechar não a contam, e fechar a aba a leva junto. O arraste mede a aba e a do resultado como uma caixa só (`unitRects`) e o marcador
+  (`dropMarks`) nunca cai entre as duas; a aba do resultado se arrasta com outro tipo (`resultTabDragType`), que as faixas não aceitam. O foco depois de trocar
+  (`afterPlaceChange`), o F6 (`f6Action`), o resultado "à vista" da atualização automática (`resultOnView`) e os itens dos menus (`placeMenu`) também moram ali.
+- **Onde se troca**: o botão "Onde mostrar o resultado" da barra (`ResultPlaceButton`, a propriedade `placeControl` do `ResultPanel`, logo antes de `actions`:
+  no painel, antes de recolher e maximizar; numa aba, na ponta), o submenu do menu da aba da consulta (depois dos de mover) e o menu da aba do resultado ("Ir para
+  a consulta", o submenu, "Voltar para o painel"). Quem troca é `changePlace` de `WorkbenchTabs`, que anuncia a troca numa região `role="status"` (sem toast).
+  Fechar a aba do resultado (o X, o clique do meio, o Ctrl+W com ela ativa, "Voltar para o painel") é trocar para o painel, sem pergunta.
+- **O ponto da aba do resultado** (`ResultTabMark`): o comando da pessoa, o script rodando e o "Salvar" das alterações (que a aba publica em `resultActivity`, porque
+  quem salva é a edição de dentro dela) acendem; o comando que termina com ela não ativa deixa o "resultado novo" (`trackUnseen`) até ela ficar ativa; o ponto
+  vermelho do script parado na pergunta de erro fica no lugar dele. O texto vai no nome da aba, para o leitor de tela.
+- **Numa aba e numa janela** a aba da consulta mostra só o editor, sem a divisória nem o recolher e o maximizar; a divisão do painel fica guardada (`tab-memory`) e
+  volta, e executar não a mexe (no painel, executar com a área recolhida a restaura, como antes).
+- **O lugar volta e viaja**: vai no `PUT api/user/workspace` de cada aba de consulta (`savedTabOf`; o gravado antes da 0.5.0 volta no painel) e na passagem para
+  outra janela (`tabTransferSchema.tab.resultPlace`): a aba do resultado vai junto. O lugar que esta versão não conhece, na leitura das abas gravadas, vale o
+  painel (a aba volta do mesmo jeito). **Rebaixar para a 0.4.0 foi conferido** (guia da API, "Abas que voltam na próxima entrada").
+- **A preferência** (RN-CONFIG-010): `results.resultPlace`, em Configurações › Resultados, lida na hora em que a aba de consulta nasce (`openQueryTab`,
+  `openScriptTab`; as que voltam e as que chegam de outra janela ficam no lugar delas).
+- **"Numa janela"** (RN-ABAS-013 a 017). Aparece nos menus e em Configurações onde há processo principal para aprová-la (`resultWindowAvailable()` pergunta à
+  ponte, `resultWindows.available`); no navegador do desenvolvimento não, e o lugar gravado como "Numa janela" vale ali o painel, sem deixar de ser o gravado.
+  A janela do resultado é uma **página em branco da mesma tela**: a aba de consulta continua desenhando a área de resultado (`ResultHost`), e a raiz dela muda
+  de DOCUMENTO (o `appendChild` a adota no da janela). Não há segunda tela, segundo executor nem estado a combinar.
+
+### A janela do resultado: o processo principal (`electron/`)
+
+- **Tudo é pedido e aprovado, uma vez.** A tela pede `prism:result-window-request {name, mode, at}` (preload da janela da aba, `assertFromApp` e zod,
+  `result-window-messages.ts`); `ResultWindows.request` (`result-windows.ts`, sem Electron, com teste) confere que a janela está pronta com o cofre aberto
+  (`hub.isReady`), que não há 32 abertas por ela (as abertas, as nascendo e as concessões contam) e que o nome não está aberto, e guarda uma **concessão de
+  uso único** (2 s, daquela janela e daquele nome). `openHandlerOf` (o `setWindowOpenHandler` de cada janela do app) só aprova com todas as condições:
+  `about:blank`, o nome casando com `^prism-result-<uuid>$`, `features` exatamente `popup`, disposição `new-window`, sem corpo de envio, janela pronta e a
+  concessão, que a aprovação consome. As opções vêm só do processo principal (`resultWindowOptions`, `web-lockdown.ts`): `show: false`, sem `parent`, o mínimo
+  de 480×320 e as `webPreferences` com todas as chaves escritas (`contextIsolation`, `sandbox`, `nodeIntegration`, `nodeIntegrationInSubFrames`, `webviewTag`,
+  `webSecurity`) e **sem preload**: a janela do resultado não tem `window.prism`. O que o texto das opções diria não conta. O `referrer` não é condição (o
+  Chromium o preenche pela página que abre, e pedir `noreferrer` faria o `window.open` devolver `null`).
+- **`did-create-window`** (`adoptResultWindow`) confere as `webPreferences` (`getLastWebPreferences`, que o tipo do Electron não declara, ou as opções com
+  que nasceu) e **destrói a janela** se alguma chave não bate; nega nela a abertura de outras; guarda-a em `resultWindows` (por janela da aba e nome; fora de
+  `appWindows`, do centro das janelas e da gravação das abas, então `window-all-closed`, `liveWindowIds` e as perguntas de fechar não a veem); aplica o zoom
+  (ali e no `dom-ready`, e `changeZoom` as inclui); liga os atalhos (`installShortcuts`, os mesmos do zoom e do F5/F6/F11/Ctrl+R); aplica de novo os limites e
+  os confere (monitores de densidades diferentes); tira o `setBackgroundThrottling` da janela da aba enquanto ela tem uma aberta; avisa
+  `prism:result-window-state {name, minimized}`; grava o lugar; e a fecha quando a janela da aba fecha, recarrega (`did-start-navigation`) ou perde o
+  processo, quando a área de trabalho dela desmonta (`prism:windows-ready` falso) e quando o app sai (`before-quit`). **Nasce escondida** e aparece quando a
+  tela avisa `prism:result-window-ready` (`show()`+`focus()` no modo `focus`, `showInactive()` no `background`), ou 3 s depois. Se o `show: false` não valer
+  numa janela aberta por `window.open`, ela fica transparente (`setOpacity(0)`) até estar pronta; no Linux isso não faz nada: **sonda S-JANELA-1**.
+- **Quem fechou.** `closeByHost` marca antes de pedir, e o `closed` da janela avisa a que a abriu `prism:result-window-closed {name, reason}`: `host` quando o
+  Prism pediu, `user` nos outros casos (o X da barra, Alt+F4, Cmd+W). Só `user` volta o resultado ao painel.
+- **O lugar** (`result-window-file.ts`, `result-window-place.ts`, sem Electron, com teste): `result-window.json` ao lado do `zoom.json` (contrato,
+  RN-VERSAO-002; `{x, y, width, height, maximized}`, arquivo ilegível vale "como se não existisse"), gravado de uma vez, no máximo a cada 500 ms (e na hora
+  ao fechar). A primeira abre 960×600 no centro do monitor da janela da aba; depois o lembrado (o tamanho sem maximizar, `getNormalBounds()`); o lugar que não
+  está em monitor nenhum vira o centro; outra janela do resultado no mesmo lugar desloca 32 px (a cascata volta ao primeiro lugar quando sairia da área útil);
+  levada pelo arraste, abre onde a aba foi solta (`at`, que só vale onde o processo principal não lê o ponteiro: o Wayland).
+- **Os diálogos do sistema** do resultado (o destino do "Exportar dados", o arquivo do "Importar…") levam o nome da janela (`resultWindow` nos schemas de
+  `transfer-messages.ts`); `dialogParent` prende o diálogo a ela, e com nome desconhecido ou de outra janela da aba, à janela da aba.
+- **Canais novos** (todos com `assertFromApp` e zod, nomes sem dígito, no `channels.test.ts` e no `result-window-main.test.ts`):
+  `prism:result-window-request|ready|focus|close|title` (a tela pede) e `-closed|-state` (o processo principal conta). `-focus` leva `target`: a do
+  resultado (padrão) ou a da aba que a abriu, porque a janela do resultado não tem ponte para pedir por si ("Voltar para o painel" e o F6 de dentro dela).
+
+### A janela do resultado: a tela
+
+- **`resultWindows`** (`workbench/_lib/result-windows.ts`, sem React, peças injetadas, com teste) é o ciclo da janela: `open` (pede a concessão, chama
+  `window.open("about:blank", name, "popup")`, monta a página, registra a raiz em `resultSlots.set(tabId, "window", raiz)`, espera a área chegar e só então
+  avisa `-ready`), `close` (marca a aba como fechando pelo Prism, pede e **espera o aviso, até 3 s**), `reconcile` (a volta das abas), `setTitle`, `focus`,
+  `shownTabs` (as abas com a janela aberta e não minimizada: o resultado "à vista" da atualização automática, `resultOnView({ windowShown })`),
+  `onUserClosed` e `connect` (liga o que o processo principal conta; ao desmontar a área de trabalho, fecha todas pelo Prism). `open` é **idempotente**: a aba que tem a janela
+  ou está abrindo uma não pede outra, e um nome aberto nunca é pedido de novo ao Chromium.
+- **Quem abre**: só a ação da pessoa (`changePlace` de `WorkbenchTabs`, que abre depois de pôr o lugar e **volta o lugar com o aviso** se a janela não abrir) e a
+  volta das abas (um efeito que só decide quais janelas faltam, `reconcile`, uma a uma, na ordem das abas e a da ativa por último, em `background`; a que não
+  abre vira o painel, com o aviso). O bloqueio (`vaultLock`) fecha todas pelo Prism (o `closeAll` também invalida as aberturas que esperam na fila do `reconcile`, e `open`
+  recusa, sem marcar falha, enquanto o cofre está bloqueado: o processo principal não sabe do bloqueio ocioso) e o desbloqueio as reabre; o diálogo, o menu, a
+  lista e o assistente abertos na página de uma janela do resultado fecham quando ela sai da lista de páginas (`useOnHostGone`, em `host-context.tsx`: a troca
+  de lugar, o fechar da pessoa, o bloqueio), e o `closePortals` do bloqueio manda o Esc também a essas páginas; "No painel" e "Numa aba" pelo botão de lugar da
+  janela do resultado trazem a janela da aba à frente, como o "Voltar para o painel"; a aba que vai para outra janela fecha a dela antes
+  e a janela que a recebe reabre (sem a confirmação em 3 s, a aba vai com o resultado no painel e `resultWindowLost` faz a outra avisar).
+- **A página** (`result-window-page.ts`, com teste): a cópia da política de conteúdo e o `<base href>` primeiro, os estilos (as `<link>` pelo endereço, as
+  `<style>` pelo texto, as folhas construídas como `<style>`) e a língua, o tema e o `style` da raiz espelhados por `MutationObserver` (que acompanha as
+  `<style>` que o Vite troca), e o `<main aria-label="Resultado de …">` onde a área se põe. Um `<a href>` não tratado e um arquivo solto não fazem nada.
+  Montar acontece com o documento `complete` e é conferido no `load` (o documento em branco do começo pode ser trocado: monta de novo).
+- **Os componentes usam a página de onde estão** (`lib/host/host.ts` e `components/ui/host-context.tsx`): `useHost()` dá `{document, view, resultWindow}`;
+  `ResultHost` dá o contexto a tudo o que a área desenha, e `Dialog`, `ContextMenu` (e o submenu), `Select`, `CustomFilterField`, a pilha dos avisos e o
+  assistente "Exportar dados" abrem no `body` DELA, medem a janela dela e ouvem o ponteiro dela. O `Dialog` e o `ContextMenu` **fixam a página em que abriram**.
+  A conferência de elemento é por `nodeType` (`isElement`, `isNode`, `elementOfTarget`), não por `instanceof`. A grade segue o ponteiro na janela do elemento, o
+  `ResizeObserver` do virtualizador, da raiz e das abas do script é o da janela do elemento e é refeito quando o documento muda (o virtualizador é desligado e
+  ligado de novo na mesma passada: `enabled`), e o campo de filtro (CodeMirror guarda o documento em que nasceu) recria o editor na página nova (`root`).
+  Os diálogos que a aba desenha por ela (confirmação da proteção, Ver SQL, cópia, Gerar SQL, a pergunta de erro do script, o "Personalizado…") abrem na janela
+  que tem o foco entre a da aba e a do resultado dela (`ActiveHostProvider`, em `query-tab.tsx`). A área de transferência é `hostClipboard(host?)`
+  (`lib/host/host.ts`): o `navigator.clipboard` da janela do elemento, ou da que tem o foco. **Código novo na área de resultado não usa `document`, `window`,
+  `instanceof Element` nem `navigator.clipboard` globais.**
+- **Os avisos e a atividade**: os toasts vão para a janela com o foco (a pilha na janela do resultado fica 12 px acima da borda); o aviso do bloqueio por
+  inatividade aparece também nela (`IdleWarning inResultWindow`, 12 px abaixo da borda de cima) e o que a pessoa faz nela conta como atividade
+  (`resultHostRegistry.each` em `use-idle-lock.ts`).
+- **As teclas**: a raiz (`ResultHost`), só na janela do resultado, trata o Ctrl+W ("Voltar para o painel", `windowKeyAction`) e não deixa o Ctrl+Shift+PageUp e
+  PageDown, o Ctrl+9, o Ctrl+B, o Ctrl+Shift+E e o Ctrl+, subirem pela árvore do React até a aba e a faixa. O F5, o F6, o Alt+X e o Ctrl+S sobem até a aba de
+  consulta. O F6 do editor traz a janela do resultado; o dela traz a da aba (`focusOpener`), com a consulta ativa e o foco no editor. "Voltar para o painel" é
+  um botão com texto na ponta direita da barra (`BackToPanelButton`); um link usado na janela traz a da aba à frente.
+- **O arraste da aba do resultado para fora da faixa** (RN-ABAS-010): a faixa o começa com `drag.begin(tabId, "result")` e o tipo `resultTabDragType`, e o
+  `dragend` segue o caminho da aba de consulta (`endTabDrag` com `kind: "result"`, sem a espera pela outra janela). A resposta `newWindow` chama
+  `changePlace(tabId, "window", "drag", at)`, que abre a janela com `resultWindows.open(tabId, { mode: "focus", at, title })` (`at` é o ponto do `dragend`, que
+  o processo principal devolve; o Wayland usa o do evento). O `PlaceVia` `drag` se comporta como o `menu`.
+- **Sondas que ficam para uma máquina de verdade** (Windows empacotado com dois monitores de escalas diferentes, macOS, Linux X11 e Wayland; nenhuma foi
+  exercitada aqui, e nada disto foi dado como passando): **S-JANELA-1** (a página em branco tem a origem do app; `getLastWebPreferences` e `window.opener`;
+  `show: false` vale numa janela do `window.open`, senão a transparência; a política copiada vale: uma imagem `https://` dispara
+  `securitypolicyviolation`; as fontes e os estilos valem no pacote e no desenvolvimento; não tem `window.prism`; **o `will-frame-navigate` não dispara na
+  página em branco do começo** (a navegação para `about:blank` é permitida por `navigationAllowed` justamente por isso); aparece sem um quadro em branco; o
+  zoom nasce e muda), **S-JANELA-2** (copiar e colar com o foco na janela, `permissions.query`, `writeText` chamado pela tela da aba no `navigator` dela),
+  **S-JANELA-3** (o outro documento: a seleção por arraste e a rolagem sozinha, a largura das colunas, o `ResizeObserver`, a rolagem virtual, o filtro com o
+  autocompletar, os menus e os diálogos com o foco preso, a troca do documento em branco e o modo estrito; o desenho da grade na janela coberta ou escondida),
+  **S-JANELA-4** (a atualização automática de 1 s com a janela da aba minimizada, atrás de outra, e com a do resultado coberta), **S-JANELA-5** (a janela
+  aberta sem clique, o `window.open` depois do pedido assíncrono sem ativação do usuário) e **S-JANELA-6** (trazer à frente uma janela minimizada ou
+  atrás de outra; o Wayland recusa o foco). Se alguma falhar numa plataforma, a chave é `available` de `resultWindows` na ponte (`preload.ts`, hoje sempre
+  `true`): falso nessa plataforma esconde "Numa janela" (nos menus, em Configurações), e o lugar gravado vale o painel. "Numa aba" sai do mesmo jeito.
+- **Conferido sob Xvfb** (`pnpm dev`, um PostgreSQL local com 5.000 linhas): com a grade rolada a 1.500 px, "Numa aba" pelo botão levou a área ao painel da aba do
+  resultado com a rolagem igual, a aba do resultado ativa, o foco no botão e o anúncio; o F6 alternou as duas abas com o foco no editor e na grade; executar com a
+  aba da consulta à frente acendeu o "resultado novo"; o Ctrl+W voltou ao painel com a rolagem (900 px) e o foco na grade; os menus das duas abas e o submenu
+  (`menuitemradio`, o lugar marcado) trocaram como a RN-ABAS-014 diz; o clique do meio voltou ao painel; o `GET api/user/workspace` trouxe `tab`; sair e entrar
+  reabriu a aba do resultado; e "Mover para nova janela" levou a aba com a do resultado.
 
 ## Scripts salvos (RN-SCRIPT-001 a 010)
 
@@ -1061,7 +1299,7 @@ da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de
   (RN-SCRIPT-006) e a marca do genérico.
 - **O teclado** (`scriptTreeMove` e `scriptTreeRowKey`): as setas para cima e para baixo sem dar a volta, Home e End; a direita abre a pasta fechada e, na
   aberta, vai à primeira linha de dentro; a esquerda fecha a aberta e, na fechada ou no script, vai à pasta pai. Enter e o duplo clique abrem e fecham a pasta
-  (a vazia, nada) e abrem o script; F2, Delete, Shift+F10 e a tecla de menu valem nas duas. A seta (`data-chevron`) também abre e fecha.
+  (a vazia, nada) e abrem o script; F2, Delete, Shift+F10 e a tecla de menu valem nas duas. A seta (`data-chevron`) também abre e fecha. Digitar as primeiras letras de um nome vai à linha à vista que começa por elas (RN-ARVORE-009, o item "Ir ao item pelas primeiras letras" da árvore do navegador).
 - **Os menus** (`scriptFolderMenu` e `scriptMenu`, em `saved-scripts.ts`): o botão direito no título da seção ou no espaço vazio dela (a seção tem a altura
   do que mostra, até 40% do navegador: o espaço vazio é a faixa sob a lista e as margens das linhas, e o texto da seção vazia), e Shift+F10 ou a tecla
   de menu no título, dão "Nova pasta" (na raiz); a pasta, "Nova subpasta", "Renomear" (F2), "Mover para…" e "Excluir" (Delete), este desabilitado na pasta que
@@ -1369,6 +1607,29 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   pela pessoa, nenhum valor é link** (`recordLinks`): as linhas que ficaram na tela são o retrato de antes da desconexão, e nada reconecta sem
   o clique em "Atualizar", que devolve os links. Numa chave composta cada coluna leva à sua parceira, a de mesma posição; numa coluna que está
   em duas chaves, vale a primeira do catálogo.
+- **Chave estrangeira no resultado da consulta e do script** (RN-TABELA-007, alterada a pedido do dono em 2026-10-20). A mesma grade (`links`, `onFollow` e
+  `linkable`, que o `ResultPanel` recebe em `follow` na aba de consulta, e em `records` nos Registros), em qualquer lugar do resultado (painel, aba, janela) e
+  nas abas de resultado do Executar script, as guardadas também: o `QueryTabPanel` liga `useResultLinks` (`_lib/use-result-links.ts`) às linhas à frente
+  (`kept ?? último comando`). A origem de cada coluna é o alvo `purpose: "sql"` (`edits.sqlTarget()`, o `sqlTarget(undefined, true)` do gancho: **sem** `notice`, sem a faixa "Conferindo…" e **sem aviso** se
+  falha ou é recusado, também o erro fora das recusas, como o cofre fechado ou a API sem resposta, pelo `silent` do `throughMutationCache`; os valores seguem como texto), perguntado quando o resultado chega com linhas, à vista (`resultShown`, a janela do resultado vale sem
+  `onScreen`) e com a aba conectada (`tab.sessionId`; sem sessão, nenhum valor é link: `shownResultLinks`). **Um pedido por comando**: `sqlTargetKey`
+  (`_lib/sql-target-key.ts`: conexão, banco, texto do comando com o filtro do resultado e as colunas, nome e tipo, na ordem) é a segunda chave da resposta em
+  `useRecordEdits` (a primeira é o `resultId`), e `knownSqlTarget()` cai nela; assim a atualização automática (1 s), o F5 e o "Carregar mais" não acrescentam pedido
+  nenhum, a pergunta em andamento vale para o resultado novo do mesmo comando, e o "Gerar SQL" e o "Copiar como" reaproveitam o mesmo alvo (e ele a eles). A
+  resposta que falhou não fica guardada. O mapeamento é puro (`resultLinks`, `sourceTables`, em `foreign-key-links.ts`): cada coluna do alvo (`table`, índice
+  em `tables`, e `baseColumn`) vale se a tabela é `kind: "table"` (a visão, o sinônimo, a `elsewhere` e a coluna calculada ou sem `baseColumn` não são link) e
+  se a coluna base está numa chave estrangeira DELA, pela regra de sempre (`linkOfColumn`); compara-se a coluna base, e não o nome que o resultado mostra,
+  então o apelido e a junção funcionam. As chaves de cada tabela de origem vêm de `foreignKeysQuery` por `useQueries` (o cache dos Registros, da Estrutura e do
+  Diagrama), só com o resultado à vista, e com `meta: { silent: true }` posto no gancho (e não em `foreignKeysQuery`, que a Estrutura e os Registros mostram no
+  próprio lugar): o catálogo que falha não vira aviso. **A resposta que não chegou** (`failed`) **não é guardada e é perguntada de novo na execução seguinte da
+  pessoa** (`RowsState.id`, que o F5 e o filtro mudam e a atualização automática de 1 s não; o gancho não pergunta com o alvo do comando na mão), e a `changed`
+  (a atualização automática trocou o resultado antes de a resposta pousar) é perguntada uma vez mais, e só uma por execução. **Resultado que a API marca como só
+  leitura** (`DISTINCT`, `GROUP BY`, `UNION`, subconsulta no `FROM`, filtro embrulhado: `notEditable`) **não tem link**, por decisão: é o alvo recusado (a API
+  não muda); um `SELECT DISTINCT status_id FROM t` fica com texto. O clique (`follow`) é o dos Registros (`followOf`, `filterHandoff.request` com o banco da aba e `onOpenTable`, com a
+  conexão e o banco do resultado); o valor é o da célula lida (a célula com alteração pendente não é link, e o item do menu usa o valor lido, como nos
+  Registros). Com o resultado numa janela própria, `onOpenTable` abre a aba na janela da aba da consulta e o `onFocusWindow(tab.id, "link")` a traz à frente.
+  O item "Ir para o registro referenciado" do menu entra pela `GridFollowSource` da aba (um proxy de identidade fixa, preenchido depois de `useResultLinks`, que
+  precisa do alvo que `useRecordEdits` guarda), só nas colunas que são link.
 - **O valor entra no filtro como literal do banco** (`sqlLiteral(engine, valor, tipoDaColuna)`, em `table-sql.ts`; `equalsCondition` monta
   `"coluna" = literal`). Número sem aspas só se a coluna é numérica E o valor é um número (um `007` numa coluna de texto fica entre aspas); o
   resto vai entre aspas simples, com a aspa dobrada, e a barra invertida depende do banco: no PostgreSQL o literal com barra vira `E'…'` com
@@ -1460,8 +1721,14 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     abaixo). A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
+    **Ao abrir** (RN-EDIT-001), o texto vem todo selecionado e à mostra desde o começo (F2, Enter, duplo clique, "Editar célula", também a edição de várias
+    células e o valor com quebra de linha; o Tab, na célula seguinte): `selectEditorText` (`cell-editing.ts`, pura sobre o que o campo expõe) faz
+    `setSelectionRange(0, fim, "backward")`, com o cursor no começo, e zera `scrollLeft` e `scrollTop` (o Chromium rola até o fim da seleção). Aberto pelo primeiro
+    caractere digitado, o cursor fica depois dele (`typed`, que a grade tira de `touched` no momento de abrir). Quem chama é a referência (callback) da área de
+    texto, estável (`useCallback` sem dependências), então roda só ao entrar na tela e não a cada tecla; a `key` do `CellEditor` é a célula, para o campo do Tab
+    ser outro. Sem DOM nos testes: o teste chama a referência com um campo falso. Conferido só nos testes, não numa janela.
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
-    com `+` no número; a excluída riscada; a que falhou no Salvar em `bg-danger/15`; a coluna que não se edita diz o motivo na dica do cabeçalho (na aba de consulta, também a marca "somente leitura" depois do tipo; ver "Num resultado de junção").
+    com `+` no número; a excluída riscada e vermelha (texto e número `text-danger line-through`, fundo `bg-danger/10`, 12% se também falhou, com o tom mantido no passar do mouse; `rowMarkClasses`, em `grid-editing.ts`, decide as classes, e `globals.test.ts` confere o contraste do vermelho sobre o tom em cada tema); a que falhou no Salvar em `bg-danger/15` e o número em negrito vermelho; a coluna que não se edita diz o motivo na dica do cabeçalho (na aba de consulta, também a marca "somente leitura" depois do tipo; ver "Num resultado de junção").
   - **A faixa** (`_components/edits-banner.tsx`), sobre a grade: "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; o aviso do banco sem log; o
     erro do último Salvar (`role="alert"`), que fica até o próximo; e o motivo de só leitura, à vista. Salvar que gravou tudo avisa "N alterações
     salvas." e chama `onSaved`: os Registros leem de novo. Sem o alvo (as pendências lembradas voltam sem ele), o Salvar e o "Ver SQL" o perguntam
@@ -1547,8 +1814,12 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
       papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o Backspace (a
       tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
       `aria-keyshortcuts`). Ctrl+Alt+Insert e Alt+Delete que a barra mostraria desabilitados (sem célula ativa, a aba ocupada…) dizem o motivo dela na faixa
-      (`rowAction`). O Delete sozinho (`deletesRows`; no macOS também a "delete", o `Backspace`) exclui as linhas inteiras escolhidas, e só elas
-      (`choseWholeRows`): com um retângulo, também o que cobre todas as colunas, ou só com a célula ativa, não faz nada (RN-EDIT-015).
+      (`rowAction`). O Delete sozinho (`deletesRows`; no macOS também a "delete", o `Backspace`) marca na hora, sem pergunta, as linhas das células escolhidas
+      (RN-EDIT-015): `deleteKeyRows` (as `selectedRows`, as do Alt+Delete; nenhuma com colunas inteiras ou sem seleção, e então a tecla segue sem `preventDefault`)
+      → `onDeleteRows` → `deleteKey`, que confere o mesmo motivo da barra que o Alt+Delete dá (a faixa) e chama `removeRows` com essas linhas, o mesmo do
+      Alt+Delete e do menu. Não há diálogo, estado de pergunta nem texto de pergunta: o dono não quis (2026-10-24); a confirmação é a de sempre, a exclusão é
+      uma pendência e nada sai do banco antes do "Salvar" (o "Desfazer alteração" e o "Descartar" valem). As linhas ficam pintadas pela marca de exclusão que
+      já existe.
     - **Duplicar linha(s)** (`duplicateRows`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), até 1.000 linhas de uma
       vez (`duplicateLimit`), uma linha nova no fim da grade para cada linha da seleção, na ordem da grade (`addRow` com as colunas copiadas; a busca dos
       valores completos é uma só, para todas; o que não vem não duplica nenhuma, com a coluna e o número da linha na frase do plural; depois, a seleção é das
@@ -1606,7 +1877,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     "Copiar valor" deixaram na área de transferência os 50.000 caracteres, com o MD5 igual ao do banco, e o "Exportar CSV" gravou o texto e o
     binário inteiros (o `Blob` que a tela entrega ao download; o diálogo de salvar do sistema foi trocado no teste). Para ler a área de
     transferência pelo protocolo de depuração: `navigator.clipboard.readText()` com `userGesture: true`.
-- **Área de resultado recolhível** (RN-PAINEL-001): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
+- **Área de resultado recolhível** (RN-PAINEL-001; o lugar do resultado, numa aba ou numa janela, está em "O resultado no painel, numa aba ou numa janela"): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
   `maximized` e `resultPercent`, de 15 a 85, que fica guardado e volta ao restaurar) em `useReducer` na aba. Recolher e maximizar
   **não desmontam** nada (`h-0` e `inert`): é o que guarda o histórico de desfazer do editor e a rolagem da grade.
   `collapsedSummary` é o texto da barra recolhida; a divisória (`result-splitter.tsx`) é um `separator` horizontal focável e só
@@ -1646,7 +1917,7 @@ desenha e avisa.
   - **As perguntas**: `activeCell`, `selectedRows` (as linhas da seleção, as que têm uma célula escolhida, pela posição, em ordem: é sobre elas que agem o
     copiar, o "Gerar SQL", "Duplicar/Excluir linhas" e "Copiar número de linha(s)"), `selectedColumns`, `selectedCells` (um gerador, linha a linha),
     `rowSpan` e `columnSpan` (o que a grade desenha em cada linha à vista e no cabeçalho), `isSelected`, `selectionSize` (`{ rows, cells, whole }`, a
-    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar" de uma célula só; o "Definir como nulo" vale para as escolhidas da coluna da ativa, seção 38) e `choseWholeRows` (o Delete).
+    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar" de uma célula só; o "Definir como nulo" vale para as escolhidas da coluna da ativa, seção 38) e `deleteKeyRows` (as linhas do Delete sozinho, RN-EDIT-015).
   - **O recorte** (`sliceOf(selection, layout, source, scope)`, `scope` `cells` (o padrão), `rows` ou `loaded`, os três do "O que copiar" da RN-GRADE-003):
     um `SelectionSlice`, que é o `GridSlice` dos formatos (`grid-export`) com `positions` e `columnIndexes` (de volta à grade), `newRows` (as linhas novas
     ainda não salvas, pelo índice no recorte: não têm número na grade, e o "Copiar como SQL" as deixa de fora) e `generated` (as células "gerado pelo
@@ -1659,7 +1930,7 @@ desenha e avisa.
 - **O que a grade recebe** (`GridEditing`): `selection` e `layout` (para desenhar), `onSelection(change)` (cada gesto, pela função pura), `onSelecting(on)`
   (o arraste e a tecla com Shift presa: a contagem só muda quando a seleção para), `status` (a contagem, "3 linhas escolhidas" ou "12 células escolhidas",
   nula com uma célula ou nenhuma; a `ResultPanel` a põe ao lado do resumo, num `role="status"` que fica na página também vazio), `onCopy()` (a seleção),
-  `onCopyAdvanced?` (Ctrl+Shift+C, só com a frente do "Copiar avançado"), `onDeleteRows()` (o Delete sozinho) e `onRowMenu(row, point)` (o botão direito no
+  `onCopyAdvanced?` (Ctrl+Shift+C, só com a frente do "Copiar avançado"), `onDeleteRows()` (o Delete sozinho, que marca as linhas na hora) e `onRowMenu(row, point)` (o botão direito no
   número da linha). `onActivate(cell)` continua sendo o clique (`select`), e `onMenu` escolhe antes a célula de fora da seleção.
 - **A grade** (`result-grid.tsx`): `aria-multiselectable`, `aria-selected` em cada célula desenhada (escolhida, e não só a ativa), o fundo de escolha
   (`bg-selected`, o do item escolhido do navegador; a pendente escolhida, `bg-accent/35`), o número da linha (`data-rowheader`, que o clique e o botão direito
@@ -1672,7 +1943,7 @@ desenha e avisa.
   `movementOf` (`grid-cursor.ts`) diz se a tecla é de movimento, se estende e se é vertical; o PageUp e o PageDown andam `pageRows` linhas e, com Ctrl, Alt ou
   Cmd, não são da grade (o Ctrl+Shift+PageUp/PageDown move a aba, RN-ABAS-001); `selectsAll`, `selectsRows` (Shift+Espaço, antes do "começar a digitar"),
   `copiesAdvanced` e `deletesRows` estão em `grid-editing.ts`; o Esc é da grade quando a seleção não é só a célula ativa (`escapeCollapses`, pela forma, e não
-  pela contagem: a linha inteira de uma coluna só é uma célula, e o Delete a excluiria), e com a célula ativa só segue para quem está acima. O cabeçalho e o
+  pela contagem: a linha inteira de uma coluna só é uma célula), e com a célula ativa só segue para quem está acima. O cabeçalho e o
   número da linha, presos, são o `scrollPaddingStart` dos dois virtualizadores: o `scrollToIndex` da célula ativa (Ctrl+Home, PageUp, Home) a deixa logo
   depois deles, e não por baixo. Nada disto foi conferido numa janela:
   o vitest não tem DOM, e o arraste, a rolagem sozinha e o foco são para conferir sob Xvfb.
@@ -1687,7 +1958,7 @@ desenha e avisa.
   Ordenar e Ir para o registro referenciado; Editar célula, Definir como nulo e Desfazer alteração; Adicionar, Duplicar e Excluir linha(s); Exportar dados… e
   o submenu "Gerar SQL"; Atualizar (F5) e Atualizar automaticamente. Cada grupo e cada item de fonte aparece só quando quem usa a edição o entrega: `sort`
   (`GridSortSource = { applied, apply }`: nos Registros, `orderRecords`, o caminho do botão de ordenar do cabeçalho; na aba de consulta, o campo de filtro do resultado com `withOrder`; não
-  nas abas guardadas do script), `follow` (`GridFollowSource`, só os Registros, pelas chaves estrangeiras da grade), `copyAs` e `generateSql`.
+  nas abas guardadas do script), `follow` (`GridFollowSource`, os Registros e o resultado da consulta e do script, nas colunas que são chave estrangeira), `copyAs` e `generateSql`.
   "Desfazer alteração" age nas células escolhidas (`undoWhere`, em `record-edits.ts`, que percorre as pendências e não a seleção).
 - **O contrato com as outras frentes** (seção 37: o "Copiar avançado…", os nove "Copiar como", a configuração deles e o "Gerar SQL"). `useRecordEdits`
   recebe `copyAs?: CopyAsSource` e `generateSql?: GenerateSqlSource`, os dois `GridMenuSource<A, S> = { access(context): S; choose(action, context) }`:
@@ -1706,7 +1977,7 @@ desenha e avisa.
     `moved()` (o resultado já não é o da seleção), `copying(controller)` (a faixa "Copiando…" passado meio segundo, com o "Cancelar" dela abortando a cópia;
     devolve quem a tira), `ensureTarget()` (o `edit-target` da edição) e o alvo do "Gerar SQL" e do "Copiar como" (abaixo).
   - **O alvo do "Gerar SQL" e do "Copiar como"** (RN-GRADE-020 e RN-EDIT-010): `sqlTarget(notice?)` é o `edit-target` com `purpose: "sql"`, o MESMO para os
-    dois, perguntado uma vez por resultado (os 32 mais recentes ficam, um por aba de resultado do script) e na sessão em que o resultado foi lido; `notice` vai à
+    dois, perguntado uma vez por resultado e uma vez por comando e colunas (`sqlTargetKey`; os 32 mais recentes de cada ficam, um por aba de resultado do script) e na sessão em que o resultado foi lido; `notice` vai à
     faixa enquanto a API responde ("Conferindo a tabela deste resultado…", do "Copiar como"; o diálogo do "Gerar SQL" diz a dele). `knownSqlTarget()` é o que
     já se sabe sem perguntar (habilitar não custa consulta): o alvo da edição, quando ele traz o `kind` e o `keyColumns` (`sqlTargetOf`); o motivo da página,
     quando ela já disse que o resultado inteiro é só leitura (a união, o `DISTINCT`, o filtro embrulhado), como `notEditable`, menos na conexão somente leitura
@@ -1958,6 +2229,11 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   "Contar total") recomeça o tempo, e o fim de uma EXECUÇÃO diz se ela trouxe um resultado de leitura novo (`outcomeOf`: o mesmo objeto de linhas de volta é
   "não rodou"; erro, cancelado, gravou). Sem leitura nova, ele para com o motivo (`stopped`), que a barra mostra numa nota curta até a próxima execução da
   pessoa (`ranByPerson`) ou até ligar de novo. A próxima execução só é marcada quando a anterior termina: nunca duas ao mesmo tempo.
+- **Os intervalos** (`autoRefreshChoices`): 1 s (o primeiro, seção 39), 5 s, 10 s, 30 s, 1 min e 5 min; o "Personalizado…" aceita de 1 a 3.600 segundos
+  (`customSecondsLimits`). Com um comando que demora mais que o intervalo, o real é maior (conta do fim), e o controle continua dizendo o escolhido. O
+  `running` do estado ligado (o "atualizando…" e o relógio pulsando) só acende depois de `runningShownAfterMs` (300 ms) de execução, num temporizador do
+  próprio relógio que o fim, o abandono (`yielded`) e o desligar apagam: no de 1 s a leitura costuma voltar antes, e o controle não pisca a cada segundo.
+  Quem decide se ela roda continua sendo o `firing`, que nasce na hora.
 - **A sessão que cai** (`DATABASE_SESSION_NOT_FOUND` no "Carregar mais", no "Contar total" ou na própria execução automática) a desliga com a nota "a sessão
   com o banco caiu" (`stopped: "disconnected"`): quem chama `lost()` é `sessionLost()`, só onde a sessão FICA caída, e não `setSession(null)`. A execução
   automática não reabre a sessão (`execute(…, reopen: false)`: a recusa volta calada, e as linhas de antes ficam), e o relógio confere `connected()` antes de
@@ -2193,6 +2469,185 @@ guardadas se editam").
   Configurações não abriu a pergunta; de volta à área de trabalho, ela apareceu com "Parar" focado, e "Parar" deu "Script parado na aba
   consulta-1.sql: 1 de 3 comandos executados.". A área vazia mostrou "… Alt+X executa os comandos da seleção ou do texto inteiro, um depois do outro.".
 
+## A linguagem das variáveis (seção 41: RN-VAR-001 a 018, 020 e 036, RN-SQL-009)
+
+Parte 9, frente 1: a linguagem, pura, em `src/app/workbench/_lib/variables/`. A execução ligada ao `use-query-runner` e o painel das variáveis são a frente 3
+(a seção seguinte); a marca no editor é da frente 4. As frentes seguintes só chamam o que está aqui. A API não lê nada disto: o texto que ela recebe já vem com os
+marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
+
+- **Os arquivos.** `lexer.ts` e `parser.ts` (o leitor da gramática inteira da RN-VAR-002; o que fica para depois é lido e recusado pela conferência com as frases
+  provisórias), `ast.ts`, `catalog.ts` (nomes fechados, palavras reservadas, membros dos espaços de nomes), `values.ts` (valores e tipos), `numbers.ts`,
+  `dates.ts`, `operators.ts`, `functions.ts` (as tabelas de funções e métodos, em `Map`), `evaluate.ts` (o avaliador), `meter.ts` (os limites), `random.ts`
+  (xoshiro128**), `script.ts` e `script-items.ts` (o script em itens), `run.ts` (a execução e a conferência), `at-names.ts` e `markers.ts` (o `@nome` e os
+  marcadores que já estão no texto), `bind.ts` (a troca), `sent-sql.ts` ("SQL enviado"), `positions.ts` (o mapa das posições), `wire.ts`,
+  `evaluator-service.ts`, `evaluator.worker.ts` e `evaluator-host.ts` (o Worker), `boundary.ts` (o único lugar que escreve no console) e
+  `variables.copy.ts` (os limites, `limits`, e as frases, `phrase`).
+- **O que a execução chama, nesta ordem.**
+  1. `readScript(source, engine?, { blankLines? }): ScriptModel` divide o script em itens (comando, declaração, reatribuição, RN-VAR-019), lê cada declaração e
+     acha os `@nome` de cada comando. Os itens têm `index`, `line`, `kind`, `parsed` (a declaração lida, ou nulo) e `error` (por que não leu). O
+     `sql-statements.ts` aprendeu o item de declaração por um `DeclarationReader` injetado (`declarationReader(engine)` em `script-items.ts`; `splitScript`,
+     `scriptItemAt`, `scriptItemCount`): o leitor do SQL não importa a linguagem. A declaração vira `;` e espaços na máscara, e as posições não mudam.
+  2. `staticDiagnostics(model): ItemDiagnostic[]` são os erros que se sabem sem executar (gramática, nomes, `const` reatribuído, `@nome` antes da declaração,
+     marcador já escrito no texto). `checkScript(model, clock?, now?)` é essa conferência mais a execução em seco do que é determinístico (RN-VAR-012).
+     **A tela mostra a conferência do script inteiro**: o serviço do Worker só devolve o erro dos itens pedidos, e o item que o leitor recusou não está na
+     lista (quem usa a variável recusada ouve "x não foi declarada", e a causa vem do `staticDiagnostics`).
+  3. `dependencyPlan(model, index, tab): number[]` diz quais atribuições avaliar antes do item (a regra do Ctrl+Enter, RN-VAR-020 e 023): as de que ele depende e
+     que a aba ainda não tem em dia (o texto da atribuição é o mesmo e foi avaliada depois das de que depende).
+  4. Avaliar: `new ScriptRun(model, { engine?, random, clock, now }, tab?, counter?)` e `run.evaluate(index): AssignmentResult` (`{ ok: true, stored, steps }` ou
+     `{ ok: false, error }`), `run.tab`, `run.counter`, `run.valueOf(name)`, `run.forget(name)`. `evaluateScript(model, config, tab?, counter?)` faz o script
+     inteiro. Em produção a avaliação roda no Worker (abaixo); o `ScriptRun` direto serve aos testes e às sondas.
+  5. Trocar: `run.bind(index): BindResult` devolve `{ ok: true, command: BoundCommand }`, com `command.sql` (os marcadores do banco: `$n` no PostgreSQL, `?` no
+     Db2 e no Informix; uma lista vira marcadores separados por `, `, só entre parênteses; o `sql` entra no texto), `command.params` (`{ type, value, variable,
+     item }`, o valor sempre como texto, ou `null`) e `command.replacements` (onde estava cada `@nome` e onde ficou o que o trocou). `bindCommand(text, engine,
+     declared, scope, types?)` é a função por baixo.
+  6. `sentSql(command, engine): SentSql` é o "SQL enviado" com os literais da exportação (`scriptLiteral`, `sqlLiteral`): `text`, `header` (o comentário do alto
+     quando um valor ficou só com o marcador), `rows` (o quadro dos parâmetros), `notes` e `sqlRanges`. `parameterLiteral(engine, parameter)` é o literal de um
+     parâmetro, ou nulo.
+  7. O erro do banco: `editorOffset(statementStart, command, databasePosition)` leva a posição do erro (1 em diante, no texto enviado) ao texto do editor; dentro
+     de um marcador, de uma lista expandida ou do texto de um `sql` cai no começo do `@nome` (`originalOffset` é a parte sem o começo do comando).
+- **O Worker** (RN-VAR-013 e 014). `EvaluatorHost({ createWorker, timers?, perItemMilliseconds?, perRunMilliseconds? })` com `evaluate(request): Promise<EvaluateOutcome>` e
+  `dispose()`; `createBrowserWorker()` abre o Worker do pacote. O pedido (`EvaluateRequest`) leva o texto do script, o banco, os índices dos itens, a aba, o
+  contador, a semente e a hora, tudo como dado; a resposta vem item a item (`start`, `item`, `done`, `failed`). O host termina o Worker (`terminate()`) quando uma
+  declaração passa de 250 ms ou a execução de 5 s, devolve `{ kind: "timeout" }` com a frase e abre outro Worker no pedido seguinte. O núcleo mede os mesmos 250 ms e os
+  passos sozinho (a segunda defesa). `handleEvaluateRequest(request, post, clock?)` é o corpo do Worker, e os testes o rodam sem Worker. Os valores atravessam por
+  `toWire`/`fromWire` (e `storedToWire`/`storedFromWire`, `typeToWire`/`typeFromWire`): a cópia estruturada perderia o congelamento e o `Map`, e o dado de fora só vira
+  valor pelos construtores da linguagem, que conferem a forma.
+- **Os valores.** Registros congelados e sem protótipo, de oito espécies: `number` (o `double` e, quando veio escrito, o texto exato `exact`, com `inexact` se o
+  `double` não o escreve inteiro; a conta e a comparação recusam o inexato), `string` (até 1.000.000 de unidades UTF-16, sem U+0000 nem metade de par), `boolean`,
+  `null`, `date` (campos do calendário e precisão `day` ou `instant`; as contas passam pela hora local da máquina), `list` (até 10.000 itens do mesmo tipo, sem lista de
+  lista), `object` (até 100 campos, num `Map` congelado: a chave nunca é propriedade) e `sql`. O tipo (`Type`) tem `nullable`, `list` e `never` (a lista vazia). A frase curta
+  de um valor é `displayValue`/`inlineValue`/`typeLabel`; o texto de uma interpolação é `textOf`.
+- **Segurança do avaliador (RN-VAR-014).** Nada do texto vira nome de propriedade do JavaScript: o membro se lê por regra positiva (campo de objeto pelo `Map`,
+  `length`, os métodos das tabelas), as palavras do JavaScript que a linguagem não tem são recusadas pelo leitor, e nenhum valor é função, `Symbol`, `undefined` nem
+  `Proxy`. O teste de ataques confere que `Object.prototype`, `Array.prototype` e os globais ficam como estavam. Sem `eval` nem `new Function`: a política de conteúdo
+  do app (`default-src 'self'`, RN-SHELL-001) vale para o Worker.
+- **Os limites** (`limits`, RN-VAR-013): 100.000 passos por declaração e 1.000.000 por execução, 250 ms por declaração e 5 s por execução, aninhamento 64, texto
+  1.000.000, lista 10.000, objeto 100 campos, declaração 64 KiB, 500 declarações, 10.000 parâmetros e 4 MiB, corpo do pedido 30.000.000 de bytes, valores da aba 128
+  MiB, `sql` 10.000 caracteres. As operações longas contam passos ponderados (`weigh`, 1 passo por 1.000 unidades). O relógio entra por parâmetro (`Clock`), e os testes
+  o falseiam.
+- **O `random`** (RN-VAR-010) é o xoshiro128** de Blackman e Vigna, um por execução, com a semente do `crypto.getRandomValues` na produção (`productionRandom()`); os
+  testes dão a semente (`new Random([a, b, c, d])`). `int` usa rejeição (uma saída até 2^32; duas, de 53 bits, acima), `float` é `u / 2^32` e `uuid` usa quatro
+  saídas com os bits de versão e variante. Não serve de segredo.
+- **As frases provisórias.** O que a gramática lê e esta frente ainda não executa é recusado, na conferência, com estas frases (em `phrase`; saem quando o passo
+  de cada uma entrar): `provisionalQuery` ("A variável de consulta chega numa próxima versão."), `provisionalSample` ("`random.of` chega numa próxima versão."),
+  `provisionalColumnType` ("O tipo de coluna chega numa próxima versão.") e `provisionalNoValue(nome)` ("`nome` não tem valor: escreva `= valor` (a pergunta dos
+  valores chega numa próxima versão)."). `StoredValue.origin` já traz `consulta`, `pergunta` e `diálogo` para quando elas entrarem.
+- **O log (RN-VAR-036).** Nenhuma exceção do JavaScript que escape do leitor, do conferidor ou do avaliador chega à pessoa: vira "Erro interno do Prism ao avaliar
+  <nome>." (`reportInternalError`), e ao console de desenvolvimento vai só o nome do tipo do erro, nunca a mensagem, o texto do script nem um valor. Nenhum outro arquivo
+  da linguagem usa o `console` (um teste confere).
+- **Os testes.** Os casos de tabela são `*.cases.json` escritos à mão a partir da especificação e nunca regerados do código (`reader`, `placement`, `types`,
+  `evaluation`, `functions`, `attacks`, `limits`, `at-names`, `binding`, `positions`), cada um com um `*.cases.test.ts` que os lê por `cases-runner.ts` (que fixa
+  `TZ=America/Sao_Paulo`, porque as datas valem na hora local). `properties.test.ts` sorteia 10.000 textos e árvores por execução, de uma semente nova a cada vez (a de
+  `PRISM_PROPERTY_SEED`, se estiver no ambiente) que a mensagem de falha traz. A fixture compartilhada com a API é `src/test-fixtures/variables/markers.json` (a conta
+  dos marcadores de cada banco; `markers.fixture.test.ts` a lê; a API tem de contar igual, RN-VAR-017).
+- **O contrato com a API (RN-VAR-017 e 032; `api-contract.test.ts`).** O pedido leva só `{ type, value }` em cada parâmetro: `requestParams(command.params)` tira o `variable`
+  e o `item`, que ficam na tela para o "SQL enviado" (uma terceira chave é 422 `QUERY_INVALID`). A tela recusa antes, com a frase dela, o que a API recusaria: o `number` de
+  mais de 100 caracteres, o decimal de mais de 31 dígitos no Db2 e no Informix (o driver; "pelo driver" na frase do Informix), a lista de mais de 10.000 valores e os
+  valores de mais de 4 MiB. O corpo de `POST queries` vai até 30.000.000 de bytes (`limits.requestBodyBytes`), o das rotas `transfers` (exportação e cópia, `source.params`)
+  até 16 MiB (`limits.transferBodyBytes`): quem monta o pedido da exportação confere `requestBodyBytes(sql, params)` contra o segundo. O `timestamp` com fuso só vai no
+  PostgreSQL; o texto exato de um instante que veio do Db2 pode ter até 12 casas, e a API aceita 6 (a consulta da variável, que traz esse texto, ainda não entrou). As
+  recusas voltam como `ApiError`: `QUERY_INVALID` (`errors["params[i].value"]`, `["params[i].type"]` ou `["params"]`, e o `errorCodes` do mesmo campo em `extensions`), na
+  exportação `EXPORT_OPTIONS_INVALID` e na cópia `IMPORT_OPTIONS_INVALID` em `source.params[i].value`, `QUERY_PARAMETERS_MISMATCH` com `extensions.markers` e `extensions.values`
+  (números; a tela e a API contam igual pela fixture, então ele só vem se o texto mudou no caminho) e `FILTER_INVALID` quando o filtro de um resultado com parâmetros
+  tem `$n` ou `?`. Os valores nunca vão a mensagem nenhuma.
+- **A sonda S-VAR-4** (Node 22 e Electron 44 sob Xvfb, numa VM de 4 vCPU a 2,1 GHz; o app empacotado não foi aberto): nenhuma declaração dentro dos limites passa de
+  ~45 ms (a conta mais longa que cabe em 64 KiB; o `replaceAll` sobre 1.000.000 de caracteres, 24 ms); a execução mais cara (400 declarações de 1.000 termos, 400.400
+  passos) leva 1,6 a 2,4 s dos 5 s; a troca de uma lista de 10.000 valores leva 60 a 280 ms nos três bancos; o host para um Worker que não volta em 250 ms (mais 10 a 45
+  ms) e em 5 s (mais 1 a 4 ms), e o Worker seguinte responde em 20 a 62 ms. Não exercitados: o app empacotado (a política de conteúdo e o endereço do Worker feito pelo
+  Vite), Windows e macOS, e uma chamada nativa que passe de verdade dos 250 ms.
+
+## Executar com variáveis e ver os valores (seção 41: RN-VAR-012, 018 a 024, 032 e 033, RN-SQL-009, RN-SEG-001)
+
+Parte 9, frente 3: o executor da aba, os valores da aba, o painel "Variáveis", o "SQL enviado" e os `params` em tudo o que executa de novo. O texto do editor segue sendo
+da pessoa; o que vai ao banco é o comando trocado pelos marcadores (RN-VAR-017), e a API só recebe `{ type, value }` (`requestParams`).
+
+- **O alvo guarda o comando trocado** (RN-VAR-033). `RunTarget.sent` (um `BoundCommand`: `sql` com os marcadores, `params` com `variable` e `item`, `replacements`, o mapa
+  das posições) vive ao lado do `sql` do editor, e é ele que o F5, o "Executar de novo", o filtro, a atualização automática, "Executar este comando", a exportação e a
+  cópia mandam (`sentTextOf`, `queryParamsOf`, `parametersOf`, em `command-wire.ts`): o `random` não sorteia de novo e as variáveis nunca são avaliadas de novo. A
+  exportação leva `source.params` (`ExportOrigin.params`, `requestSource`) e o corpo das rotas `transfers` vai a 16 MiB (`limits.transferBodyBytes`, `maxRequestBytes`,
+  `maxImportRequestBytes`; a tela confere o corpo escrito em JSON antes de mandar). `sameCommand` compara o texto enviado, o filtro e o tipo e o valor de cada
+  parâmetro. O `executeQuery` leva `params` só quando há; `QUERY_PARAMETERS_MISMATCH` e `QUERY_INVALID` são erros do comando no script (quatro escolhas), e no comando
+  avulso vão ao aviso central com a frase da API. A posição do erro do banco volta ao texto do editor por `editorOffset` (RN-SQL-009), e o filtro do resultado a
+  deixa sem marca, como antes. A passagem da aba para outra janela leva o alvo inteiro (`sent` no schema de `electron/window-messages.ts`: o texto do editor, o
+  enviado, os parâmetros e o mapa) e os valores da aba (`values`, dado puro de `wire.ts`, reconstruído pelos construtores da linguagem). A janela do resultado
+  (RN-ABAS-017) não precisa de nada: é a mesma tela, com o mesmo executor.
+- **Os valores da aba** (RN-VAR-023) são do executor: `runner.values` (`variables/tab-values.ts`, `createTabValuesStore`) com `snapshot()` (imutável, outro objeto a
+  cada mudança: `{ values, counter }`), `subscribe(listener)` (devolve a função que desfaz) e `replace`/`clear`. `declaredValues(snapshot, model)` é o que o editor lê: por
+  nome declarado, `{ type, value, stale, detail, origin, at }` (`type` como `typeLabel`, `value` até 60 caracteres como no fim da linha, `detail` até 200 para a dica,
+  `stale` quando o texto da declaração mudou ou uma atribuição de que ela depende foi avaliada de novo: `staleNames`, a mesma regra do `dependencyPlan`). O contador de
+  avaliações e os valores saem com o `retire()` (aba fechada, banco ou conexão trocados, bloqueio, "Sair"), que também larga o Worker; o `release()` (Desconectar) não os
+  esquece. `runner.reveal` (`createRevealStore`) é o pedido de trazer o painel à frente (`serial` cresce a cada pedido). **Quem liga o editor** lê `runner.values` com
+  `useSyncExternalStore` e a leitura do texto (`readScript`), e chama `declaredValues`; a frente do editor não precisa de mais nada daqui.
+- **O executor** (`createQueryRunner`). `runner.runItem({ doc, engine, from, to }, hooks)` é o Ctrl+Enter (RN-VAR-020) e `runner.runScriptDoc(...)` o Alt+X (RN-VAR-019);
+  `doc` é o texto inteiro do editor (`{ text, blankLines }`) e `from` a `to` o que vai (a seleção, o texto inteiro, ou o cursor com `from` igual a `to`). O `query-tab`
+  os chama quando o texto declara variáveis (`variableRange`, pelo `liveEditors.snapshot`, e não pelos argumentos do `onRun`/`onRunScript` do editor), e sem
+  declarações o caminho é o de sempre (`run`, `runScript`). Os ganchos (`RunHooks`): `confirm(make)` devolve `true` ou a resposta da pessoa (é o `confirmed` do
+  `useCommandConfirmation`) e `begin()` roda quando a execução vai mesmo começar (o filtro do resultado sai, a área recolhida volta, o destaque acende). A ordem do Alt+X:
+  a conferência (`planScript`: `checkScript` filtrado aos itens que vão e às atribuições de que dependem; a declaração sem valor é recusada com a frase provisória), a
+  avaliação no Worker de toda atribuição que vai e das de fora da seleção que a aba não tem em dia (`evaluateIndices`, um pedido só: `preparing` impede outro), a troca dos
+  `@nome` de cada comando com os valores daquele ponto (`scopeBefore`, `bindItem`), a pergunta da proteção com os valores como literais (`confirmedOf`,
+  `numberedScriptQuestion`: o número é o do item no script, e o comando com uma variável `sql` é irreversível na dúvida, `irreversibleOfCommand`, com o trecho dela marcado
+  em `ranges`) e então o laço (`runScriptNow(commands, declarations, closing)`). A declaração toma o valor já avaliado (atualiza o painel e as Estatísticas, `ScriptEntry.kind`
+  `declaration`, "—" nas linhas, os totais "Declarações avaliadas" à parte); no erro dela só valem "Parar" e "Tentar de novo" (que a avalia de novo), e o diálogo
+  desabilita "Pular" e "Pular todos os erros" com o motivo. O Ctrl+Enter numa declaração só avalia (o resultado na tela fica, o painel vem à frente com a linha dela);
+  no comando, `dependencyPlan` diz o que avaliar antes e o valor que a aba tem serve quando está em dia. Erro da conferência ou da avaliação: `RunnerState`
+  `variableErrors` (a lista "Erros nas variáveis" com a linha de cada um; o clique leva o cursor, `editor-goto.ts`, pelo `EditorView.findFromDOM`), o aviso "O script não foi
+  executado: N erros nas variáveis." e nada executado. `variable-execution.ts` é o planejamento (puro), `variable-run.copy.ts` os textos.
+- **A tela.** O painel "Variáveis" (`variables-panel.ts` é o modelo, puro: as linhas, `navigate`, `copyTextOf`; `variables-panel.tsx` o `treegrid`) é uma aba logo antes de
+  "Estatísticas" (`ScriptTab` ganhou `"variables"`; sem script, `ResultTabs` traz "Resultado" e "Variáveis"). O "SQL enviado" (`sent-sql-dialog.tsx`, com o botão
+  `SentSqlButton` na barra do resultado e nas linhas das Estatísticas, e "Ver o SQL enviado" na pergunta de erro) mostra o `sentSql` do alvo.
+- **Provisório, até as partes seguintes.** A pergunta dos valores que faltam (RN-VAR-021) ainda não existe: a declaração sem valor é recusada na conferência. O
+  "Executar com valores…" e a aba de execução (RN-VAR-026 a 029) não existem, e a variável de consulta, o `random.of` e o tipo de coluna ainda são recusados pelas frases
+  provisórias da linguagem. O editor conhece as declarações (a seção "O editor e as variáveis", abaixo) e recebe os valores da aba pela prop `variables`;
+  o `runTarget`/`scriptTargets` ainda usam o `statementAt`, então o destaque de execução (RN-SQL-018) de uma declaração avaliada pelo Ctrl+Enter não existe. O Ctrl+Enter chega ao `onRun` mesmo
+  com o texto só de declarações (a tecla não consulta `isRunnable`, e `hasStatement` já conta o `let`), e a aba o desvia para o `runItem` quando o texto declara variáveis.
+
+## O editor e as variáveis (seção 41: RN-VAR-025, RN-CONFIG-004)
+
+Parte 9, frente 4: o editor lê o script com a linguagem acima e pinta, confere, avisa e completa. Não executa nem avalia nada que fale com o banco.
+
+- **Os arquivos**, em `src/app/workbench/_lib/`. `variables-analysis.ts` é puro: `analyze(texto, banco, linhaEmBranco)` devolve as marcas (cores), os erros, as dicas, as variáveis
+  declaradas e onde cada declaração acaba (`EditorAnalysis`), sem CodeMirror. `variables-extension.ts` é a extensão: o estado (`variablesField`), a pausa
+  (`AnalysisScheduler`), a dica do ponteiro (`hoverAt`) e o valor no fim da linha. `variables-completion.ts` é o autocompletar. `variables-editor.copy.ts` tem as frases das dicas
+  (as dos erros são as da linguagem, `variables/variables.copy.ts`). `sql-keyword-case.ts` ganhou a regra das declarações. `sql-completion.ts` aceita `variables` (as fontes e a pergunta
+  que cala as palavras-chave e os nomes da árvore onde o SQL não completa).
+- **A prop.** `SqlEditor` recebe `variables?: VariablesStore` (`variables-extension.ts`): `{ snapshot(): ReadonlyMap<string, { type: string; value: string; stale: boolean }>; subscribe(listener: () => void): () => void }`.
+  É o armazém dos valores da aba (frente 3, RN-VAR-023); o editor só lê. A chave é o nome da variável. `type` é o tipo como o painel o escreve (`number`, `string[]`, `Date (dia)`, `number | null`:
+  o autocompletar deduz daí os métodos); `value` é o texto do valor como o painel o escreve (`7`, `'Ana'`, `[1, 2, 3]`), que o editor só corta (200 caracteres na dica do ponteiro, 60 com `…` no
+  fim da linha); `stale` é o valor de antes de a declaração mudar, que não aparece no fim da linha e na dica leva "desatualizado". **Quem avisa a mudança do texto da declaração é o armazém**: ele
+  marca `stale` quando a declaração (ou uma de que ela depende) muda, e `subscribe` avisa. O editor também esconde, por conta própria, o valor da declaração que a pessoa acabou de mexer
+  (RN-VAR-025), e a leitura seguinte (300 ms) não o devolve: ele só volta quando o armazém assume (marca `stale`, 400 ms depois da última tecla) ou traz uma avaliação nova, ou quando a pessoa
+  desfaz a mudança. A origem e a hora vêm em `from` ("diálogo · 14:32:05"), e a dica do ponteiro mostra "nome: tipo = valor · origem · hora" (sem `from`, só "nome: tipo = valor"). `short` é o texto do
+  fim da linha quando difere do `value` (a lista leva o " · 3 itens"); sem ele o editor corta o `value` em 60.
+- **A ligação na aba.** `QueryTabPanel` (a aba de consulta e a de script são a mesma, e o único lugar onde o `SqlEditor` é montado) chama `useEditorVariables` (`use-tab-variables.ts`): o
+  `declaredValues` do armazém do executor (`runner.values`) com a leitura do texto de agora, entregue a um armazém por aba (`editor-variables.ts`, de identidade estável, para o editor não se religar)
+  que só avisa o editor quando o tipo, o valor, a origem ou o `stale` de algum nome mudou. O texto que a aba lê é o do editor (`liveEditors`), com o atraso da aba (`updateTab`, 400 ms), e o editor
+  esconde por conta própria o valor da declaração que a pessoa acabou de mexer até lá. O fluxo inteiro (declarar, Alt+X, o painel, a dica do ponteiro e o fim da linha, o F5 e a atualização automática
+  com os mesmos parâmetros) tem teste em `editor-variables.test.ts`, e a ligação na aba em `query-tab.test.ts`.
+- **A leitura em segundo plano.** `analyze` roda 300 ms depois da última tecla (a primeira, ao abrir o editor, sem espera), e o atraso cresce com o que a leitura custou (quatro vezes o custo, de
+  300 ms a 2 s), então um script grande é lido menos vezes. Entre uma leitura e outra as marcas só acompanham a edição (`RangeSet.map`): a tecla nunca espera pela leitura. Texto sem `let`, `const`, `@` nem `//` não
+  é lido; acima de 100.000 caracteres (`analysisMaxChars`; medido: 0,4 a 0,5 ms por 1.000 caracteres, e a leitura do script é o custo; 165 a 200 ms para 190.000 com 500 declarações e 3.000 comandos com `@v`) não é lido e o editor fica sem as marcas.
+  **Decisão (RN-VAR-014):** a leitura do editor roda na thread da tela, e não no Worker que a especificação pede. Ela não avalia o que depende da hora, da sorte ou do banco, a execução em seco
+  tem 40 ms e o texto lido tem esse teto, de modo que a pausa de uma leitura fica abaixo de 50 ms; mover `readScript` e `checkScript` ao Worker custaria uma cópia do texto a cada pausa e um
+  segundo canal de resposta. Se a medida passar disso, o caminho é o Worker (`evaluator-host`), e não subir o teto. A execução em seco do
+  `checkScript` (os erros de tipo que se sabem sem o banco) tem 40 ms (`dryRunBudgetMs`): passado o tempo, o que só ela acharia é descartado, e os erros da leitura (`staticDiagnostics`) ficam. O
+  `readScript` não tem versão incremental: o orçamento é a pausa, o atraso adaptativo e o teto. Os testes que leem a árvore do `lang-sql` usam `freezeParseBudget`.
+- **O que cada coisa usa.** O realce e os erros vêm de `readScript` e `checkScript`; o `@nome` e a dica dele, de `findAtReferences` (`at-names.ts`); o corpo de rotina, de `statementHasBody`. Os textos entre aspas
+  duplas e as crases das declarações são pintados como texto (o `lang-sql` os leria como nome entre aspas), e o `//` como comentário, só nos lugares da RN-VAR-001 (dentro das declarações e entre os itens, e só no script que declara alguma variável: sem nenhuma a execução é a de sempre, que não conhece
+  o `//`, e ele vai ao banco como está); o `//` dentro de um comando, ou em um script sem declaração, é SQL, e a dica diz. As marcas ficam por dentro das cores do `lang-sql` (`Prec.highest`) e, por garantia, a cor vale também para os pedaços que o `lang-sql` pintou por dentro.
+  O comentário colado ao valor (`i--`, `a //2`) só leva a dica quando o `--` ou o `//` está sem espaço antes dele, ou o resto da linha é só um número ou o nome de uma variável: `let x = 5 // nota` é um comentário
+  comum e não leva dica (a especificação cita `a // b`, que não se distingue de um comentário no fim da linha).
+- **A cor da variável** é a ficha `--color-syntax-variable` (a especificação a chama de `--editor-variable`: o nome segue as outras fichas de sintaxe, e o teste de contraste a confere em cada um dos temas (os seis do canvas e o Kanagawa)
+  sobre as cinco superfícies, como as quatro de sintaxe). O `@nome` de uma variável `sql` leva o sublinhado pontilhado no tom do acento.
+- **O valor no fim da linha** é um `Decoration.widget` (não é texto do documento: não se seleciona, não se copia, não entra no `getText` nem no Ctrl+S) com `aria-hidden`. A preferência é
+  `editor.showVariableValues` (Configurações › Editor SQL, ligada por padrão; efeito `setShowVariableValues`).
+- **O autocompletar** lê o script de novo a cada versão do texto (o nome que a pessoa acabou de declarar tem de aparecer, e a leitura em segundo plano pode não ter rodado), até 200.000 caracteres. Depois de `@`
+  completa os declarados acima do comando; dentro do valor de uma declaração, os declarados acima, a lista fechada (`closedNames`), os membros de `Math.`/`random.`/`date.`/`Date.`/`Number.` e, depois de
+  `.`, os métodos da espécie do valor (`methodNames`), quando o tipo se sabe pelo armazém ou pela anotação. Não completa no nome, na anotação, em texto nem em comentário. Dentro das declarações e depois do `@` de uma variável
+  as palavras-chave e os nomes da árvore se calam. Segue a chave "Autocompletar ao digitar".
+- **A caixa das palavras-chave** (`keywordCase(banco, linhaEmBranco)`) não converte dentro de uma declaração ou reatribuição: pergunta ao `scriptItemAt`, e só quando o texto tem `let` ou `const`.
+- **O que muda de `SqlEditor`**: a prop `variables`; as preferências `blankLineSeparates` e o banco da aba disparam uma leitura nova (`reanalyzeVariables`).
+
 ## Proteções da conexão e da pasta (RN-PROT-001 a 006)
 
 Seção 32 da especificação, pedido do dono em 2026-10-15 ("um modal pedindo confirmação do usuário antes de executar qualquer comando em uma conexão ou
@@ -2415,6 +2870,48 @@ Electron não ganhou canal novo.
   demais recusas da leitura, 422. Os testes simulam a API.
 - **O que não foi feito**: a conferência na tela com a API de verdade (cada lado tem os testes dele, e o contrato foi conferido no código), e o diálogo de
   salvar do sistema concluído por uma pessoa, como no "Exportar CSV".
+
+## Importar do DBeaver (seção 40, RN-DBEAVER-001 a 018 e RN-CONFIG-011)
+
+- **A origem é o `sourceId`** da cópia que o processo principal fez (acima); a tela nunca recebe caminho nem senha, e a prévia diz só se a conexão leva senha. As
+  rotas (`connections/_lib/dbeaver.service.ts`, `dbeaver.schema.ts`): `GET api/user/connections/dbeaver` → `{ invitedAt, lastImportAt }` (a consulta
+  `dbeaverStateQuery`); `PUT …/dbeaver/invite` → 204 (`markInvited`, que nunca lança: a falha só faz o convite voltar); `POST …/dbeaver/scan` `{ sourceId }` →
+  `{ where, projects: [{ name, connections, importable, withPassword, protected, nameInvalid, credentialsUnreadable, credentialsProtected }] }`; `POST
+  …/dbeaver/import/preview` `{ sourceId, project?, targetFolderID, withPasswords, drdaPorts? }` → `{ folders, connections, notes }`; `POST …/dbeaver/import` com
+  o mesmo mais `{ items, onConflict, overwrite }` → `{ folderIDs, connectionIDs, updatedIDs, mergedFolders, renamed, skipped }`. `project` é o nome inteiro do
+  projeto e some do corpo para "Todos os projetos". As recusas que o diálogo mostra no lugar (`dbeaverRefusals`): `DBEAVER_SOURCE_MISSING`,
+  `DBEAVER_SOURCE_INVALID`, `DBEAVER_PROJECT_NOT_FOUND`, `DBEAVER_LIMITS_EXCEEDED` e `FOLDER_NOT_FOUND`; `IMPORT_EMPTY` e `IMPORT_INVALID` vão ao aviso central.
+  O schema tolera o que a API pode omitir (`notes`, `existing` e `overwrite` nulos, o `leftOut` com código que a tela não conhece é ignorado). A conexão da prévia
+  traz também `dbeaverPort` (a SQLI do DBeaver no Informix; `port` é a que a conexão terá), `drdaPort` e `authModel` (o `<modelo>` de "o login do DBeaver"), o
+  `existing` traz o que a conexão do Prism tem hoje (`host`, `port`, `database`, `userName`, `environmentName`) e o `notes`, `unreadableProjects` (os projetos de
+  que nenhum arquivo foi lido, que levam a frase no plural).
+- **O diálogo** (`connections/_components/import-dbeaver-dialog.tsx`; o que se decide está em `_lib/dbeaver-model.ts`, puro e testado): o "Importar conexões" da seção 34
+  com outra origem. Reusa a árvore de marcar, as marcas e a conta do rodapé (`import-model.ts`), as linhas de pasta e as marcas (`ImportFolderRow`, `Tags`). Abre
+  procurando sozinho (`start: { type: "find" }`), pedindo a pasta (`choose`) ou com a cópia do convite (`copy`); a prévia vem sozinha, sem botão. A cópia é solta ao
+  fechar, ao trocar de origem e em qualquer saída (a limpeza do efeito; a resposta que chega depois de fechar solta a que trouxe). Trocar "Levar as senhas", o lugar
+  ou as portas DRDA refaz a prévia com as marcas, um pedido de cada vez; **trocar o projeto pede a prévia dele e as marcas continuam** (`marksAfterScopeChange`): a API dá a mesma chave
+  (`p2`, `f2_1`, `c2_1`: a posição do projeto e a ordem dentro dele) ao mesmo item em "Todos os projetos" e com o projeto escolhido, então valem as marcas que ainda existem na árvore
+  nova, e o que a árvore de antes não tinha chega marcado; sem prévia à vista (a anterior foi recusada), abre de novo, tudo marcado. A recusa da importação deixa o diálogo aberto; só `DBEAVER_SOURCE_MISSING` apaga a
+  origem. **Importar com alguma marcada que já existe no Prism abre a pergunta** (RN-DBEAVER-017), que ocupa a janela (o foco começa em "Cancelar", Esc volta ao
+  diálogo): "Sobrescrever todas", "Escolher quais…" (a lista com caixas, o que muda e, quando a prévia traz os valores de antes, "host a → b") e "Não sobrescrever
+  nenhuma"; as três mandam todas as marcadas em `items` e as que se sobrescrevem em `overwrite`.
+- **A porta DRDA do Informix** (RN-DBEAVER-010 e 015, emenda do arquiteto): uma tabela com uma linha por servidor do DBeaver (host, porta
+  SQLI e `INFORMIXSERVER` como a prévia os dá, porque a API os compara assim; `drdaRows`) com conexão Informix marcada, cada uma com um campo opcional (1 a 65.535). O preenchido vai em `drdaPorts: [{ host, port,
+  server, drdaPort }]` na prévia e na importação (`port` é a SQLI do DBeaver, o `dbeaverPort` da prévia, e não o `port` dela, que já é a DRDA depois de aplicada: a chave que a API casa) e vale para as conexões novas e as
+  sobrescritas daquele servidor; a segunda linha mostra a porta digitada e a marca "porta do DBeaver" sai. A prévia se refaz 500 ms depois da última tecla, e
+  "Importar" com uma porta ainda não vista por ela refaz primeiro e segue.
+- **O "Comece por aqui"** (`workbench/_components/start-here.tsx`) é decidido uma vez por entrada pela página (`startHerePhaseOf`, em `dbeaver-entry.ts`): o cofre sem
+  conexão e o convite por fazer; enquanto as duas respostas não chegam, a área fica vazia. O cartão do DBeaver procura e conta ao aparecer e **solta a cópia assim que
+  a contagem responde**; fora do Electron diz que só funciona no app. Clicar em qualquer botão do painel, ou em "Agora não", grava o convite (a página). **O convite em
+  forma de diálogo** (`inviteStep`): `Entrar` e `Criar usuário` armam `dbeaverEntry` (a janela de entrada é a única que convida; o desbloqueio não passa por ali), e a
+  página, com o cofre já com conexão e o convite por fazer, procura e conta sem mostrar nada: achando o que importar abre o diálogo com a cópia (`invite: true`, "Agora
+  não"), senão solta a cópia e não grava o convite. O bloqueio e o "Sair" fecham o diálogo sem gravar.
+- **Os diálogos de passar conexões são da página** (`workbench/page.tsx`, um por janela; `transfer-requests.ts`): o "Exportar conexões", o "Importar conexões" e o
+  "Importar do DBeaver" não abrem juntos nem com o formulário de conexão (a entrada de um, com outro aberto, leva o foco ao aberto), e somem com o bloqueio e quando a
+  área de trabalho sai da tela (`keepsTransfer`). O navegador pede por `onTransfer`; Configurações › Importar (RN-CONFIG-011, `settings/_components/import-section.tsx`)
+  pede por `transferRequests` e vai à área de trabalho. O que a importação criou volta ao navegador por `importedReveal` (e ele aparece, se estava escondido).
+- **O que não foi feito**: a conferência com a API de verdade (o contrato é o da seção 40 mais a emenda da porta DRDA, e cada lado tem os testes dele), com um DBeaver
+  instalado (as sondas S-DBEAVER-1 a 3 são do arquiteto) e sob o Electron (os testes cobrem o processo principal em pastas de verdade, mas não o diálogo de pasta do sistema).
 
 ## Copiar como e Copiar avançado (RN-GRADE-003, 016 e 017)
 
@@ -2801,8 +3298,9 @@ fechar não apaga as abas.
   foco do campo (`mousedown` cancelado).
 - **Autocompletar** (RN-CONFIG-004; `_lib/sql-completion.ts`; a única dependência nova foi o `@codemirror/autocomplete`, em 6.20.3 exato, a
   versão que a trava já resolvia): as palavras-chave do dialeto da aba e os **nomes que a árvore já carregou** daquela conexão (esquemas,
-  tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: o que a árvore
-  não abriu não existe para o autocompletar, e nenhuma chamada à API sai por causa dele. Depois de `esquema.` saem as tabelas; depois de
+  tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: `sql-completion.ts` só
+  lê; o que a árvore não abriu não existe para ele, e as duas buscas que o autocompletar faz, as colunas de `tabela.` e as chaves estrangeiras da junção
+  (`sql-catalog-completion.ts`, logo abaixo), são de outro módulo. Depois de `esquema.` saem as tabelas; depois de
   `tabela.` ou de um apelido, as colunas com o tipo; as tabelas de qualquer esquema carregado aparecem também sem o esquema (o `public` do
   PostgreSQL sem ele, os outros com `esquema.`). A lista abre sem nada escolhido (`selectOnOpen: false`: Enter e Tab seguem como eram),
   filtra por prefixo, Esc a fecha e Ctrl+Espaço a abre. **Depois de um ponto não entra palavra-chave nenhuma** (`keywordsSource`): a fonte de
@@ -2816,6 +3314,39 @@ fechar não apaga as abas.
   PostgreSQL, as "reservadas" e as "reservadas, podem ser função ou tipo" (`verbose`, `freeze`, `isnull`…): o teste as confere contra o que um
   PostgreSQL 18 devolve em `pg_get_keywords()`, categorias R e T; ao subir de versão do PostgreSQL, rode a consulta de novo. Db2 e Informix usam
   as palavras-chave do SQL padrão.
+- **As colunas de `nome.` e a junção** (RN-CONFIG-004 e RN-SQL-025; pedido do dono em 2026-10-24): as duas únicas coisas que o autocompletar busca no banco,
+  em três módulos puros e uma fonte fina. `_lib/sql-references.ts` lê o comando do cursor (`statementAt` + `sqlTokens`, o leitor do projeto, então texto,
+  comentário e `$tag$` nunca são nome): `analyzeAt` devolve as tabelas e os apelidos do `FROM`/`JOIN`/`UPDATE`/`INTO` **do nível do cursor** (a subconsulta
+  `SELECT`/`WITH` mais de dentro em que ele está, ou o comando; os grupos entre parênteses viram um item e o que está dentro não conta; a chamada de função e a
+  subconsulta da lista não são tabela, mas o apelido delas entra em `used`; `OUTER` do Informix vem antes da tabela e o `USING` só traz tabela em `DELETE`/`MERGE`), os níveis de fora
+  (`outerReferences`, um grupo por subconsulta que contém o cursor, do mais de dentro ao comando: só `resolveQualifier` os usa, para o `p.` de uma subconsulta correlacionada
+  achar o apelido de fora; a junção e `used` ficam no nível do cursor), o que o cursor pede (`member`, `join`, `on` ou `none`) e `usesAliases`. A palavra
+  do cursor é tirada do texto antes de ler (a aspa aberta, e a que a tela fechou, também), e o `;` antes do cursor, fora de parênteses, faz o comando ser outro.
+  `resolveQualifier`/`resolveReference` acham a tabela pelo catálogo da árvore (`linkCatalog` e o esquema padrão de `defaultSchemasOf`, como o link da
+  RN-LINK-001; o apelido vale mais que o nome do catálogo). `_lib/sql-join.ts` monta as sugestões a partir de `TableLink` (`linksOf`: a chave vista de cada
+  lado, `own` e `other` na ordem da chave): `joinSuggestions` (depois de `JOIN`), `onSuggestions` (depois de `ON`), `aliasFor` (as iniciais das partes do nome
+  por `_`, só letras, 2, 3… quando em uso ou reservada) e `writtenTable` (`sqlName`, com o esquema fora da lista padrão; no Informix, sempre com ele). O apelido
+  gerado vai cru e em minúsculas (nunca por `sqlName`, que no Db2 o poria entre aspas); o já escrito no comando vai como está. A chave que liga uma tabela a si
+  mesma sai nos dois sentidos, com apelido novo. **O escopo da junção**: `joinScope` (em `sql-references.ts`; `Reference.start` é onde o nome da tabela começa) dá à fonte só as tabelas escritas ANTES
+  do cursor, sem o alvo do `INSERT INTO` (`via: "into"`); depois de `ON`, só as que vêm antes da tabela do `JOIN`. As escritas adiante continuam em `used` (o apelido novo
+  não as repete), mas não ligam nada nem pedem as chaves delas. `_lib/sql-catalog-completion.ts` (`catalogCompletion`) é a fonte: `sources` (colunas e junção) e `owns`, que
+  cala a fonte de nomes do `lang-sql` onde as colunas são das novas (`unlessOwned` em `sqlCompletion`), para nenhuma coluna sair duas vezes; as colunas do
+  cache saem de `columnOptions` (a mesma montagem do `completionNamespace`) e as aspas abertas voltam por `requoted`. As fontes usam `unlessQuiet` das
+  variáveis como as outras. **A busca**: só com a sessão da árvore da conexão e do banco já aberta (`getQueryData(databaseSessionKey(...))`; nada abre nem
+  reabre sessão), uma vez por lista (`fetchQuery` divide a requisição em andamento), com `meta: { silent: true }` (sem aviso). As colunas vão pela
+  `columnsQuery` (a chave `table-structure` da Estrutura, o dado cru) e a lista pronta é posta também na chave `tree` do nível `columns` (`columnNodes`, o mesmo mapa da
+  árvore); a que uma das duas já tem em dia vale e vai para a outra (`cachedColumns`), então o navegador e a Estrutura não perguntam de novo. As chaves vão por
+  `foreignKeysQuery` e `referencedByQuery` (`table-structure.service.ts`, a rota `referenced-by` da RN-CAT-004, `referencingForeignKeySchema`), na mesma chave da
+  Estrutura. **O "Atualizar"**: o `invalidateQueries` só busca de novo a consulta que alguém observa, e a lista que o autocompletar buscou sozinho não tem
+  observador; por isso `listOf` olha `isInvalidated` (`peek`), busca de novo a invalidada (o `fetchQuery` busca mesmo com `staleTime` infinito) e, se a busca falha
+  ou não há sessão, responde a velha (e, na falha, devolve a consulta ao estado de antes, velha e sem o erro, com `invalidateQueries({ refetchType: "none" })`).
+  O "Atualizar" do navegador também invalida a família da Estrutura sob o nó (`invalidateStructure`/`structureScopes`, `table-structure.service.ts`), porque o
+  `treePrefixes` só conhece a `tree`. A lista que falha vira nada, entra nas marcas de `catalog-fetch-failures.ts` (por conexão e sessão, para não repetir a cada tecla;
+  o "Atualizar" do navegador e o da Estrutura as esquecem por `forgetFailedLists`) e sai do cache se ninguém a observa e nunca veio, para a árvore não mostrar um erro que a pessoa não
+  pediu. O resultado é síncrono quando tudo está no cache (a lista não pisca) e uma promessa quando falta algo, descartada se `context.aborted`. Sem conexão
+  na aba ou com o texto de mais de 200.000 caracteres, nada. A conferência rápida `mayAsk` (um ponto, ou `JOIN`/`ON` e o espaço, antes do cursor) poupa a
+  leitura do comando a cada tecla. O editor cria um `catalogCompletion` por editor e lê a conexão, o banco e o usuário na hora (`useEffectEvent`), como o
+  `readLevels`; a `boost` das junções cai na ordem (a lista abre com elas no topo).
 - **Converter palavras-chave para maiúsculas** (RN-CONFIG-004; `_lib/sql-keyword-case.ts`): converte a palavra que a pessoa acabou de digitar, na
   MESMA transação da tecla (um Ctrl+Z desfaz a palavra e o caractere), só numa inserção do teclado cujo primeiro caractere termina a palavra
   (espaço, vírgula, parêntese, ponto e vírgula, quebra de linha); colar, aceitar uma sugestão e desfazer não convertem. Só o que está na lista
@@ -2876,6 +3407,9 @@ minuto) e bloqueia: a API fecha o cofre, e a tela pede a senha do MESMO
 usuário. Desbloquear devolve as abas e o texto de SQL; os resultados são descartados; as outras telas de dentro do cofre voltam ao estado
 inicial; "Sair" encerra de verdade.
 
+- **As janelas do resultado** (RN-ABAS-013 a 016): o que a pessoa faz nelas conta como atividade e o aviso de antes do bloqueio aparece nelas também; o
+  bloqueio e o "Sair" as fecham pelo Prism (`resultWindows.closeAll` no `WorkbenchTabs`, e o `windows-ready` falso no processo principal), com o lugar da aba
+  guardado, e o desbloqueio as reabre vazias, no tamanho e no lugar lembrados.
 - **Quem faz o quê.** `lib/api/vault-lock.ts` (o estado "bloqueado", a época e a barreira dos pedidos). Em `app/_lib/`: `idle-timer.ts` (a
   contagem, pura, com relógio injetado), `idle-watch.ts` (`watchActivity`: os eventos da janela ligados ao temporizador), `use-idle-lock.ts`
   (o gancho), `lock-vault.ts` (**a ordem dos passos de bloquear e de desbloquear, e o que cada falha faz**, com dependências injetadas),
@@ -3057,6 +3591,17 @@ passa endereço, caminho nem nome de arquivo ao processo principal.
   as somas inteiros (`found`), nunca o que foi para a tela. Ao abrir, no máximo uma a cada 24 horas: a hora gravada é a da TENTATIVA (uma
   máquina sem rede não consulta a cada abertura), e uma hora no futuro vale como "nunca consultou". A falha ao abrir só vai para o
   log (`[prism] atualização: …`). A consulta manual não depende das 24 horas, de "Não verificar ao abrir" nem da versão pulada.
+- **Release sem o pacote desta instalação não é oferecida (RN-ATUALIZA-002, 003 e 005).** A pipeline publica a release com as
+  plataformas que vieram inteiras (a falha do pacote de uma plataforma não segura as outras), e o macOS só é empacotado nas estáveis:
+  um beta nunca tem o pacote de macOS. `offerable` (`releases.ts`, pura e testada) tira da consulta as releases em que o pacote que
+  `choosePackage` escolheria (plataforma, arquitetura e FORMATO da instalação em uso) não está nas somas das notas, e que são mais
+  novas que a mais nova que o tem; a oferta é essa, e a lista de notas vai até ela (as mais antigas ficam, mesmo sem o pacote:
+  as notas contam o que mudou). Nenhuma com o pacote: o Prism está atualizado (`check` responde `upToDate` com `withoutPackage`, a
+  mais nova que saiu sem ele, e o aviso a cita; no macOS os betas não entram nessa conta, porque a falta do pacote neles é o
+  esperado e não uma falha, e um Mac só com um beta mais novo vê só "o Prism está atualizado"). O sistema para o qual não existe pacote nenhum (`choosePackage` sem resposta,
+  Linux arm64) não filtra: a tela já diz que não há pacote, e baixar é recusado. As versões instaladas até a 0.5.0-beta.2 não têm
+  esta regra: nelas a release sem o pacote aparece, e a atualização é recusada com a causa de antes (a soma que falta nas notas).
+  Em Configurações › Atualizações, no macOS, "Receber versões beta" continua e ganha a dica de que os betas não têm pacote ali.
 - **Linha de comando que desliga o atualizador (RN-ATUALIZA-008).** O app empacotado aberto com `ignore-certificate-errors`,
   `ignore-certificate-errors-spki-list`, `host-resolver-rules` ou `host-rules` não consulta nem baixa nada naquela abertura
   (`updatesBlocked`, em `origin.ts`, pura e testada; o `main.ts` pergunta a `app.commandLine.hasSwitch`): os dois primeiros fazem o
@@ -3221,8 +3766,13 @@ passa endereço, caminho nem nome de arquivo ao processo principal.
   `Prism-<versão>-<sistema>-<arquitetura>.<extensão>` (o `${arch}` do electron-builder vira `x64`, `x86_64` ou `amd64`, conforme
   o formato). **O macOS sai uma arquitetura por vez**, porque há uma API só em `resources/api`: `build:api -- osx-arm64` e
   `dist -- mac arm64`, depois `build:api -- osx-x64` e `dist -- mac x64` (sem arquitetura, a da máquina). Os alvos de macOS no
-  `electron-builder.yml` não declaram `arch` de propósito: com `arch` lá, o `--arm64` não restringe e as duas saem de uma vez. Sem assinatura
-  e sem publicação: nenhum token, certificado ou variável de segredo. Windows e Linux são só x64.
+  `electron-builder.yml` não declaram `arch` de propósito: com `arch` lá, o `--arm64` não restringe e as duas saem de uma vez. Sem publicação e
+  sem certificado: nenhum token ou variável de segredo. Windows e Linux saem sem assinatura; o macOS sai com **assinatura ad hoc**
+  (issue #33): `identity: "-"`, `hardenedRuntime: false` e `notarize: false` no `electron-builder.yml`, que não pedem certificado nem
+  keychain (o comentário do arquivo diz o que cada linha faz e que não foi aberto num Mac de verdade). O `dist` tira as `CSC_*` do
+  ambiente no macOS (`builderEnvironment`, em `dist-plan.mjs`), para um certificado esquecido ali não mudar a assinatura. A atualização
+  no macOS não depende da assinatura: o app só baixa o `dmg`, confere as somas e o deixa na pasta de downloads (RN-ATUALIZA-006), sem
+  verificar assinatura nem mexer em quarentena. Windows e Linux são só x64.
 - **`PRISM_HOMEPAGE`** (só no `dist -- linux`): o `.deb` e o `.rpm` exigem a URL pública do projeto ("Please specify project
   homepage"), que não está no repositório; a pipeline a preenche. O `dist` valida a variável (`parseHomepage`: `https://` bem
   formada, sem usuário nem senha, senão falha dizendo só que é inválida) e a passa ao electron-builder em
@@ -3337,8 +3887,12 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 
 - Tudo fica em `devDependencies`: o Vite empacota a tela, e `main` e `preload` só usam o Electron
   e os módulos do Node. O `electron-builder` copia para o app o que estiver em `dependencies`.
-- React e Electron em versão exata. O Electron está na 44.5.1 porque a 44.6 e a 44.7 tinham menos
-  de três dias quando o projeto foi criado; subir quando a trava deixar.
+- React e Electron em versão exata. O Electron está na 44.9.3, a mais nova da linha 44 com mais de três dias em 24/10/2026
+  (a 44.9.1 é a primeira com a correção do aviso de segurança do Electron); subir quando a trava deixar. A 45 pede revisão à parte.
+- O `undici` é dependência transitiva (`electron` > `@electron/get`, na linha 7.x, e `electron-builder` > `node-gyp`, na 6.x) e
+  não tem `overrides`: os intervalos dos pais já aceitam a versão corrigida, então o aviso de segurança se resolve só no
+  `pnpm-lock.yaml` (`pnpm update undici`, que regera o arquivo; nunca à mão). Só criar um `overrides` no
+  `pnpm-workspace.yaml` se um pai passar a pedir uma versão que não aceita a corrigida.
 - `vite` fica na linha 7 (o `electron-vite` 5 não aceita a 8) e `typescript` na 6.0 (o
   `typescript-eslint` não aceita a 7).
 - As travas do pnpm (`pnpm-workspace.yaml`) ficam ligadas. As únicas exceções, `semver@5.7.2` e `semver@6.3.1` (falsos

@@ -2,6 +2,9 @@ import { Button, Dialog } from "@/components/ui";
 
 import { commandHint, type ScriptChoice, type ScriptEntry } from "../_lib/script-run";
 import { scriptRunCopy } from "../_lib/script-run.copy";
+import { sentSqlCopy } from "../_lib/sent-sql.copy";
+import type { RunTarget } from "../_lib/use-query-runner";
+import { variableRunCopy } from "../_lib/variable-run.copy";
 
 const copy = scriptRunCopy.error;
 
@@ -12,6 +15,8 @@ type ScriptErrorDialogProps = {
   number: number;
   total: number;
   onChoose: (choice: ScriptChoice) => void;
+  /** RN-VAR-018: "Ver o SQL enviado", no comando que levou variáveis. */
+  onViewSent?: (target: RunTarget) => void;
 };
 
 /**
@@ -20,8 +25,12 @@ type ScriptErrorDialogProps = {
  * segue o script), e é também o Esc, como a especificação diz. Sem o X e sem o clique fora (`dismissible="escape"`): a resposta é uma das quatro, e um
  * clique fora, sem querer, pararia o script calado. O foco volta, ao fechar, ao que o tinha quando ela abriu: o editor, de onde o script saiu.
  */
-export function ScriptErrorDialog({ entry, number, total, onChoose }: ScriptErrorDialogProps) {
+export function ScriptErrorDialog({ entry, number, total, onChoose, onViewSent }: ScriptErrorDialogProps) {
   const error = entry.error;
+  // RN-VAR-022: o erro numa declaração só deixa "Parar" e "Tentar de novo": sem o valor, os comandos que o usam não têm como rodar.
+  const declaration = entry.kind === "declaration";
+  const name = declaration ? (/^\s*(?:let|const)?\s*([^\s=:;]+)/.exec(entry.target.sql)?.[1] ?? "a variável") : "";
+  const skipReason = declaration ? variableRunCopy.skipDisabled(name) : undefined;
 
   return (
     <Dialog
@@ -29,7 +38,7 @@ export function ScriptErrorDialog({ entry, number, total, onChoose }: ScriptErro
       role="alertdialog"
       size="lg"
       dismissible="escape"
-      title={copy.title(number, total)}
+      title={declaration ? variableRunCopy.declarationTitle(number, total) : copy.title(number, total)}
       description={copy.description}
       onClose={() => onChoose("stop")}
       footer={
@@ -40,20 +49,27 @@ export function ScriptErrorDialog({ entry, number, total, onChoose }: ScriptErro
           <Button type="button" variant="secondary" onClick={() => onChoose("retry")}>
             {copy.retry}
           </Button>
-          <Button type="button" variant="secondary" onClick={() => onChoose("skip")}>
+          {/* O desabilitado de verdade (o foco não precisa chegar nele): o motivo vai na dica e no texto para o leitor de tela. */}
+          <Button type="button" variant="secondary" disabled={declaration} title={skipReason} onClick={() => onChoose("skip")}>
             {copy.skip}
           </Button>
-          <Button type="button" variant="secondary" onClick={() => onChoose("skipAll")}>
+          <Button type="button" variant="secondary" disabled={declaration} title={skipReason} onClick={() => onChoose("skipAll")}>
             {copy.skipAll}
           </Button>
+          {entry.target.sent === undefined || onViewSent === undefined ? null : (
+            <Button type="button" variant="secondary" onClick={() => onViewSent(entry.target)}>
+              {sentSqlCopy.view}
+            </Button>
+          )}
         </>
       }
     >
       <div className="flex flex-col gap-4">
         <section className="flex flex-col gap-1.5">
-          <h3 className="text-sm font-semibold text-muted">{copy.command}</h3>
+          <h3 className="text-sm font-semibold text-muted">{declaration ? variableRunCopy.declaration : copy.command}</h3>
           <pre className="max-h-40 overflow-auto rounded-md border border-border bg-background p-3 font-mono text-xs break-words whitespace-pre-wrap text-ink">{commandHint(entry.target.sql)}</pre>
         </section>
+        {skipReason === undefined ? null : <p className="text-xs text-muted">{skipReason}</p>}
         {error === null ? null : (
           <section className="flex flex-col gap-1.5">
             <h3 className="text-sm font-semibold text-danger">{error.title}</h3>

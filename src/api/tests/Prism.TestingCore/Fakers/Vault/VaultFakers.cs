@@ -53,8 +53,8 @@ public static class VaultFakers
     }
 
     /// <summary>Uma aba de consulta da área de trabalho gravada (RN-ABAS-006), com o texto sorteado quando o teste não fixa um.</summary>
-    public static VaultWorkspaceTabRecord CreateQueryTab(Guid? connectionID = null, string? database = null, string? sql = null, Guid? scriptID = null, bool dirty = false, bool sqlTooLarge = false)
-        => new("query", connectionID, database, sql ?? $"SELECT {new Faker().Random.Int(min: 1, max: 9999)}", scriptID, dirty, sqlTooLarge, null, null, null);
+    public static VaultWorkspaceTabRecord CreateQueryTab(Guid? connectionID = null, string? database = null, string? sql = null, Guid? scriptID = null, bool dirty = false, bool sqlTooLarge = false, string? resultPlace = "panel")
+        => new("query", connectionID, database, sql ?? $"SELECT {new Faker().Random.Int(min: 1, max: 9999)}", scriptID, dirty, sqlTooLarge, null, null, null, resultPlace);
 
     /// <summary>Uma aba de tabela da área de trabalho gravada (RN-ABAS-006): sempre com a conexão dela.</summary>
     public static VaultWorkspaceTabRecord CreateTableTab(Guid? connectionID = null, string? database = null, string schema = "loja", string table = "clientes", string view = "data")

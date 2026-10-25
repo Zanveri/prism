@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { navItem } from "@/components/ui";
+import { stripTags } from "@/lib/testing/text";
 
 import type { StructureSection } from "../../_lib/structure-sections";
 import { structureSections } from "../../_lib/structure-sections";
@@ -60,7 +61,7 @@ function render(levels: Levels = {}) {
 const attributes = (tag: string) => Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map((match) => [match[1], match[2]]));
 
 /** As entradas da lista lateral, com o texto delas (o nome e a marca). */
-const tabsOf = (markup: string) => [...markup.matchAll(/<button([^>]*role="tab"[^>]*)>([^]*?)<\/button>/g)].map((match) => ({ attrs: attributes(match[1]), text: match[2].replace(/<[^>]*>/g, ""), inner: match[2] }));
+const tabsOf = (markup: string) => [...markup.matchAll(/<button([^>]*role="tab"[^>]*)>([^]*?)<\/button>/g)].map((match) => ({ attrs: attributes(match[1]), text: stripTags(match[2]), inner: match[2] }));
 
 /** Só o painel da seção (do `tabpanel` em diante): a lista lateral, que vem antes dele, também rola e não conta. */
 const panelOf = (markup: string) => markup.slice(markup.indexOf('role="tabpanel"'));
@@ -292,7 +293,7 @@ describe("a tabela da seção usa a largura toda: nada de barra horizontal, e o 
   });
 
   it("as células de texto (nome, tipo, colunas e referência) quebram em qualquer ponto em vez de empurrar a tabela, e nenhuma força uma linha só", () => {
-    const cellOf = (markup: string, text: string) => new RegExp(`<td([^>]*)>${text.replace(/[()]/g, "\\$&")}</td>`).exec(markup)?.[1] ?? "";
+    const cellOf = (markup: string, text: string) => new RegExp(`<td([^>]*)>${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</td>`).exec(markup)?.[1] ?? "";
 
     for (const [section, texts] of [
       ["columns", ["ordem_id", "bigint"]],

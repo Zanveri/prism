@@ -4,7 +4,10 @@
 # develop e a estável da main (com a seção no changelog ou sem ela, com as notas do git-cliff); a versão da vez depois de uma estável;
 # o rascunho que recebe os pacotes e só depois é publicado (é a publicação que cria a tag); a
 # repetição depois de uma falha em cada ponto; o rascunho velho de outro commit; o plano que não bate com o estado das tags; a
-# release de um commit que muda .github/workflows/; e por onde o token passa.
+# release de um commit que muda .github/workflows/; por onde o token passa; e, nas seções 16 a 22, a falha do pacote de uma plataforma
+# que não segura as outras: o beta com Windows e Linux, o beta só com Linux, a estável com as quatro, a estável sem o macOS, o grupo
+# com um arquivo só (fica de fora), nenhum grupo inteiro (recusado, nada publicado), e a retomada (uma release publicada parcial é
+# aceita, e uma cujos anexos não são os do SHA256SUMS dela é recusada).
 # Rode com `bash scripts/ci/release.test.sh`; sai com 1 se algum caso falhar.
 #
 # O que ele NÃO prova: nada do GitHub de verdade (a API, as regras de tag e de ramo, as releases imutáveis, o envio dos anexos).
@@ -13,6 +16,8 @@ set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=fake-project.sh
 source "$here/fake-project.sh"
+# shellcheck source=packages.sh
+source "$here/packages.sh"
 fake_project
 trap 'rm -rf "$sandbox"' EXIT
 
@@ -97,6 +102,18 @@ release_json() { jq --arg tag "$1" '[.[] | select(.tag_name == $tag)] | .[0]' "$
 release_field() { release_json "$1" | jq -r "$2"; }
 reset_calls() { : > "$FAKE/calls"; : > "$FAKE/uploads"; }
 
+# packages_only <versão dos pacotes> <grupo>...: os pacotes de mentira só desses grupos (o que sobra quando o job de outra plataforma
+# falha: o artefato dele não existe).
+packages_only() {
+  local version=$1 file
+  shift
+  rm -rf "$work/src/client/release"
+  mkdir -p "$work/src/client/release"
+  for file in $(package_files "$version" "$@"); do
+    printf '%s de mentira, %s\n' "$file" "$version" > "$work/src/client/release/$file"
+  done
+}
+
 # packages_at <versão dos pacotes> [conteúdo]: os dez pacotes de mentira em src/client/release (o que os jobs de pacote deixam).
 packages_at() {
   local version=$1 file
@@ -156,7 +173,7 @@ expect "3. sem plano nenhum (--expect ausente), um lançamento é recusado" 2 "U
 
 packages_at 0.1.0-beta.1
 pipeline develop -- --expect v0.1.0-beta.2
-expect "3. os pacotes com a versão errada (beta 1, para publicar o beta 2): FALHA antes de escrever" 1 "faltou Prism-0.1.0-beta.2-win-x64.exe"
+expect "3. os pacotes com a versão errada (beta 1, para publicar o beta 2): FALHA antes de escrever, porque nenhuma plataforma veio inteira com a versão da tag" 1 "nenhuma plataforma veio com os pacotes inteiros"
 check "3. nada escrito" is "$(writes)" "0 0 0"
 
 # ============ 4. o envio que falha no meio, e a repetição ============
@@ -301,10 +318,10 @@ commit_all "ci: tira o workflow" > /dev/null
 # ============ 12. as conferências antes de escrever ============
 
 packages_at 0.2.0
-rm "$work/src/client/release/Prism-0.2.0-mac-x64.dmg"
+for file in win-x64.zip linux-x86_64.AppImage linux-amd64.deb linux-x86_64.rpm linux-x64.tar.gz mac-arm64.zip mac-x64.zip; do rm "$work/src/client/release/Prism-0.2.0-$file"; done
 reset_calls
 pipeline main -- --expect v0.2.0
-expect "12. falta um pacote (o de macOS inclusive): FALHA antes de escrever" 1 "faltou Prism-0.2.0-mac-x64.dmg"
+expect "12. um arquivo só de cada plataforma (nenhuma inteira): FALHA antes de escrever" 1 "nenhuma plataforma veio com os pacotes inteiros"
 check "12. nada escrito" is "$(writes)" "0 0 0"
 packages_at 0.2.0
 pipeline main GITHUB_SHA="$first" -- --expect v0.2.0
@@ -391,6 +408,145 @@ expect "15. no GitHub Actions o lançamento sai" 0 "Prism 0.3.0-beta.3 publicado
 token_line=$(printf '%s\n' "$out" | sed -n 's/^::stop-commands::\(prism-[0-9a-f]*\)$/\1/p' | head -n 1)
 check "15. e a mensagem que imita ::error:: está entre ::stop-commands:: e o fim" eval "[ -n '$token_line' ] && printf '%s\n' \"\$out\" | sed -n '/^::stop-commands::$token_line\$/,/^::$token_line::\$/p' | grep -q '::error::uma mensagem'"
 check "15. o resumo do job diz o que saiu" grep -q 'v0.3.0-beta.3' "$summary"
+
+# ============ 16. develop com o Windows e o Linux: o beta sai completo, sem aviso ============
+
+branch=develop
+git -C "$work" checkout -q "$twelfth"
+head=$(release_commit 0.3.0 "feat: o beta só com Windows e Linux")
+packages_only 0.3.0-beta.4 win linux
+echo "Prism-0.3.0-beta.4-linux-amd64.deb" > "$FAKE/upload-falha"
+reset_calls
+pipeline develop -- --expect v0.3.0-beta.4
+expect "16. um anexo do Linux falha no meio do envio: o job falha, e o rascunho fica com parte dos anexos" 1 "o envio de Prism-0.3.0-beta.4-linux-amd64.deb falhou"
+rm "$FAKE/upload-falha"
+reset_calls
+pipeline develop -- --expect v0.3.0-beta.4
+expect "16. repetir: o rascunho é retomado com o mesmo conjunto (Windows e Linux), e o beta sai" 0 "Prism 0.3.0-beta.4 publicado. A tag v0.3.0-beta.4 aponta para $head"
+expect "16. develop com Windows e Linux: nenhum aviso de plataforma, porque o macOS não é esperado num beta" 0 "" "Plataforma sem pacote"
+check "16. os anexos são os seis pacotes e o SHA256SUMS, e nenhum de macOS" is "$(release_json v0.3.0-beta.4 | jq -r '[.assets[].name] | length') $(release_json v0.3.0-beta.4 | jq -r '[.assets[] | select(.name | test("mac"))] | length')" "7 0"
+check "16. o SHA256SUMS da release lista só o que entrou" eval "[ \"\$(cat '$FAKE'/asset-\$(release_json v0.3.0-beta.4 | jq -r '.assets[] | select(.name == \"SHA256SUMS\") | .id') | wc -l | tr -d ' ')\" = 6 ]"
+check "16. as notas do beta trazem a frase fixa dos betas, e nenhuma de pacote que faltou" eval "release_field v0.3.0-beta.4 .body | grep -qF 'Os betas saem para Windows e Linux; no macOS, as atualizações chegam pelas versões estáveis.' && ! release_field v0.3.0-beta.4 .body | grep -q 'saiu sem o pacote'"
+
+# ============ 17. develop só com o Linux: o Windows fica de fora, com aviso e frase ============
+
+seventeenth=$(release_commit 0.3.0 "feat: o beta só com o Linux")
+packages_only 0.3.0-beta.5 linux
+reset_calls
+pipeline develop -- --expect v0.3.0-beta.5
+expect "17. só o Linux veio: o beta sai com ele" 0 "Prism 0.3.0-beta.5 publicado. A tag v0.3.0-beta.5 aponta para $seventeenth"
+expect "17. e o Windows que faltou aparece no log" 0 "o pacote de Windows não veio" 
+expect "17. e como aviso à vista, com o job verde" 0 "AVISO (Plataforma sem pacote): a release v0.3.0-beta.5 sai sem o pacote de: Windows."
+check "17. quatro pacotes do Linux e o SHA256SUMS, nenhum do Windows" is "$(release_json v0.3.0-beta.5 | jq -r '[.assets[].name] | length') $(release_json v0.3.0-beta.5 | jq -r '[.assets[] | select(.name | test("win"))] | length')" "5 0"
+check "17. a primeira linha das notas é a frase do Windows" is "$(release_field v0.3.0-beta.5 .body | head -n 1)" "Esta versão saiu sem o pacote de Windows, que não foi gerado nesta execução. Quem usa Windows continua na versão anterior e recebe a próxima que tiver o pacote."
+check "17. e as notas trazem a frase fixa do beta também" eval "release_field v0.3.0-beta.5 .body | grep -qF 'Os betas saem para Windows e Linux; no macOS, as atualizações chegam pelas versões estáveis.'"
+check "17. a release saiu como pré-lançamento" is "$(release_field v0.3.0-beta.5 '"\(.draft) \(.prerelease)"')" "false true"
+
+# ============ 18. main com as quatro plataformas: sai completa, sem aviso ============
+
+git -C "$work" checkout -q "$next"
+branch=main
+eighteenth=$(release_commit 0.3.0 "Merge pull request #20 from Exemplo/develop")
+packages_only 0.3.0 win linux mac-arm64 mac-x64
+reset_calls
+pipeline main -- --expect v0.3.0
+expect "18. main com as quatro plataformas: lança a estável" 0 "Prism 0.3.0 publicado. A tag v0.3.0 aponta para $eighteenth" "Plataforma sem pacote"
+check "18. os dez pacotes e o SHA256SUMS" is "$(release_json v0.3.0 | jq -r '[.assets[].name] | length')" 11
+check "18. as notas são a seção do changelog e não dizem que falta pacote" eval "release_field v0.3.0 .body | grep -q 'Coisa da 0.3.0' && ! release_field v0.3.0 .body | grep -q 'saiu sem o pacote'"
+
+# ============ 19. main sem o macOS: a estável sai, com aviso e frase, e a retomada aceita a release parcial ============
+
+nineteenth=$(release_commit 0.4.0 "Merge pull request #21 from Exemplo/develop")
+packages_only 0.4.0 win linux
+reset_calls
+pipeline main -- --expect v0.4.0
+expect "19. main sem o macOS (os dois jobs falharam): a estável sai com Windows e Linux" 0 "Prism 0.4.0 publicado. A tag v0.4.0 aponta para $nineteenth"
+expect "19. o aviso à vista diz os dois macOS" 0 "AVISO (Plataforma sem pacote): a release v0.4.0 sai sem o pacote de: macOS (Apple Silicon); macOS (Intel)."
+check "19. seis pacotes e o SHA256SUMS, nenhum de macOS" is "$(release_json v0.4.0 | jq -r '[.assets[].name] | length') $(release_json v0.4.0 | jq -r '[.assets[] | select(.name | test("mac"))] | length')" "7 0"
+check "19. a primeira linha das notas é a frase dos dois macOS juntos" is "$(release_field v0.4.0 .body | head -n 1)" "Esta versão saiu sem o pacote de macOS (Apple Silicon e Intel), que não foi gerado nesta execução. Quem usa macOS continua na versão anterior e recebe a próxima que tiver o pacote."
+check "19. e as notas seguem com a seção do changelog e as somas" eval "release_field v0.4.0 .body | grep -q 'Coisa da 0.4.0' && release_field v0.4.0 .body | grep -q '^### Somas SHA-256\$'"
+check "19. a release é a mais recente e não é pré-lançamento" is "$(release_field v0.4.0 '"\(.prerelease) \(.make_latest)"')" "false true"
+
+# A retomada de uma release PUBLICADA parcial: conferida contra o SHA256SUMS dela, e não contra a lista inteira de packages.txt.
+reset_calls
+pipeline main -- --expect v0.4.0
+expect "19. retomar a release publicada sem o macOS: aceita, nada a publicar" 0 "já foi lançado deste commit" "Prism 0.4.0 publicado"
+expect "19. e o aviso da plataforma que faltou continua à vista" 0 "AVISO (Plataforma sem pacote): a release v0.4.0 sai sem o pacote de: macOS (Apple Silicon); macOS (Intel)."
+check "19. a retomada só leu: nenhum POST, PATCH, DELETE nem anexo" is "$(writes) $(wc -l < "$FAKE/uploads" | tr -d ' ')" "0 0 0 0"
+packages_only 0.4.0 win linux mac-arm64 mac-x64
+reset_calls
+pipeline main -- --expect v0.4.0
+expect "19. retomar com os pacotes do macOS agora presentes: a release continua como saiu (não se acrescenta anexo a uma release publicada)" 0 "já foi lançado deste commit"
+check "19. nada escrito, nenhum anexo enviado" is "$(writes) $(wc -l < "$FAKE/uploads" | tr -d ' ')" "0 0 0 0"
+
+# A release publicada cujos anexos não são os do SHA256SUMS dela é recusada (uma release mutável que alguém mexeu).
+cp "$FAKE/releases.json" "$FAKE/releases.ok"
+jq '(.[] | select(.tag_name == "v0.4.0") | .assets) |= map(select(.name != "Prism-0.4.0-linux-amd64.deb"))' "$FAKE/releases.ok" > "$FAKE/releases.json"
+reset_calls
+pipeline main -- --expect v0.4.0
+expect "19. um anexo que o SHA256SUMS lista e a release não tem: recusada" 1 "não confere com o SHA256SUMS dela"
+jq '(.[] | select(.tag_name == "v0.4.0") | .assets) += [{"id": 9001, "name": "Prism-0.4.0-mac-arm64.dmg", "state": "uploaded", "size": 1, "digest": null}]' "$FAKE/releases.ok" > "$FAKE/releases.json"
+pipeline main -- --expect v0.4.0
+expect "19. um anexo que o SHA256SUMS não lista (o macOS posto por fora): recusada" 1 "não confere com o SHA256SUMS dela"
+jq '(.[] | select(.tag_name == "v0.4.0") | .assets[] | select(.name == "Prism-0.4.0-win-x64.exe") | .digest) = "sha256:0000000000000000000000000000000000000000000000000000000000000000"' "$FAKE/releases.ok" > "$FAKE/releases.json"
+pipeline main -- --expect v0.4.0
+expect "19. um anexo com bytes que não são os que o SHA256SUMS diz: recusada" 1 "não tem a soma que o SHA256SUMS da release diz"
+check "19. as recusas não escreveram nada" is "$(writes)" "0 0 0"
+cp "$FAKE/releases.ok" "$FAKE/releases.json"
+printf 'lixo\n' > "$FAKE/asset-$(release_json v0.4.0 | jq -r '.assets[] | select(.name == "SHA256SUMS") | .id')"
+pipeline main -- --expect v0.4.0
+expect "19. um SHA256SUMS que não é o da release (linha fora do formato): recusada" 1 "linha fora do formato"
+cp "$FAKE/releases.ok" "$FAKE/releases.json"
+sums_id=$(release_json v0.4.0 | jq -r '.assets[] | select(.name == "SHA256SUMS") | .id')
+printf '%s  Prism-0.4.0-win-x64.exe\n' "$(printf 'a%.0s' {1..64})" > "$FAKE/asset-$sums_id"
+pipeline main -- --expect v0.4.0
+expect "19. um SHA256SUMS que lista só um arquivo de um grupo (nenhuma plataforma inteira): recusada" 1 "não lista nenhuma plataforma inteira"
+cp "$FAKE/releases.ok" "$FAKE/releases.json"
+{ printf '%s  Prism-0.4.0-win-x64.exe\n%s  Prism-0.4.0-win-x64.zip\n%s  Prism-0.4.0-linux-amd64.deb\n' "$(printf 'a%.0s' {1..64})" "$(printf 'b%.0s' {1..64})" "$(printf 'c%.0s' {1..64})"; } > "$FAKE/asset-$sums_id"
+pipeline main -- --expect v0.4.0
+expect "19. um SHA256SUMS que lista uma plataforma inteira e mais um arquivo solto de outra: recusada" 1 "não é de uma plataforma inteira"
+rm "$FAKE/releases.ok"
+
+# ============ 20. um grupo com um arquivo só fica de fora ============
+
+twentieth=$(release_commit 0.5.0 "Merge pull request #22 from Exemplo/develop")
+packages_only 0.5.0 win linux mac-arm64
+printf 'mac-x64.dmg de mentira, 0.5.0\n' > "$work/src/client/release/Prism-0.5.0-mac-x64.dmg"
+reset_calls
+pipeline main -- --expect v0.5.0
+expect "20. o macOS Intel veio só com o .dmg: o grupo fica de fora, e a estável sai com as outras três" 0 "Prism 0.5.0 publicado. A tag v0.5.0 aponta para $twentieth"
+expect "20. o log diz que o grupo veio incompleto e o que faltou" 0 "o pacote de macOS (Intel) veio INCOMPLETO e fica de fora, com todos os arquivos dele (faltou: Prism-0.5.0-mac-x64.zip)"
+expect "20. e o aviso à vista cita só o Intel" 0 "AVISO (Plataforma sem pacote): a release v0.5.0 sai sem o pacote de: macOS (Intel)."
+check "20. o .dmg solto não foi enviado" is "$(uploads_of Prism-0.5.0-mac-x64.dmg)" 0
+check "20. oito pacotes e o SHA256SUMS" is "$(release_json v0.5.0 | jq -r '[.assets[].name] | length')" 9
+check "20. as notas dizem que falta o pacote do Intel, e só dele" eval "release_field v0.5.0 .body | head -n 1 | grep -q 'pacote de macOS (Intel), que não foi gerado' && ! release_field v0.5.0 .body | grep -q 'Apple Silicon)'"
+
+# ============ 21. nenhum grupo inteiro: recusado, nada é publicado ============
+
+twentyfirst=$(release_commit 0.6.0 "Merge pull request #23 from Exemplo/develop")
+packages_only 0.6.0 win
+rm "$work/src/client/release/Prism-0.6.0-win-x64.zip"
+printf 'mac-x64.dmg de mentira\n' > "$work/src/client/release/Prism-0.6.0-mac-x64.dmg"
+reset_calls
+pipeline main -- --expect v0.6.0
+expect "21. só arquivos soltos (nenhum grupo inteiro): recusado" 1 "nenhuma plataforma veio com os pacotes inteiros"
+check "21. nada foi escrito no GitHub e nada foi enviado" is "$(writes) $(wc -l < "$FAKE/uploads" | tr -d ' ') $(remote_commit_of v0.6.0)" "0 0 0 0 "
+rm -rf "$work/src/client/release"
+reset_calls
+pipeline main -- --expect v0.6.0
+expect "21. a pasta dos pacotes vazia (todos os jobs de empacotar falharam): recusado, nada publicado" 1 "nenhuma plataforma veio com os pacotes inteiros"
+check "21. nada escrito" is "$(writes) $(remote_commit_of v0.6.0)" "0 0 0 "
+packages_only 0.6.0 win
+reset_calls
+pipeline develop -- --expect v0.6.0
+expect "21. um pacote de outra versão (0.6.0 com o plano de um beta): o plano não bate, e nada é publicado" 1 "planejou v0.6.0"
+
+# ============ 22. por onde o token passa, depois dos casos das plataformas ============
+
+check "22. o token não está em argumento de nenhuma chamada do gh" eval "! grep -qF '$token' '$FAKE/gh.argv'"
+check "22. nem em argumento de nenhuma chamada do git" eval "! grep -qF '$token' '$FAKE/git.argv'"
+check "22. o token não ficou em arquivo nenhum da pasta do ensaio" eval "! grep -rqF '$token' '$sandbox'"
+check "22. o conteúdo do SHA256SUMS da release foi pedido como arquivo (Accept: application/octet-stream), e não como JSON" grep -q -- "-H Accept: application/octet-stream repos/$repo/releases/assets/" "$FAKE/gh.argv"
 
 echo
 echo "$((total - failures)) de $total casos passaram."

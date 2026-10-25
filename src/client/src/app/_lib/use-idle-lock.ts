@@ -1,5 +1,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
 
+import { resultHostRegistry } from "@/lib/host/host";
+
 import { createIdleTimer } from "./idle-timer";
 import { watchActivity } from "./idle-watch";
 import { shouldShareActivity } from "./peer-session";
@@ -76,6 +78,8 @@ export function useIdleLock({ enabled, minutes, isBusy, onLock, peers }: IdleLoc
     }
 
     const stopWatching = watchActivity({ window, document, timer: counted, check });
+    // RN-SEG-001 e RN-ABAS-015: o que a pessoa faz na janela do resultado também conta como atividade (ela é uma página à parte, com a janela dela).
+    const stopResultWindows = resultHostRegistry.each((host) => watchActivity({ window: host.view, document: host.document, timer: counted, check }));
     // A pessoa mexeu em outra janela: a contagem daqui recomeça (ou, se o prazo já tinha acabado com esta janela dormindo, bloqueia).
     const stopPeers = subscribePeers(() => {
       timer.activity();
@@ -87,6 +91,7 @@ export function useIdleLock({ enabled, minutes, isBusy, onLock, peers }: IdleLoc
       stopped = true;
       clearInterval(interval);
       stopWatching();
+      stopResultWindows();
       stopPeers();
       setSecondsLeft(null);
     };

@@ -3,6 +3,9 @@
 # mac-x64) em packages.txt, um por linha, com a versão no lugar de @VERSION@. Falha (e não escreve nada) se algum grupo não existe,
 # mesmo havendo outro válido ao lado, ou se nenhum grupo foi pedido: uma lista vazia ou incompleta faria a conferência dos pacotes
 # passar sem conferir tudo. O caminho do packages.txt é resolvido ao ler este arquivo, então vale de qualquer pasta.
+# Cada plataforma é um GRUPO e vai (ou não) para a release inteira: present_groups diz quais grupos de uma lista de arquivos estão
+# inteiros (todos os arquivos do grupo, com a versão), expected_groups diz quais a pipeline espera de um beta e de uma estável, e
+# group_label é o nome do grupo para quem lê (log, aviso e notas).
 # (Sem nada do bash 4: o package-desktop.sh lê este arquivo também no bash 3.2 do macOS.)
 packages_file=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/packages.txt
 
@@ -17,6 +20,48 @@ package_files() {
   names=$(awk -v v="$version" -v groups=" $* " '/^#/ || NF == 0 { next } index(groups, " " $1 " ") { gsub(/@VERSION@/, v, $2); print $2 }' "$packages_file") || return 1
   [ -n "$names" ] || { echo "packages.sh: nenhum arquivo para o(s) grupo(s) \"$*\" em $packages_file." >&2; return 1; }
   printf '%s\n' "$names"
+}
+
+# package_groups: os grupos de packages.txt, um por linha, na ordem do arquivo.
+package_groups() {
+  awk '/^#/ || NF == 0 { next } !seen[$1]++ { print $1 }' "$packages_file"
+}
+
+# present_groups <versão> <arquivo>: dos grupos de packages.txt, os que estão INTEIROS na lista do arquivo (um nome por linha): todos
+# os arquivos do grupo, com a versão, e nome inteiro (não vale um pedaço dele). Escreve-os na ordem do packages.txt, um por linha;
+# nada se nenhum está inteiro. Um grupo com um arquivo só não é uma plataforma que se possa instalar: fica de fora.
+present_groups() {
+  local version=$1 listing=$2 group files file whole
+  while IFS= read -r group; do
+    files=$(package_files "$version" "$group") || return 1
+    whole=1
+    while IFS= read -r file; do
+      grep -qxF -- "$file" "$listing" || whole=0
+    done <<< "$files"
+    [ "$whole" -eq 0 ] || printf '%s\n' "$group"
+  done < <(package_groups)
+}
+
+# expected_groups <beta|stable>: os grupos que a pipeline gera naquele tipo de lançamento, separados por espaço. O macOS só é
+# empacotado na estável (decisão do dono, 2026-10-20: os minutos de macOS são os mais caros), então a falta dele num beta é o
+# esperado, e na estável é uma falha de empacotamento.
+expected_groups() {
+  case "$1" in
+    beta) echo "win linux" ;;
+    stable) echo "win linux mac-arm64 mac-x64" ;;
+    *) echo "packages.sh: tipo de lançamento desconhecido: $1 (beta ou stable)." >&2; return 1 ;;
+  esac
+}
+
+# group_label <grupo>: o nome da plataforma como se diz a quem usa.
+group_label() {
+  case "$1" in
+    win) echo "Windows" ;;
+    linux) echo "Linux" ;;
+    mac-arm64) echo "macOS (Apple Silicon)" ;;
+    mac-x64) echo "macOS (Intel)" ;;
+    *) echo "$1" ;;
+  esac
 }
 
 # launch_origin_problem <plataforma>: escreve por que este job NÃO pode gerar o pacote de um lançamento, ou nada se pode. Na

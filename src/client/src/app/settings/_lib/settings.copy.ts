@@ -20,6 +20,7 @@ export const settingsCopy = {
     about: "Sobre",
     results: "Resultados",
     account: "Conta",
+    import: "Importar",
     transactions: "Transações",
     security: "Segurança",
   },
@@ -35,6 +36,7 @@ export const settingsCopy = {
       dracula: { name: "Dracula", kind: "escuro" },
       nord: { name: "Nord", kind: "escuro" },
       githubLight: { name: "GitHub Claro", kind: "claro" },
+      kanagawa: { name: "Kanagawa", kind: "escuro" },
     },
     preview: "Prévia",
     followSystem: "Seguir o modo claro ou escuro do sistema",
@@ -82,12 +84,15 @@ export const settingsCopy = {
     preview: "Prévia do editor",
     // RN-CONFIG-004: os dois rótulos são os do canvas; as dicas dizem o que o editor faz de fato.
     autocomplete: "Autocompletar ao digitar",
-    autocompleteHint: "Sugere as palavras-chave do banco da aba e os nomes que a árvore já carregou: esquemas, tabelas, visões e colunas. Nunca consulta o banco. As setas escolhem uma sugestão, e só então o Enter a aceita.",
+    autocompleteHint: "Sugere as palavras-chave do banco da aba e os nomes que a árvore já carregou: esquemas, tabelas, visões e colunas. Com a conexão aberta, também busca as colunas de uma tabela que você começa a escrever (tabela. ou apelido.) e as chaves estrangeiras que completam o JOIN; fora isso, não consulta o banco. As setas escolhem uma sugestão, e só então o Enter a aceita.",
     uppercaseKeywords: "Converter palavras-chave para maiúsculas",
     uppercaseKeywordsHint: "Só as palavras reservadas (SELECT, FROM, WHERE…), quando você as termina com espaço, vírgula, parêntese ou Enter. Nomes de colunas, texto entre aspas, comentários e o que você cola ficam como estão.",
     // RN-SQL-018 (issue #7): como o "Smart" do DBeaver, com o cuidado de não executar metade de um comando.
     blankLineSeparates: "A linha em branco separa os comandos",
     blankLineSeparatesHint: "Sem seleção, o Ctrl+Enter executa só o comando do cursor, até o ponto e vírgula ou até uma linha em branco, como no DBeaver. A linha em branco só separa quando a de baixo começa outro comando (SELECT, INSERT, UPDATE…) e a de cima não ficou pela metade; nunca dentro de texto, comentário ou rotina. Desligada, só o ponto e vírgula separa.",
+    // RN-CONFIG-004 e RN-VAR-025 (seção 41): o valor que a declaração tem na aba, apagado, depois do texto da linha.
+    showVariableValues: "Mostrar o valor das variáveis no fim da linha",
+    showVariableValuesHint: "Depois que uma declaração (let ou const) é avaliada, o editor escreve o valor dela, apagado, no fim da linha. Não é texto do script: não se seleciona, não se copia e não vai para o arquivo. Some quando você muda a declaração, até a próxima avaliação.",
   },
 
   // RN-ATUALIZA-007: o que a ponte do processo principal guarda e a tela lê e muda.

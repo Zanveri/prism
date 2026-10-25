@@ -190,11 +190,11 @@ describe("Resultados (RN-CONFIG-005)", () => {
     expect(autoLoad(html)).toContain("checked");
   });
 
-  it("'Linhas por busca' continua em breve, até a API: tem a etiqueta e o motivo, e nenhum campo (o único campo é o do nulo)", () => {
+  it("'Linhas por busca' continua em breve, até a API: tem a etiqueta e o motivo, e nenhum campo (os campos são o do nulo, as caixas e o lugar do resultado das abas novas, RN-CONFIG-010)", () => {
     const html = results(render().markup);
 
     expect(html).toMatch(/Linhas por busca<\/p><p[^>]*><span[^>]*>Em breve<\/span><span[^>]*>A página tem 200 linhas/);
-    expect([...html.matchAll(/<input\b[^>]*>/g)].map((match) => /id="([^"]*)"/.exec(match[0])?.[1] ?? "(checkbox)")).toEqual(["cfg-nulo", "(checkbox)", "cfg-tipo-cabecalho"]);
+    expect([...html.matchAll(/<input\b[^>]*>/g)].map((match) => /id="([^"]*)"/.exec(match[0])?.[1] ?? "(checkbox)")).toEqual(["cfg-nulo", "(checkbox)", "cfg-tipo-cabecalho", "(checkbox)", "(checkbox)"]);
   });
 });
 
@@ -281,10 +281,12 @@ describe("Editor SQL", () => {
       expect(checked(box(html, "cfg-maiusculas"))).toBe(true);
     });
 
-    it("diz o que cada uma faz, sem prometer o que o editor não faz: nomes da árvore sem consultar o banco; só as reservadas, só ao digitar", () => {
+    it("diz o que cada uma faz, sem prometer o que o editor não faz: nomes da árvore, e só a coluna de tabela e a chave estrangeira buscadas no banco; só as reservadas, só ao digitar", () => {
       const html = editor(render().markup);
 
-      expect(html).toContain("Nunca consulta o banco.");
+      expect(html).toContain("também busca as colunas de uma tabela que você começa a escrever");
+      expect(html).toContain("as chaves estrangeiras que completam o JOIN");
+      expect(html).not.toContain("Nunca consulta o banco");
       expect(html).toContain("esquemas, tabelas, visões e colunas");
       expect(html).toContain("o que você cola ficam como estão");
     });
@@ -306,6 +308,25 @@ describe("Editor SQL", () => {
       const html = editor(render({ editor: { blankLineSeparates: false } }).markup);
 
       expect(checked(box(html, "cfg-linha-em-branco"))).toBe(false);
+      expect(checked(box(html, "cfg-autocompletar"))).toBe(true);
+    });
+  });
+
+  describe("o valor das variáveis no fim da linha (RN-CONFIG-004 e RN-VAR-025)", () => {
+    it("é uma caixa de marcar depois da linha em branco, ligada por padrão, com a dica de que não é texto do script", () => {
+      const html = editor(render().markup);
+
+      expect(box(html, "cfg-valor-variaveis")).toContain('type="checkbox"');
+      expect(labelled(html, "cfg-valor-variaveis", "Mostrar o valor das variáveis no fim da linha")).toBe(true);
+      expect(checked(box(html, "cfg-valor-variaveis"))).toBe(true);
+      expect(html.indexOf('id="cfg-linha-em-branco"')).toBeLessThan(html.indexOf('id="cfg-valor-variaveis"'));
+      expect(html).toContain("Não é texto do script: não se seleciona, não se copia e não vai para o arquivo.");
+    });
+
+    it("mostra a escolha do usuário, sem mexer nas outras caixas", () => {
+      const html = editor(render({ editor: { showVariableValues: false } }).markup);
+
+      expect(checked(box(html, "cfg-valor-variaveis"))).toBe(false);
       expect(checked(box(html, "cfg-autocompletar"))).toBe(true);
     });
   });
@@ -350,7 +371,7 @@ describe("Atualizações (RN-ATUALIZA-007)", () => {
   });
 
   it("diz o que a atualização garante: o que a tela de versão nova já diz (soma SHA-256, pacotes sem assinatura)", () => {
-    expect(updates(render({}, { updates: defaults }).markup)).toContain("Os pacotes ainda não são assinados.");
+    expect(updates(render({}, { updates: defaults }).markup)).toContain("Os pacotes ainda não têm a assinatura de um desenvolvedor identificado.");
   });
 });
 
@@ -437,11 +458,11 @@ describe("Sobre", () => {
 describe("Aparência: tema", () => {
   const cards = (markup: string) => [...markup.matchAll(/<button type="button" aria-pressed="(true|false)"[^>]*>[\s\S]*?<span class="font-semibold">([^<]*)<\/span>/g)].map((match) => [match[2], match[1]]);
   const followSystem = (markup: string) => /<input type="checkbox"([^>]*)\/?>[\s\S]*?Seguir o modo claro ou escuro do sistema/.exec(markup)?.[1] ?? "";
-  const names = ["Prism Escuro", "Prism Claro", "Monokai", "Dracula", "Nord", "GitHub Claro"];
-  /** Os seis cartões, com só o do tema dado marcado. */
+  const names = ["Prism Escuro", "Prism Claro", "Monokai", "Dracula", "Nord", "GitHub Claro", "Kanagawa"];
+  /** Os cartões, com só o do tema dado marcado. */
   const only = (name: string) => names.map((candidate) => [candidate, String(candidate === name)]);
 
-  it("por padrão o tema é o Escuro, e há seis, na ordem do canvas: Prism Escuro, Prism Claro, Monokai, Dracula, Nord e GitHub Claro", () => {
+  it("por padrão o tema é o Escuro, seguido pelos temas disponíveis", () => {
     const { markup } = render();
 
     expect(cards(markup)).toEqual(only("Prism Escuro"));
@@ -456,6 +477,7 @@ describe("Aparência: tema", () => {
     ["dracula", "Dracula"],
     ["nord", "Nord"],
     ["github-light", "GitHub Claro"],
+    ["kanagawa", "Kanagawa"],
   ] as const)("mostra o tema que o usuário escolheu (%s), e a prévia é a dele", (theme, name) => {
     const { markup } = render({ theme });
 

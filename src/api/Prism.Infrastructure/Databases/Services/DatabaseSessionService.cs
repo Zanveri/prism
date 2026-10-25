@@ -165,6 +165,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task CloseAllAsync()
         => Task.WhenAll(Take(_ => true).Select(CloseSessionAsync));
 
+    public bool HasSession(Guid connectionID, long vaultGeneration)
+        => _sessions.Values.Any(session => session.Info.ConnectionID == connectionID && session.VaultGeneration == vaultGeneration && !session.Closed);
+
     public bool HasOpenSession(IReadOnlyCollection<EDatabaseEngine> engines)
         => _sessions.Values.Any(session => engines.Contains(session.Info.Engine));
 
@@ -211,14 +214,21 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => ExecuteAsync(sessionID, sql, filter, pageSize, readOnly, [], cancellationToken);
 
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, CancellationToken cancellationToken)
+        => ExecuteAsync(sessionID, sql, filter, pageSize, readOnly, keep, [], cancellationToken);
+
+    public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
             var dialect = DialectOf(session);
 
             // RN-GRADE-011: o comando montado é o que roda. A recusa do filtro, como a do texto do comando, deixa o resultado anterior como estava.
+            // RN-VAR-032: com `params`, o filtro não tem marcador (os marcadores do comando ficam na ordem, e o filtro entra sem marcador).
             FilteredSql? filtered = null;
             if (!string.IsNullOrWhiteSpace(filter))
             {
+                if (parameters.Count > 0 && QueryParameterRules.FilterHasMarker(filter, session.Info.Engine))
+                    return new DatabaseFailure(EDatabaseFailure.FilterInvalid, QueryParameterRules.FilterMarker);
+
                 var applied = SqlFilter.Apply(sql, filter, dialect);
                 if (applied.IsFailure)
                     return applied.Error;
@@ -228,11 +238,19 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
             var sent = filtered?.Sql ?? sql;
 
+            // RN-VAR-032: os marcadores do texto montado contra os valores, e o que o banco não guarda; antes de qualquer coisa ir a ele.
+            if (QueryParameterRules.Refusal(sent, session.Info.Engine, parameters, "params") is { } invalid)
+                return invalid;
+
             // RN-PROT-002: na conexão somente leitura, o comando montado que não é uma leitura nem vai ao banco, e o resultado anterior fica.
             if (readOnly && ReadOnlySql.Refusal(sent, session.Info.Engine) is { } reason)
                 return new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, ReadOnlySql.Message(reason));
 
-            var outcome = readOnly ? await session.Connection.ExecuteReadOnlyAsync(sent, pageSize, cancellationToken) : await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken);
+            var outcome = readOnly ? await session.Connection.ExecuteReadOnlyAsync(sent, pageSize, cancellationToken, parameters) : await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken, parameters);
+
+            // RN-LOG-001 e RN-VAR-036: quantos parâmetros o comando levou, nunca o valor.
+            if (parameters.Count > 0)
+                _logger.Information("Sessão {SessionID}: {Operation} levou {Parameters} parâmetros.", session.Info.ID, nameof(ExecuteAsync), parameters.Count);
 
             // RN-SQL-009: a posição do erro seria a do comando montado, que a tela não mostra (como na contagem, RN-SQL-006).
             if (outcome.IsFailure && filtered is not null)
@@ -252,7 +270,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             // RN-SQL-006: "contar total" vale para o último comando que devolveu linhas, mesmo que outros sem linhas venham depois.
             if (outcome.IsSuccess && outcome.Value.Page is { } page)
             {
-                session.LastRowQuery = new RowQuery(sent, page.TotalRows);
+                session.LastRowQuery = new RowQuery(sent, page.TotalRows, parameters);
 
                 // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
                 // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura. O filtro junto é lido com o comando
@@ -264,7 +282,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                     : EditableSql.Read(sent, dialect);
                 // RN-EXPORT-001 e 002: exportar executa o comando de novo, numa conexão à parte; só vale para a leitura só, pelo comando montado, que não gravou.
                 var read = page.TotalRows is null && ReadOnlySql.ExportRefusal(sent, session.Info.Engine) is null;
-                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read, readOnly ? ReadOnlySql.ResultReason : null, sent);
+                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read, readOnly ? ReadOnlySql.ResultReason : null, sent, parameters);
                 var withoutFullValue = result.Cells.Add(page);
                 ReplaceResult(session, result);
 
@@ -280,7 +298,18 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         }, cancellationToken);
 
     public string? FilterRefusal(Guid sessionID, string? filter)
-        => _sessions.TryGetValue(sessionID, out var session) ? SqlFilter.Refusal(filter, DialectOf(session)) : null;
+        => FilterRefusal(sessionID, filter, withParameters: false);
+
+    public string? FilterRefusal(Guid sessionID, string? filter, bool withParameters)
+    {
+        if (!_sessions.TryGetValue(sessionID, out var session))
+            return null;
+
+        if (withParameters && !string.IsNullOrWhiteSpace(filter) && QueryParameterRules.FilterHasMarker(filter, session.Info.Engine))
+            return QueryParameterRules.FilterMarker;
+
+        return SqlFilter.Refusal(filter, DialectOf(session));
+    }
 
     public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(FetchNextAsync), waitsForTurn: false, async session =>
@@ -343,7 +372,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
         await using var connection = opened.Value;
         var started = _timeProvider.GetTimestamp();
-        var total = await connection.CountAsync(query.Sql, counting.Token);
+        var total = await connection.CountAsync(query.Sql, counting.Token, query.Parameters);
         Log(session, nameof(CountAsync), started, total);
 
         return total;
@@ -415,7 +444,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         IReadOnlyList<EditStatement> first = [];
         if (whole.Value is { } index)
         {
-            var statements = WholeColumnSql.Preview(dialect, result.Sql, result.Read, target.Value, result.Columns, changes[index], index);
+            var statements = WholeColumnSql.Preview(dialect, result.Sql, result.Read, target.Value, result.Columns, changes[index], index, result.Parameters);
             if (statements.IsFailure)
                 return statements.Error;
 
@@ -493,7 +522,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             if (expected.IsFailure)
                 return expected.Error;
 
-            var planned = WholeColumnSql.Plan(dialect, result.Sql, result.Read, expected.Value, result.Columns, changes[index], index, requiresRows: false);
+            var planned = WholeColumnSql.Plan(dialect, result.Sql, result.Read, expected.Value, result.Columns, changes[index], index, requiresRows: false, result.Parameters);
             if (planned.IsFailure)
                 return planned.Error;
 
@@ -503,7 +532,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                 if (now.IsFailure || !EditTargetResolver.Same(expected.Value, now.Value))
                     return Result.Failure<WholeColumnPlan, DatabaseFailure>(TableChanged(expected.Value, now));
 
-                return WholeColumnSql.Plan(dialect, result.Sql, result.Read, now.Value, result.Columns, changes[index], index, requiresRows: false);
+                return WholeColumnSql.Plan(dialect, result.Sql, result.Read, now.Value, result.Columns, changes[index], index, requiresRows: false, result.Parameters);
             }, cancellationToken);
         }, cancellationToken);
 
@@ -537,7 +566,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         WholeColumnPlan? wholeColumn = null;
         if (whole is { } index)
         {
-            var planned = WholeColumnSql.Plan(dialect, result.Sql, result.Read, target, result.Columns, changes[index], index, requiresRows: true);
+            var planned = WholeColumnSql.Plan(dialect, result.Sql, result.Read, target, result.Columns, changes[index], index, requiresRows: true, result.Parameters);
             if (planned.IsFailure)
                 return planned.Error;
 
@@ -1062,14 +1091,21 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// <param name="filterApplied">RN-GRADE-011: como o filtro entrou no comando do resultado; nulo sem filtro.</param>
     /// <param name="read">RN-EXPORT-002: o comando do resultado, com o filtro, é uma leitura só e não gravou: o resultado inteiro se exporta.</param>
     /// <param name="sql">RN-EDIT-023: o comando executado, com o filtro junto.</param>
+    /// <param name="parameters">RN-VAR-033: os valores dos marcadores do comando.</param>
     /// <param name="readOnlyReason">
     /// RN-PROT-002: o motivo da conexão somente leitura em que o resultado foi lido, que a página leva no lugar do que o texto diz. Não muda o
     /// <paramref name="source"/>: o alvo do "Gerar SQL" nela (RN-GRADE-020) e o da edição, quando ela deixa de ser somente leitura, saem dele. Quem recusa
     /// a edição na conexão somente leitura é a rota, pela opção de agora.
     /// </param>
-    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null, bool read = false, string? readOnlyReason = null, string? sql = null)
+    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null, bool read = false, string? readOnlyReason = null, string? sql = null, IReadOnlyList<QueryParameter>? parameters = null)
     {
         public bool Read => read;
+
+        /// <summary>
+        /// RN-VAR-033 e 036: os valores dos marcadores do <see cref="Sql"/>, na ordem do texto, só na memória da sessão (até 4 MiB, nunca no disco nem no log): vão de novo
+        /// em tudo o que executa o comando outra vez (a coluna inteira), e morrem com o resultado.
+        /// </summary>
+        public IReadOnlyList<QueryParameter> Parameters => parameters ?? [];
 
         /// <summary>
         /// RN-EDIT-023: o comando como a API o executou, com o filtro do resultado já junto, só na memória (nunca no disco nem no log): é o `<Q>` da coluna
@@ -1101,9 +1137,12 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     }
 
     /// <summary>O comando e, quando ele gravou e foi executado até o fim (RN-SQL-013), o total de linhas que devolveu. Não é um record: o SQL não se imprime.</summary>
-    private sealed class RowQuery(string sql, long? totalRows)
+    private sealed class RowQuery(string sql, long? totalRows, IReadOnlyList<QueryParameter> parameters)
     {
         public string Sql => sql;
+
+        /// <summary>RN-VAR-033: os valores dos marcadores do comando, que a contagem leva de novo.</summary>
+        public IReadOnlyList<QueryParameter> Parameters => parameters;
 
         public long? TotalRows => totalRows;
     }

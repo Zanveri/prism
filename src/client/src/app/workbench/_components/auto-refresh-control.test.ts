@@ -138,6 +138,20 @@ describe("a atualização automática na barra do resultado (RN-GRADE-014)", () 
   });
 });
 
+describe("as medidas do controle (RN-ABAS-009)", () => {
+  const sizes = (tree: ReactElement | null) => elementsOf(tree).filter((element) => element.type === "button").map((element) => String(element.props.className).split(" ").filter((token) => /^(size|h)-\d+$/.test(token)));
+
+  it("na barra da área de resultado da aba de consulta, 24 px, desligada e ligada (o relógio, o texto e o X)", () => {
+    expect(sizes(bar({ size: "bar" }))).toEqual([["size-6"]]);
+    expect(sizes(bar({ state: on(), size: "bar" }))).toEqual([["h-6"], ["size-6"]]);
+  });
+
+  it("no rodapé dos Registros (o padrão), 28 px", () => {
+    expect(sizes(bar())).toEqual([["size-7"]]);
+    expect(sizes(bar({ state: on() }))).toEqual([["h-7"], ["size-7"]]);
+  });
+});
+
 describe("o \"Personalizado…\" (RN-GRADE-014)", () => {
   const dialog = (over: Partial<Parameters<typeof AutoRefreshDialog>[0]> = {}) => AutoRefreshDialog({ everyMs: null, error: null, onSubmit: noop, onCancel: noop, ...over });
 
@@ -146,6 +160,11 @@ describe("o \"Personalizado…\" (RN-GRADE-014)", () => {
 
     expect(field(dialog())?.props).toMatchObject({ defaultValue: "", label: copy.dialog.seconds, inputMode: "numeric", autoFocus: true });
     expect(field(dialog({ everyMs: 45_000, error: copy.dialog.invalid }))?.props).toMatchObject({ defaultValue: "45", error: copy.dialog.invalid });
+  });
+
+  it("a ajuda e a recusa dizem de 1 a 3.600 segundos, com as palavras da especificação (seção 39)", () => {
+    expect(copy.dialog.description).toBe("O comando do resultado é executado de novo a cada intervalo, enquanto o resultado está à vista. O intervalo vai de 1 a 3.600 segundos (1 hora).");
+    expect(copy.dialog.invalid).toBe("Use um número inteiro de segundos, de 1 a 3.600.");
   });
 
   it("enviar entrega o texto digitado, como está (quem confere é quem chama); cancelar fecha", () => {

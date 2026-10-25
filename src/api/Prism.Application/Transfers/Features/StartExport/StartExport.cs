@@ -76,9 +76,14 @@ internal sealed class StartExportHandler(IConnectionQueries connectionQueries, I
         if (driverService.RefusalFor(record.Engine) is { } refusal)
             return Result.Failure<TransferStartedDto, ApiErrorDto>(DatabaseSessionErrors.From(refusal));
 
-        var command = CommandOf(source, request.Columns!, record.Engine);
+        var parameters = QueryParameterRules.Read(source.Params);
+        var command = CommandOf(source, request.Columns!, record.Engine, parameters.Count > 0);
         if (command.IsFailure)
             return Result.Failure<TransferStartedDto, ApiErrorDto>(TransferJobErrors.From(command.Error));
+
+        // RN-VAR-032 e 033: os marcadores do comando montado contra os `source.params`, e o que o banco da conexão não guarda, pelo dialeto dele.
+        if (QueryParameterRules.Refusal(command.Value, record.Engine, parameters, "source.params") is { } mismatch)
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(TransferJobErrors.From(mismatch, TransferJobErrors.OptionsInvalidCode));
 
         var (options, _) = ExportOptionsReader.Read(request.Format!, request.Options, ExportRequestRules.DefaultTable(source));
         if (options is SqlExportOptions { RowsPerStatement: > 1 } && record.Engine == EDatabaseEngine.Informix)
@@ -87,7 +92,7 @@ internal sealed class StartExportHandler(IConnectionQueries connectionQueries, I
         var output = request.Output ?? new();
         var columns = request.Columns!.OrderBy(column => column.Position).Select(column => new ExportColumnChoice(column.Position, column.Name!)).ToList();
         var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, source.Database ?? record.Database, record.UserName, record.Password);
-        var job = new ExportJob(record.ID, settings, generation, request.WindowID, command.Value, columns, source.Kind == "query", request.Count, request.Format!, options!, source.Kind == "table" ? source.Table! : source.Name ?? ResultName, output.Bom, output.Zip ? output.EntryName : null, output.Clipboard);
+        var job = new ExportJob(record.ID, settings, generation, request.WindowID, command.Value, columns, source.Kind == "query", request.Count, ExportFormats.Canonical(request.Format!), options!, source.Kind == "table" ? source.Table! : source.Name ?? ResultName, output.Bom, output.Zip ? output.EntryName : null, output.Clipboard, parameters);
 
         var started = transferService.StartExport(job);
         if (started.IsFailure)
@@ -107,10 +112,11 @@ internal sealed class StartExportHandler(IConnectionQueries connectionQueries, I
 
     /// <summary>
     /// RN-EXPORT-002: o comando que a exportação executa. Na tabela, o `SELECT` das colunas marcadas, pelo nome e na ordem da posição, montado pela API; nos
-    /// Registros e no resultado, o comando como foi executado, com o filtro, conferido de novo como leitura pelo dialeto do banco.
+    /// Registros e no resultado, o comando como foi executado, com o filtro, conferido de novo como leitura pelo dialeto do banco. Com `params`, o filtro não tem
+    /// marcador (RN-VAR-032).
     /// </summary>
-    private static Result<string, ExportSqlRefusal> CommandOf(ExportSourceDto source, IReadOnlyList<ExportColumnDto> columns, EDatabaseEngine engine)
+    private static Result<string, ExportSqlRefusal> CommandOf(ExportSourceDto source, IReadOnlyList<ExportColumnDto> columns, EDatabaseEngine engine, bool hasParameters)
         => source.Kind == "table"
             ? ExportSql.Table(source.Schema!, source.Table!, columns.OrderBy(column => column.Position).Select(column => column.Name!))
-            : ExportSql.Query(source.Sql!, source.Filter, engine);
+            : ExportSql.Query(source.Sql!, source.Filter, engine, hasParameters);
 }

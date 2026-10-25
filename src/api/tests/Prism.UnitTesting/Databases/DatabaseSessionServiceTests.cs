@@ -686,6 +686,9 @@ public sealed partial class DatabaseSessionServiceTests
         /// <summary>RN-PROT-002: os comandos que chegaram pelo caminho da conexão somente leitura, na ordem.</summary>
         public List<string> ExecutedReadOnly { get; } = [];
 
+        /// <summary>RN-VAR-032: os parâmetros de cada comando que chegou (por `ExecuteAsync` e por `ExecuteReadOnlyAsync`), na ordem; nulo quando o comando veio sem eles.</summary>
+        public List<IReadOnlyList<QueryParameter>?> ExecutedParameters { get; } = [];
+
         /// <summary>
         /// RN-SQL-007: há um cursor aberto na conexão. Segue o da base: a página com mais linhas o abre, e todo comando que chega à conexão, o
         /// fim da leitura e o fechamento por ociosidade o fecham; a recusa antes de ir ao banco (<see cref="Refusal"/>) não o toca. O teste
@@ -704,7 +707,7 @@ public sealed partial class DatabaseSessionServiceTests
         /// <summary>A conexão cai na verificação, como a que o administrador derrubou.</summary>
         public bool ClosesItselfOnVerify { get; set; }
 
-        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
+        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
         {
             if (Refusal is { } refusal)
             {
@@ -714,6 +717,7 @@ public sealed partial class DatabaseSessionServiceTests
             }
 
             Executed.Add(sql);
+            ExecutedParameters.Add(parameters);
             HasOpenCursor = false;
             if (Failure is { } failure)
                 return Task.FromResult(Result.Failure<QueryOutcome, DatabaseFailure>(failure));
@@ -721,9 +725,10 @@ public sealed partial class DatabaseSessionServiceTests
             return Respond();
         }
 
-        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken)
+        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
         {
             ExecutedReadOnly.Add(sql);
+            ExecutedParameters.Add(parameters);
             HasOpenCursor = false;
 
             return Respond();
@@ -786,8 +791,15 @@ public sealed partial class DatabaseSessionServiceTests
         public Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
-        public Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+        /// <summary>RN-SQL-006 e RN-VAR-033: as contagens que chegaram a esta conexão (o texto e os parâmetros do comando), na ordem.</summary>
+        public List<(string Sql, IReadOnlyList<QueryParameter>? Parameters)> Counts { get; } = [];
+
+        public Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
+        {
+            Counts.Add((sql, parameters));
+
+            return Task.FromResult(Result.Success<long, DatabaseFailure>(99));
+        }
 
         public Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();
@@ -891,10 +903,10 @@ public sealed partial class DatabaseSessionServiceTests
         public Task<UnitResult<DatabaseFailure>> BeginExportAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
-        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken)
+        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
             => throw new NotSupportedException();
 
-        public Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken)
+        public Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
             => throw new NotSupportedException();
 
         public Task<Result<ExportBatch, DatabaseFailure>> ReadExportRowsAsync(ExportReadPlan plan, CancellationToken cancellationToken)

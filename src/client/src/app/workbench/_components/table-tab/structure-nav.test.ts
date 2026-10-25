@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { navItem } from "@/components/ui";
 import { elementsOf } from "@/lib/testing/react-tree";
+import { stripTags } from "@/lib/testing/text";
 
 import type { StructureSection } from "../../_lib/structure-sections";
 import { StructureNav, structurePanelId, structureTabId, type NavEntry } from "./structure-nav";
@@ -28,7 +29,7 @@ const attributes = (tag: string) => Object.fromEntries([...tag.matchAll(/([\w-]+
 
 /** Cada entrada da lista: os atributos do botão e o HTML de dentro dele. */
 function tabsOf(markup: string) {
-  return [...markup.matchAll(/<button([^>]*)>([^]*?)<\/button>/g)].map((match) => ({ attrs: attributes(match[1]), inner: match[2], text: match[2].replace(/<[^>]*>/g, "") }));
+  return [...markup.matchAll(/<button([^>]*)>([^]*?)<\/button>/g)].map((match) => ({ attrs: attributes(match[1]), inner: match[2], text: stripTags(match[2]) }));
 }
 
 describe("a lista lateral de seções da Estrutura (RN-TABELA-009)", () => {

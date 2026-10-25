@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { dotnetStaging, fontLicenses, projectNotices } from "./licenses.mjs";
@@ -54,5 +56,32 @@ describe("o instalador do Windows (seção 25, RN-INSTALA-001 a 004)", () => {
     expect(body[0]).toBe("!ifndef BUILD_UNINSTALLER");
     expect(body.at(-1)).toBe("!endif");
     expect(include).not.toMatch(/^\s*Function\b/m);
+  });
+});
+
+describe("o pacote de macOS leva assinatura ad hoc (issue #33)", () => {
+  const start = builder.indexOf("\nmac:\n");
+  const mac = builder.slice(start, builder.indexOf("\n\n", start + 1) === -1 ? undefined : builder.indexOf("\n\n", start + 1));
+
+  it("assina com a identidade ad hoc (`-`), sem Hardened Runtime e sem notarização: nada disso pede certificado", () => {
+    expect(mac).toMatch(/^ {2}identity: "-"$/m);
+    expect(mac).toMatch(/^ {2}hardenedRuntime: false$/m);
+    expect(mac).toMatch(/^ {2}notarize: false$/m);
+  });
+
+  it("sem entitlements próprios, vale o modelo do electron-builder, que já desliga a validação de bibliotecas (a assinatura ad hoc precisa disso)", () => {
+    const keys = lines.filter((line) => !line.trimStart().startsWith("#")).join("\n");
+    const require = createRequire(import.meta.url);
+    const builderLib = createRequire(require.resolve("electron-builder/package.json"));
+    const template = readFileSync(join(dirname(builderLib.resolve("app-builder-lib/package.json")), "templates", "entitlements.mac.plist"), "utf8");
+
+    expect(keys).not.toMatch(/^\s*entitlements(Inherit)?:/m);
+    expect(template).toMatch(/<key>com\.apple\.security\.cs\.disable-library-validation<\/key>\s*<true\/>/);
+  });
+
+  it("nenhum certificado nem segredo nas chaves do arquivo (os comentários podem citá-los)", () => {
+    const keys = lines.filter((line) => !line.trimStart().startsWith("#")).join("\n");
+
+    expect(keys).not.toMatch(/identity: null|cscLink|cscKeyPassword|cscInstaller|provisioningProfile|CSC_|APPLE_/);
   });
 });

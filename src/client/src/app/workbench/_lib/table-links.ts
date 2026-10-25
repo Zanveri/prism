@@ -47,11 +47,11 @@ export function defaultSchemasOf(engine: Engine | undefined, userName: string | 
 const fold = (text: string, upper: boolean) => (upper ? text.replace(/[a-z]+/g, (part) => part.toUpperCase()) : text.replace(/[A-Z]+/g, (part) => part.toLowerCase()));
 
 const isQuotedName = (sql: string, token: SqlToken) => !token.word && sql.charCodeAt(token.start) === 34;
-const isName = (sql: string, token: SqlToken | undefined): token is SqlToken => token !== undefined && (token.word || isQuotedName(sql, token));
-const isDot = (token: SqlToken | undefined) => token !== undefined && !token.word && token.text === ".";
+export const isName = (sql: string, token: SqlToken | undefined): token is SqlToken => token !== undefined && (token.word || isQuotedName(sql, token));
+export const isDot = (token: SqlToken | undefined) => token !== undefined && !token.word && token.text === ".";
 
 /** O nome como o banco o lê: entre aspas duplas, como está escrito (a aspa de dentro é dobrada); sem elas, dobrado. `null`: a palavra reservada sem aspas não é nome. */
-function nameOf(sql: string, token: SqlToken, engine: Engine | undefined): string | null {
+export function nameOf(sql: string, token: SqlToken, engine: Engine | undefined): string | null {
   if (isQuotedName(sql, token)) return sql.slice(token.start + 1, token.end - 1).replaceAll('""', '"');
   const written = sql.slice(token.start, token.end);
   return isReservedWord(written) ? null : fold(written, engine === db2);

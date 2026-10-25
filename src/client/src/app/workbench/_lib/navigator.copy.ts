@@ -82,4 +82,10 @@ export const navigatorCopy = {
     renameConnection: "Renomear",
     duplicateConnection: "Duplicar conexão",
   },
+
+  // RN-ARVORE-009: o indicador de ir ao item pelas primeiras letras, nas duas árvores. `none` é o que o leitor de tela anuncia (`aria-live`).
+  typeAhead: {
+    typed: (text: string) => `Ir para: ${text}`,
+    none: (text: string) => `Nenhum item começa com “${text}”`,
+  },
 } as const;

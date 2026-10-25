@@ -12,6 +12,15 @@ describe("o que 'Verificar atualizações' diz (RN-ATUALIZA-002): o resultado se
     expect(checkNotice({ outcome: "upToDate" }, "")).toEqual({ tone: "success", title: "O Prism está atualizado.", description: undefined });
   });
 
+  it("atualizado, mas a versão mais nova saiu sem o pacote deste sistema: o aviso diz qual", () => {
+    expect(checkNotice({ outcome: "upToDate", withoutPackage: "0.2.0" }, "0.1.0")).toEqual({
+      tone: "success",
+      title: "O Prism está atualizado.",
+      description: "A versão instalada, 0.1.0, é a mais recente que tem pacote para este sistema. A versão 0.2.0 saiu sem ele; o Prism oferece a próxima que tiver.",
+    });
+    expect(checkNotice({ outcome: "upToDate", withoutPackage: "0.2.0" }, "")).toMatchObject({ description: undefined });
+  });
+
   it("sem origem", () => {
     expect(checkNotice({ outcome: "noSource" }, "0.1.0")).toMatchObject({ tone: "warning", title: "Este Prism não procura atualizações." });
   });

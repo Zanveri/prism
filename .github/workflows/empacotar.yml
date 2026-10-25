@@ -4,6 +4,12 @@
 # electron-builder fixado por digest) e macOS (dmg e zip, Apple Silicon e Intel, os dois no runner de macOS Apple Silicon, porque o
 # dmg só se gera no macOS). Toda execução empacota, lance ou não; quem publica é o workflow lancar.
 #
+# O macOS SÓ NA ESTÁVEL (decisão do dono, 2026-10-20, para economizar minutos da pipeline: o minuto de macOS é o mais caro): os
+# dois jobs de macOS só rodam na `main`, o merge do pull request de lançamento. Na `develop` eles nem são marcados, por um `if` no
+# JOB pelo ramo da execução (o contexto `github` de um workflow reutilizável é o do que o chamou) e não por um passo que pula por
+# dentro: o runner de macOS não pode ser pedido à toa. Um beta sai com Windows e Linux. Os jobs de pacote são independentes: um que
+# falha não derruba os outros, e o `lancar` publica as plataformas que vieram.
+#
 # A versão dos pacotes é a do plano (input `versao`, do job `versao` do workflow verificar): num beta, X.Y.Z-beta.N, gravada na
 # cópia de trabalho antes de publicar a API e de empacotar (set-build-version.sh), para o app empacotado dizer que é o beta.
 #
@@ -179,6 +185,7 @@ jobs:
   macos:
     name: Pacote de macOS (${{ matrix.arquitetura }})
     needs: api
+    if: github.ref_name == 'main'
     runs-on: macos-15
     timeout-minutes: 45
     permissions:

@@ -48,6 +48,10 @@ internal static class DatabaseSessionErrors
             // RN-GRADE-011: pela rota, o validator recusa antes, com o mesmo código, no campo `Filter`; esta é a do registro de sessões.
             EDatabaseFailure.FilterInvalid => ApiErrorDto.CreateUnprocessableEntity("Filtro inválido.", "FILTER_INVALID", failure.Message),
 
+            // RN-VAR-032: o valor dos `params` que o banco não guarda, no campo dele; e os marcadores que não batem com os valores (`markers` e `values`).
+            EDatabaseFailure.QueryInvalid => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "QUERY_INVALID", failure.Field ?? "params", failure.Message),
+            EDatabaseFailure.ParametersMismatch => ApiErrorDto.CreateUnprocessableEntity("Os marcadores não batem com os valores.", "QUERY_PARAMETERS_MISMATCH", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["markers"] = failure.Markers, ["values"] = failure.Values }),
+
             // RN-PROT-002: nada foi ao banco, e o resultado anterior continua (sem `executed`).
             EDatabaseFailure.ConnectionReadOnly => ApiErrorDto.CreateUnprocessableEntity("Conexão somente leitura.", "CONNECTION_READ_ONLY", failure.Message),
 

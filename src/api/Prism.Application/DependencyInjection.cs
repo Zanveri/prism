@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prism.Application.ConnectionTransfers.Repositories;
+using Prism.Application.DbeaverImports.Repositories;
 using Prism.Application.Connections.Queries;
 using Prism.Application.Connections.Repositories;
 using Prism.Application.Folders.Queries;
@@ -35,6 +36,7 @@ public static class DependencyInjection
     {
         services.AddTransient<IConnectionImportRepository, ConnectionImportRepository>();
         services.AddTransient<IConnectionRepository, ConnectionRepository>();
+        services.AddTransient<IDbeaverImportRepository, DbeaverImportRepository>();
         services.AddTransient<IFolderRepository, FolderRepository>();
         services.AddTransient<IScriptFolderRepository, ScriptFolderRepository>();
         services.AddTransient<IScriptRepository, ScriptRepository>();

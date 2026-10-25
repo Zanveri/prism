@@ -18,7 +18,7 @@ export type ThemeId = Exclude<ThemeMode, "system">;
  * muda com o claro e o escuro e não é cor de token: a coluna das fichas `light-dark()`, a marca, a barra de rolagem e os controles do navegador,
  * e se o CodeMirror trata o editor como escuro.
  */
-export const themeSchemes = { dark: "dark", light: "light", monokai: "dark", dracula: "dark", nord: "dark", "github-light": "light" } as const satisfies Record<ThemeId, Scheme>;
+export const themeSchemes = { dark: "dark", light: "light", monokai: "dark", dracula: "dark", nord: "dark", "github-light": "light", kanagawa: "dark" } as const satisfies Record<ThemeId, Scheme>;
 
 /** O mínimo que se usa do <html>: o teste passa um objeto qualquer no lugar. */
 type ThemeRoot = { dataset: Record<string, string | undefined> };

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { environmentLookup } from "@/app/connections/_lib/environment";
 import { ConfirmDialog, useToast } from "@/components/ui";
-import { currentWindowId, onTabWanted, onWindowCloseRequested, sendTabAway, tellWindows } from "@/lib/api/bridge";
+import { currentWindowId, endTabDrag, onTabWanted, onWindowCloseRequested, sendTabAway, tellWindows } from "@/lib/api/bridge";
 import { vaultLock } from "@/lib/api/vault-lock";
 
 import type { TabMoveTarget } from "../../../../electron/window-messages";
@@ -15,8 +15,14 @@ import { loadTracker, windowTransfers } from "../_lib/data-import/data-imports";
 import { exitQuestion, totalOf, type ExitQuestion } from "../_lib/data-import/transfer-exits";
 import { windowCloseStep } from "../_lib/data-export/export-exits";
 import { liveEditors } from "../_lib/live-editors";
-import { recallForTransfer } from "../_lib/tab-memory";
-import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
+import { recall, recallForTransfer } from "../_lib/tab-memory";
+import { afterPlaceChange, f6Action, isF6, placeAnnouncement, placeMenu, placeOf, resultOnView, resultPanelElementId, type PlaceVia } from "../_lib/result-place";
+import { resultPlaceCopy } from "../_lib/result-place.copy";
+import { resultWindows } from "../_lib/result-windows";
+import { resultFocus, resultSlots } from "../_lib/result-slots";
+import { createTabDragSession, dragEndRequest, isOnlyTab, type DragEndEvent } from "../_lib/tab-drag";
+import { tabMoveShortcut } from "../_lib/tab-order";
+import { stripTitles } from "../_lib/tab-titles";
 import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
 import { scriptsQuery } from "../_lib/scripts.service";
@@ -27,11 +33,14 @@ import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
 import { isBusyState } from "../_lib/use-query-runner";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { useWorkbench } from "../_lib/workbench-state";
-import { isTableTab, type TableView } from "../_lib/workbench-model";
+import { isTableTab, type ResultPlace, type TableView } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { QueryTabPanel } from "./query-tab";
+import { focusResultIn, releaseFocusIn, resultHostOf } from "./result-host";
+import { ResultTabMark } from "./result-tab-mark";
 import { UnsavedScriptsDialog } from "./script-dialogs";
 import { ScriptWaitingMark } from "./script-tabs";
+import { TabDragVeil } from "./tab-drag-veil";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
 import { TableTabPanel } from "./table-tab/table-tab";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
@@ -41,6 +50,15 @@ const copy = workbenchCopy.tabs;
 
 /** Fechar abas, ou uma janela que não é a última, pergunta tudo (RN-ABAS-007). */
 const askEverything = closeAsks({ closesTheApp: false });
+
+/**
+ * RN-ABAS-012: o painel da aba do resultado, logo depois do da aba dela: o lugar onde a área de resultado da aba se põe (`resultSlots`), com o nome
+ * "Resultado de consulta-2.sql" (e não o da aba, que leva o ponto no nome). O conteúdo é da aba de consulta, que o desenha por portal (`ResultHost`).
+ */
+function ResultTabPanel({ tabId, label, hidden }: { tabId: string; label: string; hidden: boolean }) {
+  const register = useCallback((element: HTMLDivElement | null) => resultSlots.set(tabId, "tab", element), [tabId]);
+  return <div ref={register} role="tabpanel" id={resultPanelElementId(tabId)} aria-label={label} hidden={hidden} className={hidden ? undefined : "flex min-h-0 min-w-0 flex-1 flex-col"} />;
+}
 
 /**
  * A faixa de abas e o painel de cada uma. Cada aba é uma consulta (`QueryTab`) de uma conexão, com
@@ -53,13 +71,16 @@ const askEverything = closeAsks({ closesTheApp: false });
  * Linux, então nada mais responde a esse atalho; no macOS o menu do app não tem "Fechar janela". Os diálogos e o menu de contexto ficam
  * fora desta árvore de teclado (o menu para a propagação), e a tela de bloqueio é um diálogo por cima de tudo: nenhum fecha aba por engano.
  *
- * As abas mudam de lugar (RN-ABAS-001: arrastando, ou Ctrl+Shift+PageUp e PageDown na ativa) e passam para outra janela (RN-ABAS-002 e 003: pelo menu
- * da aba, arrastando-a para fora da janela ou até a faixa de outra). A aba com comando em andamento não muda de janela, e a dos Registros com
- * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
+ * As abas mudam de lugar (RN-ABAS-001: arrastando, ou Ctrl+Shift+PageUp e PageDown na ativa) e passam para outra janela (RN-ABAS-002, 003 e 010: pelo
+ * menu da aba; soltando-a em qualquer lugar que não seja uma faixa, dentro ou fora da janela, numa janela nova; ou soltando-a sobre outra janela, que a
+ * recebe). A aba com comando em andamento não muda de janela, e a dos Registros com alterações não salvas pergunta antes se salva ou descarta. Fechar a
+ * janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, resultActive, showEntry, setResultPlace, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
+  // RN-ABAS-008: o nome curto das abas (o do painel da aba do resultado também).
+  const shortTitles = useMemo(() => stripTitles(tabs), [tabs]);
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
   const folders = useQuery(foldersQuery);
@@ -75,6 +96,10 @@ export function WorkbenchTabs() {
 
   // Uma aba só está À VISTA se for a ativa e a área de trabalho for a tela mostrada (RN-SEG-001): a escondida não fala com o banco.
   const onScreen = useWorkbenchOnScreen();
+
+  // RN-ABAS-010: o arraste da aba desta janela, que a faixa começa e marca, o véu marca, e o fim do arraste lê. A área das abas é onde o véu põe a frase.
+  const [drag] = useState(() => createTabDragSession());
+  const area = useRef<HTMLElement>(null);
 
   // Quem a pessoa desconectou: as vistas das tabelas dessas conexões esperam o clique, em vez de reabrir a sessão (`connection-intent.ts`).
   const [disconnectLog] = useState(() => createDisconnectLog(queryClient));
@@ -110,6 +135,113 @@ export function WorkbenchTabs() {
   const handleOpenQuery = useCallback((connectionId: string, sql: string, database?: string) => latestOpenQuery.current(connectionId, sql, database), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
   const handleSwitchConnection = useCallback((tabId: string, connectionId: string) => latestSwitchConnection.current(tabId, connectionId), []);
+
+  // RN-ABAS-014: as abas que estão indo para outra janela ("Numa janela" fica desabilitado nelas), e o anúncio da troca de lugar, para o leitor de tela.
+  const [moving, setMoving] = useState<ReadonlySet<string>>(() => new Set());
+  const [announcement, setAnnouncement] = useState({ text: "", seq: 0 });
+  useEffect(() => resultFocus.forgetExcept(new Set(tabs.map((tab) => tab.id))), [tabs]);
+  // RN-ABAS-015: as abas cuja janela do resultado está aberta e não minimizada: o resultado delas está à vista, qualquer que seja a aba ativa.
+  const shownWindows = useSyncExternalStore(resultWindows.subscribe, resultWindows.shownTabs, resultWindows.shownTabs);
+  const locked = useSyncExternalStore(vaultLock.subscribe, vaultLock.isLocked, vaultLock.isLocked);
+
+  /**
+   * Seção 39 (RN-ABAS-011, 012 e 014): troca o lugar do resultado da aba, sem executar nada (a área é a mesma, e só muda de lugar). Antes, o campo de edição
+   * de uma célula aberto é confirmado (o foco sai da área). Depois, o que fica ativo e onde fica o foco (`afterPlaceChange`), e o anúncio, numa região
+   * `role="status"`, sem toast.
+   */
+  function changePlace(tabId: string, to: ResultPlace, via: PlaceVia, at: { x: number; y: number } | null = null) {
+    const tab = latestTabs.current.find((candidate) => candidate.id === tabId);
+    const from = tab === undefined ? null : placeOf(tab);
+    if (from === null || from === to) return;
+
+    const after = afterPlaceChange({ to, via, resultWasActive: resultActive && activeTabId === tabId });
+    releaseFocusIn(tabId);
+    setResultPlace(tabId, to);
+    if (after.show !== "keep") showEntry(tabId, after.show);
+    if (after.focus !== null) resultFocus.request(tabId, after.focus);
+    setAnnouncement((current) => ({ text: placeAnnouncement(to), seq: current.seq + 1 }));
+    resultWindows.forgetFailure(tabId);
+
+    // RN-ABAS-013 e 017: a janela do resultado abre a pedido da pessoa, agora (o botão, o menu), e nunca por um efeito. O lugar já vale; se a janela não abrir, o
+    // resultado volta para onde estava, com o aviso. A janela que deixa de ser o lugar fecha pelo Prism, e "Voltar para o painel" e o botão de lugar da janela do resultado trazem a janela da aba à frente.
+    if (to === "window") {
+      void resultWindows.open(tabId, { mode: "focus", ...(at === null ? {} : { at }), title: shortTitles.get(tabId) ?? tab?.title ?? "" }).then((opened) => {
+        if (opened) return;
+        setResultPlace(tabId, from);
+        toast.warning(resultPlaceCopy.windowFailed);
+      });
+    } else if (from === "window" && via !== "windowClosed") {
+      // Quem trocou de dentro da janela do resultado (o botão dela, "Voltar para o painel") a vê fechar: o foco prometido (RN-ABAS-014) é da janela da aba, e o
+      // sistema não escolheria ela. O menu das abas é da própria janela da aba, que já está à frente.
+      void resultWindows.close(tabId).then(() => (via === "back" || via === "bar" ? void resultWindows.focus(tabId, "opener") : undefined));
+    }
+  }
+  const latestChangePlace = useRef(changePlace);
+  useEffect(() => {
+    latestChangePlace.current = changePlace;
+  });
+  // O botão da barra do resultado (no painel memorizado de cada aba): a função é estável e chama a versão mais recente.
+  const handlePlace = useCallback((tabId: string, place: ResultPlace) => latestChangePlace.current(tabId, place, "bar"), []);
+  // RN-ABAS-013: "Voltar para o painel" da janela do resultado (e o Ctrl+W nela): a aba da consulta fica ativa, com o foco no resultado, e a janela da aba vem à frente.
+  const handleBack = useCallback((tabId: string) => latestChangePlace.current(tabId, "panel", "back"), []);
+  // RN-ABAS-014: o F6 com o resultado numa janela. Do editor, a janela do resultado vem à frente (com o foco no resultado); do resultado, a janela da aba, com a
+  // consulta ativa e o foco no editor.
+  // `link`: um link da área de resultado abriu outra tela na janela da aba (o "Instalar driver"), e a janela da aba vem à frente.
+  function focusWindow(tabId: string, target: "result" | "opener" | "link") {
+    if (target === "opener") {
+      // O pedido de foco do editor só vale se a troca vai redesenhar a aba (a consulta não estava à frente): o editor que já está à vista é focado por quem pediu.
+      const switching = activeTabId !== tabId || resultActive;
+      showEntry(tabId, "query");
+      if (switching) resultFocus.request(tabId, "editor");
+    }
+    void resultWindows.focus(tabId, target === "result" ? "result" : "opener");
+  }
+  const latestFocusWindow = useRef(focusWindow);
+  useEffect(() => {
+    latestFocusWindow.current = focusWindow;
+  });
+  const handleFocusWindow = useCallback((tabId: string, target: "result" | "opener" | "link") => latestFocusWindow.current(tabId, target), []);
+
+  // RN-ABAS-013 e 017: o que o processo principal conta das janelas do resultado (o fechamento, com o motivo, e o estado), enquanto a área de trabalho está
+  // montada; ao desmontar (o "Sair"), as janelas fecham pelo Prism. A pessoa que fecha a janela pelo sistema volta o resultado ao painel, sem perguntar nada.
+  useEffect(() => resultWindows.connect(), []);
+  useEffect(() => resultWindows.onUserClosed((tabId) => latestChangePlace.current(tabId, "panel", "windowClosed")), []);
+
+  // RN-ABAS-016: as janelas que as abas pedem (a volta das abas na entrada e no desbloqueio, a aba que chegou de outra janela) abrem uma a uma, na ordem das
+  // abas e a da aba ativa por último, sem tomar o foco; as que deixaram de ser pedidas fecham, pelo Prism. O bloqueio e o "Sair" as fecham (nada do que estava
+  // aberto fica à vista), e o lugar das abas continua o que era. Quem abre por ação da pessoa é `changePlace`; isto não abre duas vezes (a abertura é idempotente).
+  const windowTabs = tabs.filter((tab) => placeOf(tab) === "window" && !moving.has(tab.id));
+  const windowKey = `${windowTabs.map((tab) => tab.id).join(",")}|${windowTabs.some((tab) => tab.id === activeTabId) ? activeTabId : ""}|${locked}`;
+  useEffect(() => {
+    if (locked) {
+      void resultWindows.closeAll();
+      return;
+    }
+    const ordered = [...windowTabs.filter((tab) => tab.id !== activeTabId), ...windowTabs.filter((tab) => tab.id === activeTabId)];
+    resultWindows.reconcile(
+      ordered.map((tab) => ({ tabId: tab.id, title: shortTitles.get(tab.id) ?? tab.title })),
+      (tabId) => {
+        // A janela não abriu: o resultado fica no painel (onde se vê), com o aviso, e o lugar guardado passa a ser o painel.
+        toast.warning(resultPlaceCopy.windowFailed);
+        latestChangePlace.current(tabId, "panel", "windowClosed");
+      },
+    );
+    // `windowKey` resume as abas pedidas, a ativa e o bloqueio; o resto vem da renderização de agora.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowKey]);
+  // O título da janela acompanha o da aba (RN-ABAS-008 e 013).
+  useEffect(() => {
+    for (const tab of tabs) if (placeOf(tab) === "window") resultWindows.setTitle(tab.id, shortTitles.get(tab.id) ?? tab.title);
+  }, [tabs, shortTitles, shownWindows]);
+
+  // RN-ABAS-014: o F6 com o resultado numa aba troca a entrada ativa, com o foco no resultado ou no editor.
+  const handleToggleEntry = useCallback(
+    (tabId: string, view: "query" | "result") => {
+      showEntry(tabId, view);
+      resultFocus.request(tabId, view === "result" ? "result" : "editor");
+    },
+    [showEntry],
+  );
 
   /**
    * Fechar várias de uma vez. `closeTab` parte da lista de abas que viu quando foi criado, então chamado várias vezes no mesmo instante
@@ -212,6 +344,15 @@ export function WorkbenchTabs() {
     const asked = tabNow();
     if (asked === undefined) return;
 
+    setMoving((current) => new Set([...current, tabId]));
+    try {
+      await sendNow(tabId, target, tabNow, asked, saved);
+    } finally {
+      setMoving((current) => new Set([...current].filter((id) => id !== tabId)));
+    }
+  }
+
+  async function sendNow(tabId: string, target: TabMoveTarget, tabNow: () => (typeof tabs)[number] | undefined, asked: (typeof tabs)[number], saved: boolean) {
     const runner = runnerOf(tabId);
     const outcome = await handOffTab(runner, {
       // Enquanto a execução automática terminava, a aba pode ter fechado (ela saiu da lista, e o executor também: `runnerOf` lança) ou trocado de executor
@@ -227,13 +368,17 @@ export function WorkbenchTabs() {
         // `alive` acabou de achá-la na lista de agora.
         const tab = tabNow() ?? asked;
         const state = saved && isTableTab(tab) && !isBusyState(current) ? { status: "idle" as const } : current;
-        return isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
+        return isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId), values: runner.values.snapshot() });
       },
       send: async (transfer) => {
-        const reply = await sendTabAway({ target, transfer });
-        if (reply.ok) detachTab(tabId);
-        // Solta em cima de outra janela, fora da faixa dela: a aba fica onde estava, sem aviso (na faixa, quem a leva é a outra janela).
-        else if (reply.reason !== "overWindow") toast.error(copy.moveFailed);
+        // RN-ABAS-016: a janela do resultado da aba fecha (pelo Prism) e reabre a partir da outra janela; a aba só vai depois de o processo principal confirmar.
+        // Sem a confirmação em 3 segundos, ela vai assim mesmo, com o resultado no painel, e a janela que a recebe avisa.
+        const closed = resultWindows.isOpen(tabId) ? await resultWindows.close(tabId) : true;
+        const outgoing = closed || transfer.tab.resultPlace !== "window" ? transfer : { ...transfer, tab: { ...transfer.tab, resultPlace: "panel" as const }, resultWindowLost: true };
+        const reply = await sendTabAway({ target, transfer: outgoing });
+        // O elemento da aba arrastada fica na página até o fim do arraste (a outra janela pode recebê-la antes do `dragend` daqui, RN-ABAS-010).
+        if (reply.ok) drag.whenIdle(tabId, () => detachTab(tabId));
+        else toast.error(copy.moveFailed);
         return reply.ok;
       },
     });
@@ -335,14 +480,46 @@ export function WorkbenchTabs() {
       return;
     }
 
+    // RN-ABAS-014: o F6 na faixa vale o lado da entrada ativa (o editor e o resultado tratam o deles e não deixam a tecla chegar aqui).
+    if (isF6(event)) {
+      const tab = tabs.find((candidate) => candidate.id === activeTabId);
+      const place = tab === undefined ? null : placeOf(tab);
+      if (place === null || (event.target as Element).closest?.('[role="tablist"]') == null) return;
+      event.preventDefault();
+      const action = f6Action({ place, from: "strip", mode: recall(activeTabId, "layout")?.mode ?? "split", resultActive });
+      const host = resultHostOf(activeTabId);
+      if (action === "focusResult" && host !== null) focusResultIn(host);
+      else if (action === "showResult" || action === "showQuery") handleToggleEntry(activeTabId, action === "showResult" ? "result" : "query");
+      else if (action === "focusWindow" || action === "focusOpener") handleFocusWindow(activeTabId, action === "focusWindow" ? "result" : "opener");
+      return;
+    }
+
     if (!isCloseShortcut(event)) return;
     event.preventDefault();
-    handleClose("one", activeTabId);
+    // RN-ABAS-012: com a aba do resultado ativa, o Ctrl+W volta o resultado ao painel, sem perguntar nada.
+    if (resultActive) changePlace(activeTabId, "panel", "close");
+    else handleClose("one", activeTabId);
   }
 
-  // RN-ABAS-003: a janela sem abas também recebe a aba arrastada de outra janela, no lugar da faixa.
+  // RN-ABAS-003: a aba de outra janela, solta na faixa desta (no lugar da soltura) ou no véu dela (no fim da faixa; também na janela sem abas).
   function receive(fromWindowId: number, tabId: string, index: number) {
     tellWindows((windows) => windows.requestTab({ fromWindowId, tabId, index }));
+  }
+
+  /**
+   * RN-ABAS-010: o arraste de uma aba desta janela terminou. Quem decide é quem recebeu a soltura: a faixa daqui (a aba já mudou de lugar), o véu daqui (a
+   * janela nova), outra janela (que a pede, RN-ABAS-003) ou ninguém (fora das janelas do Prism, a janela nova; o Esc e a barra de título, nada). O processo
+   * principal lê o ponteiro e responde; a janela nova vem pelo caminho de sempre, com as perguntas de antes (RN-ABAS-002). A aba só sai quando ele
+   * responde que a janela nova a recebeu.
+   */
+  async function handleDragEnd(tabId: string, event: DragEndEvent) {
+    const request = dragEndRequest(drag.finish(), event, { windowId, onlyTab: isOnlyTab(latestTabs.current) });
+    if (request === null) return;
+    const reply = await endTabDrag(request);
+    if (reply.action !== "newWindow") return;
+    // A aba do resultado não vai para outra janela de abas: o resultado dela abre na janela do resultado, no ponto da soltura (RN-ABAS-010 e 013).
+    if (request.kind === "result") latestChangePlace.current(tabId, "window", "drag", reply.at);
+    else latestMove.current(tabId, reply.at === null ? { kind: "new" } : { kind: "new", at: reply.at });
   }
 
   const connectionOf = (connectionId: string | null) => (connectionId === null ? undefined : connections.data?.find((connection) => connection.id === connectionId));
@@ -356,7 +533,7 @@ export function WorkbenchTabs() {
 
   return (
     <>
-      <section onKeyDown={handleKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <section ref={area} onKeyDown={handleKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {tabs.length === 0 ? null : (
           <TabStrip
             tabs={tabs}
@@ -370,44 +547,71 @@ export function WorkbenchTabs() {
             onReorder={reorderTab}
             onMove={handleMove}
             onReceive={receive}
+            drag={drag}
+            onDragEnd={(tabId, event) => void handleDragEnd(tabId, event)}
             // RN-SQL-021: a aba cujo script espera a resposta da pergunta de erro, que só aparece na aba à vista.
             markOf={(tabId) => <ScriptWaitingMark runner={runnerOf(tabId)} />}
+            resultActive={resultActive}
+            onShowEntry={showEntry}
+            onPlace={(tabId, place, via) => changePlace(tabId, place, via)}
+            placeItemsOf={(tabId) => {
+              const tab = tabs.find((candidate) => candidate.id === tabId);
+              return placeMenu((tab === undefined ? null : placeOf(tab)) ?? "panel", { moving: moving.has(tabId) });
+            }}
+            resultMarkOf={(tabId, active) => <ResultTabMark tabId={tabId} runner={runnerOf(tabId)} active={active} />}
           />
         )}
 
         {tabs.length === 0 ? (
-          <div
-            onDragOver={(event) => {
-              if (!event.dataTransfer.types.includes(tabDragType)) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-            }}
-            onDrop={(event) => {
-              if (!event.dataTransfer.types.includes(tabDragType)) return;
-              event.preventDefault();
-              const drag = readTabDrag(event.dataTransfer.getData(tabDragType));
-              if (drag !== null && drag.windowId !== null && drag.windowId !== windowId) receive(drag.windowId, drag.tabId, 0);
-            }}
-            className="flex flex-1 flex-col justify-center gap-1.5 px-10"
-          >
+          // RN-ABAS-003: a janela sem abas recebe a aba de outra janela pelo véu, como a que tem abas recebe fora da faixa.
+          <div className="flex flex-1 flex-col justify-center gap-1.5 px-10">
             <h2 className="text-lg font-semibold">{copy.emptyTitle}</h2>
             <p className="max-w-[420px] text-muted">{copy.emptyHint}</p>
           </div>
         ) : (
           tabs.map((tab) => {
             const selected = tab.id === activeTabId;
+            // RN-ABAS-012: com a aba do resultado ativa, o painel dela aparece, e o da aba da consulta fica escondido (montado, como o das outras abas).
+            const place = placeOf(tab);
+            const queryShown = selected && !resultActive;
 
             return (
-              <div key={tab.id} role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!selected} className={selected ? "flex min-h-0 flex-1 flex-col" : undefined}>
-                {isTableTab(tab) ? (
-                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} />
-                ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onSwitchConnection={handleSwitchConnection} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} onSwitchDatabase={handleSwitchDatabase} />
-                )}
-              </div>
+              <Fragment key={tab.id}>
+                <div role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!queryShown} className={queryShown ? "flex min-h-0 flex-1 flex-col" : undefined}>
+                  {isTableTab(tab) ? (
+                    <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} />
+                  ) : (
+                    <QueryTabPanel
+                      tab={tab}
+                      runner={runnerOf(tab.id)}
+                      engine={connectionOf(tab.connectionId)?.engine}
+                      active={selected}
+                      place={place ?? "panel"}
+                      editorShown={queryShown}
+                      resultShown={resultOnView({ place: place ?? "panel", selected, resultActive, windowShown: shownWindows.has(tab.id) })}
+                      moving={moving.has(tab.id)}
+                      onPlace={handlePlace}
+                      onToggleEntry={handleToggleEntry}
+                      onBackToPanel={handleBack}
+                      onFocusWindow={handleFocusWindow}
+                      onSqlChange={updateTab}
+                      onEdited={markScriptEdited}
+                      onSave={requestSave}
+                      onSwitchConnection={handleSwitchConnection}
+                      onOpenTable={handleOpenTable}
+                      onOpenQuery={handleOpenQuery}
+                      onSwitchDatabase={handleSwitchDatabase}
+                    />
+                  )}
+                </div>
+                {place === "tab" ? <ResultTabPanel tabId={tab.id} label={resultPlaceCopy.tab.panelLabel(shortTitles.get(tab.id) ?? tab.title)} hidden={!(selected && resultActive)} /> : null}
+              </Fragment>
             );
           })
         )}
+
+        {/* RN-ABAS-010: o véu do arraste da aba, sobre a janela inteira menos a faixa; a aba de outra janela solta nele entra no fim da faixa (RN-ABAS-003). */}
+        <TabDragVeil session={drag} windowId={windowId} onlyTab={isOnlyTab(tabs)} area={area} onReceive={(fromWindowId, tabId) => receive(fromWindowId, tabId, latestTabs.current.length)} />
       </section>
 
       {unsaved === null ? null : (
@@ -446,6 +650,11 @@ export function WorkbenchTabs() {
       )}
 
       {saveDialog}
+
+      {/* RN-ABAS-014: a troca do lugar do resultado, para o leitor de tela, sem toast. */}
+      <div role="status" className="sr-only">
+        {announcement.text === "" ? null : <span key={announcement.seq}>{announcement.text}</span>}
+      </div>
 
       {/* RN-EXPORT-023: "Continuar exportando" tem o foco e o Esc, e deixa a janela aberta; confirmado, seguem as perguntas das abas. */}
       {transferQuestion === null ? null : (

@@ -24,6 +24,9 @@ public sealed partial class AdoDatabaseConnectionTests
 
     /// <summary>Os valores dos parâmetros de cada comando sem linhas, na ordem em que chegaram, e se ele foi na transação.</summary>
     private readonly List<object?[]> _sentValues = [];
+
+    /// <summary>RN-VAR-032: os comandos que foram ao banco de mentira pelo leitor, com os parâmetros que levaram, na ordem.</summary>
+    private readonly List<(string Sql, DbParameter[] Parameters)> _readerCommands = [];
     private readonly List<bool> _sentInTransaction = [];
 
     /// <summary>O que o banco de mentira lança na confirmação da transação da carga; e o que acontece no meio dela.</summary>
@@ -368,6 +371,9 @@ public sealed partial class AdoDatabaseConnectionTests
         private readonly List<DbParameter> _items = [];
 
         public IEnumerable<object?> Values => _items.Select(parameter => parameter.Value is DBNull ? null : parameter.Value);
+
+        /// <summary>Os parâmetros como o comando os recebeu (o valor e o `DbType`).</summary>
+        public IReadOnlyList<DbParameter> Items => _items;
 
         public override int Count => _items.Count;
 

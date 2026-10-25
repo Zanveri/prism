@@ -71,7 +71,7 @@ internal sealed class CopyRun(CopyJob job, Func<ConnectionSettings, Cancellation
         if (job.Count || job.ForcedCount)
         {
             progress.Phase(ETransferPhase.Counting);
-            var counted = await reading.CountExportAsync(job.Sql, job.ForcedCount, token);
+            var counted = await reading.CountExportAsync(job.Sql, job.ForcedCount, token, job.Parameters);
             if (counted.IsFailure)
                 return LoadEnd.Of(LoadSteps.Database(counted.Error, ETransferSide.Source, token));
 
@@ -79,7 +79,7 @@ internal sealed class CopyRun(CopyJob job, Func<ConnectionSettings, Cancellation
             progress.Total(total);
         }
 
-        var started = await reading.StartExportReadAsync(job.Sql, token);
+        var started = await reading.StartExportReadAsync(job.Sql, token, job.Parameters);
         if (started.IsFailure)
             return LoadEnd.Of(LoadSteps.Database(started.Error, ETransferSide.Source, token));
 

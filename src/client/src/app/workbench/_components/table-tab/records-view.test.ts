@@ -1149,7 +1149,7 @@ describe("RecordsView: a atualização automática (RN-GRADE-014)", () => {
 
     const opened = view.show().autoDialog!;
     expect(opened).toMatchObject({ everyMs: null, error: null });
-    opened.onSubmit("1");
+    opened.onSubmit("0");
     expect(view.show().autoDialog).toMatchObject({ error: autoRefreshCopy.dialog.invalid });
     expect(runner.autoRefresh.start).not.toHaveBeenCalled();
 

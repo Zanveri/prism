@@ -101,6 +101,20 @@ internal sealed class TransferFileClient(TransferSettings settings, ILogger logg
 
         if (leftovers is { IsSuccess: true, Value.Length: > 0 })
             _logger.Information("A partida apagou {Files} arquivos que sobraram na pasta das transferências.", leftovers.Value.Length);
+
+        // RN-EXPORT-018 e RN-DBEAVER-006: as cópias do DBeaver são pastas (`<sourceId>.dbeaver` e a `.dbeaver.part` que o processo principal não terminou), com as
+        // senhas do DBeaver dentro: apagadas com o que têm, e não só os arquivos soltos.
+        var folders = Send(nameof(Prepare), null, () => Directory.GetDirectories(settings.Directory));
+        foreach (var folder in folders.IsSuccess ? folders.Value : [])
+            _ = Send(nameof(Prepare), null, () =>
+            {
+                Directory.Delete(folder, recursive: true);
+
+                return true;
+            });
+
+        if (folders is { IsSuccess: true, Value.Length: > 0 })
+            _logger.Information("A partida apagou {Folders} pastas que sobraram na pasta das transferências.", folders.Value.Length);
     }
 
     public Result<ExportFile, TransferFileFailure> CreateExport(Guid id, string format, ExportWriterContext context, bool bom, string? zipEntryName)

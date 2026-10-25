@@ -13,6 +13,7 @@ Prism é um cliente de banco de dados para desktop, no lugar do DBeaver, para qu
 | `src/api/` | A API em C#; leia [src/api/AGENTS.md](src/api/AGENTS.md). |
 | `src/client/` | A interface: Electron, React e Vite. |
 | `src/test-fixtures/export/` | As fixtures de ouro da exportação de dados (RN-EXPORT-024): JSON escritos à mão com a entrada e a saída esperada de cada caso, lidos pelos testes da tela e da API. Mudar uma regra é mudar a fixture; nunca se regera a partir do código. |
+| `src/test-fixtures/variables/` | A fixture dos marcadores de parâmetro (`markers.json`, RN-VAR-017): o texto de um comando, o banco e quantos marcadores ele já tem (`$n` no PostgreSQL, `?` no Db2 e no Informix, fora de texto, comentário, nome entre aspas e `$tag$`). Escrita à mão, lida pelos testes da tela e da API, que têm de contar igual. Mudar uma regra é mudar a fixture; nunca se regera a partir do código. |
 
 ## Projeto de referência
 
@@ -34,4 +35,5 @@ Estão aqui para que ninguém as "corrija" depois (seção 8 da especificação)
 6. **Interface em `src/client`, não em `src/web`.** É a pasta que o usuário criou.
 7. **Sem rate limiting, Turnstile, cabeçalhos de proxy e HTTPS.** A API só existe em loopback e só para o próprio app, então nenhuma dessas defesas tem de quem proteger.
 8. **O mediador é do próprio Prism (`Prism.Core.Mediator`).** O projeto é de código aberto e tem de compilar só com fontes públicas, então não há pacote de mediador (RN-ABERTO-002).
+9. **A chave pública do DBeaver numa constante.** O `credentials-config.json` do DBeaver é cifrado com uma chave fixa que está no código aberto dele; a API a tem numa constante comentada (RN-DBEAVER-008). Não é segredo do Prism e não protege nada: a regra de "nenhum segredo no código" e a verificação de vazamentos da pipeline a aceitam só nessa constante, e ela não vira configuração.
 

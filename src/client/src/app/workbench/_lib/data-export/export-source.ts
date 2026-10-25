@@ -1,3 +1,7 @@
+import type { Engine } from "@/components/ui/engine-tag";
+
+import type { BoundCommand, BoundParameter } from "../variables/bind";
+import { sentSql } from "../variables/sent-sql";
 import { dataExportCopy } from "./data-export.copy";
 
 /**
@@ -10,12 +14,27 @@ import { dataExportCopy } from "./data-export.copy";
 export type ExportOrigin =
   | { kind: "table"; view: boolean; schema: string; name: string }
   /** `sql`: o comando que a grade mostra (o `RunTarget` das linhas); `filter`: o filtro e a ordem aplicados, como o campo os tem ("" sem nenhum). */
-  | { kind: "records"; schema: string; name: string; sql: string; filter: string }
+  | { kind: "records"; schema: string; name: string; sql: string; filter: string; params?: readonly BoundParameter[] }
   /**
    * `tabTitle`: o nome da aba; `scriptNumber`: o número do comando no script (RN-SQL-020), ou nulo fora dele. `filter`: o do resultado (RN-GRADE-011). `table`:
-   * a tabela única que o alvo da edição já conhece (RN-EDIT-002), que preenche a de destino do SQL e do DbUnit sem perguntar ao banco.
+   * a tabela única que o alvo da edição já conhece (RN-EDIT-002), que preenche a de destino do SQL e do DbUnit sem perguntar ao banco. `params` (RN-VAR-033): o
+   * comando com variáveis vai pelo texto enviado (`sql`, com os marcadores) e pelos parâmetros dele, e nunca pelo texto do editor. `bound` (RN-EXPORT-015): o comando
+   * trocado inteiro, para a Confirmação mostrar o "SQL enviado" com os valores no lugar.
    */
-  | { kind: "result"; tabTitle: string; scriptNumber: number | null; sql: string; filter: string | null; table: { schema: string; name: string } | null };
+  | { kind: "result"; tabTitle: string; scriptNumber: number | null; sql: string; filter: string | null; table: { schema: string; name: string } | null; params?: readonly BoundParameter[]; bound?: BoundCommand };
+
+/**
+ * O comando da origem como a Origem do assistente o mostra (RN-EXPORT-015): o do resultado, ou, no comando com variáveis, o texto com os valores no lugar como literais
+ * do banco, o mesmo do "SQL enviado" (RN-VAR-018), com a linha de comentário do alto quando algum valor ficou sem literal. A tabela não tem comando.
+ */
+export function originCommandText(origin: ExportOrigin, engine: Engine | undefined): string | null {
+  if (origin.kind === "table") return null;
+  if (origin.kind === "result" && origin.bound !== undefined) {
+    const shown = sentSql(origin.bound, engine);
+    return shown.header === null ? shown.text : `${shown.header}\n${shown.text}`;
+  }
+  return origin.sql;
+}
 
 /** Uma coluna da origem, como a grade (ou o catálogo, na tabela pelo navegador) a mostra. `generated: "always"` é a que o banco calcula sempre (RN-CAT-001). */
 export type SourceColumn = { name: string; type: string; generated?: "always" | "byDefault" | null };

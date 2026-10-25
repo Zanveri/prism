@@ -6,10 +6,21 @@ import type { Engine } from "@/components/ui/engine-tag";
 import { irreversibleOf, type Irreversible } from "./irreversible";
 
 /** Um comando que vai ao banco, como o executor o recebe: o texto, o banco da aba (que diz como ler o texto) e o filtro do resultado (RN-GRADE-011). */
-export type ConfirmedTarget = { sql: string; engine?: Engine; filter?: string };
+export type ConfirmedTarget = {
+  sql: string;
+  engine?: Engine;
+  filter?: string;
+  /**
+   * RN-VAR-018: o comando com variáveis mostra o texto com os valores que já se sabem como literais do banco (`sentSql`), e `ranges` diz onde, nele, entrou o texto
+   * de uma variável `sql` (destacado no fundo de atenção). `irreversible` é a análise do comando enviado, que o texto com literais não substitui (RN-VAR-019:
+   * o comando com uma variável `sql` é irreversível na dúvida). Sem eles, o aviso analisa o `sql`.
+   */
+  ranges?: readonly { start: number; end: number }[];
+  irreversible?: Irreversible | null;
+};
 
 /** Um comando no aviso: o número dele no script (nulo fora do script), o texto, o filtro do resultado que vai junto e por que ele é irreversível. */
-export type AskedCommand = { number: number | null; sql: string; filter?: string; irreversible: Irreversible | null };
+export type AskedCommand = { number: number | null; sql: string; filter?: string; irreversible: Irreversible | null; ranges?: readonly { start: number; end: number }[] };
 
 /**
  * O que o aviso de confirmação pergunta (RN-PROT-001): executar um comando (o "Executar", o Ctrl+Enter, o "Executar este comando" das abas do script, o F5,
@@ -57,7 +68,16 @@ export type ConfirmationContext = { connection: string; database: string; enviro
 /** A confirmação que vale (nula: "Não") e se a conexão é somente leitura, de `shownProtections`. */
 type Protections = Pick<ShownProtections, "confirm" | "readOnly">;
 
-const asked = (target: ConfirmedTarget, number: number | null, irreversible: Irreversible | null): AskedCommand => ({ number, sql: target.sql, ...(target.filter === undefined ? {} : { filter: target.filter }), irreversible });
+const asked = (target: ConfirmedTarget, number: number | null, irreversible: Irreversible | null): AskedCommand => ({
+  number,
+  sql: target.sql,
+  ...(target.filter === undefined ? {} : { filter: target.filter }),
+  irreversible,
+  ...(target.ranges === undefined || target.ranges.length === 0 ? {} : { ranges: target.ranges }),
+});
+
+/** A análise do comando: a que o chamador já fez (o comando com variáveis), ou a do texto. */
+const irreversibleOfTarget = (target: ConfirmedTarget): Irreversible | null => (target.irreversible !== undefined ? target.irreversible : irreversibleOf(target.sql, target.engine));
 
 /**
  * Se a proteção pede o aviso para este comando (RN-PROT-001), e o que ele mostra; nulo quando o comando sai sem perguntar. Em "Todos os comandos", todo
@@ -69,7 +89,7 @@ export function commandQuestion(protections: Protections, target: ConfirmedTarge
   const level = protections.confirm?.level ?? null;
   if (level === null) return null;
 
-  const irreversible = irreversibleOf(target.sql, target.engine);
+  const irreversible = irreversibleOfTarget(target);
   if (level === "irreversible" && (protections.readOnly !== null || irreversible === null)) return null;
   return { kind: "command", command: asked(target, null, irreversible) };
 }
@@ -83,8 +103,20 @@ export function scriptQuestion(protections: Protections, targets: readonly Confi
   const level = protections.confirm?.level ?? null;
   if (level === null || targets.length === 0 || (level === "irreversible" && protections.readOnly !== null)) return null;
 
-  const commands = targets.map((target, index) => asked(target, index + 1, irreversibleOf(target.sql, target.engine))).filter((command) => level === "all" || command.irreversible !== null);
+  const commands = targets.map((target, index) => asked(target, index + 1, irreversibleOfTarget(target))).filter((command) => level === "all" || command.irreversible !== null);
   return commands.length === 0 ? null : { kind: "script", commands, total: targets.length };
+}
+
+/**
+ * O aviso do "Executar script" com variáveis (RN-PROT-001, RN-VAR-019): como o `scriptQuestion`, mas os comandos já chegam com o número deles no script (as
+ * declarações também têm número, RN-VAR-022) e com os valores que se sabem no texto. `total` é quantos itens o script tem.
+ */
+export function numberedScriptQuestion(protections: Protections, targets: readonly (ConfirmedTarget & { number: number })[], total: number): CommandQuestion | null {
+  const level = protections.confirm?.level ?? null;
+  if (level === null || targets.length === 0 || (level === "irreversible" && protections.readOnly !== null)) return null;
+
+  const commands = targets.map((target) => asked(target, target.number, irreversibleOfTarget(target))).filter((command) => level === "all" || command.irreversible !== null);
+  return commands.length === 0 ? null : { kind: "script", commands, total };
 }
 
 /**
@@ -100,7 +132,7 @@ export function saveQuestion(protections: Protections, count: number): CommandQu
  * intervalo. Ela só liga sobre uma leitura, que nunca é irreversível.
  */
 export function autoRefreshQuestion(protections: Protections, target: ConfirmedTarget): CommandQuestion | null {
-  return protections.confirm?.level === "all" ? { kind: "autoRefresh", command: asked(target, null, irreversibleOf(target.sql, target.engine)) } : null;
+  return protections.confirm?.level === "all" ? { kind: "autoRefresh", command: asked(target, null, irreversibleOfTarget(target)) } : null;
 }
 
 /**

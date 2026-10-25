@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiRequestError } from "@/lib/api/prism-api";
 
-import { columnsQuery, foreignKeysQuery, indexesQuery, structureKey, structurePrefix } from "./table-structure.service";
+import { columnsQuery, foreignKeysQuery, indexesQuery, invalidateStructure, referencedByQuery, structureKey, structurePrefix, structureScopes } from "./table-structure.service";
 
 const fakes = vi.hoisted(() => ({
   openSession: vi.fn(),
   getColumns: vi.fn(),
   getIndexes: vi.fn(),
   getForeignKeys: vi.fn(),
+  getReferencedBy: vi.fn(),
 }));
 
 vi.mock("./database-sessions.service", async (importOriginal) => {
@@ -21,6 +22,7 @@ vi.mock("./database-sessions.service", async (importOriginal) => {
     getColumns: fakes.getColumns,
     getIndexes: fakes.getIndexes,
     getForeignKeys: fakes.getForeignKeys,
+    getReferencedBy: fakes.getReferencedBy,
   };
 });
 
@@ -36,6 +38,7 @@ beforeEach(() => {
   fakes.getColumns.mockImplementation(() => ok([{ name: "id", type: "bigint", isNullable: false, isPrimaryKey: true, position: 1 }]));
   fakes.getIndexes.mockImplementation(() => ok([{ name: "pk", columns: ["id"], isUnique: true }]));
   fakes.getForeignKeys.mockImplementation(() => ok([]));
+  fakes.getReferencedBy.mockImplementation(() => ok([]));
 });
 
 describe("as consultas de catálogo da Estrutura e do Diagrama (RN-TABELA-003 e 004)", () => {
@@ -93,5 +96,67 @@ describe("as consultas de catálogo da Estrutura e do Diagrama (RN-TABELA-003 e 
 
   it("nome com barra, aspas e ponto não colide com outro: a chave guarda os nomes inteiros", () => {
     expect(structureKey(connection, "a.b", "c", "columns")).not.toEqual(structureKey(connection, "a", "b.c", "columns"));
+  });
+
+  it("as chaves que apontam para a tabela (RN-CAT-004): a rota referenced-by pela sessão da árvore, no cache da Estrutura", async () => {
+    const referencing = [{ name: "fk_item", referencingSchema: "s", referencingTable: "itens", columns: ["t_id"], referencedColumns: ["id"] }];
+    fakes.getReferencedBy.mockImplementation(() => ok(referencing));
+
+    expect(await queryClient.fetchQuery(referencedByQuery(connection, "s", "t", queryClient))).toEqual(referencing);
+    expect(fakes.getReferencedBy).toHaveBeenCalledWith("sessao-1", "s", "t");
+    expect(queryClient.getQueryData(structureKey(connection, "s", "t", "referencedBy"))).toEqual(referencing);
+  });
+
+  it("'Atualizar' a tabela refaz também as chaves que apontam para ela, e uma lista guardada não vai à API de novo", async () => {
+    await queryClient.fetchQuery(referencedByQuery(connection, "s", "t", queryClient));
+    await queryClient.fetchQuery(referencedByQuery(connection, "s", "t", queryClient));
+    expect(fakes.getReferencedBy).toHaveBeenCalledTimes(1);
+
+    await queryClient.invalidateQueries({ queryKey: structurePrefix(connection, "s", "t") });
+    expect(queryClient.getQueryState(structureKey(connection, "s", "t", "referencedBy"))?.isInvalidated).toBe(true);
+  });
+});
+
+describe("o Atualizar do navegador nas listas da Estrutura (RN-CONFIG-004)", () => {
+  const keys = (path: Parameters<typeof structureScopes>[0]) => structureScopes(path).map((scope) => scope.queryKey);
+
+  it("cada nó invalida o prefixo do que está abaixo dele; pasta e objetos, nada", () => {
+    expect(keys({ type: "folder", id: "f1" })).toEqual([]);
+    expect(keys({ type: "objects", connectionId: "c1", schema: "s", objects: "tables" })).toEqual([]);
+    expect(keys({ type: "connection", connectionId: "c1" })).toEqual([["table-structure", "c1"]]);
+    expect(keys({ type: "database", connectionId: "c1", database: "alfa" })).toEqual([["table-structure", "c1", { database: "alfa" }]]);
+    expect(keys({ type: "schema", connectionId: "c1", schema: "loja" })).toEqual([["table-structure", "c1", "loja"]]);
+    expect(keys({ type: "schema", connectionId: "c1", database: "alfa", schema: "loja" })).toEqual([["table-structure", "c1", { database: "alfa" }, "loja"]]);
+    expect(keys({ type: "table", connectionId: "c1", schema: "loja", table: "pedidos" })).toEqual([structurePrefix("c1", "loja", "pedidos")]);
+    expect(keys({ type: "tableLevel", connectionId: "c1", schema: "loja", table: "pedidos", level: "columns" })).toEqual([structureKey("c1", "loja", "pedidos", "columns")]);
+    expect(keys({ type: "tableLevel", connectionId: "c1", schema: "loja", table: "pedidos", level: "foreignKeys" })).toEqual([structureKey("c1", "loja", "pedidos", "foreignKeys"), structureKey("c1", "loja", "pedidos", "referencedBy")]);
+  });
+
+  it("o banco da conexão não pega as listas dos outros bancos do servidor, e o banco dado pega só as dele", async () => {
+    queryClient.setQueryData(structureKey("c1", "s", "t", "columns"), []);
+    queryClient.setQueryData(structureKey("c1", "s", "t", "columns", "alfa"), []);
+    queryClient.setQueryData(structureKey("c2", "s", "t", "columns"), []);
+
+    invalidateStructure(queryClient, { type: "database", connectionId: "c1" }, new Set());
+    const invalidated = (queryKey: readonly unknown[]) => queryClient.getQueryState(queryKey)?.isInvalidated;
+    expect(invalidated(structureKey("c1", "s", "t", "columns"))).toBe(true);
+    expect(invalidated(structureKey("c1", "s", "t", "columns", "alfa"))).toBe(false);
+    expect(invalidated(structureKey("c2", "s", "t", "columns"))).toBe(false);
+
+    invalidateStructure(queryClient, { type: "database", connectionId: "c1", database: "alfa" }, new Set());
+    expect(invalidated(structureKey("c1", "s", "t", "columns", "alfa"))).toBe(true);
+    expect(invalidated(structureKey("c2", "s", "t", "columns"))).toBe(false);
+  });
+
+  it("a conexão toda pega todos os bancos, menos os de sessão caída", () => {
+    queryClient.setQueryData(structureKey("c1", "s", "t", "columns"), []);
+    queryClient.setQueryData(structureKey("c1", "s", "t", "columns", "alfa"), []);
+    queryClient.setQueryData(structureKey("c1", "s", "t", "columns", "beta"), []);
+
+    invalidateStructure(queryClient, { type: "connection", connectionId: "c1" }, new Set(["beta"]));
+
+    expect(queryClient.getQueryState(structureKey("c1", "s", "t", "columns"))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(structureKey("c1", "s", "t", "columns", "alfa"))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(structureKey("c1", "s", "t", "columns", "beta"))?.isInvalidated).toBe(false);
   });
 });

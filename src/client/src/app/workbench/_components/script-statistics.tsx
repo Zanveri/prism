@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils/cn";
 
 import { commandHead, commandHint, entriesOf, scriptResultCap, scriptTotals, statisticsRange, type ScriptEntry, type ScriptEntryStatus, type ScriptRun } from "../_lib/script-run";
 import { scriptRunCopy } from "../_lib/script-run.copy";
+import type { RunTarget } from "../_lib/use-query-runner";
+import { SentSqlButton } from "./sent-sql-button";
 
 const copy = scriptRunCopy.statistics;
 
@@ -20,6 +22,8 @@ const statusTone: Record<ScriptEntryStatus, string> = {
 
 /** As linhas do comando, como a coluna as diz: as lidas (com mais a ler, as primeiras), as devolvidas pelo comando que grava, as afetadas. */
 function rowsOf(entry: ScriptEntry): string {
+  // RN-VAR-022: a declaração não lê linhas do banco ("—" quando ela não tem consulta).
+  if (entry.kind === "declaration") return entry.status === "ok" ? "—" : "";
   if (entry.rows !== null) {
     const rows = entry.rows.total === null ? copy.read(entry.rows.read, entry.rows.more) : copy.returned(entry.rows.total);
     return entry.kept === false ? `${rows} · ${copy.notKept}` : rows;
@@ -33,13 +37,17 @@ const cell = "border-b border-border px-2 py-1 align-top";
  * Um comando, e o erro dele na linha de baixo, como veio (RN-SQL-009). Memorizado: o script publica um estado novo a cada comando, e só a linha do comando
  * que mudou é outro objeto.
  */
-const StatisticsRow = memo(function StatisticsRow({ entry, number, current }: { entry: ScriptEntry; number: number; current: boolean }) {
+const StatisticsRow = memo(function StatisticsRow({ entry, number, current, onViewSent }: { entry: ScriptEntry; number: number; current: boolean; onViewSent?: (target: RunTarget) => void }) {
   return (
     <Fragment>
       <tr aria-current={current ? "step" : undefined} className={cn(current && "bg-selected")}>
         <td className={cn(cell, "text-right font-mono text-muted tabular-nums")}>{number.toLocaleString("pt-BR")}</td>
-        <td className={cn(cell, "max-w-0 truncate font-mono text-ink")} title={commandHint(entry.target.sql)}>
-          {commandHead(entry.target, 96)}
+        <td className={cn(cell, "max-w-0 font-mono text-ink")} title={commandHint(entry.target.sql)}>
+          <span className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">{commandHead(entry.target, 96)}</span>
+            {/* RN-VAR-018: o "SQL enviado" também no comando sem resultado e no que falhou. */}
+            {entry.target.sent === undefined || onViewSent === undefined ? null : <SentSqlButton onClick={() => onViewSent(entry.target)} />}
+          </span>
         </td>
         <td className={cn(cell, "whitespace-nowrap", statusTone[entry.status])}>{copy.statuses[entry.status]}</td>
         <td className={cn(cell, "whitespace-nowrap text-ink")}>{rowsOf(entry)}</td>
@@ -110,12 +118,12 @@ export function useCoalescedRun(run: ScriptRun, everyMs = statisticsRefreshMs): 
  * depois; no fim, todos. Ela está à frente e muda a cada comando: inteira, cada mudança refazia e media de novo a tabela toda, e um script de milhares de
  * comandos levava minutos, com a janela sem responder. E ela se redesenha no máximo quatro vezes por segundo enquanto o script roda (`useCoalescedRun`).
  */
-export const ScriptStatistics = memo(function ScriptStatistics({ run }: { run: ScriptRun }) {
-  return <StatisticsTable run={useCoalescedRun(run)} />;
+export const ScriptStatistics = memo(function ScriptStatistics({ run, onViewSent }: { run: ScriptRun; onViewSent?: (target: RunTarget) => void }) {
+  return <StatisticsTable run={useCoalescedRun(run)} onViewSent={onViewSent} />;
 });
 
 /** A tabela e os totais de um script. Memorizada: o mesmo script não a redesenha. */
-const StatisticsTable = memo(function StatisticsTable({ run }: { run: ScriptRun }) {
+const StatisticsTable = memo(function StatisticsTable({ run, onViewSent }: { run: ScriptRun; onViewSent?: (target: RunTarget) => void }) {
   const totals = scriptTotals(run);
   const { from, to } = statisticsRange(run);
 
@@ -152,13 +160,15 @@ const StatisticsTable = memo(function StatisticsTable({ run }: { run: ScriptRun 
         <tbody>
           {from === 0 ? null : <NoteRow text={copy.before(from)} />}
           {entriesOf(run, from, to).map((entry, offset) => (
-            <StatisticsRow key={from + offset} entry={entry} number={from + offset + 1} current={run.current === from + offset} />
+            <StatisticsRow key={from + offset} entry={entry} number={from + offset + 1} current={run.current === from + offset} onViewSent={onViewSent} />
           ))}
           {to === run.size ? null : <NoteRow text={copy.after(run.size - to)} />}
         </tbody>
       </table>
       <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-ink">
-        <span>{copy.executed(totals.ok, totals.total)}</span>
+        {totals.total === 0 && totals.declarations > 0 ? null : <span>{copy.executed(totals.ok, totals.total)}</span>}
+        {/* RN-VAR-022: as declarações têm o total delas, só no script que as tem. */}
+        {totals.declarations === 0 ? null : <span>{copy.declarationsEvaluated(totals.declarationsOk, totals.declarations)}</span>}
         {totals.errors === 0 ? null : <span className="text-danger">{copy.withErrors(totals.errors)}</span>}
         <span>{copy.changed(totals.changed, totals.returning)}</span>
         <span>{copy.totalTime(totals.elapsedMs)}</span>

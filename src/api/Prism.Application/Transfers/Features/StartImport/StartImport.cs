@@ -85,7 +85,7 @@ internal sealed class StartImportHandler(IConnectionQueries connectionQueries, I
 
         var (options, _) = ImportReaderOptionsReader.Read(request.Format!, request.Reader, keys: true);
         var (load, _) = ImportRequestRules.Load(request.Load, copy: false);
-        var job = new ImportJob(fileID, record.ID, TransferConnections.SettingsOf(record, target.Database), generation, request.WindowID, request.Format!, options!, ImportRequestRules.Formats(request.Values), target.Schema!, target.Table!, ImportRequestRules.MappingOf(request.Mapping!), load!, TransferConnections.StopNow(connectionQueries, record.ID));
+        var job = new ImportJob(fileID, record.ID, TransferConnections.SettingsOf(record, target.Database), generation, request.WindowID, ImportFormats.Canonical(request.Format!), options!, ImportRequestRules.Formats(request.Values), target.Schema!, target.Table!, ImportRequestRules.MappingOf(request.Mapping!), load!, TransferConnections.StopNow(connectionQueries, record.ID));
 
         var started = transferService.StartImport(job);
         if (started.IsFailure)

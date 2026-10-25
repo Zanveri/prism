@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseHomepage, parseTarget, parseUpdateOrigin, planDist } from "./dist-plan.mjs";
+import { builderEnvironment, parseHomepage, parseTarget, parseUpdateOrigin, planDist } from "./dist-plan.mjs";
 
 describe("parseTarget", () => {
   it("Windows e Linux são x64; o macOS, sem arquitetura, é o da máquina", () => {
@@ -224,5 +224,25 @@ describe("planDist: a origem das atualizações vai ao electron-builder (RN-ATUA
 
     expect(skipped).toEqual([]);
     expect(builderArgs.filter((argument) => argument.startsWith("-c."))).toEqual(["-c.extraMetadata.homepage=https://prism.example.invalid/", `-c.extraMetadata.prismUpdateApi=${api}`, `-c.extraMetadata.prismUpdateSite=${site}`, "-c.extraMetadata.prismUpdateRepository=Zanveri/prism"]);
+  });
+});
+
+describe("builderEnvironment: a assinatura ad hoc do macOS (issue #33) não muda com um certificado no ambiente", () => {
+  const env = { PATH: "/usr/bin", CSC_LINK: "base64", CSC_KEY_PASSWORD: "x", CSC_NAME: "Alguém", CSC_KEYCHAIN: "k", CSC_IDENTITY_AUTO_DISCOVERY: "false", PRISM_HOMEPAGE: "https://github.com/Zanveri/prism" };
+
+  it("no macOS tira toda CSC_* e deixa o resto", () => {
+    expect(builderEnvironment("mac", env)).toEqual({ PATH: "/usr/bin", PRISM_HOMEPAGE: "https://github.com/Zanveri/prism" });
+  });
+
+  it("no Windows e no Linux o ambiente segue como está", () => {
+    expect(builderEnvironment("win", env)).toEqual(env);
+    expect(builderEnvironment("linux", env)).toEqual(env);
+  });
+
+  it("devolve uma cópia: o ambiente de quem chamou não muda", () => {
+    const copy = { ...env };
+    builderEnvironment("mac", copy);
+
+    expect(copy).toEqual(env);
   });
 });

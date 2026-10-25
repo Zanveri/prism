@@ -52,4 +52,35 @@ public sealed class ExportSqlTests
         Assert.Equal(kind, result.Error.Kind);
         Assert.False(string.IsNullOrWhiteSpace(result.Error.Reason));
     }
+
+    /// <summary>RN-VAR-032 e RN-GRADE-011: com `params`, o filtro do resultado não tem marcador, como no `queries`; sem `params`, o `?` e o `$1` do filtro são texto do banco.</summary>
+    [Trait("ExportSql", "Query")]
+    [Theory(DisplayName = "Erro com params o filtro com marcador de parâmetro é FILTER_INVALID, nos três bancos")]
+    [InlineData(EDatabaseEngine.PostgreSql, "SELECT * FROM loja.pedido WHERE a = $1 ORDER BY c", "b = $2")]
+    [InlineData(EDatabaseEngine.Db2, "SELECT * FROM loja.pedido WHERE a = ? ORDER BY c", "b = ?")]
+    [InlineData(EDatabaseEngine.Informix, "SELECT * FROM loja.pedido WHERE a = ?", "b = ?")]
+    public void Query_FilterWithMarkerAndParameters_ShouldBeRefused(EDatabaseEngine engine, string sql, string filter)
+    {
+        //Act
+        var result = ExportSql.Query(sql, filter, engine, hasParameters: true);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal((EExportSqlRefusal.FilterInvalid, QueryParameterRules.FilterMarker), (result.Error.Kind, result.Error.Reason));
+    }
+
+    [Trait("ExportSql", "Query")]
+    [Theory(DisplayName = "OK com params o filtro sem marcador entra, e sem params o marcador do filtro não é recusado aqui")]
+    [InlineData(EDatabaseEngine.PostgreSql, "SELECT * FROM loja.pedido WHERE a = $1", "b = 'x?$2'", true)]
+    [InlineData(EDatabaseEngine.Db2, "SELECT * FROM loja.pedido WHERE a = ?", "b = 2", true)]
+    [InlineData(EDatabaseEngine.Db2, "SELECT * FROM loja.pedido", "b = ?", false)]
+    public void Query_FilterWithoutMarkerOrWithoutParameters_ShouldJoinTheFilter(EDatabaseEngine engine, string sql, string filter, bool hasParameters)
+    {
+        //Act
+        var result = ExportSql.Query(sql, filter, engine, hasParameters);
+
+        //Assert
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Reason : null);
+        Assert.Contains(filter, result.Value, StringComparison.Ordinal);
+    }
 }

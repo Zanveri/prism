@@ -67,8 +67,8 @@ describe("o diálogo de versão nova (RN-ATUALIZA-003)", () => {
     expect(render({ status: "available", ...offer }, { noStartupCheck: true })).toMatch(/<input type="checkbox"[^>]* checked=""/);
   });
 
-  it("diz de onde vem a atualização, como é conferida e que os pacotes não são assinados (RN-ATUALIZA-009)", () => {
-    expect(markup).toContain("A atualização é baixada das releases do projeto no GitHub e conferida por duas somas SHA-256, e uma release publicada não pode ser trocada. Os pacotes ainda não são assinados.");
+  it("diz de onde vem a atualização, como é conferida e que os pacotes não têm assinatura de um desenvolvedor (RN-ATUALIZA-009)", () => {
+    expect(markup).toContain("A atualização é baixada das releases do projeto no GitHub e conferida por duas somas SHA-256, e uma release publicada não pode ser trocada. Os pacotes ainda não têm a assinatura de um desenvolvedor identificado.");
     expect(markup).not.toContain("GitLab");
   });
 
@@ -196,9 +196,9 @@ describe("o diálogo abre sozinho: nada nele age sem a pessoa escolher", () => {
 
     const markup = render({ status: "available", ...offer });
     const firstNotes = markup.indexOf("data-update-release");
-    expect(markup.indexOf("Os pacotes ainda não são assinados.")).toBeLessThan(firstNotes);
+    expect(markup.indexOf("Os pacotes ainda não têm a assinatura de um desenvolvedor identificado.")).toBeLessThan(firstNotes);
     expect(markup.indexOf("O texto das abas de SQL abertas não é salvo.")).toBeLessThan(firstNotes);
-    expect(markup.split("Os pacotes ainda não são assinados.")).toHaveLength(2);
+    expect(markup.split("Os pacotes ainda não têm a assinatura de um desenvolvedor identificado.")).toHaveLength(2);
   });
 
   it("com notas muito longas as duas linhas continuam antes delas", () => {

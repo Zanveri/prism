@@ -74,7 +74,7 @@ const tagTones: Record<PreviewTag["tone"], string> = {
 };
 
 /** As marcas à direita da linha, com a explicação na dica (RN-TRANSF-011). */
-function Tags({ tags }: { tags: readonly PreviewTag[] }) {
+export function Tags({ tags }: { tags: readonly PreviewTag[] }) {
   if (tags.length === 0) return null;
   return (
     <span className="flex max-w-[45%] flex-none flex-wrap justify-end gap-1">
@@ -103,7 +103,7 @@ type FolderRowProps = {
  * A pasta do arquivo: o ícone com a cor, o nome, o ambiente e o cadeado dela; a que não pode ser importada diz por quê, embaixo, inteiro. O leitor de tela
  * ouve, na caixa, o caminho e as marcas com a explicação de cada uma (`rowDescription`).
  */
-const ImportFolderRow = memo(function ImportFolderRow({ node, folder, state, open, path, tags, reason, onToggleOpen, onMark }: FolderRowProps) {
+export const ImportFolderRow = memo(function ImportFolderRow({ node, folder, state, open, path, tags, reason, onToggleOpen, onMark }: FolderRowProps) {
   const name = nameOf(folder);
   const descriptionId = useId();
   const description = rowDescription({ path, line: null, reason, tags });

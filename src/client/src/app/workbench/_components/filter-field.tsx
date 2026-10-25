@@ -5,6 +5,7 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorSelection, EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderText, tooltips } from "@codemirror/view";
 
+import { useHost } from "@/components/ui";
 import type { Engine } from "@/components/ui/engine-tag";
 
 import { completionTheme, highlight } from "../_lib/completion-theme";
@@ -70,15 +71,23 @@ type FilterFieldProps = {
  * autocompletar das colunas e das palavras do filtro. É controlado como o `input` de antes: `value` de fora troca o texto (o cursor vai ao fim), e cada
  * tecla chega a `onChange`. Enter aplica; com a lista de sugestões aberta e uma escolhida, Enter a aceita (a lista abre sem nada escolhido). Desfazer e
  * refazer valem no campo. A lista de sugestões vai para o `body`, para a barra do filtro não a recortar.
+ *
+ * RN-ABAS-017: o CodeMirror guarda o documento em que nasceu (`root`: a seleção, o foco e os estilos dele), e o campo muda de documento quando a área de
+ * resultado vai para a janela do resultado (ou volta). Ao mudar, o editor é criado de novo na página de agora, com o texto que o campo tem; a lista de sugestões
+ * vai para o `body` dessa página.
  */
 export function FilterField({ value, onChange, onSubmit, label, describedBy, invalid, placeholder, engine, columns, autocomplete }: FilterFieldProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const [slots] = useState(() => ({ language: new Compartment(), completion: new Compartment(), attributes: new Compartment(), placeholder: new Compartment() }));
-  const [initial] = useState(() => ({ value, engine, autocomplete, attributes: fieldAttributes({ label, describedBy, invalid }), placeholder }));
+  const [initialAttributes] = useState(() => fieldAttributes({ label, describedBy, invalid }));
+  const page = useHost().document;
   const now = useRef({ columns, engine });
+  // O que o campo tem agora: o editor criado de novo (a mudança de página) nasce com isto, e não com o de quando o componente montou.
+  const latest = useRef({ value, engine, autocomplete, attributes: initialAttributes, placeholder });
   useEffect(() => {
     now.current = { columns, engine };
+    latest.current = { value, engine, autocomplete, attributes: fieldAttributes({ label, describedBy, invalid }), placeholder };
   });
 
   const emitChange = useEffectEvent((text: string) => onChange(text));
@@ -92,24 +101,26 @@ export function FilterField({ value, onChange, onSubmit, label, describedBy, inv
       return true;
     };
 
+    const start = latest.current;
     const editor = new EditorView({
       parent: host.current,
+      root: page,
       state: EditorState.create({
-        doc: initial.value,
-        selection: EditorSelection.cursor(initial.value.length),
+        doc: start.value,
+        selection: EditorSelection.cursor(start.value.length),
         extensions: [
           singleLine,
           history(),
-          slots.language.of(sql({ dialect: dialectOf(initial.engine) })),
+          slots.language.of(sql({ dialect: dialectOf(start.engine) })),
           syntaxHighlighting(highlight),
           fieldTheme,
-          tooltips({ parent: document.body }),
+          tooltips({ parent: page.body }),
           // O autocompletar vem antes do Enter do campo: com uma sugestão escolhida, o Enter a aceita.
-          slots.completion.of(completionFor(initial.autocomplete)),
+          slots.completion.of(completionFor(start.autocomplete)),
           Prec.high(keymap.of([{ key: "Enter", run: submit }, { key: "Mod-Enter", run: submit }])),
           keymap.of([...standardKeymap, ...historyKeymap]),
-          slots.attributes.of(EditorView.contentAttributes.of(initial.attributes)),
-          slots.placeholder.of(placeholderText(initial.placeholder)),
+          slots.attributes.of(EditorView.contentAttributes.of(start.attributes)),
+          slots.placeholder.of(placeholderText(start.placeholder)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !update.transactions.some((transaction) => transaction.annotation(external) === true)) emitChange(update.state.doc.toString());
           }),
@@ -122,7 +133,7 @@ export function FilterField({ value, onChange, onSubmit, label, describedBy, inv
       editor.destroy();
       view.current = null;
     };
-  }, [initial, slots]);
+  }, [slots, page]);
 
   // O texto que chega de fora (o clique no cabeçalho, o "Filtrar", "Limpar", a memória da aba) troca o do campo, com o cursor no fim.
   useEffect(() => {

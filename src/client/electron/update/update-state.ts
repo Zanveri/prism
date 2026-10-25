@@ -53,9 +53,10 @@ export type UpdateState =
 export type UpdateProgress = { checkId: number; receivedBytes: number; totalBytes: number | null };
 
 /**
- * O resultado de uma consulta manual, que sempre aparece na tela (RN-ATUALIZA-002). `busy`: há um download ou uma instalação
- * em andamento, e a consulta não é feita.
+ * O resultado de uma consulta manual, que sempre aparece na tela (RN-ATUALIZA-002). `upToDate` com `withoutPackage`: há uma versão
+ * mais nova, mas ela saiu sem o pacote deste sistema (a pipeline publica as plataformas que vieram), e por isso não é oferecida:
+ * `withoutPackage` é a mais nova delas, e a tela o diz. `busy`: há um download ou uma instalação em andamento, e a consulta não é feita.
  * `blocked`: o app foi aberto com um argumento de linha de comando que desliga a conferência do certificado ou troca o
  * endereço dos servidores, e por isso não atualiza nesta abertura (RN-ATUALIZA-008).
  */
-export type CheckOutcome = { outcome: "available" | "upToDate" | "noSource" | "busy" | "blocked" } | { outcome: "failed"; reason: string };
+export type CheckOutcome = { outcome: "available" | "noSource" | "busy" | "blocked" } | { outcome: "upToDate"; withoutPackage?: string } | { outcome: "failed"; reason: string };

@@ -33,8 +33,8 @@ export type TransferDeskDeps = {
   downloadsDir: () => string;
   /** No Windows e no macOS os destinos se comparam sem diferenciar maiúsculas. */
   platform: NodeJS.Platform;
-  /** Abre o diálogo de salvar do sistema sobre a janela que pediu; `null` quando a pessoa desiste. */
-  showSaveDialog(windowId: number, options: { defaultPath: string; filters: SaveDialogFilter[] }): Promise<string | null>;
+  /** Abre o diálogo de salvar do sistema sobre a janela que pediu (ou sobre a janela do resultado dela, RN-ABAS-017); `null` quando a pessoa desiste. */
+  showSaveDialog(windowId: number, options: { defaultPath: string; filters: SaveDialogFilter[] }, resultWindow?: string): Promise<string | null>;
   writeClipboard(text: string): void;
   /** Abre o gerenciador de arquivos com o arquivo escolhido (`shell.showItemInFolder`). */
   reveal(path: string): void;
@@ -140,7 +140,7 @@ export function createTransferDesk(deps: TransferDeskDeps) {
   }
 
   async function chooseDestination(windowId: number, raw: unknown): Promise<DestinationReply> {
-    const { suggestedName, extension } = destinationRequestSchema.parse(raw);
+    const { suggestedName, extension, resultWindow } = destinationRequestSchema.parse(raw);
     // A mesma regra de nome da tela (RN-EXPORT-014): o nome que chega é conferido de novo, e só ele vai ao diálogo.
     const name = exportFileName(suggestedName, extension);
     const filters = [
@@ -148,7 +148,7 @@ export function createTransferDesk(deps: TransferDeskDeps) {
       { name: "Todos os arquivos", extensions: ["*"] },
     ];
     const mark = releaseMark(windowId);
-    const chosen = await deps.showSaveDialog(windowId, { defaultPath: join(lastFolder ?? deps.downloadsDir(), name), filters });
+    const chosen = await deps.showSaveDialog(windowId, { defaultPath: join(lastFolder ?? deps.downloadsDir(), name), filters }, resultWindow);
     if (chosen === null || chosen === "") return { status: "canceled" };
 
     // O nome escolhido sem extensão nenhuma ganha a do formato.

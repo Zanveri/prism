@@ -45,7 +45,8 @@ export function CopyFormatList({
     if (next === null) return;
     event.preventDefault();
     onChoose(next);
-    document.getElementById(copyFormatOptionId(idPrefix, next))?.focus();
+    // A página do elemento (RN-ABAS-017): o diálogo pode estar na janela do resultado.
+    event.currentTarget.ownerDocument.getElementById(copyFormatOptionId(idPrefix, next))?.focus();
   }
 
   return (

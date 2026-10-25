@@ -18,6 +18,8 @@ vi.mock("react", async (importOriginal) => ({
   useEffect: (effect: () => void | (() => void), deps: readonly unknown[]) => void hooks.effects.push({ effect, deps }),
 }));
 
+import { hostOfDocument, resultHostRegistry } from "@/lib/host/host";
+
 import { useIdleLock } from "./use-idle-lock";
 
 /** Um alvo de eventos de mentira: guarda os ouvintes e deixa a prova disparar um evento. */
@@ -241,5 +243,56 @@ describe("useIdleLock: as outras janelas (RN-ABAS-004)", () => {
 
     cleanup?.();
     expect(other.listening()).toBe(0);
+  });
+});
+
+describe("useIdleLock: as janelas do resultado (RN-SEG-001 e RN-ABAS-015)", () => {
+  /** Uma janela do resultado de mentira, com o documento e a janela dela, registrada como as de verdade. */
+  function resultWindow() {
+    const view = fakeTarget();
+    const page = fakeTarget();
+    const host = hostOfDocument({ defaultView: view, ...page } as unknown as Document, `prism-result-${resultHostRegistry.list().length}`);
+    resultHostRegistry.add(host);
+    return { view, page, host };
+  }
+
+  afterEach(() => {
+    for (const host of resultHostRegistry.list()) resultHostRegistry.remove(host);
+  });
+
+  it("o que a pessoa faz na janela do resultado recomeça a contagem, como na janela da aba", () => {
+    const { onLock } = mount({ minutes: 1 });
+    const result = resultWindow();
+
+    vi.advanceTimersByTime(40_000);
+    result.view.fire("keydown");
+    vi.advanceTimersByTime(40_000);
+    expect(onLock).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(20_000);
+    expect(onLock).toHaveBeenCalledOnce();
+  });
+
+  it("a janela que abre depois de a contagem começar também conta, e a que fecha deixa de ser ouvida", () => {
+    mount({ minutes: 1 });
+    const result = resultWindow();
+    expect(result.view.listening()).toBeGreaterThan(0);
+
+    resultHostRegistry.remove(result.host);
+
+    // Nenhum ouvinte de atividade fica na janela que saiu (o aviso de foco do registro também sai).
+    expect(result.view.listening()).toBe(0);
+    expect(result.page.listening()).toBe(0);
+  });
+
+  it("ao desligar a contagem, solta as janelas do resultado também", () => {
+    const { cleanup } = mount({ minutes: 1 });
+    const result = resultWindow();
+    // Os efeitos das outras provas não foram desfeitos, e também ouvem a janela: o que importa é o que ESTA contagem soltou (os quatro eventos de atividade).
+    const before = result.view.listening();
+
+    cleanup?.();
+
+    expect(before - result.view.listening()).toBe(4);
   });
 });

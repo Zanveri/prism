@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createWindowHub, newWindowBounds, verificationClaimTtlMs, verificationSlackMs, type HubWindow, type Rect } from "./window-hub";
+import { boundsMatch, createWindowHub, dragClaimWaitMs, newWindowBounds, verificationClaimTtlMs, verificationSlackMs, type HubWindow, type Point, type Rect, type WindowHubDeps } from "./window-hub";
 import type { TabTransfer } from "./window-messages";
 
 const transfer: TabTransfer = {
@@ -13,16 +13,21 @@ const transfer: TabTransfer = {
 
 type Sent = { to: number; channel: string; payload: unknown };
 
-/** Janelas de mentira: anotam o que receberam e quando foram trazidas à frente. O relógio da vez da verificação é o do teste (`clock.now`). */
-function setup() {
+/**
+ * Janelas de mentira: anotam o que receberam e quando foram trazidas à frente. O relógio da vez da verificação é o do teste (`clock.now`); o ponteiro
+ * (`pointer.at`) e a espera pela outra janela (`waits`, que a prova solta) também.
+ */
+function setup(over: Partial<WindowHubDeps> = {}) {
   const clock = { now: 1_000_000 };
+  const pointer: { at: Point | null } = { at: null };
   const sent: Sent[] = [];
   const focused: number[] = [];
   const created: { at: unknown; source: Rect | null }[] = [];
   const logs: string[] = [];
+  const waits: { ms: number; release: () => void }[] = [];
 
-  function fakeWindow(id: number, bounds: Rect = { x: 0, y: 0, width: 1000, height: 800 }): HubWindow {
-    return { id, send: (channel, payload) => void sent.push({ to: id, channel, payload }), bounds: () => bounds, focus: () => void focused.push(id) };
+  function fakeWindow(id: number, bounds: Rect = { x: 0, y: 0, width: 1000, height: 800 }, normal: Rect = bounds): HubWindow {
+    return { id, send: (channel, payload) => void sent.push({ to: id, channel, payload }), bounds: () => bounds, normalBounds: () => normal, focus: () => void focused.push(id) };
   }
 
   let nextId = 10;
@@ -33,10 +38,16 @@ function setup() {
     },
     log: (message) => void logs.push(message),
     now: () => clock.now,
+    cursorPoint: () => pointer.at,
+    wait: (ms) => new Promise<void>((release) => void waits.push({ ms, release })),
+    ...over,
   });
 
-  return { hub, sent, focused, created, logs, fakeWindow, clock };
+  return { hub, sent, focused, created, logs, fakeWindow, clock, pointer, waits };
 }
+
+/** Deixa a promessa andar até onde ela espera (a espera de mentira, que a prova solta). */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("o processo principal e as janelas (RN-ABAS-002 a 005)", () => {
   it("'Mover para nova janela' cria a janela (só aqui, RN-ABAS-005) e entrega a aba quando a área de trabalho dela fica pronta", () => {
@@ -52,18 +63,12 @@ describe("o processo principal e as janelas (RN-ABAS-002 a 005)", () => {
     expect(sent).toEqual([{ to: 10, channel: "prism:windows-tab", payload: { transfer } }]);
   });
 
-  it("solta fora de todas as janelas, abre uma onde foi solta; solta em cima de outra janela do Prism, não sai por aqui (quem a leva é o pedido da faixa de lá)", () => {
-    const { hub, sent, created, fakeWindow } = setup();
-    hub.add(fakeWindow(1, { x: 0, y: 0, width: 1000, height: 800 }));
-    hub.add(fakeWindow(2, { x: 1200, y: 0, width: 600, height: 600 }));
-    hub.setReady(2, true);
-
-    expect(hub.moveTab(1, { target: { kind: "new", at: { x: 1500, y: 300 } }, transfer })).toEqual({ ok: false, reason: "overWindow" });
-    expect(created).toEqual([]);
-    expect(sent).toEqual([]);
+  it("a janela nova com o ponto do fim do arraste abre ali, do tamanho da de origem SEM maximizar (RN-ABAS-010)", () => {
+    const { hub, created, fakeWindow } = setup();
+    hub.add(fakeWindow(1, { x: 0, y: 0, width: 1920, height: 1040 }, { x: 80, y: 60, width: 1280, height: 800 }));
 
     expect(hub.moveTab(1, { target: { kind: "new", at: { x: 400, y: 1200 } }, transfer })).toEqual({ ok: true });
-    expect(created.map((placement) => placement.at)).toEqual([{ x: 400, y: 1200 }]);
+    expect(created).toEqual([{ at: { x: 400, y: 1200 }, source: { x: 80, y: 60, width: 1280, height: 800 } }]);
   });
 
   it("'Mover para a janela…' entrega na outra janela, na posição pedida, e a traz à frente; para si mesma ou para uma janela que fechou, recusa", () => {
@@ -194,20 +199,155 @@ describe("o processo principal e as janelas (RN-ABAS-002 a 005)", () => {
   });
 });
 
-describe("newWindowBounds: onde a janela nova abre", () => {
+describe("newWindowBounds: onde a janela nova abre (RN-ABAS-002 e 010)", () => {
   const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
 
-  it("solta, a janela abre com a faixa de abas sob o ponteiro, do tamanho da janela de origem", () => {
-    expect(newWindowBounds({ at: { x: 1000, y: 300 }, source: { x: 0, y: 0, width: 1200, height: 800 }, workArea })).toEqual({ x: 640, y: 220, width: 1200, height: 800 });
+  it("solta, a janela abre com o canto de cima à esquerda onde a aba foi solta, do tamanho da janela de origem", () => {
+    expect(newWindowBounds({ at: { x: 300, y: 150 }, source: { x: 0, y: 0, width: 1200, height: 800 }, workArea })).toEqual({ x: 300, y: 150, width: 1200, height: 800 });
   });
 
   it("pelo menu, ela abre um pouco abaixo e à direita da de origem", () => {
     expect(newWindowBounds({ at: null, source: { x: 100, y: 50, width: 1200, height: 800 }, workArea })).toEqual({ x: 132, y: 82, width: 1200, height: 800 });
   });
 
-  it("não sai da área útil da tela: perto da borda, ela encosta; maior que a tela, fica do tamanho dela", () => {
+  it("não sai da área útil do monitor do ponto (outro monitor também): perto da borda, ela encosta; maior que ela, diminui até caber", () => {
     expect(newWindowBounds({ at: { x: 1900, y: 1030 }, source: { x: 0, y: 0, width: 1200, height: 800 }, workArea })).toEqual({ x: 720, y: 240, width: 1200, height: 800 });
-    expect(newWindowBounds({ at: { x: 10, y: 5 }, source: { x: 0, y: 0, width: 1200, height: 800 }, workArea: { x: 1920, y: 0, width: 1280, height: 700 } })).toEqual({ x: 1920, y: 0, width: 1200, height: 700 });
+    expect(newWindowBounds({ at: { x: 2000, y: 5 }, source: { x: 0, y: 0, width: 1440, height: 900 }, workArea: { x: 1920, y: 0, width: 1280, height: 760 } })).toEqual({ x: 1920, y: 0, width: 1280, height: 760 });
+    expect(newWindowBounds({ at: { x: -1500, y: -200 }, source: { x: 0, y: 0, width: 1200, height: 800 }, workArea: { x: -1920, y: -300, width: 1920, height: 1080 } })).toEqual({ x: -1500, y: -200, width: 1200, height: 800 });
+  });
+
+  it("sem passar do mínimo de 1024×700: num monitor menor, ela fica no mínimo, encostada no canto da área útil", () => {
+    expect(newWindowBounds({ at: { x: 500, y: 300 }, source: { x: 0, y: 0, width: 1440, height: 900 }, workArea: { x: 0, y: 0, width: 800, height: 600 } })).toEqual({ x: 0, y: 0, width: 1024, height: 700 });
+  });
+
+  it("boundsMatch: o tamanho e o lugar que a janela pediu e os que ela tem, com um pixel de folga do arredondamento das escalas", () => {
+    const asked = { x: 300, y: 150, width: 1200, height: 800 };
+    expect(boundsMatch(asked, { x: 301, y: 149, width: 1201, height: 800 })).toBe(true);
+    expect(boundsMatch(asked, { x: 300, y: 150, width: 1500, height: 1000 })).toBe(false);
+    expect(boundsMatch(asked, { x: 600, y: 150, width: 1200, height: 800 })).toBe(false);
+  });
+});
+
+describe("o fim do arraste da aba (RN-ABAS-010)", () => {
+  const tabId = transfer.tab.id;
+  const end = (over: Record<string, unknown> = {}) => ({ tabId, kind: "tab", dropped: "none", effect: "move", at: { x: 5, y: 5 }, inPage: false, ...over });
+
+  function twoWindows(over: Partial<WindowHubDeps> = {}) {
+    const harness = setup(over);
+    harness.hub.add(harness.fakeWindow(1, { x: 0, y: 0, width: 1000, height: 800 }));
+    harness.hub.add(harness.fakeWindow(2, { x: 1200, y: 0, width: 600, height: 600 }));
+    return harness;
+  }
+
+  it("o véu desta janela recebeu a soltura (dentro dela, longe da faixa): a janela nova, no ponteiro que o processo principal lê, sem esperar ninguém", async () => {
+    const { hub, pointer, waits } = twoWindows();
+    pointer.at = { x: 420, y: 330 };
+
+    await expect(hub.endDrag(1, end({ dropped: "veil", at: { x: 1, y: 1 } }))).resolves.toEqual({ action: "newWindow", at: { x: 420, y: 330 } });
+    expect(waits).toEqual([]);
+  });
+
+  it("ninguém aqui recebeu, e o ponteiro está dentro desta janela (o Esc, a barra de título) ou sobre outra janela do Prism (ela decide): nada", async () => {
+    const { hub, pointer } = twoWindows();
+    pointer.at = { x: 500, y: 10 };
+    await expect(hub.endDrag(1, end())).resolves.toEqual({ action: "none" });
+    pointer.at = { x: 1500, y: 300 };
+    await expect(hub.endDrag(1, end())).resolves.toEqual({ action: "none" });
+  });
+
+  it("fora das janelas do Prism: espera a outra janela dizer que recebeu a aba; sem isso, a janela nova no ponteiro", async () => {
+    const { hub, pointer, waits } = twoWindows();
+    pointer.at = { x: 1300, y: 900 };
+
+    const ending = hub.endDrag(1, end());
+    await settle();
+    expect(waits.map((entry) => entry.ms)).toEqual([dragClaimWaitMs]);
+    waits[0].release();
+    await expect(ending).resolves.toEqual({ action: "newWindow", at: { x: 1300, y: 900 } });
+  });
+
+  it("a outra janela pediu a aba pela soltura (RN-ABAS-003), antes ou durante a espera: a janela nova não abre", async () => {
+    const { hub, pointer, waits } = twoWindows();
+    pointer.at = { x: 1300, y: 900 };
+
+    // O pedido que chegou antes do fim do arraste (a soltura vem antes do `dragend`): nem espera.
+    hub.requestTab(2, { fromWindowId: 1, tabId, index: 0 });
+    await expect(hub.endDrag(1, end())).resolves.toEqual({ action: "none" });
+    expect(waits).toEqual([]);
+
+    // O que chegou durante a espera.
+    const ending = hub.endDrag(1, end());
+    await settle();
+    hub.requestTab(2, { fromWindowId: 1, tabId, index: 3 });
+    waits[0].release();
+    await expect(ending).resolves.toEqual({ action: "none" });
+  });
+
+  it("o pedido de outro arraste, há mais de 2 s, não conta; o de outra aba também não", async () => {
+    const { hub, pointer, waits, clock } = twoWindows();
+    pointer.at = { x: 1300, y: 900 };
+    hub.requestTab(2, { fromWindowId: 1, tabId, index: 0 });
+    clock.now += 2_001;
+
+    const ending = hub.endDrag(1, end());
+    await settle();
+    hub.requestTab(2, { fromWindowId: 1, tabId: "11111111-1111-4111-8111-111111111111", index: 0 });
+    waits[0].release();
+    await expect(ending).resolves.toEqual({ action: "newWindow", at: { x: 1300, y: 900 } });
+  });
+
+  it("onde o Esc termina sem efeito (o X11, `escapeEndsWithoutEffect`), o `dropEffect` `none` fora das janelas é o Esc: nada; nas outras plataformas, vale como a soltura", async () => {
+    const x11 = twoWindows({ escapeEndsWithoutEffect: true });
+    x11.pointer.at = { x: 1300, y: 900 };
+    await expect(x11.hub.endDrag(1, end({ effect: "none" }))).resolves.toEqual({ action: "none" });
+
+    const other = twoWindows();
+    other.pointer.at = { x: 1300, y: 900 };
+    const ending = other.hub.endDrag(1, end({ effect: "none" }));
+    await settle();
+    other.waits[0].release();
+    await expect(ending).resolves.toEqual({ action: "newWindow", at: { x: 1300, y: 900 } });
+  });
+
+  it("a aba do resultado nenhuma outra janela recebe: fora das janelas do Prism, a janela dela na hora; sobre outra janela do Prism, nada", async () => {
+    const { hub, pointer, waits } = twoWindows();
+    pointer.at = { x: 1300, y: 900 };
+    await expect(hub.endDrag(1, end({ kind: "result" }))).resolves.toEqual({ action: "newWindow", at: { x: 1300, y: 900 } });
+    pointer.at = { x: 1500, y: 300 };
+    await expect(hub.endDrag(1, end({ kind: "result" }))).resolves.toEqual({ action: "none" });
+    expect(waits).toEqual([]);
+  });
+
+  it("sem o ponteiro (o Wayland): vale o ponto do `dragend`, sem ponto a janela abre ao lado da de origem, e o `dragend` dentro da página não abre nada", async () => {
+    const { hub, waits } = twoWindows({ cursorPoint: () => null });
+
+    await expect(hub.endDrag(1, end({ dropped: "veil", at: { x: 40, y: 60 } }))).resolves.toEqual({ action: "newWindow", at: { x: 40, y: 60 } });
+    await expect(hub.endDrag(1, end({ dropped: "veil", at: null }))).resolves.toEqual({ action: "newWindow", at: null });
+    await expect(hub.endDrag(1, end({ inPage: true }))).resolves.toEqual({ action: "none" });
+
+    const ending = hub.endDrag(1, end({ at: { x: 3000, y: 50 } }));
+    await settle();
+    waits[0].release();
+    await expect(ending).resolves.toEqual({ action: "newWindow", at: { x: 3000, y: 50 } });
+  });
+
+  it("o pedido fora do schema, ou de uma janela que o centro não conhece, não abre nada", async () => {
+    const { hub, pointer } = twoWindows();
+    pointer.at = { x: 1300, y: 900 };
+    await expect(hub.endDrag(1, end({ tabId: "x" }))).resolves.toEqual({ action: "none" });
+    await expect(hub.endDrag(1, end({ dropped: "strip" }))).resolves.toEqual({ action: "none" });
+    await expect(hub.endDrag(1, "fim")).resolves.toEqual({ action: "none" });
+    await expect(hub.endDrag(9, end({ dropped: "veil" }))).resolves.toEqual({ action: "none" });
+  });
+
+  it("a janela de origem que fecha durante a espera não abre a janela nova", async () => {
+    const { hub, pointer, waits } = twoWindows();
+    pointer.at = { x: 1300, y: 900 };
+    const ending = hub.endDrag(1, end());
+    await settle();
+    hub.remove(1);
+    waits[0].release();
+    await expect(ending).resolves.toEqual({ action: "none" });
   });
 });
 

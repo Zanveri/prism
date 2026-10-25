@@ -76,6 +76,8 @@ export function createHookRuntime() {
   const useCallback = <T>(callback: T, deps: Deps): T => memoize(() => callback, deps);
   const useEffect = (effect: Effect, deps?: Deps) => void pending.push({ slot: effectCursor++, effect, deps });
   const useSyncExternalStore = <T>(_subscribe: unknown, getSnapshot: () => T): T => getSnapshot();
+  /** O valor de um contexto é o que o provedor de fora daria: sem árvore, o padrão do contexto (o componente simulado não tem provedor acima). */
+  const useContext = <T>(context: { _currentValue: T }): T => context._currentValue;
 
   /** Os efeitos da renderização que valeu (a que não pediu outra) rodam, os que têm as dependências trocadas, com a limpeza do anterior antes. */
   function flush() {
@@ -113,5 +115,5 @@ export function createHookRuntime() {
     effectSlots = [];
   }
 
-  return { hooks: { useState, useReducer, useRef, useId, useMemo, useCallback, useEffect, useLayoutEffect: useEffect, useEffectEvent, useSyncExternalStore }, render, unmount };
+  return { hooks: { useState, useReducer, useRef, useId, useMemo, useCallback, useEffect, useLayoutEffect: useEffect, useEffectEvent, useSyncExternalStore, useContext }, render, unmount };
 }

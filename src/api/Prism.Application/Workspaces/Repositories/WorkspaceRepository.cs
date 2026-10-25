@@ -30,5 +30,5 @@ internal sealed class WorkspaceRepository(IVaultService vaultService) : IWorkspa
         => current.ActiveIndex == next.ActiveIndex && current.Tabs.SequenceEqual(next.Tabs);
 
     private static VaultWorkspaceRecord ToRecord(Workspace workspace)
-        => new([.. workspace.Tabs.Select(tab => new VaultWorkspaceTabRecord(tab.Kind, tab.ConnectionID, tab.Database, tab.Sql, tab.ScriptID, tab.Dirty, tab.SqlTooLarge, tab.Schema, tab.Table, tab.View))], workspace.ActiveIndex);
+        => new([.. workspace.Tabs.Select(tab => new VaultWorkspaceTabRecord(tab.Kind, tab.ConnectionID, tab.Database, tab.Sql, tab.ScriptID, tab.Dirty, tab.SqlTooLarge, tab.Schema, tab.Table, tab.View, tab.ResultPlace))], workspace.ActiveIndex);
 }

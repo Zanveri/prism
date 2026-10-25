@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type KeyboardEvent } from "react";
 
-import { Button } from "@/components/ui";
+import { Button, useHost } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { commandHead, commandHint, entryAt, scriptTabKeyTarget, scriptTabsOf, type ScriptRun, type ScriptTab } from "../_lib/script-run";
 import { scriptRunCopy } from "../_lib/script-run.copy";
 import { revealOffset } from "../_lib/tab-strip";
+import { variablesPanelCopy } from "../_lib/variables-panel.copy";
 import { useScriptRun, type QueryRunner } from "../_lib/use-query-runner";
 
 const copy = scriptRunCopy.tabs;
@@ -21,6 +22,8 @@ type ScriptTabsProps = {
   idPrefix: string;
   /** O id do corpo da área, que as abas controlam. */
   panelId: string;
+  /** RN-VAR-024: a aba tem variáveis avaliadas, e "Variáveis" entra logo antes de "Estatísticas". */
+  variables?: boolean;
   /**
    * Escolhe a aba; `false` quando a troca espera uma resposta (as alterações não salvas, RN-SQL-023), e o foco fica onde está até ela: trocada a aba depois
    * ("Salvar" ou "Descartar"), o foco vai à escolhida pelo teclado.
@@ -36,10 +39,12 @@ type ScriptTabsProps = {
  * As abas dos resultados rolam na horizontal quando não cabem, e a escolhida é sempre trazida à vista: a do último comando, que vem à frente sozinha no fim,
  * ficava fora da faixa com umas oito abas. "Estatísticas" fica fixa na ponta direita, fora da rolagem, sempre ao alcance.
  */
-export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTabsProps) {
+export function ScriptTabs({ run, shown, idPrefix, panelId, variables = false, onChoose }: ScriptTabsProps) {
   const list = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  const tabs = scriptTabsOf(run);
+  // RN-ABAS-017: a faixa pode estar na página da janela do resultado, e o `ResizeObserver` é o da janela dela (e recriado quando a página muda).
+  const page = useHost().document;
+  const tabs = scriptTabsOf(run, variables);
   // A faixa estava sem largura (a aba de consulta escondida, ou a área de trabalho por baixo de outra tela) quando a escolhida pediu para aparecer.
   const revealPending = useRef(false);
 
@@ -60,12 +65,12 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
     const element = scroller.current;
     if (element === null) return;
 
-    const observer = new ResizeObserver(() => {
+    const observer = new (element.ownerDocument.defaultView ?? window).ResizeObserver(() => {
       if (revealPending.current) reveal();
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [reveal]);
+  }, [reveal, page]);
 
   // A aba escolhida pelo teclado cuja troca esperou a pergunta das alterações não salvas (RN-SQL-023). Quando a pergunta troca de aba ("Salvar" ou
   // "Descartar"), o foco vai a ela: o diálogo, ao fechar, o devolve à aba de antes, que já saiu da ordem do Tab, e as setas seguintes contariam a partir da
@@ -93,7 +98,8 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
 
   const tab = (item: ScriptTab) => {
     const selected = item === shown;
-    const label = item === "statistics" ? copy.statistics : copy.result(item + 1, commandHead(entryAt(run, item).target));
+    const fixed = item === "statistics" || item === "variables";
+    const label = item === "statistics" ? copy.statistics : item === "variables" ? copy.variables : copy.result(item + 1, commandHead(entryAt(run, item).target));
     return (
       <button
         key={item}
@@ -104,9 +110,9 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
         aria-selected={selected}
         aria-controls={panelId}
         tabIndex={selected ? 0 : -1}
-        title={item === "statistics" ? undefined : commandHint(entryAt(run, item).target.sql)}
+        title={fixed ? undefined : commandHint(entryAt(run, item).target.sql)}
         onClick={() => choose(item)}
-        className={cn("flex h-9 max-w-64 flex-none cursor-pointer items-center border-b-2 px-2.5 whitespace-nowrap", selected ? "border-accent font-semibold text-ink" : "border-transparent text-muted hover:text-ink")}
+        className={cn("flex h-7 max-w-64 flex-none cursor-pointer items-center border-b-2 px-2 whitespace-nowrap", selected ? "border-accent font-semibold text-ink" : "border-transparent text-muted hover:text-ink")}
       >
         <span className="truncate">{label}</span>
       </button>
@@ -117,9 +123,65 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
     <div ref={list} role="tablist" aria-label={copy.label} onKeyDown={onKeyDown} className="mr-auto flex min-w-0 flex-1">
       {/* `relative`: a posição de cada aba (`offsetLeft`) é contada a partir daqui, como a rolagem. */}
       <div ref={scroller} className="relative flex min-w-0 overflow-x-auto [scrollbar-width:thin]">
-        {tabs.filter((item) => item !== "statistics").map(tab)}
+        {tabs.filter((item) => item !== "statistics" && item !== "variables").map(tab)}
       </div>
-      {tab("statistics")}
+      {variables ? (
+        <>
+          {tab("variables")}
+          {tab("statistics")}
+        </>
+      ) : (
+        tab("statistics")
+      )}
+    </div>
+  );
+}
+
+type ResultTabsProps = {
+  /** A aba à frente. */
+  shown: "result" | "variables";
+  idPrefix: string;
+  panelId: string;
+  onChoose: (tab: "result" | "variables") => void;
+};
+
+/**
+ * RN-VAR-024: sem script, mas com variáveis avaliadas (depois de um Ctrl+Enter numa declaração), a área ganha as abas "Resultado" e "Variáveis", no lugar do
+ * título "Resultado". É uma lista de abas, como a do script: só a escolhida entra no Tab, e as setas, Home e End escolhem a outra.
+ */
+export function ResultTabs({ shown, idPrefix, panelId, onChoose }: ResultTabsProps) {
+  const list = useRef<HTMLDivElement>(null);
+  const items = ["result", "variables"] as const;
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const next = scriptTabKeyTarget(event.key, items, shown);
+    if (next === null) return;
+    event.preventDefault();
+    onChoose(next);
+    list.current?.querySelector<HTMLElement>(`[data-result-tab="${next}"]`)?.focus();
+  }
+
+  return (
+    <div ref={list} role="tablist" aria-label={variablesPanelCopy.tabsLabel} onKeyDown={onKeyDown} className="mr-auto flex min-w-0 flex-1">
+      {items.map((item) => {
+        const selected = item === shown;
+        return (
+          <button
+            key={item}
+            type="button"
+            role="tab"
+            id={`${idPrefix}-${item}`}
+            data-result-tab={item}
+            aria-selected={selected}
+            aria-controls={panelId}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onChoose(item)}
+            className={cn("flex h-7 flex-none cursor-pointer items-center border-b-2 px-2 whitespace-nowrap", selected ? "border-accent font-semibold text-ink" : "border-transparent text-muted hover:text-ink")}
+          >
+            {item === "result" ? variablesPanelCopy.result : variablesPanelCopy.tab}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -190,7 +252,7 @@ export function ScriptWaitingMark({ runner }: { runner: QueryRunner }) {
 
   return (
     <>
-      <span aria-hidden data-script-waiting title={scriptRunCopy.error.waiting} className="size-2 flex-none rounded-full bg-danger" />
+      <span aria-hidden data-script-waiting title={scriptRunCopy.error.waiting} className="size-1.5 flex-none rounded-full bg-danger" />
       <span className="sr-only">{scriptRunCopy.error.waiting}</span>
     </>
   );

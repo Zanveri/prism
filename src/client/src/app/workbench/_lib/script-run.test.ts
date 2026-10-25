@@ -125,7 +125,7 @@ describe("o estado do script", () => {
     let current = withEntry(run(), 0, { status: "ok", rows: { read: 200, more: true, total: null }, elapsedMs: 40, kept: true });
     current = withEntry(current, 1, { status: "ok", affected: 12, elapsedMs: 10 });
     current = withEntry(current, 2, { status: "skipped", error: { title: "Erro", message: "x", sqlState: null } });
-    expect(scriptTotals(current)).toEqual({ ok: 2, total: 3, errors: 1, changed: 12, returning: 0, elapsedMs: 50, dropped: 0 });
+    expect(scriptTotals(current)).toEqual({ ok: 2, total: 3, declarationsOk: 0, declarations: 0, errors: 1, changed: 12, returning: 0, elapsedMs: 50, dropped: 0 });
 
     expect(scriptTotals(withEntry(current, 1, { affected: -1 })).changed).toBe(0);
     expect(scriptTotals(withEntry(current, 0, { kept: false })).dropped).toBe(1);
@@ -175,6 +175,8 @@ describe("um script de milhares de comandos (RN-SQL-020)", () => {
       return {
         ok: is("ok"),
         total: entries.length,
+        declarationsOk: 0,
+        declarations: 0,
         errors: is("error", "skipped"),
         changed: entries.reduce((sum, entry) => sum + (entry.affected !== null && entry.affected > 0 ? entry.affected : 0), 0),
         returning: entries.filter((entry) => entry.rows !== null && entry.rows.total !== null).length,
@@ -207,6 +209,27 @@ describe("um script de milhares de comandos (RN-SQL-020)", () => {
     expect(statisticsRange(many(size))).toEqual({ from: 0, to: statisticsWindow });
     expect(statisticsRange(startEntry(many(10), 9))).toEqual({ from: 0, to: 10 });
     expect(statisticsRange(finishRun(running, "cancelled"))).toEqual({ from: 0, to: size });
+  });
+});
+
+describe("as declarações são itens do script (RN-VAR-022)", () => {
+  const target = (sql: string) => ({ sql, offset: 0 });
+
+  it("os totais separam os comandos das declarações: o tempo soma os dois, e os erros contam os dois", () => {
+    let current = createScriptRun(1, [target("let a = 1"), target("select @a"), target("let b = a +"), target("select 2")], ["declaration", "statement", "declaration", "statement"]);
+    expect(scriptTotals(current)).toMatchObject({ ok: 0, total: 2, declarationsOk: 0, declarations: 2 });
+    expect(entriesOf(current).map((entry) => entry.kind)).toEqual(["declaration", "statement", "declaration", "statement"]);
+
+    current = withEntry(current, 0, { status: "ok", elapsedMs: 3 });
+    current = withEntry(current, 1, { status: "ok", affected: 1, elapsedMs: 10 });
+    current = withEntry(current, 2, { status: "error", elapsedMs: 4, error: { title: "Erro", message: "x", sqlState: null } });
+    expect(scriptTotals(current)).toMatchObject({ ok: 1, total: 2, declarationsOk: 1, declarations: 2, errors: 1, elapsedMs: 17 });
+  });
+
+  it("sem declarações o script é o de sempre, e os itens são comandos", () => {
+    const current = createScriptRun(1, [target("select 1")]);
+    expect(entryAt(current, 0).kind).toBe("statement");
+    expect(scriptTotals(current)).toMatchObject({ total: 1, declarations: 0 });
   });
 });
 

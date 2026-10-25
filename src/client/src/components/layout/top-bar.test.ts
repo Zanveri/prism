@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 import type { Driver } from "@/app/drivers/_lib/drivers.schema";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
+import { stripTags } from "@/lib/testing/text";
 
 import { TopBar } from "./top-bar";
 
@@ -42,7 +43,7 @@ describe("a barra superior", () => {
     const markup = render();
 
     // O texto de cada link, sem as marcas.
-    expect([...markup.matchAll(/<a [^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/g)].map((match) => [match[1], match[2].replace(/<[^>]*>/g, "")])).toEqual([
+    expect([...markup.matchAll(/<a [^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/g)].map((match) => [match[1], stripTags(match[2])])).toEqual([
       ["/workbench", "Área de trabalho"],
       ["/settings", "Configurações"],
     ]);

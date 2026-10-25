@@ -4,6 +4,7 @@ import { createQueryClient } from "@/lib/api/query-client";
 
 import { databaseSessionKey, treeKey } from "./database-sessions.service";
 import { structureKey } from "./table-structure.service";
+import { inlineEvaluator } from "./variables/evaluator-inline";
 import { createQueryRunner, type QueryRunner, type RunnerState } from "./use-query-runner";
 import { anyRunnerBusy, createLockHandles, discardForLock } from "./workbench-lock";
 import type { QueryTab } from "./workbench-model";
@@ -45,7 +46,7 @@ function fakeApi() {
 function workbench(tabs: QueryTab[]) {
   const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
   const queryClient = createQueryClient(toast);
-  const createRunner = (tab: Pick<QueryTab, "id" | "connectionId">) => createQueryRunner({ connectionId: tab.connectionId, queryClient, toast, onSession: () => {} });
+  const createRunner = (tab: Pick<QueryTab, "id" | "connectionId">) => createQueryRunner({ connectionId: tab.connectionId, queryClient, toast, onSession: () => {}, evaluator: inlineEvaluator() });
   const runners = new Map(tabs.map((tab) => [tab.id, createRunner(tab)]));
   const setTabs = vi.fn();
   return { queryClient, runners, setTabs, createRunner, discard: () => discardForLock({ runners, tabs, createRunner, setTabs, queryClient }) };
@@ -84,6 +85,18 @@ describe("discardForLock: o descarte do bloqueio chega à tela mesmo sem nenhuma
 
     expect(api.calls).toEqual([]);
     expect(old.getState()).toEqual({ status: "idle" });
+  });
+
+  it("(vi) os valores das variáveis saem com o executor velho, e o novo começa sem nenhum (RN-VAR-023 e RN-SEG-001)", async () => {
+    const { runners, discard } = workbench([typed]);
+    const old = runners.get("a")!;
+    await old.runItem({ doc: { text: "let x = 5", blankLines: true }, engine: 1, from: 0, to: 0 });
+    expect(old.values.snapshot().values.size).toBe(1);
+
+    discard();
+
+    expect(old.values.snapshot().values.size).toBe(0);
+    expect(runners.get("a")!.values.snapshot().values.size).toBe(0);
   });
 
   it("(iii) uma aba com linhas na tela e sessionId nulo (como depois de Desconectar) fica sem linhas, no executor novo e no velho", async () => {

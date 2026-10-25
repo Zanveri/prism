@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import { themeModes } from "@/app/settings/_lib/preferences";
 import { themeSchemes, type ThemeId } from "@/app/settings/_lib/theme";
 import { markColors } from "@/components/layout/prism-mark";
+import { rowMarkClasses } from "@/app/workbench/_lib/grid-editing";
 import { contrast, over } from "@/lib/testing/contrast";
 import { css, dark, light, paletteOf, themeBlock, type Palette } from "@/lib/testing/theme-palettes";
 
 /** Os temas além do Prism Escuro e do Prism Claro: cada um é um bloco de CSS que troca as fichas e fica com as do esquema dele nas demais. */
 const extraThemes = themeModes.filter((mode): mode is Exclude<ThemeId, "dark" | "light"> => mode !== "dark" && mode !== "light" && mode !== "system");
-const names: Record<ThemeId, string> = { dark: "Prism Escuro", light: "Prism Claro", monokai: "Monokai", dracula: "Dracula", nord: "Nord", "github-light": "GitHub Claro" };
+const names: Record<ThemeId, string> = { dark: "Prism Escuro", light: "Prism Claro", monokai: "Monokai", dracula: "Dracula", nord: "Nord", "github-light": "GitHub Claro", kanagawa: "Kanagawa" };
 
 /** Todos os temas do app. Cada um passa pela mesma bateria de contraste: quem acrescenta um tema acrescenta o bloco dele no CSS e o nome aqui. */
 const themes = (["light", "dark", ...extraThemes] as const).map((id) => ({ id, name: names[id], ...paletteOf(id) }));
@@ -18,10 +19,44 @@ const neutralText = ["ink", "body", "muted", "subtle"] as const;
 const toneText = ["accent", "postgres", "db2", "informix", "danger", "success"] as const;
 /** As cores de sintaxe do editor (RN-CONFIG-003): palavra-chave, texto entre aspas, número e comentário. O canvas as define em cada tema. */
 const syntaxText = ["syntax-keyword", "syntax-string", "syntax-number", "syntax-comment"] as const;
+/** RN-VAR-025: a cor da variável (o nome declarado e o `@nome` no SQL). O canvas não a desenha: cada tema traz a sua, e ela passa no mesmo contraste da sintaxe. */
+const variableText = ["syntax-variable"] as const;
 /** O que o editor pinta por cima da seleção: o texto e o que o erro de SQL marca (a sintaxe é conferida à parte, em cada superfície). */
 const editorOnSelection = { texto: "ink", erro: "danger" } as const;
 /** `FormMessage` (e o aviso): o texto do tom sobre 10% do próprio tom por cima da superfície (`bg-<tom>/10`). */
 const messageTones = { erro: "danger", atenção: "accent", sucesso: "success" } as const;
+
+/** Separa os argumentos de uma função CSS na vírgula de fora dos parênteses. */
+function splitArguments(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let at = 0; at < text.length; at++) {
+    if (text[at] === "(") depth++;
+    else if (text[at] === ")") depth--;
+    else if (text[at] === "," && depth === 0) {
+      parts.push(text.slice(start, at));
+      start = at + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+/**
+ * A cor que o navegador compõe para um `color-mix(in_srgb,var(--color-a)_N%,<fundo>)` de classe do Tailwind (o `<fundo>` é `var(--color-b)` ou outra mistura),
+ * pelas fichas da paleta. Só o formato que a grade usa.
+ */
+function resolveMix(expression: string, palette: Palette): string {
+  const token = /^var\(--color-([\w-]+)\)$/.exec(expression);
+  if (token) return palette[token[1]];
+  const mix = /^color-mix\((.*)\)$/.exec(expression);
+  if (!mix) throw new Error(`mistura que o teste não entende: ${expression}`);
+  const [space, top, bottom] = splitArguments(mix[1]);
+  const share = /^(.+)_(\d+)%$/.exec(top);
+  if (space !== "in_srgb" || !share || bottom === undefined) throw new Error(`mistura que o teste não entende: ${expression}`);
+  return over(resolveMix(share[1], palette), resolveMix(bottom, palette), Number(share[2]) / 100);
+}
 
 describe("os tokens de cor (tema escuro e tema claro)", () => {
   it("cada token tem as duas colunas, e o tema escuro é o que o app sempre teve", () => {
@@ -47,6 +82,7 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
       "syntax-string": "#5ed3a3",
       "syntax-number": "#f2b644",
       "syntax-comment": "#8e99a8",
+      "syntax-variable": "#c9a8ff",
       link: "#7db2ff",
     });
     expect(Object.keys(light).sort()).toEqual(Object.keys(dark).sort());
@@ -104,8 +140,8 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
 });
 
 describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
-  it("são Monokai, Dracula, Nord e GitHub Claro, cada um com o seu bloco no CSS", () => {
-    expect(extraThemes).toEqual(["monokai", "dracula", "nord", "github-light"]);
+  it("cada tema adicional tem o seu bloco no CSS", () => {
+    expect(extraThemes).toEqual(["monokai", "dracula", "nord", "github-light", "kanagawa"]);
     for (const id of extraThemes) expect(css, id).toContain(`:root[data-theme="${id}"]`);
   });
 
@@ -115,7 +151,7 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
 
       expect(scheme, id).toBe(themeSchemes[id as keyof typeof themeSchemes]);
     }
-    expect(themeSchemes).toEqual({ dark: "dark", light: "light", monokai: "dark", dracula: "dark", nord: "dark", "github-light": "light" });
+    expect(themeSchemes).toEqual({ dark: "dark", light: "light", monokai: "dark", dracula: "dark", nord: "dark", "github-light": "light", kanagawa: "dark" });
   });
 
   it("um bloco só troca fichas que existem: nenhum token inventado", () => {
@@ -138,9 +174,10 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
     dracula: { bg: "#282A36", painel: "#21222C", linha: "#44475A", fg: "#F8F8F2", kw: "#FF79C6", str: "#F1FA8C", num: "#BD93F9", com: "#9AA5CE", rolagem: "#6272A4" },
     nord: { bg: "#2E3440", painel: "#272C36", linha: "#434C5E", fg: "#D8DEE9", kw: "#81A1C1", str: "#A3BE8C", num: "#B48EAD", com: "#9AA6BD", rolagem: "#4C566A" },
     "github-light": { bg: "#FFFFFF", painel: "#F6F8FA", linha: "#D1D9E0", fg: "#1F2328", kw: "#CF222E", str: "#0A3069", num: "#0550AE", com: "#59636E", rolagem: "#AFB8C1" },
+    kanagawa: { bg: "#1F1F28", painel: "#1A1A22", linha: "#54546D", fg: "#DCD7BA", kw: "#7E9CD8", str: "#98BB6C", num: "#DCA561", com: "#9C987D", rolagem: "#54546D" },
   };
   const tokenOf = { bg: "background", painel: "panel", linha: "border", fg: "ink", kw: "syntax-keyword", str: "syntax-string", num: "syntax-number", com: "subtle", rolagem: "border-strong" } as const;
-  const lifted: Record<string, string[]> = { monokai: ["kw", "num"], dracula: [], nord: ["kw", "num", "com"], "github-light": [] };
+  const lifted: Record<string, string[]> = { monokai: ["kw", "num"], dracula: [], nord: ["kw", "num", "com"], "github-light": [], kanagawa: [] };
 
   it.each(extraThemes)("o tema %s usa as cores do canvas, menos as que sozinhas não passam em 4,5:1 (e essas são as únicas trocadas)", (id) => {
     const theme = themes.find((candidate) => candidate.id === id)!;
@@ -163,12 +200,20 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
   // As fichas que cada bloco troca, nem uma a mais. As do canvas todo bloco troca; qualquer outra é uma decisão de cor, e entra em `swapped`
   // com o motivo conferido logo abaixo: a cor que o tema herdaria do esquema dele não passa em alguma superfície dele.
   const fromCanvas = ["background", "panel", "raised", "selected", "selection", "border", "border-strong", "ink", "body", "muted", "subtle", ...syntaxText];
-  const swapped: Record<string, string[]> = { monokai: [], dracula: [], nord: ["danger"], "github-light": [] };
+  // Kanagawa fornece estes tons na própria paleta; Nord troca `danger` porque a ficha herdada não passa no contraste.
+  const paletteColors: Record<string, Record<string, string>> = {
+    kanagawa: { accent: "#819fdc", postgres: "#7e9cd8", db2: "#98bb6c", informix: "#ea7f89", danger: "#ea7f89", success: "#98bb6c" },
+  };
+  const swapped: Record<string, string[]> = { monokai: [], dracula: [], nord: ["danger"], "github-light": [], kanagawa: [] };
   // RN-LINK-001: o azul de link de cada tema (o canvas não o desenha): o do Prism nos dois do Prism, o da paleta do tema nos outros quatro.
-  const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7" } as const;
+  const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7", kanagawa: "#7e9cd8" } as const;
 
   it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas, o azul de link e as da lista de trocadas, nem uma a mais", (id) => {
-    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...swapped[id]].sort());
+    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...variableText, ...Object.keys(paletteColors[id] ?? {}), ...swapped[id]].sort());
+  });
+
+  it.each(Object.entries(paletteColors.kanagawa))("Kanagawa usa o tom %s da paleta", (token, color) => {
+    expect(themes.find((theme) => theme.id === "kanagawa")!.palette[token]).toBe(color);
   });
 
   it.each(extraThemes)("o azul de link do tema %s é o da paleta dele (o do GitHub Claro, escurecido o mínimo para passar na linha selecionada)", (id) => {
@@ -209,13 +254,18 @@ describe.each(themes)("contraste do tema $name (WCAG AA: 4,5:1 para texto, sem e
 
   // O editor pinta o código sobre o fundo; a lista de sugestões, sobre a superfície elevada e a selecionada; a seleção, por cima de tudo.
   // Selecionar para executar é a interação central do editor: o que está selecionado tem de continuar legível.
-  it.each(syntaxText.flatMap((text) => ([...surfaces, "selection"] as const).map((surface) => [text, surface] as const)))("sintaxe %s sobre %s", (text, surface) => {
+  it.each([...syntaxText, ...variableText].flatMap((text) => ([...surfaces, "selection"] as const).map((surface) => [text, surface] as const)))("sintaxe %s sobre %s", (text, surface) => {
     expect(contrast(palette[text], palette[surface])).toBeGreaterThanOrEqual(4.5);
   });
 
   // RN-LINK-001: o nome da tabela com o Ctrl apertado, no editor (sobre o fundo, a linha do cursor e a seleção) e onde mais um link aparecer.
   it.each(([...surfaces, "selection"] as const).map((surface) => [surface] as const))("o azul de link sobre %s", (surface) => {
     expect(contrast(palette.link, palette[surface])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // RN-VAR-025: a variável tem a própria cor, e nenhuma é igual a uma das outras de sintaxe (se fosse, o nome declarado se perderia no SQL).
+  it("a cor da variável não é a de nenhuma outra de sintaxe nem a do texto", () => {
+    for (const other of [...syntaxText, "ink"] as const) expect(palette["syntax-variable"], other).not.toBe(palette[other]);
   });
 
   it.each(Object.entries(editorOnSelection))("no editor, %s por cima da seleção", (_what, token) => {
@@ -226,6 +276,20 @@ describe.each(themes)("contraste do tema $name (WCAG AA: 4,5:1 para texto, sem e
   it.each(["background", "panel"] as const)("o raio e o contorno da marca sobre %s (3:1)", (surface) => {
     expect(contrast(markColors.ray[kind], palette[surface])).toBeGreaterThanOrEqual(3);
     expect(contrast(markColors.rim[kind], palette[surface])).toBeGreaterThanOrEqual(3);
+  });
+
+  // RN-EDIT-004 e 015: a linha marcada para exclusão (`rowMarkClasses`, em grid-editing.ts) tem o texto em `danger` sobre o próprio vermelho por cima da
+  // superfície da grade (o painel do resultado; o fundo também, por segurança), e o passar do mouse troca o fundo por outra mistura. Os tons vêm das próprias
+  // classes que a grade usa (mudar um tom lá muda o que se confere aqui). A escolha (`selected`) cobre o tom, e o texto vermelho sobre ela já é conferido em "tom danger sobre selected".
+  it.each([["a excluída", { deleted: true, failed: false }], ["a excluída que também falhou", { deleted: true, failed: true }]] as const)("o texto de %s: danger sobre o tom do repouso e do passar do mouse", (_what, flags) => {
+    const row = rowMarkClasses({ kind: "read", deleted: flags.deleted, pending: new Map(), failed: flags.failed }, false).row;
+    const rest = Number(/(?:^| )bg-danger\/(\d+)(?: |$)/.exec(row)?.[1]) / 100;
+    const hover = /hover:bg-\[(color-mix\(.+\))\]/.exec(row)?.[1];
+    expect(rest, "o tom do repouso").toBeGreaterThan(0);
+    expect(hover, "o fundo do passar do mouse").toBeDefined();
+
+    for (const surface of ["background", "panel"] as const) expect(contrast(palette.danger, over(palette.danger, palette[surface], rest))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(palette.danger, resolveMix(hover!, palette))).toBeGreaterThanOrEqual(4.5);
   });
 
   // `FormMessage`: `border-<tom>/40 bg-<tom>/10 text-<tom>`. O fundo real é o tom a 10% sobre a superfície onde a mensagem está.
@@ -244,9 +308,9 @@ describe("todos os temas", () => {
     }
   });
 
-  it("são seis, e cada modo de tema (menos o do sistema) é um deles", () => {
+  it("são sete, e cada modo de tema (menos o do sistema) é um deles", () => {
     expect(themes.map((theme) => theme.id).sort()).toEqual(themeModes.filter((mode) => mode !== "system").sort());
-    expect(themes).toHaveLength(6);
+    expect(themes).toHaveLength(7);
   });
 });
 

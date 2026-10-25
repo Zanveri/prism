@@ -1,6 +1,7 @@
 using Prism.Application.Scripts.Models;
 using Prism.Application.Transfers.Features.StartExport;
 using Prism.Application.Transfers.Models.Dtos;
+using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Transfers.Writers;
 using System.Globalization;
 
@@ -91,6 +92,9 @@ internal static class ExportRequestRules
 
             if (!IsName(source.Table))
                 refusals.Add(("source.table", NameMessage("A tabela")));
+
+            if (source.Params is { } given && !(given.ValueKind is System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined || (given.ValueKind == System.Text.Json.JsonValueKind.Array && given.GetArrayLength() == 0)))
+                refusals.Add(("source.params", "Os valores dos marcadores só valem na origem query."));
         }
         else if (source.Kind == "query")
         {
@@ -101,6 +105,9 @@ internal static class ExportRequestRules
 
             if (source.Name is not null && !IsName(source.Name))
                 refusals.Add(("source.name", NameMessage("O nome da origem")));
+
+            // RN-VAR-032 e 033: os valores dos marcadores do comando, na forma da rota das consultas, cada erro no campo dele.
+            refusals.AddRange(QueryParameterRules.Refusals(source.Params, "source.params"));
         }
         else
         {

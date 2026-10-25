@@ -259,6 +259,16 @@ describe("createLockVaultDeps: a fiação do bloqueio com as peças de verdade",
     expect(sent).toEqual([expect.objectContaining({ type: "keydown", key: "Escape" })]);
   });
 
+  it("closePortals também manda o Esc ao que abriu na página de uma janela do resultado (RN-ABAS-011)", () => {
+    const inResult = { hasAttribute: () => false, querySelector: () => null, dispatchEvent: vi.fn() };
+    const { deps } = build({ extraRoots: () => [{ querySelectorAll: () => [inResult] as unknown as NodeListOf<Element> }] });
+
+    deps.closePortals();
+
+    expect(sent).toHaveLength(1);
+    expect(inResult.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "keydown", key: "Escape" }));
+  });
+
   it("saveWorkspace é a gravação das abas que quem bloqueia deu; sem ela, não grava nada (a janela que acompanha o bloqueio de outra)", async () => {
     const saveWorkspace = vi.fn(async () => undefined);
 

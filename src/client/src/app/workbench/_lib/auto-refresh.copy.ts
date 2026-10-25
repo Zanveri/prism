@@ -48,9 +48,9 @@ export const autoRefreshCopy = {
 
   dialog: {
     title: "Atualizar automaticamente",
-    description: "O comando do resultado é executado de novo a cada intervalo, enquanto a aba está à vista. O intervalo vai de 2 a 3.600 segundos (1 hora).",
+    description: "O comando do resultado é executado de novo a cada intervalo, enquanto o resultado está à vista. O intervalo vai de 1 a 3.600 segundos (1 hora).",
     seconds: "Intervalo em segundos",
-    invalid: "Use um número inteiro de segundos, de 2 a 3.600.",
+    invalid: "Use um número inteiro de segundos, de 1 a 3.600.",
     submit: "Ligar",
     cancel: "Cancelar",
   },

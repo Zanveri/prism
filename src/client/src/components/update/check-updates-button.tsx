@@ -14,7 +14,10 @@ const copy = updateCopy.toasts;
  * falha vem do processo principal e é escrita como texto.
  */
 export function checkNotice(result: CheckOutcome, version: string): { tone: "success" | "warning" | "error"; title: string; description?: string } | null {
-  if (result.outcome === "upToDate") return { tone: "success", title: copy.upToDate, description: version === "" ? undefined : copy.upToDateDetail(version) };
+  if (result.outcome === "upToDate") {
+    const detail = version === "" ? undefined : result.withoutPackage === undefined ? copy.upToDateDetail(version) : copy.upToDateWithoutPackage(version, result.withoutPackage);
+    return { tone: "success", title: copy.upToDate, description: detail };
+  }
   if (result.outcome === "noSource") return { tone: "warning", title: copy.noSource, description: copy.noSourceDetail };
   if (result.outcome === "blocked") return { tone: "warning", title: copy.blocked, description: copy.blockedDetail };
   if (result.outcome === "busy") return { tone: "warning", title: copy.busy };

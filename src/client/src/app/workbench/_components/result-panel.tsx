@@ -12,15 +12,18 @@ import type { GridEditing } from "../_lib/grid-editing";
 import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-columns";
 import { dataExportCopy } from "../_lib/data-export/data-export.copy";
 import { dataImportCopy } from "../_lib/data-import/data-import.copy";
+import { controlHeight, iconControlSize, type ControlSize } from "../_lib/result-bar";
 import { autoLoadArmed } from "../_lib/result-paging";
 import { platformScriptShortcut } from "../_lib/script-run";
 import { recall, remember } from "../_lib/tab-memory";
-import { isPersonBusy, type RowsState, type RunnerState } from "../_lib/use-query-runner";
+import { isPersonBusy, type RowsState, type RunnerState, type VariableErrorsState } from "../_lib/use-query-runner";
+import { variableRunCopy } from "../_lib/variable-run.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { EditBar } from "./edit-bar";
 import { GridZoomControls } from "./grid-zoom-controls";
 import { ResultGrid } from "./result-grid";
 import { KeptResultNote } from "./script-tabs";
+import { SentSqlButton } from "./sent-sql-button";
 
 const copy = workbenchCopy.result;
 
@@ -40,7 +43,7 @@ function PanelButton({ children, ...props }: { children: ReactNode; onClick: () 
  * não se desabilita de verdade, só por `aria-disabled`: o botão `disabled` perde o foco. Quando ele sai da página com o foco (o resultado novo não tem o
  * que contar), avisa `onFocusLost`, e quem desenha a área leva o foco para dentro dela.
  */
-export function CountButton({ rows, busy, onCount, onFocusLost }: { rows: RowsState; busy: boolean; onCount: () => void; onFocusLost?: () => void }) {
+export function CountButton({ rows, busy, onCount, onFocusLost, size = "regular" }: { rows: RowsState; busy: boolean; onCount: () => void; onFocusLost?: () => void; size?: ControlSize }) {
   const recount = rows.total !== null;
   const lost = useRef(onFocusLost);
   useLayoutEffect(() => {
@@ -67,7 +70,7 @@ export function CountButton({ rows, busy, onCount, onFocusLost }: { rows: RowsSt
       onClick={() => {
         if (!busy) onCount();
       }}
-      className={cn("h-7 text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50", recount ? "w-7 px-0" : "px-2.5")}
+      className={cn("text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50", recount ? cn(iconControlSize[size], "px-0") : cn(controlHeight[size], "px-2.5"))}
     >
       {recount ? <RefreshIcon className={cn(rows.counting && "animate-spin")} /> : rows.counting ? copy.counting : copy.count}
     </Button>
@@ -78,7 +81,7 @@ export function CountButton({ rows, busy, onCount, onFocusLost }: { rows: RowsSt
  * Um botão de entrada de assistente do rodapé ou da barra: está sempre lá, e o que não se aplica fica desabilitado sem sair do caminho do Tab
  * (`aria-disabled`, como o "Contar total"), com o motivo na dica e para o leitor de tela.
  */
-function EntryButton({ icon, label, blocker, hint, onOpen }: { icon: ReactNode; label: string; blocker: string | null; hint: string; onOpen: () => void }) {
+function EntryButton({ icon, label, blocker, hint, onOpen, size = "regular" }: { icon: ReactNode; label: string; blocker: string | null; hint: string; onOpen: () => void; size?: ControlSize }) {
   const reasonId = useId();
   const blocked = blocker !== null;
   return (
@@ -93,7 +96,7 @@ function EntryButton({ icon, label, blocker, hint, onOpen }: { icon: ReactNode; 
         onClick={() => {
           if (!blocked) onOpen();
         }}
-        className="h-7 px-2.5 text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        className={cn("px-2.5 text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50", controlHeight[size])}
       >
         {icon}
         {label}
@@ -106,8 +109,8 @@ function EntryButton({ icon, label, blocker, hint, onOpen }: { icon: ReactNode; 
 }
 
 /** RN-EXPORT-001: "Exportar…", que abre o assistente "Exportar dados" com a origem desta área. Está sempre lá, também sem resultado. */
-export function ExportButton({ exporter, hint }: { exporter: ExportEntry; hint: string }) {
-  return <EntryButton icon={<DownloadIcon />} label={dataExportCopy.entry.button} blocker={exporter.blocker} hint={hint} onOpen={exporter.onExport} />;
+export function ExportButton({ exporter, hint, size }: { exporter: ExportEntry; hint: string; size?: ControlSize }) {
+  return <EntryButton icon={<DownloadIcon />} label={dataExportCopy.entry.button} blocker={exporter.blocker} hint={hint} onOpen={exporter.onExport} size={size} />;
 }
 
 /** RN-IMPORT-001: "Importar…", nos Registros de uma tabela, logo depois de "Exportar…": abre o assistente "Importar dados" com a tabela da aba. */
@@ -144,6 +147,7 @@ export function collapsedSummary(state: RunnerState): string {
   if (state.status === "affected") return copy.affected(state.rowsAffected, state.elapsedMs);
   if (state.status === "cancelled") return copy.cancelled;
   if (state.status === "notice") return state.message;
+  if (state.status === "variableErrors") return `${variableRunCopy.errors.title} · ${state.errors.length.toLocaleString("pt-BR")}`;
   if (state.status === "error") return state.sqlState === null ? state.title : `${state.title} · ${copy.sqlState} ${state.sqlState}`;
   return copy.empty;
 }
@@ -185,10 +189,20 @@ type ResultPanelProps = {
   collapsed?: boolean;
   /** Os botões do fim da barra (recolher, maximizar); a vista Registros de uma tabela não os tem. */
   actions?: ReactNode;
+  /**
+   * RN-ABAS-014: "Onde mostrar o resultado", logo antes dos botões do fim da barra: antes do recolher e do maximizar (no painel), na ponta direita (na aba),
+   * antes de "Voltar para o painel" (na janela). Só na aba de consulta; os Registros não o têm.
+   */
+  placeControl?: ReactNode;
   id?: string;
   /** O `flex` que o pai dá à área; sem ele ela ocupa o que sobra. */
   style?: CSSProperties;
   records?: RecordsMode;
+  /**
+   * RN-TABELA-007: as colunas do resultado de um comando que são chave estrangeira e o clique no valor delas (a aba de consulta e as abas de resultado do script, em
+   * qualquer lugar em que a área esteja). Nos Registros, quem diz é `records`.
+   */
+  follow?: Pick<RecordsMode, "links" | "onFollow" | "linkable">;
   /** O texto do valor nulo na grade (`results.nullText`, RN-CONFIG-005); sem ele, "NULL". */
   nullText?: string;
   /** Buscar a página seguinte ao rolar até o fim da grade (`results.autoLoadMore`, RN-CONFIG-005). Quem chama passa `onLoadMore` com identidade estável. */
@@ -220,11 +234,18 @@ type ResultPanelProps = {
    * Seção 31 (RN-SQL-020): as abas do script, no lugar do título "Resultado". O corpo da área passa a ser o painel da aba escolhida (`role="tabpanel"`,
    * rotulado por ela).
    */
-  tabs?: { list: ReactNode; panelId: string; labelledBy: string };
+  /** `mark`: o que vai logo depois da lista (o ponto vermelho do script parado na pergunta de erro, na janela do resultado, RN-ABAS-015). */
+  tabs?: { list: ReactNode; mark?: ReactNode; panelId: string; labelledBy: string };
   /** RN-SQL-019: o comando do script em execução ("Executando 3 de 12…"), na barra, em qualquer aba e com a área recolhida, no lugar do "Executando…". */
   progress?: string | null;
   /** RN-SQL-020: as Estatísticas do script no corpo, no lugar do resultado; `summary` é o que a barra recolhida diz delas. */
   statistics?: { body: ReactNode; summary: string };
+  /** RN-VAR-024: o painel "Variáveis" no corpo, no lugar do resultado, como as Estatísticas; `summary` é o que a barra recolhida diz dele. */
+  variables?: { body: ReactNode; summary: string };
+  /** RN-VAR-012: um erro da lista "Erros nas variáveis" leva o cursor do editor ao lugar dele (a posição no texto do editor). */
+  onGoTo?: (offset: number) => void;
+  /** RN-VAR-018: o botão "SQL enviado", na barra do resultado de um comando que levou variáveis; o clique abre o diálogo. */
+  onViewSent?: () => void;
   /**
    * RN-SQL-020 e 023: uma aba guardada do script. As linhas lidas, que se editam como as do último comando (a faixa e a edição, com a barra dela, vêm de
    * quem usa a área), sem contar, sem "Carregar mais", sem filtro nem atualização automática, e a nota dela (`KeptResultNote`), com "Executar este comando",
@@ -242,11 +263,36 @@ type ResultPanelProps = {
 };
 
 /**
+ * RN-VAR-012: a lista "Erros nas variáveis", quando a conferência de antes de executar achou erros e nada foi executado: cada erro com a linha e a frase; o
+ * Enter e o clique levam o cursor do editor ao lugar dele.
+ */
+export function VariableErrorsView({ state, onGoTo }: { state: VariableErrorsState; onGoTo?: (offset: number) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="font-semibold text-danger">{variableRunCopy.errors.title}</h3>
+      <ul aria-label={variableRunCopy.errors.list} className="flex flex-col gap-1">
+        {state.errors.map((error, index) => (
+          <li key={index}>
+            <button type="button" onClick={() => onGoTo?.(error.offset)} className="flex w-full cursor-pointer items-baseline gap-2 rounded-sm px-1 py-0.5 text-left text-ink hover:bg-selected">
+              <span className="flex-none font-mono text-xs text-muted">{variableRunCopy.errors.line(error.line)}:</span>
+              <span className="min-w-0 break-words">{error.message}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted">{variableRunCopy.errors.hint}</p>
+    </div>
+  );
+}
+
+/**
  * A área de resultado da aba (RN-SQL-004 a 009): as linhas na grade, as linhas afetadas, ou o erro
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter, importer }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, placeControl, id, style, records, follow, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics: scriptStatistics, variables, onGoTo, onViewSent, kept, exporter, importer }: ResultPanelProps) {
+  // As Estatísticas e o painel Variáveis tomam o corpo da área da mesma forma: nem grade, nem resumo das linhas na barra.
+  const statistics = scriptStatistics ?? variables;
   // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
   // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
   const running = state.status === "running" && state.auto !== true;
@@ -283,6 +329,9 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
   const autoLoad = kept === undefined && autoLoadArmed(state, { enabled: autoLoadMore, connected });
   const loadedHint = autoLoadMore ? copy.loadedHintAuto : copy.loadedHint;
   const exportHintId = useId();
+  // RN-ABAS-009: a barra da área de resultado da aba de consulta tem os botões de 24 px e o título (ou as abas do script) de 28 px; a dos Registros, a
+  // medida de antes.
+  const barSize: ControlSize = records ? "regular" : "bar";
 
   // RN-SQL-006: o botão de contar que sai da página com o foco (o resultado novo não tem o que contar) não o deixa cair no `body`, fora da aba, onde o F5
   // não vale: o foco vai para a grade ou, sem ela (ou com ela recolhida), para a própria área. O mesmo com "Executar este comando", de uma aba guardada do
@@ -310,8 +359,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
   return (
     // `tabIndex={-1}`: a área recebe o foco quando o botão que o tinha sai da página (`rescueFocus`), sem entrar no Tab.
     <section ref={section} tabIndex={-1} id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running || progress !== null} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
-      <div className={cn("flex flex-none flex-wrap items-center gap-x-1 px-3", !collapsed && "border-b border-border")}>
-        {tabs === undefined ? <h2 className="mr-auto flex h-9 items-center border-b-2 border-accent px-2.5 font-semibold text-ink">{records ? copy.recordsTitle : copy.title}</h2> : tabs.list}
+      <div className={cn("flex flex-none flex-wrap items-center gap-x-1 px-3", !records && "min-h-7", !collapsed && "border-b border-border")}>
+        {tabs === undefined ? <h2 className={cn("mr-auto flex items-center border-b-2 border-accent font-semibold text-ink", records ? "h-9 px-2.5" : "h-7 px-2")}>{records ? copy.recordsTitle : copy.title}</h2> : <>{tabs.list}{tabs.mark}</>}
         {collapsed ? (
           <span role={running || progress !== null ? "status" : undefined} className="min-w-0 truncate px-2 text-xs text-muted">
             {progress ?? statistics?.summary ?? collapsedSummary(state)}
@@ -346,7 +395,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 {rows.counting ? ` · ${copy.recounting}` : null}
               </span>
             )}
-            {connected && kept === undefined && (rows.hasMore || rows.total !== null) ? <CountButton rows={rows} busy={busy} onCount={onCount} onFocusLost={rescueFocus} /> : null}
+            {connected && kept === undefined && (rows.hasMore || rows.total !== null) ? <CountButton rows={rows} busy={busy} onCount={onCount} onFocusLost={rescueFocus} size={barSize} /> : null}
           </>
         )}
         {/* Sem resultado na tela, "Executando…" ocupa a área de resultado, logo abaixo. O script diz qual comando roda (RN-SQL-019). */}
@@ -361,8 +410,11 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
         ) : null}
         {records || kept !== undefined || statistics !== undefined ? null : (autoRefresh ?? null)}
         {/* Os controles do zoom só existem com a grade no corpo da área (as linhas, inclusive esmaecidas enquanto outro comando roda) e a área aberta. */}
-        {rows !== null && !collapsed ? <GridZoomControls zoom={zoom} onZoom={zoomTo} /> : null}
-        {records || exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.resultHint} />}
+        {rows !== null && !collapsed ? <GridZoomControls zoom={zoom} onZoom={zoomTo} size={barSize} /> : null}
+        {/* RN-VAR-018: o resultado de um comando que levou variáveis mostra o SQL enviado, com os valores. */}
+        {records || onViewSent === undefined || rows?.target.sent === undefined ? null : <SentSqlButton onClick={onViewSent} />}
+        {records || exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.resultHint} size="bar" />}
+        {placeControl}
         {actions}
       </div>
 
@@ -397,9 +449,9 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 generated={rows.generated}
                 nullText={nullText}
                 onReachEnd={autoLoad ? onLoadMore : undefined}
-                links={records?.links}
-                onFollow={records?.onFollow}
-                linkable={records?.linkable}
+                links={(records ?? follow)?.links}
+                onFollow={(records ?? follow)?.onFollow}
+                linkable={(records ?? follow)?.linkable}
                 widths={current.widths}
                 onResize={resize}
                 showTypes={preferences.results.showColumnTypes}
@@ -475,6 +527,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />
                 {copy.cancelled}
               </p>
+            ) : shown.status === "variableErrors" ? (
+              <VariableErrorsView state={shown} onGoTo={onGoTo} />
             ) : shown.status === "error" ? (
               <div className="flex flex-col gap-2">
                 <h3 className="font-semibold text-danger">{shown.title}</h3>

@@ -108,7 +108,7 @@ describe("o atualizador", () => {
     });
 
     it("muitas versões mais novas: a tela recebe as 20 mais recentes e quantas ficaram de fora", async () => {
-      const many = Array.from({ length: 60 }, (_, index) => gh(`v0.${index + 2}.0`, `notas da 0.${index + 2}.0`));
+      const many = Array.from({ length: 60 }, (_, index) => gh(`v0.${index + 2}.0`, notes(`0.${index + 2}.0`, `Prism-0.${index + 2}.0-win-x64.exe`, good)));
       const subject = updater(fakeHttp({ [releasesUrl]: json(many) }));
       await subject.checkOnStartup();
 
@@ -233,7 +233,7 @@ describe("o atualizador", () => {
       expect(second.state()).toEqual({ status: "none" });
 
       now = new Date("2026-10-14T12:00:00.000Z");
-      const newer = fakeHttp({ [releasesUrl]: json([gh("v0.4.0", "nova"), gh("v0.3.0", "pulada")]) });
+      const newer = fakeHttp({ [releasesUrl]: json([gh("v0.4.0", notes("0.4.0", "Prism-0.4.0-win-x64.exe", good)), gh("v0.3.0", notes("0.3.0", exe, good))]) });
       const third = updater(newer);
       await third.checkOnStartup();
       expect(third.state()).toMatchObject({ status: "available" });
@@ -545,15 +545,15 @@ describe("o atualizador", () => {
       expect(spawn).toHaveBeenCalledWith(join(dir, "updates", "0.4.0-beta.2", betaExe), ["--updated", "/S", "--force-run"], { detached: true, stdio: "ignore", shell: false });
     });
 
-    it("o bloco de somas é exigido no beta também: sem ele nas notas, recusa antes de pedir qualquer coisa", async () => {
+    it("o bloco de somas é exigido no beta também: o beta sem o pacote nas notas não é oferecido, e vale a estável mais nova que o tem (as notas vão até ela)", async () => {
       const net = betaWorld({ betaSum: null });
       const subject = updater(net);
       subject.setReceiveBeta(true);
       await subject.check();
-      net.requested.length = 0;
 
-      await expect(subject.download("0.4.0-beta.2")).resolves.toMatchObject({ status: "failed", reason: expect.stringMatching(/notas da versão não trazem a soma SHA-256 de Prism-0\.4\.0-beta\.2-win-x64\.exe/) });
-      expect(net.requested).toEqual([]);
+      expect(offered(subject)).toEqual(["0.3.0", "0.3.0-beta.1 (beta)", "0.2.0"]);
+      await expect(subject.download("0.4.0-beta.2")).rejects.toThrow("Pedido de atualização inválido.");
+      expect(logs.join("\n")).toMatch(/2 versão\(ões\) mais nova\(s\) sem o pacote deste sistema, não oferecida\(s\): 0\.4\.0-beta\.2, 0\.4\.0-beta\.1/);
     });
 
     it("'Pular esta versão' vale igual com um beta: a abertura seguinte não o oferece, e o beta seguinte, sim", async () => {
@@ -570,10 +570,172 @@ describe("o atualizador", () => {
       expect(logs.join("\n")).toMatch(/0\.4\.0-beta\.2 foi pulada/);
 
       now = new Date("2026-10-14T12:00:00.000Z");
-      net.routes[releasesUrl] = json([gh("v0.4.0-beta.3", "o seguinte"), gh("v0.4.0-beta.2", "o pulado")]);
+      net.routes[releasesUrl] = json([gh("v0.4.0-beta.3", notes("0.4.0-beta.3", "Prism-0.4.0-beta.3-win-x64.exe", good)), gh("v0.4.0-beta.2", notes("0.4.0-beta.2", betaExe, good))]);
       const third = updater(net);
       await third.checkOnStartup();
       expect(offered(third)[0]).toBe("0.4.0-beta.3 (beta)");
+    });
+  });
+
+  describe("uma release que saiu sem o pacote desta instalação não é oferecida (RN-ATUALIZA-002, 003 e 005)", () => {
+    /** As notas de uma release com as somas dos arquivos dados (os nomes que a pipeline escreve: só o que entrou na release). */
+    const notesWith = (version: string, files: string[]) => `### Adicionado\n\n- Coisa da ${version}.\n\n### Somas SHA-256\n\n\`\`\`\n${files.map((file) => `${good}  ${file}`).join("\n")}\n\`\`\`\n`;
+    const every = (version: string) => ({
+      win: [`Prism-${version}-win-x64.exe`, `Prism-${version}-win-x64.zip`],
+      linux: [`Prism-${version}-linux-x86_64.AppImage`, `Prism-${version}-linux-amd64.deb`, `Prism-${version}-linux-x86_64.rpm`, `Prism-${version}-linux-x64.tar.gz`],
+      macArm: [`Prism-${version}-mac-arm64.dmg`, `Prism-${version}-mac-arm64.zip`],
+      macIntel: [`Prism-${version}-mac-x64.dmg`, `Prism-${version}-mac-x64.zip`],
+    });
+    const all = (version: string) => Object.values(every(version)).flat();
+    const list = (...releases: ReturnType<typeof gh>[]) => fakeHttp({ [releasesUrl]: json(releases) });
+    const offeredVersions = (subject: ReturnType<typeof updater>) => {
+      const state = subject.state();
+      return state.status === "none" ? [] : state.releases.map((each) => each.version);
+    };
+    const linux = (overrides: Partial<InstallFacts>): InstallFacts => ({ platform: "linux", arch: "x64", appImage: false, execPath: "/usr/local/Prism/prism", debInstalled: false, hasRpm: false, nsisInstalled: false, ...overrides });
+    const mac = (arch: string): InstallFacts => ({ platform: "darwin", arch, appImage: false, execPath: "/Applications/Prism.app/Contents/MacOS/Prism", debInstalled: false, hasRpm: false, nsisInstalled: false });
+
+    it("uma release mais nova sem o pacote do Windows é pulada: a oferta é a mais nova que o tem, e a lista de notas vai até ela", async () => {
+      const subject = updater(list(gh("v0.4.0", notesWith("0.4.0", [...every("0.4.0").linux, ...every("0.4.0").macArm])), gh("v0.3.0", notesWith("0.3.0", all("0.3.0"))), gh("v0.2.0", notesWith("0.2.0", all("0.2.0")))));
+
+      await expect(subject.check()).resolves.toEqual({ outcome: "available" });
+
+      expect(subject.state()).toMatchObject({ status: "available", format: "nsis" });
+      expect(offeredVersions(subject)).toEqual(["0.3.0", "0.2.0"]);
+      expect(logs.join("\n")).toMatch(/1 versão\(ões\) mais nova\(s\) sem o pacote deste sistema, não oferecida\(s\): 0\.4\.0/);
+    });
+
+    it("ao abrir também: o aviso é da versão que tem o pacote, e baixar a pulada é um pedido inválido", async () => {
+      const subject = updater(list(gh("v0.4.0", notesWith("0.4.0", every("0.4.0").linux)), gh("v0.3.0", notesWith("0.3.0", all("0.3.0")))));
+      await subject.checkOnStartup();
+
+      expect(offeredVersions(subject)).toEqual(["0.3.0"]);
+      await expect(subject.download("0.4.0")).rejects.toThrow("Pedido de atualização inválido.");
+    });
+
+    it("a release do meio sem o pacote fica na lista (as notas dela contam o que mudou até a oferta), e a mais nova com o pacote é a oferta", async () => {
+      const subject = updater(list(gh("v0.5.0", notesWith("0.5.0", all("0.5.0"))), gh("v0.4.0", notesWith("0.4.0", every("0.4.0").linux)), gh("v0.3.0", notesWith("0.3.0", all("0.3.0")))));
+      await subject.check();
+
+      expect(offeredVersions(subject)).toEqual(["0.5.0", "0.4.0", "0.3.0"]);
+      const state = subject.state();
+      if (state.status !== "available") throw new Error("estado inesperado");
+      expect(state.releases[1].notes).toContain("Coisa da 0.4.0.");
+      expect(state.releases[1].sums).toEqual(every("0.4.0").linux.map((file) => ({ file, sha256: good })));
+    });
+
+    it("nenhuma mais nova tem o pacote: o Prism está atualizado, e a consulta manual diz qual versão saiu sem ele", async () => {
+      const subject = updater(list(gh("v0.4.0", notesWith("0.4.0", every("0.4.0").linux)), gh("v0.3.0", notesWith("0.3.0", every("0.3.0").macArm)), gh("v0.1.0", "a instalada")));
+
+      await expect(subject.check()).resolves.toEqual({ outcome: "upToDate", withoutPackage: "0.4.0" });
+
+      expect(subject.state()).toEqual({ status: "none" });
+      expect(states).toEqual([]);
+    });
+
+    it("sem versão nova nenhuma, a consulta manual não cita versão sem pacote", async () => {
+      const subject = updater(list(gh("v0.1.0", "a instalada")));
+
+      await expect(subject.check()).resolves.toEqual({ outcome: "upToDate" });
+    });
+
+    it("ao abrir, sem nenhuma mais nova com o pacote: nada na tela, e o log diz por quê", async () => {
+      const subject = updater(list(gh("v0.4.0", notesWith("0.4.0", every("0.4.0").linux))));
+      await subject.checkOnStartup();
+
+      expect(subject.state()).toEqual({ status: "none" });
+      expect(states).toEqual([]);
+      expect(logs.join("\n")).toMatch(/nenhuma versão mais nova com o pacote deste sistema/);
+    });
+
+    it("uma release que ganhou o pacote depois (a próxima versão) volta a ser oferecida normalmente", async () => {
+      const net = list(gh("v0.4.0", notesWith("0.4.0", every("0.4.0").linux)));
+      const first = updater(net);
+      await first.check();
+      expect(first.state()).toEqual({ status: "none" });
+
+      net.routes[releasesUrl] = json([gh("v0.5.0", notesWith("0.5.0", all("0.5.0"))), gh("v0.4.0", notesWith("0.4.0", every("0.4.0").linux))]);
+      await first.check();
+      expect(offeredVersions(first)).toEqual(["0.5.0", "0.4.0"]);
+    });
+
+    describe("Linux: cada formato de instalação procura o próprio arquivo nas somas", () => {
+      // A 0.4.0 só tem o deb; a 0.3.0 tem os quatro formatos.
+      const net = () => list(gh("v0.4.0", notesWith("0.4.0", ["Prism-0.4.0-linux-amd64.deb"])), gh("v0.3.0", notesWith("0.3.0", every("0.3.0").linux)));
+      const cases: [string, InstallFacts, string[]][] = [
+        ["deb (instalado em /opt, com o dpkg)", linux({ execPath: "/opt/Prism/prism", debInstalled: true }), ["0.4.0", "0.3.0"]],
+        ["rpm (instalado em /opt, sem o dpkg)", linux({ execPath: "/opt/Prism/prism", hasRpm: true }), ["0.3.0"]],
+        ["AppImage", linux({ appImage: true, execPath: "/tmp/.mount_Prism/prism" }), ["0.3.0"]],
+        ["tar.gz (fora de /opt)", linux({}), ["0.3.0"]],
+      ];
+
+      for (const [name, facts, expected] of cases) {
+        it(`${name}: oferece ${expected[0]}`, async () => {
+          const subject = updater(net(), { facts });
+          await subject.check();
+
+          expect(offeredVersions(subject)).toEqual(expected);
+        });
+      }
+
+      it("o AppImage sem o AppImage nas somas, mesmo com os outros três formatos: a release não é oferecida", async () => {
+        const subject = updater(list(gh("v0.4.0", notesWith("0.4.0", every("0.4.0").linux.filter((file) => !file.endsWith(".AppImage")))), gh("v0.3.0", notesWith("0.3.0", every("0.3.0").linux))), { facts: linux({ appImage: true, execPath: "/tmp/.mount_Prism/prism" }) });
+        await subject.check();
+
+        expect(offeredVersions(subject)).toEqual(["0.3.0"]);
+      });
+
+      it("Linux que não é x64: não há pacote para ele, e a release segue oferecida (a tela diz que não há pacote)", async () => {
+        const subject = updater(net(), { facts: linux({ arch: "arm64" }) });
+        await subject.check();
+
+        expect(subject.state()).toMatchObject({ status: "available", format: null });
+        expect(offeredVersions(subject)).toEqual(["0.4.0", "0.3.0"]);
+      });
+    });
+
+    describe("macOS: a arquitetura é a do grupo", () => {
+      const net = () => list(gh("v0.4.0", notesWith("0.4.0", every("0.4.0").macArm)), gh("v0.3.0", notesWith("0.3.0", [...every("0.3.0").macArm, ...every("0.3.0").macIntel])));
+
+      it("Apple Silicon: a 0.4.0 só com o mac-arm64 é oferecida", async () => {
+        const subject = updater(net(), { facts: mac("arm64") });
+        await subject.check();
+
+        expect(subject.state()).toMatchObject({ status: "available", format: "dmg" });
+        expect(offeredVersions(subject)).toEqual(["0.4.0", "0.3.0"]);
+      });
+
+      it("Intel: a 0.4.0 só com o mac-arm64 é pulada, e vale a 0.3.0, que tem os dois", async () => {
+        const subject = updater(net(), { facts: mac("x64") });
+        await subject.check();
+
+        expect(offeredVersions(subject)).toEqual(["0.3.0"]);
+      });
+
+      it("um beta (que nunca tem o pacote de macOS) não é oferecido, nem com 'Receber versões beta' ligado: só as estáveis", async () => {
+        const subject = updater(list(gh("v0.4.0-beta.1", notesWith("0.4.0-beta.1", [...every("0.4.0-beta.1").win, ...every("0.4.0-beta.1").linux])), gh("v0.3.0", notesWith("0.3.0", all("0.3.0")))), { facts: mac("arm64") });
+        subject.setReceiveBeta(true);
+        await subject.check();
+
+        expect(offeredVersions(subject)).toEqual(["0.3.0"]);
+      });
+
+      it("só há um beta mais novo: a consulta manual diz só 'atualizado', porque a falta do pacote de macOS no beta é o esperado", async () => {
+        const subject = updater(list(gh("v0.4.0-beta.1", notesWith("0.4.0-beta.1", [...every("0.4.0-beta.1").win, ...every("0.4.0-beta.1").linux])), gh("v0.1.0", "a instalada")), { facts: mac("arm64") });
+        subject.setReceiveBeta(true);
+
+        await expect(subject.check()).resolves.toEqual({ outcome: "upToDate" });
+
+        expect(logs.join("\n")).not.toMatch(/sem o pacote deste sistema/);
+      });
+
+      it("um beta com o pacote de Windows e Linux continua sendo oferecido a quem usa Windows", async () => {
+        const subject = updater(list(gh("v0.4.0-beta.1", notesWith("0.4.0-beta.1", [...every("0.4.0-beta.1").win, ...every("0.4.0-beta.1").linux])), gh("v0.3.0", notesWith("0.3.0", all("0.3.0")))));
+        subject.setReceiveBeta(true);
+        await subject.check();
+
+        expect(offeredVersions(subject)).toEqual(["0.4.0-beta.1", "0.3.0"]);
+      });
     });
   });
 
@@ -649,12 +811,13 @@ describe("o atualizador", () => {
       expect(filesIn(updatesDir())).toEqual([]);
     });
 
-    it("falta a soma nas notas: recusa antes de pedir qualquer coisa", async () => {
+    it("falta a soma nas notas: a release não é oferecida (vale a mais nova que a tem), e baixá-la é um pedido inválido: nada é pedido", async () => {
       const net = world({ notesSum: null });
       const subject = updater(net);
       await subject.check();
 
-      await expect(subject.download("0.3.0")).resolves.toMatchObject({ status: "failed", reason: expect.stringMatching(/notas/) });
+      expect(subject.state()).toMatchObject({ status: "available", releases: [{ version: "0.2.0" }] });
+      await expect(subject.download("0.3.0")).rejects.toThrow("Pedido de atualização inválido.");
       expect(net.requested).toEqual([releasesUrl]);
     });
 

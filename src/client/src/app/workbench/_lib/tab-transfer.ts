@@ -2,6 +2,7 @@ import { tabTransferSchema, type TabTransfer } from "../../../../electron/window
 import { isScriptDirty } from "./saved-scripts";
 import type { SelectionMemory, TransferMemory } from "./tab-memory";
 import type { RunnerState } from "./use-query-runner";
+import { emptyTabValues, valuesFromTransfer, valuesToTransfer, type TabValuesSnapshot } from "./variables/tab-values";
 import type { QueryTab } from "./workbench-model";
 
 /**
@@ -20,10 +21,12 @@ export type TabSnapshot = {
   editor: { sql: string; anchor: number; head: number } | null;
   state: RunnerState;
   memory: TransferMemory;
+  /** RN-VAR-023: os valores das variáveis da aba (o armazém do executor dela): vão junto. Sem eles, a aba chega sem valores. */
+  values?: TabValuesSnapshot;
 };
 
 /** A aba como a janela que recebe a monta. */
-export type AdoptedTab = { tab: QueryTab; selection: SelectionMemory | null; state: RunnerState; memory: TransferMemory };
+export type AdoptedTab = { tab: QueryTab; selection: SelectionMemory | null; state: RunnerState; memory: TransferMemory; resultWindowLost: boolean; values: TabValuesSnapshot };
 
 type TransferredResult = NonNullable<TabTransfer["result"]>;
 
@@ -38,6 +41,9 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
       return null;
     case "running":
       return undefined;
+    // RN-VAR-012: a lista de erros das variáveis é da tela de onde a aba sai; a janela que recebe começa limpa.
+    case "variableErrors":
+      return null;
     case "rows": {
       if (state.loadingMore || state.counting) return undefined;
       const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated, sourceRows, filterApplied, read } = state;
@@ -65,11 +71,11 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
  * O que vai para a outra janela, ou `null` quando a aba não pode ir: há comando em andamento nela (executar, carregar mais, contar). A resposta dele
  * chegaria à janela que a aba deixou, e o executor de lá já saiu de cena; quem chama pede para esperar ou cancelar.
  */
-export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnapshot): TabTransfer | null {
+export function serializeTab({ tab, sessionId, editor, state, memory, values = emptyTabValues }: TabSnapshot): TabTransfer | null {
   const result = resultOf(state);
   if (result === undefined) return null;
 
-  const { table, database, script } = tab;
+  const { table, database, script, resultPlace } = tab;
   return {
     version: 1,
     tab: {
@@ -80,6 +86,7 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
       sessionId,
       sql: editor?.sql ?? tab.sql,
       ...(table === undefined ? {} : { table }),
+      ...(resultPlace === undefined ? {} : { resultPlace }),
       ...(script === undefined
         ? {}
         : {
@@ -96,8 +103,15 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
     },
     editor: editor === null ? null : { anchor: editor.anchor, head: editor.head },
     result,
+    ...withValues(values),
     memory,
   };
+}
+
+/** RN-VAR-023: os valores vão como dado puro, só quando a aba os tem. */
+function withValues(values: TabValuesSnapshot): Pick<TabTransfer, "values"> {
+  const transferred = valuesToTransfer(values);
+  return transferred === undefined ? {} : { values: transferred };
 }
 
 function stateOf(result: TabTransfer["result"]): RunnerState {
@@ -113,7 +127,7 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
   const parsed = tabTransferSchema.safeParse(raw);
   if (!parsed.success) return null;
 
-  const { tab, editor, result, memory } = parsed.data;
+  const { tab, editor, result, memory, resultWindowLost, values } = parsed.data;
   const clamp = (position: number) => Math.min(position, tab.sql.length);
   // O tipo da aba é o da tela: o TypeScript confere que o schema do processo principal não divergiu dele.
   const adopted: QueryTab = {
@@ -124,10 +138,12 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
     sessionId: tab.sessionId,
     sql: tab.sql,
     ...(tab.table === undefined ? {} : { table: tab.table }),
+    // RN-ABAS-016: a aba chega no lugar do resultado que tinha, e não no da preferência desta janela.
+    ...(tab.resultPlace === undefined ? {} : { resultPlace: tab.resultPlace }),
     // RN-SCRIPT-003: o ponto da faixa é o texto que chegou e o lugar da aba contra o que foi salvo (a aba pode ter trocado de conexão ou de banco).
     ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql, tab) } }),
   };
   const restored: TransferMemory = memory;
 
-  return { tab: adopted, selection: editor === null ? null : { anchor: clamp(editor.anchor), head: clamp(editor.head) }, state: stateOf(result), memory: restored };
+  return { tab: adopted, selection: editor === null ? null : { anchor: clamp(editor.anchor), head: clamp(editor.head) }, state: stateOf(result), memory: restored, resultWindowLost: resultWindowLost === true, values: valuesFromTransfer(values) };
 }

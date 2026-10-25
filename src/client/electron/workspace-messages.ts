@@ -3,8 +3,9 @@ import { z } from "zod";
 /**
  * As abas que voltam na próxima entrada (RN-ABAS-006), como a tela as conta ao processo principal e como a API as grava (`PUT api/user/workspace`): o mesmo
  * schema dos dois lados da ponte, como o de `window-messages.ts`. O processo principal confere o que cada janela manda antes de juntar, e a tela confere o que
- * a API devolve antes de reabrir. Só o que volta: de cada aba de consulta, o texto, a conexão, o banco, o script de onde veio e a marca de mudança não salva;
- * de cada aba de tabela, a conexão, o banco, o esquema, a tabela e a vista. Nada de resultado, cursor, sessão nem alteração não salva da grade.
+ * a API devolve antes de reabrir. Só o que volta: de cada aba de consulta, o texto, a conexão, o banco, o script de onde veio, a marca de mudança não salva e
+ * o lugar do resultado (RN-ABAS-016: `panel`, `tab` ou `window`; sem ele, o painel); de cada aba de tabela, a conexão, o banco, o esquema, a tabela e a vista.
+ * Nada de resultado, cursor, sessão nem alteração não salva da grade.
  *
  * Os nomes dos campos são os da API (`connectionID`, `scriptID`), e os limites também: o banco de 1 a 128 caracteres (o da abertura de sessão), o esquema e a
  * tabela até 1024, e o texto até 1 MB em bytes de UTF-8 (RN-SCRIPT-004). Este arquivo não importa nada de `src/`; a vista repete a de `workbench-model.ts`,
@@ -25,8 +26,14 @@ const guid = z.guid();
 const database = z.string().min(1).max(128).nullable();
 const objectName = z.string().max(1024);
 
+/**
+ * RN-ABAS-016: os três lugares do resultado, como a tela os tem (`resultPlaces`, em `workbench-model.ts`). Um lugar que esta versão não conhece (gravado por uma
+ * mais nova) vale nulo, o painel, e a aba volta do mesmo jeito: só o lugar não volta.
+ */
+const resultPlace = z.enum(["panel", "tab", "window"]).nullable().optional().catch(null);
+
 export const savedQueryTabSchema = z
-  .object({ kind: z.literal("query"), connectionID: guid.nullable(), database, sql: z.string().refine(fitsSavedSqlLimit), scriptID: guid.nullable(), dirty: z.boolean(), sqlTooLarge: z.boolean() })
+  .object({ kind: z.literal("query"), connectionID: guid.nullable(), database, sql: z.string().refine(fitsSavedSqlLimit), scriptID: guid.nullable(), dirty: z.boolean(), sqlTooLarge: z.boolean(), resultPlace })
   // O texto que passava de 1 MB não é gravado: a aba vai vazia, com a marca.
   .refine((tab) => !tab.sqlTooLarge || tab.sql === "");
 

@@ -11,6 +11,7 @@ import { AccountSection } from "./_components/account-section";
 import { AppearanceSection } from "./_components/appearance-section";
 import { DriversSection } from "./_components/drivers-section";
 import { EditorSection } from "./_components/editor-section";
+import { ImportSection } from "./_components/import-section";
 import { ResultsSection } from "./_components/results-section";
 import { SecuritySection } from "./_components/security-section";
 import { ComingSoonCard } from "./_components/settings-card";
@@ -45,6 +46,8 @@ function SectionBody({ section, highlightedDriver }: { section: SettingsSection;
       return <SecuritySection anchor={section.anchor} />;
     case "account":
       return <AccountSection anchor={section.anchor} />;
+    case "import":
+      return <ImportSection anchor={section.anchor} />;
     case "transactions":
       return <ComingSoonCard anchor={section.anchor} title={copy.transactions.title} description={copy.transactions.description} />;
   }

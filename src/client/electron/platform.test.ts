@@ -1,7 +1,7 @@
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, expect, it } from "vitest";
 
-import { applicationMenuTemplate, menuShortcutIgnored, windowIconFile } from "./platform";
+import { applicationMenuTemplate, isWaylandSession, menuShortcutIgnored, windowIconFile } from "./platform";
 
 describe("windowIconFile (RN-MARCA-001)", () => {
   it(".ico no Windows, PNG no Linux e nenhum no macOS, onde o ícone é o do pacote", () => {
@@ -41,8 +41,8 @@ describe("applicationMenuTemplate", () => {
 describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11 chegam à tela (RN-GRADE-012 e RN-GRADE-013)", () => {
   const input = (key: string, over: Partial<{ type: string; control: boolean; meta: boolean; shift: boolean; alt: boolean }> = {}) => ({ type: "keyDown", key, control: false, meta: false, shift: false, alt: false, ...over });
 
-  it("F5 e F11, com ou sem modificador, não vão ao menu (o Recarregar e o Tela cheia do menu de desenvolvimento): a tela os recebe", () => {
-    for (const key of ["F5", "F11"]) {
+  it("F5, F6 e F11, com ou sem modificador, não vão ao menu (o Recarregar e o Tela cheia do menu de desenvolvimento): a tela os recebe (o F6 alterna entre o editor e o resultado, RN-ABAS-014)", () => {
+    for (const key of ["F5", "F6", "F11"]) {
       expect(menuShortcutIgnored(input(key)), key).toBe(true);
       expect(menuShortcutIgnored(input(key, { control: true })), key).toBe(true);
       expect(menuShortcutIgnored(input(key, { shift: true })), key).toBe(true);
@@ -58,5 +58,29 @@ describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11
 
   it("o resto segue para o menu (no macOS, Cmd+C, Cmd+V e Cmd+Q são do menu; o R sem Ctrl é digitação)", () => {
     for (const [key, over] of [["c", { meta: true }], ["v", { control: true }], ["q", { meta: true }], ["r", {}], ["F2", {}], ["Enter", { control: true }]] as const) expect(menuShortcutIgnored(input(key, over)), key).toBe(false);
+  });
+});
+
+describe("isWaylandSession: o app no Wayland nativo, onde o ponteiro lido pelo processo principal não vale fora das janelas (RN-ABAS-010)", () => {
+  const wayland = { XDG_SESSION_TYPE: "wayland", WAYLAND_DISPLAY: "wayland-0" };
+  const session = (over: Partial<Parameters<typeof isWaylandSession>[0]> = {}) => isWaylandSession({ platform: "linux", ozonePlatform: "", ozoneHint: "", env: {}, ...over });
+
+  it("no padrão (`auto`), numa sessão Wayland com o servidor dele, sim; numa sessão X11, não", () => {
+    expect(session({ env: wayland })).toBe(true);
+    expect(session({ env: { XDG_SESSION_TYPE: "x11", DISPLAY: ":0" } })).toBe(false);
+    expect(session({ env: { XDG_SESSION_TYPE: "wayland" } })).toBe(false);
+  });
+
+  it("o `--ozone-platform` vence a sessão, e a dica (`--ozone-platform-hint` ou ELECTRON_OZONE_PLATFORM_HINT) também", () => {
+    expect(session({ ozonePlatform: "x11", env: wayland })).toBe(false);
+    expect(session({ ozonePlatform: "wayland" })).toBe(true);
+    expect(session({ ozoneHint: "x11", env: wayland })).toBe(false);
+    expect(session({ env: { ...wayland, ELECTRON_OZONE_PLATFORM_HINT: "x11" } })).toBe(false);
+    expect(session({ ozoneHint: "wayland", env: { WAYLAND_DISPLAY: "wayland-0" } })).toBe(true);
+  });
+
+  it("fora do Linux, nunca", () => {
+    expect(session({ platform: "win32", env: wayland })).toBe(false);
+    expect(session({ platform: "darwin", ozonePlatform: "wayland" })).toBe(false);
   });
 });

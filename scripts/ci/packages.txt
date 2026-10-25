@@ -1,5 +1,7 @@
 # Os arquivos que cada plataforma gera (RN-ABERTO-006): "grupo  arquivo", com @VERSION@ no lugar da versão. É a lista que o
-# package-desktop.sh confere depois do empacotamento e que o publish-release.sh anexa à release do GitHub (com o SHA256SUMS).
+# package-desktop.sh confere depois do empacotamento e que o publish-release.sh anexa à release do GitHub (com o SHA256SUMS), um GRUPO
+# por vez: a release leva os grupos que vieram inteiros (o macOS só é empacotado nas estáveis, e a falha de uma plataforma não segura
+# as outras), e o app só oferece a release que traz, nas somas das notas, o arquivo da instalação dele.
 #
 # ESTA LISTA É CONTRATO COM O ATUALIZADOR DO APP (RN-ATUALIZA-005). O outro lado dela é src/client/electron/update/packages.ts,
 # que a repete (o app não lê arquivo do repositório) e monta com ela o endereço do pacote que baixa; um teste do cliente

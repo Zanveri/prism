@@ -82,7 +82,7 @@
         </div>
         <div class="aviso">
           <span class="aviso-titulo">No começo</span>
-          <p>O Prism está no começo: a estável mais nova é a recomendada, e os betas podem ter defeitos. Os pacotes não são assinados: <a href="#nao-assinados">veja como abrir</a>.</p>
+          <p>O Prism está no começo: a estável mais nova é a recomendada, e os betas podem ter defeitos. Os pacotes não têm assinatura de desenvolvedor: <a href="#nao-assinados">veja como abrir</a>.</p>
         </div>
         <figure>
           <a href="../img/editor-resultado.png"><img src="../img/editor-resultado.png" width="1280" height="800" alt="O Prism com o navegador de objetos de um PostgreSQL à esquerda, um comando SQL no editor e, embaixo, o resultado em grade com as 200 primeiras linhas e o tempo do comando"></a>
@@ -125,7 +125,7 @@
       <section id="baixar">
         <h2>Baixar e instalar</h2>
         <p class="botoes"><a class="botao botao-principal botao-grande" href="https://github.com/Zanveri/prism/releases">Baixar na página de releases</a></p>
-        <p><strong>Estável ou beta.</strong> A estável mais nova fica marcada como <strong>Latest</strong>: é a recomendada. Os betas saem a cada merge na <code>develop</code>, aparecem marcados como <strong>Pre-release</strong> e podem ter defeitos.</p>
+        <p><strong>Estável ou beta.</strong> A estável mais nova fica marcada como <strong>Latest</strong>: é a recomendada. Os betas saem a cada merge na <code>develop</code>, aparecem marcados como <strong>Pre-release</strong> e podem ter defeitos. <strong>Os betas saem só para Windows e Linux</strong>: os pacotes de macOS vêm com as versões estáveis. Se uma versão saiu sem o pacote do seu sistema, o começo das notas dela diz isso.</p>
         <p>Na página, abra a versão mais nova (a de cima) e, em <strong>Assets</strong>, escolha o arquivo do seu sistema. Nos nomes, <code>&lt;versão&gt;</code> é a da release, como <code>0.1.0</code> ou <code>0.1.1-beta.1</code>.</p>
 
         <div class="tabela">
@@ -155,7 +155,7 @@
           <li><strong>Linux, rpm:</strong> <code>sudo dnf install ./Prism-&lt;versão&gt;-linux-x86_64.rpm</code></li>
           <li><strong>Linux, tar.gz:</strong> descompacte e abra o <code>prism</code>, dentro da pasta.</li>
         </ul>
-        <p>Na primeira abertura o sistema avisa que o pacote não é assinado. <a href="#nao-assinados">Veja abaixo</a> como seguir.</p>
+        <p>Na primeira abertura o sistema avisa sobre o pacote. <a href="#nao-assinados">Veja abaixo</a> como seguir.</p>
 
         <h3 id="conferir-soma">Conferir a soma</h3>
         <p>Cada versão traz o arquivo <code>SHA256SUMS</code>, com a soma SHA-256 de todos os pacotes, e as mesmas somas no fim das notas da versão. Calcule o SHA-256 do arquivo baixado e compare com a linha dele no <code>SHA256SUMS</code> <strong>e</strong> no bloco “Somas SHA-256” das notas. Se não bater, apague o arquivo e baixe de novo.</p>
@@ -172,12 +172,12 @@
           </table>
         </div>
 
-        <h3 id="nao-assinados">Nenhum pacote é assinado</h3>
-        <p>Assinar os pacotes fica para depois. Até lá, o Windows e o macOS avisam na primeira abertura. O aviso é esperado: confira a soma e siga assim.</p>
+        <h3 id="nao-assinados">Os pacotes não têm assinatura de desenvolvedor</h3>
+        <p>Os pacotes de Windows e de Linux não são assinados, e os de macOS levam só a assinatura ad hoc (sem Developer ID da Apple, sem notarização). Assinar com um certificado de desenvolvedor fica para depois. Até lá, o Windows e o macOS avisam na primeira abertura. O aviso é esperado: confira a soma e siga assim.</p>
         <ul>
           <li><strong>Windows:</strong> o SmartScreen mostra “O Windows protegeu o computador”. Clique em <strong>Mais informações</strong> e depois em <strong>Executar assim mesmo</strong>.</li>
-          <li><strong>macOS:</strong> o Gatekeeper bloqueia aplicativo sem assinatura. Com o Prism na pasta Aplicativos, clique nele com o botão direito, escolha <strong>Abrir</strong> e confirme em <strong>Abrir</strong>. No macOS 15 (Sequoia) ou mais novo isso não basta: tente abrir uma vez, vá em <strong>Ajustes do Sistema › Privacidade e Segurança</strong> e clique em <strong>Abrir Mesmo Assim</strong>.</li>
-          <li><strong>macOS, pelo Terminal:</strong> serve em qualquer versão.
+          <li><strong>macOS, a partir da próxima versão estável:</strong> com o Prism na pasta Aplicativos, abra-o uma vez; o macOS diz que não pode verificar o app. Então vá em <strong>Ajustes do Sistema › Privacidade e Segurança</strong>, role até “Segurança” e clique em <strong>Abrir Mesmo Assim</strong> (macOS 15, Sequoia, ou mais novo). Até o macOS 14, clique no app com o botão direito, escolha <strong>Abrir</strong> e confirme em <strong>Abrir</strong>. Isso é feito uma vez só, e não precisa de comando no Terminal.</li>
+          <li><strong>macOS, versões até a 0.4.x:</strong> o sistema diz que o app está danificado. Pelo Terminal, em qualquer versão do macOS:
             <pre><code>xattr -dr com.apple.quarantine /Applications/Prism.app</code></pre>
           </li>
           <li><strong>Linux:</strong> nada que dependa de assinatura. O AppImage e o tar.gz abrem sem ela, e o deb e o rpm se instalam pelo gerenciador de pacotes.</li>
@@ -362,7 +362,7 @@
         <ul>
           <li><strong>Conta.</strong> Trocar a senha. O Prism recriptografa o seu cofre com a senha nova.</li>
           <li><strong>Aparência.</strong> O tema. O Prism traz seis: Prism Escuro, Prism Claro, Monokai, Dracula, Nord e GitHub Claro. O tema vale para toda a interface, e dá para seguir o modo claro ou escuro do sistema.</li>
-          <li><strong>Editor SQL.</strong> A fonte, o tamanho da fonte, o tamanho da tabulação, “Autocompletar ao digitar” e “Converter palavras-chave para maiúsculas”. O autocompletar usa as palavras-chave do banco e os nomes que a árvore já carregou, e nunca consulta o banco.</li>
+          <li><strong>Editor SQL.</strong> A fonte, o tamanho da fonte, o tamanho da tabulação, “Autocompletar ao digitar” e “Converter palavras-chave para maiúsculas”. O autocompletar usa as palavras-chave do banco e os nomes que a árvore já carregou; com a conexão aberta, também busca as colunas de uma tabela que você começa a escrever e as chaves estrangeiras que completam o JOIN.</li>
           <li><strong>Resultados.</strong> O texto do valor nulo (de 1 a 12 caracteres) e “Buscar mais linhas ao rolar até o fim da grade”.</li>
           <li><strong>Segurança.</strong> “Bloquear o Prism após” um número de minutos sem uso. Vem ligado, em 10 minutos, e aceita de 1 a 240. Bloqueado, o cofre fecha, e só a sua senha o reabre.</li>
           <li><strong>Atualizações.</strong> Abaixo.</li>
@@ -386,7 +386,8 @@
           <li>A consulta não envia identificador seu nem da máquina.</li>
           <li>Antes de usar o arquivo, o Prism o confere contra duas somas SHA-256: a das notas da release e a do <code>SHA256SUMS</code>. Se uma falta ou não bate, ele apaga o arquivo e recusa a atualização.</li>
           <li>No Windows, “Atualizar agora” roda o instalador conferido, que reabre o Prism. No Linux e no macOS, o Prism deixa o pacote conferido na pasta de downloads e diz o que fazer.</li>
-          <li><strong>Canal beta.</strong> Com “Receber versões beta” desligado, que é o padrão, o Prism só oferece as versões estáveis. Ligado, oferece também os betas, e o diálogo avisa que a versão é beta e pode ter defeitos.</li>
+          <li><strong>Canal beta.</strong> Com “Receber versões beta” desligado, que é o padrão, o Prism só oferece as versões estáveis. Ligado, oferece também os betas, e o diálogo avisa que a versão é beta e pode ter defeitos. No macOS os betas não têm pacote, então a opção não muda nada ali: as atualizações vêm com as versões estáveis.</li>
+          <li><strong>Só versões com pacote para o seu sistema.</strong> Se uma versão mais nova saiu sem o pacote do seu sistema (por exemplo, um pacote que falhou ao ser gerado), o Prism não a oferece: oferece a mais nova que tem o pacote, com as notas até ela, e “Verificar atualizações” diz qual versão saiu sem ele.</li>
         </ul>
         <figure>
           <a href="../img/configuracoes-atualizacoes.png"><img src="../img/configuracoes-atualizacoes.png" width="1170" height="428" loading="lazy" alt="Configurações, seção Atualizações: verificar ao abrir (ligado), Receber versões beta (desligado), a última verificação, a versão pulada e o botão Verificar atualizações"></a>
@@ -424,7 +425,7 @@
             </thead>
             <tbody>
               <tr><td>Esqueci a senha do Prism.</td><td>Não há recuperação. O cofre não abre. Crie outro usuário e cadastre as conexões de novo.</td></tr>
-              <tr><td>O Windows ou o macOS bloqueia a abertura.</td><td>O pacote não é assinado. Veja <a href="#nao-assinados">como abrir</a>.</td></tr>
+              <tr><td>O Windows ou o macOS bloqueia a abertura.</td><td>O pacote não tem assinatura de desenvolvedor. Veja <a href="#nao-assinados">como abrir</a>.</td></tr>
               <tr><td>“Driver não instalado” no Db2 ou no Informix.</td><td>Baixe o driver em Configurações › Drivers. Veja <a href="#drivers">Db2 e Informix</a>.</td></tr>
               <tr><td>No Linux, o driver da IBM não abre.</td><td>Ele precisa da biblioteca <code>libxml2</code> (arquivo <code>libxml2.so.2</code>). Instale-a pelo gerenciador de pacotes.</td></tr>
               <tr><td>O Informix não conecta.</td><td>Use a porta DRDA do servidor (o Prism sugere a 9089), e não a do protocolo nativo.</td></tr>
@@ -433,7 +434,7 @@
               <tr><td>“O cursor foi fechado.”</td><td>Passaram 5 minutos sem ler o resultado. Clique em “Executar de novo”.</td></tr>
               <tr><td>O texto de uma aba de SQL sumiu.</td><td>O texto das abas não é guardado. Copie para um arquivo o que não pode perder.</td></tr>
               <tr><td>O Prism pediu a senha sem eu sair.</td><td>Foi o bloqueio por inatividade (10 minutos, por padrão). Mude em Configurações › Segurança.</td></tr>
-              <tr><td>Não aparece atualização.</td><td>Clique em “Verificar atualizações”. Para receber betas, ligue “Receber versões beta” em Configurações › Atualizações.</td></tr>
+              <tr><td>Não aparece atualização.</td><td>Clique em “Verificar atualizações”. Para receber betas, ligue “Receber versões beta” em Configurações › Atualizações (no macOS não há betas: as atualizações vêm com as versões estáveis). Uma versão que saiu sem o pacote do seu sistema não é oferecida até a próxima que o tiver.</td></tr>
             </tbody>
           </table>
         </div>
@@ -456,7 +457,7 @@
           <li>Abas de esquema e de banco.</li>
           <li>Modo somente leitura e confirmação antes de comando irreversível.</li>
           <li>Barra própria da janela e zoom do programa inteiro.</li>
-          <li>Assinatura dos pacotes.</li>
+          <li>Assinatura Developer ID e notarização dos pacotes.</li>
         </ul>
       </section>
 

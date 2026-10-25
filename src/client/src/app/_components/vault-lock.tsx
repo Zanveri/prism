@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
@@ -7,6 +8,7 @@ import { onPeerEvent, sharePeerEvent } from "@/lib/api/bridge";
 import type { ApiResult } from "@/lib/api/prism-api";
 import { vaultLock } from "@/lib/api/vault-lock";
 import { workspaceSync } from "@/lib/api/workspace-sync";
+import { resultHostRegistry } from "@/lib/host/host";
 
 import { createLockVaultDeps, createUnlockHandler, lockVault, type CloseState } from "../_lib/lock-vault";
 import { peerAction } from "../_lib/peer-session";
@@ -80,7 +82,7 @@ export function VaultLock({ isBusy, discard, discardedExports }: VaultLockProps)
     // primeiro passo, antes de qualquer espera: quando as outras janelas sabem do bloqueio, esta já não deixa pedido passar.
     // RN-ABAS-006: as abas são gravadas antes de o cofre fechar, por quem o fecha; a janela que acompanha o bloqueio de outra não grava (a outra já grava as
     // de todas as janelas).
-    void lockVault(createLockVaultDeps({ lock: vaultLock, root: document, signOut: followed ? closedByAnotherWindow : signOut, discard, saveWorkspace: followed ? undefined : () => workspaceSync.flush(), report: setCloseState, onError: reportError })).catch(reportError);
+    void lockVault(createLockVaultDeps({ lock: vaultLock, root: document, extraRoots: () => resultHostRegistry.list().map((host) => host.document), signOut: followed ? closedByAnotherWindow : signOut, discard, saveWorkspace: followed ? undefined : () => workspaceSync.flush(), report: setCloseState, onError: reportError })).catch(reportError);
     if (!followed) sharePeerEvent("lock");
   }
 
@@ -93,6 +95,8 @@ export function VaultLock({ isBusy, discard, discardedExports }: VaultLockProps)
   useEffect(() => onPeerEvent((kind) => onPeer(kind)), []);
 
   const secondsLeft = useIdleLock({ enabled: lockEnabled && !locked, minutes: lockAfterMinutes, isBusy, onLock: lockNow, peers });
+  // RN-SEG-001 e RN-ABAS-015: o aviso antes do bloqueio aparece também nas janelas do resultado, que não têm barra superior.
+  const resultPages = useSyncExternalStore(resultHostRegistry.subscribe, resultHostRegistry.list, resultHostRegistry.list);
 
   if (locked)
     return (
@@ -109,6 +113,7 @@ export function VaultLock({ isBusy, discard, discardedExports }: VaultLockProps)
     <>
       <IdleAnnouncer active={secondsLeft !== null} discardedExports={discarded} />
       {secondsLeft === null ? null : <IdleWarning secondsLeft={secondsLeft} discardedExports={discarded} />}
+      {secondsLeft === null ? null : resultPages.map((page) => createPortal(<IdleWarning secondsLeft={secondsLeft} discardedExports={discarded} inResultWindow />, page.document.body, page.resultWindow ?? undefined))}
     </>
   );
 }

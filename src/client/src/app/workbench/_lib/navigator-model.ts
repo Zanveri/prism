@@ -197,6 +197,12 @@ export function parentRowIndex(rows: readonly NavNode[], index: number): number 
 export const isFocusable = (node: NavNode | undefined): node is NavNode => node !== undefined && node.kind !== "loading";
 
 /**
+ * Os nomes que o type-ahead compara (RN-ARVORE-009), um por linha: o que a linha mostra como nome (`label`), sem o selo, o detalhe nem a contagem. A linha
+ * de "Carregando…" e a de erro não têm nome (`""`): a mensagem delas não é item que se procure.
+ */
+export const typeAheadLabels = (rows: readonly NavNode[]): string[] => rows.map((row) => (row.kind === "loading" || row.kind === "error" ? "" : row.label));
+
+/**
  * A única linha que o Tab alcança na lista (as demais só pelas setas): a selecionada, se está entre
  * as linhas desenhadas (`rendered`, índices em `rows`); senão a primeira desenhada que recebe foco.
  * Sem esse recuo, selecionar uma linha e rolar até ela sair da janela virtual deixaria a árvore sem

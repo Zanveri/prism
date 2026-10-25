@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-import { maxImportBytes, sourceRequestSchema, type SourceFailureReason, type SourceReply, type SourceStatus } from "./transfer-messages";
+import { chooseSourceRequestSchema, maxImportBytes, sourceRequestSchema, type SourceFailureReason, type SourceReply, type SourceStatus } from "./transfer-messages";
 
 /**
  * O arquivo de uma importação de dados (RN-IMPORT-017 e 018), sem depender do Electron: o `main.ts` liga isto ao diálogo de abrir do sistema, e os testes, a
@@ -21,7 +21,7 @@ export type TransferSourceDeps = {
   /** A pasta do primeiro diálogo de abrir desta abertura do app: a de Downloads do sistema (lida na hora: o Electron a dá depois de pronto). */
   downloadsDir: () => string;
   /** Abre o diálogo de abrir do sistema sobre a janela que pediu, com o título e os filtros daqui; `null` quando a pessoa desiste. */
-  showOpenDialog(windowId: number, options: { title: string; defaultPath: string; filters: OpenDialogFilter[] }): Promise<string | null>;
+  showOpenDialog(windowId: number, options: { title: string; defaultPath: string; filters: OpenDialogFilter[] }, resultWindow?: string): Promise<string | null>;
   /** O log do processo principal: só o identificador, o tamanho e a duração, nunca o nome nem o caminho do arquivo (RN-LOG-001). */
   log(message: string): void;
   /** Um identificador novo, na forma de um da API (36 caracteres, em minúsculas, com os hifens). */
@@ -237,9 +237,10 @@ export function createTransferSource(deps: TransferSourceDeps) {
    * atalho: não uma pasta, um FIFO, que prenderia a cópia, ou um dispositivo), até 2 GiB, que o sistema deixa ler (aberto só para leitura e fechado de novo), a
    * pasta de dados que aceita gravação e o espaço livre nela para o arquivo e mais 64 MiB. Passou, responde `chosen` e começa a cópia em segundo plano.
    */
-  async function choose(windowId: number): Promise<SourceReply> {
+  async function choose(windowId: number, raw: unknown = {}): Promise<SourceReply> {
+    const { resultWindow } = chooseSourceRequestSchema.parse(raw ?? {});
     const mark = releaseMark(windowId);
-    const chosen = await deps.showOpenDialog(windowId, { title: sourceDialogTitle, defaultPath: lastFolder ?? deps.downloadsDir(), filters: sourceDialogFilters });
+    const chosen = await deps.showOpenDialog(windowId, { title: sourceDialogTitle, defaultPath: lastFolder ?? deps.downloadsDir(), filters: sourceDialogFilters }, resultWindow);
     if (chosen === null || chosen === "") return { status: "canceled" };
     lastFolder = dirname(chosen);
 

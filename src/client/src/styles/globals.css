@@ -61,6 +61,13 @@
   --color-syntax-comment: light-dark(#5f6875, #8e99a8);
 
   /*
+   * A cor da variável no editor (RN-VAR-025): o nome declarado e cada `@nome` declarado no SQL. O canvas não a desenha ("O canvas não desenha nada disto", seção 41):
+   * cada tema traz uma cor que não é nenhuma das quatro de sintaxe (um violeta nos dois do Prism; o laranja ou o salmão da paleta nos outros cinco). Vale sobre as mesmas
+   * superfícies da sintaxe, e o teste de contraste confere todas.
+   */
+  --color-syntax-variable: light-dark(#6b2fc0, #c9a8ff);
+
+  /*
    * O azul de link (RN-LINK-001: o nome de uma tabela no editor com o Ctrl apertado). O canvas não o desenha: nos dois temas do Prism é o azul do PostgreSQL, e
    * cada um dos outros quatro traz o da paleta dele. Vale sobre o fundo do editor, as superfícies e a seleção, e o teste de contraste confere todas.
    */
@@ -169,6 +176,7 @@
     --color-syntax-string: #e6db74;
     --color-syntax-number: #b48aff;
     --color-syntax-comment: #a6a28c;
+    --color-syntax-variable: #fd971f;
     --color-link: #66d9ef;
   }
 
@@ -189,6 +197,7 @@
     --color-syntax-string: #f1fa8c;
     --color-syntax-number: #bd93f9;
     --color-syntax-comment: #9aa5ce;
+    --color-syntax-variable: #ffb86c;
     --color-link: #8be9fd;
   }
 
@@ -210,6 +219,7 @@
     --color-syntax-string: #a3be8c;
     --color-syntax-number: #c5a7bf;
     --color-syntax-comment: #a5b0c4;
+    --color-syntax-variable: #e8a590;
     --color-link: #88c0d0;
   }
 
@@ -230,8 +240,36 @@
     --color-syntax-string: #0a3069;
     --color-syntax-number: #0550ae;
     --color-syntax-comment: #59636e;
+    --color-syntax-variable: #953800;
     /* O azul de link do GitHub (#0969da), escurecido o mínimo: sobre a linha selecionada ele dava 4,4:1. */
     --color-link: #0967d7;
+  }
+
+  :root[data-theme="kanagawa"] {
+    color-scheme: dark;
+    --color-background: #1f1f28;
+    --color-panel: #1a1a22;
+    --color-raised: #2a2a35;
+    --color-selected: #2a2a38;
+    --color-border: #54546d;
+    --color-border-strong: #54546d;
+    --color-selection: #2a2a38;
+    --color-ink: #dcd7ba;
+    --color-body: #c8c3a7;
+    --color-muted: #b8b396;
+    --color-subtle: #9c987d;
+    --color-accent: #819fdc;
+    --color-postgres: #7e9cd8;
+    --color-db2: #98bb6c;
+    --color-informix: #ea7f89;
+    --color-danger: #ea7f89;
+    --color-success: #98bb6c;
+    --color-syntax-keyword: #7e9cd8;
+    --color-syntax-string: #98bb6c;
+    --color-syntax-number: #dca561;
+    --color-syntax-comment: #9c987d;
+    --color-syntax-variable: #ffa066;
+    --color-link: #7e9cd8;
   }
 
   /* A pilha da interface que vem com o app: a reserva da escolhida (RN-CONFIG-008). Fora do `@theme`, para não virar classe. */
@@ -307,6 +345,7 @@
     --color-syntax-string: #5ed3a3;
     --color-syntax-number: #f2b644;
     --color-syntax-comment: #8e99a8;
+    --color-syntax-variable: #c9a8ff;
     --color-link: #7db2ff;
     --color-scrim: rgb(6 8 10 / 0.72);
     background-color: var(--color-background);

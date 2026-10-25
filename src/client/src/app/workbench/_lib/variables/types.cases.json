@@ -1,0 +1,2505 @@
+{
+  "rule": "RN-VAR-004 a 007: os tipos (sem o de coluna), os números exatos, os textos e as datas. As datas valem na hora de São Paulo (UTC-3, sem horário de verão desde 2019), que o teste fixa.",
+  "cases": [
+    {
+      "name": "inferência de number",
+      "engine": null,
+      "input": "let n = 10",
+      "seed": null,
+      "value": 10,
+      "type": "number"
+    },
+    {
+      "name": "inferência de string",
+      "engine": null,
+      "input": "let s = 'a'",
+      "seed": null,
+      "value": "a",
+      "type": "string"
+    },
+    {
+      "name": "inferência de boolean",
+      "engine": null,
+      "input": "let ok = true",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "inferência de Date de dia",
+      "engine": null,
+      "input": "let d = date.of(2026, 10, 20)",
+      "seed": null,
+      "value": "2026-10-20",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "inferência de Date de instante",
+      "engine": null,
+      "input": "let d = new Date('2026-10-20T10:30')",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "inferência da lista de number",
+      "engine": null,
+      "input": "let ids = [1, 2]",
+      "seed": null,
+      "value": [
+        1,
+        2
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "inferência da lista de string",
+      "engine": null,
+      "input": "let l = ['a', 'b']",
+      "seed": null,
+      "value": [
+        "a",
+        "b"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "inferência da lista de Date",
+      "engine": null,
+      "input": "let l = [date.of(2026, 1, 1), date.of(2026, 2, 1)]",
+      "seed": null,
+      "value": [
+        "2026-01-01",
+        "2026-02-01"
+      ],
+      "type": "Date (dia)[]"
+    },
+    {
+      "name": "a lista de datas de precisões diferentes é Date[]",
+      "engine": null,
+      "input": "let l = [date.of(2026, 1, 1), new Date('2026-01-01T10:00')]",
+      "seed": null,
+      "value": [
+        "2026-01-01",
+        "2026-01-01 10:00:00"
+      ],
+      "type": "Date[]"
+    },
+    {
+      "name": "inferência de null",
+      "engine": null,
+      "input": "let nada = null",
+      "seed": null,
+      "value": null,
+      "type": "null"
+    },
+    {
+      "name": "a lista vazia sem anotação",
+      "engine": null,
+      "input": "let l = []",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "Anote o tipo da lista vazia: let l: number[] = []"
+      }
+    },
+    {
+      "name": "a lista com null é (number | null)[]",
+      "engine": null,
+      "input": "let l = [1, null]",
+      "seed": null,
+      "value": [
+        1,
+        null
+      ],
+      "type": "(number | null)[]"
+    },
+    {
+      "name": "a lista só de null",
+      "engine": null,
+      "input": "let l = [null]",
+      "seed": null,
+      "value": [
+        null
+      ],
+      "type": "null[]"
+    },
+    {
+      "name": "a lista mistura number e string",
+      "engine": null,
+      "input": "let l = [1, 'a']",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "A lista mistura number e string."
+      }
+    },
+    {
+      "name": "a lista mistura boolean e number",
+      "engine": null,
+      "input": "let l = [true, 1]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "A lista mistura boolean e number."
+      }
+    },
+    {
+      "name": "lista de lista",
+      "engine": null,
+      "input": "let l = [[1], [2]]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "Lista de lista não existe aqui: anote uma lista de valores simples."
+      }
+    },
+    {
+      "name": "o objeto escrito",
+      "engine": null,
+      "input": "let o = { id: 1, nome: 'Ana' }",
+      "seed": null,
+      "value": {
+        "id": 1,
+        "nome": "Ana"
+      },
+      "type": "objeto"
+    },
+    {
+      "name": "a lista de objetos",
+      "engine": null,
+      "input": "let l = [{ a: 1 }, { a: 2 }]",
+      "seed": null,
+      "value": [
+        {
+          "a": 1
+        },
+        {
+          "a": 2
+        }
+      ],
+      "type": "objeto[]"
+    },
+    {
+      "name": "o objeto com lista dentro",
+      "engine": null,
+      "input": "let o = { ids: [1, 2] }",
+      "seed": null,
+      "value": {
+        "ids": [
+          1,
+          2
+        ]
+      },
+      "type": "objeto"
+    },
+    {
+      "name": "number | null com null",
+      "engine": null,
+      "input": "let x: number | null = null",
+      "seed": null,
+      "value": null,
+      "type": "number | null"
+    },
+    {
+      "name": "number | null com valor",
+      "engine": null,
+      "input": "let x: number | null = 5",
+      "seed": null,
+      "value": 5,
+      "type": "number | null"
+    },
+    {
+      "name": "number com null",
+      "engine": null,
+      "input": "let x: number = null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 17,
+        "message": "x é number, mas recebeu null."
+      }
+    },
+    {
+      "name": "string com número",
+      "engine": null,
+      "input": "let x: string = 5",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 17,
+        "message": "x é string, mas recebeu 5."
+      }
+    },
+    {
+      "name": "number com texto",
+      "engine": null,
+      "input": "let cliente_id: number = 'abc'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 26,
+        "message": "cliente_id é number, mas recebeu 'abc'."
+      }
+    },
+    {
+      "name": "lista anotada vazia",
+      "engine": null,
+      "input": "let ids: number[] = []",
+      "seed": null,
+      "value": [],
+      "type": "number[]"
+    },
+    {
+      "name": "lista anotada com nulo",
+      "engine": null,
+      "input": "let ids: number[] | null = null",
+      "seed": null,
+      "value": null,
+      "type": "number[] | null"
+    },
+    {
+      "name": "lista anotada com tipo errado",
+      "engine": null,
+      "input": "let ids: number[] = ['a']",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 21,
+        "message": "ids é number[], mas recebeu ['a']."
+      }
+    },
+    {
+      "name": "lista anotada com null dentro",
+      "engine": null,
+      "input": "let ids: number[] = [1, null]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 21,
+        "message": "ids é number[], mas recebeu [1, null]."
+      }
+    },
+    {
+      "name": "Date anotada",
+      "engine": null,
+      "input": "let d: Date = date.of(2026, 1, 1)",
+      "seed": null,
+      "value": "2026-01-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "Date[] anotada",
+      "engine": null,
+      "input": "let d: Date[] = [date.of(2026, 1, 1)]",
+      "seed": null,
+      "value": [
+        "2026-01-01"
+      ],
+      "type": "Date[]"
+    },
+    {
+      "name": "boolean anotado",
+      "engine": null,
+      "input": "let b: boolean = false",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "o objeto não se anota",
+      "engine": null,
+      "input": "let o: { a: number } = { a: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 8,
+        "message": "Objetos não se anotam: o tipo vem da consulta."
+      }
+    },
+    {
+      "name": "lista de lista anotada",
+      "engine": null,
+      "input": "let n: number[][] = []",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "Lista de lista não existe aqui: anote uma lista de valores simples."
+      }
+    },
+    {
+      "name": "Array<number> não existe",
+      "engine": null,
+      "input": "let n: Array<number> = []",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 8,
+        "message": "O tipo Array não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna)."
+      }
+    },
+    {
+      "name": "number | string não existe",
+      "engine": null,
+      "input": "let n: number | string = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 8,
+        "message": "O tipo number | string não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna)."
+      }
+    },
+    {
+      "name": "o tipo de coluna ainda não existe",
+      "engine": null,
+      "input": "let c: pedido.cliente_id = 5",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 8,
+        "message": "O tipo de coluna chega numa próxima versão."
+      }
+    },
+    {
+      "name": "o tipo de coluna com esquema ainda não existe",
+      "engine": null,
+      "input": "let c: estoque.pedido.cliente_id = 5",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 8,
+        "message": "O tipo de coluna chega numa próxima versão."
+      }
+    },
+    {
+      "name": "let x = null e x = 5",
+      "engine": null,
+      "input": "let x = null\nx = 5",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 5,
+        "message": "x é null: para guardar outro valor, anote o tipo, como let x: number | null = null"
+      }
+    },
+    {
+      "name": "let x: number | null e x = 5",
+      "engine": null,
+      "input": "let x: number | null = null\nx = 5",
+      "seed": null,
+      "value": 5,
+      "type": "number | null"
+    },
+    {
+      "name": "a reatribuição mantém o tipo",
+      "engine": null,
+      "input": "let n = 1\nn = 2.5",
+      "seed": null,
+      "value": 2.5,
+      "type": "number"
+    },
+    {
+      "name": "a reatribuição não muda o tipo",
+      "engine": null,
+      "input": "let n = 1\nn = 'a'",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 5,
+        "message": "n é number, mas recebeu 'a'."
+      }
+    },
+    {
+      "name": "a reatribuição de const",
+      "engine": null,
+      "input": "const c = 1\nc = 2",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 1,
+        "message": "c é const e não pode receber outro valor (linha 1)."
+      }
+    },
+    {
+      "name": "a reatribuição de lista com outro tipo",
+      "engine": null,
+      "input": "let ids = [1]\nids = ['a']",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 7,
+        "message": "ids é number[], mas recebeu ['a']."
+      }
+    },
+    {
+      "name": "a reatribuição da lista com a lista vazia",
+      "engine": null,
+      "input": "let ids = [1]\nids = []",
+      "seed": null,
+      "value": [],
+      "type": "number[]"
+    },
+    {
+      "name": "const sem valor",
+      "engine": null,
+      "input": "const c",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 7,
+        "message": "const c precisa de um valor: const c = …"
+      }
+    },
+    {
+      "name": "const com tipo e sem valor",
+      "engine": null,
+      "input": "const c: number",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 7,
+        "message": "const c precisa de um valor: const c = …"
+      }
+    },
+    {
+      "name": "let sem valor e sem tipo",
+      "engine": null,
+      "input": "let x",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "Anote o tipo de x, que não tem valor: let x: number"
+      }
+    },
+    {
+      "name": "let sem valor, a pergunta chega depois",
+      "engine": null,
+      "input": "let x: number",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "`x` não tem valor: escreva `= valor` (a pergunta dos valores chega numa próxima versão)."
+      }
+    },
+    {
+      "name": "reatribuição de variável que não existe",
+      "engine": null,
+      "input": "z = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 1,
+        "message": "z não foi declarada: escreva let z = 1."
+      }
+    },
+    {
+      "name": "reatribuição antes da declaração",
+      "engine": null,
+      "input": "x = 1\nlet x = 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 1,
+        "message": "x é usada antes de ser declarada, na linha 2."
+      }
+    },
+    {
+      "name": "const sql",
+      "engine": null,
+      "input": "const t: sql = 'pedido'",
+      "seed": null,
+      "value": "pedido",
+      "type": "sql"
+    },
+    {
+      "name": "const sql com ponto",
+      "engine": null,
+      "input": "const e: sql = 'estoque.pedido'",
+      "seed": null,
+      "value": "estoque.pedido",
+      "type": "sql"
+    },
+    {
+      "name": "const sql com ORDER BY",
+      "engine": null,
+      "input": "const o: sql = 'ORDER BY nome DESC, id'",
+      "seed": null,
+      "value": "ORDER BY nome DESC, id",
+      "type": "sql"
+    },
+    {
+      "name": "let sql",
+      "engine": null,
+      "input": "let t: sql = 'a'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "A variável sql t tem de ser const."
+      }
+    },
+    {
+      "name": "sql com lista",
+      "engine": null,
+      "input": "const t: sql[] = 'a'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 10,
+        "message": "O tipo sql não tem lista nem | null."
+      }
+    },
+    {
+      "name": "sql com | null",
+      "engine": null,
+      "input": "const t: sql | null = 'a'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 10,
+        "message": "O tipo sql não tem lista nem | null."
+      }
+    },
+    {
+      "name": "sql com número",
+      "engine": null,
+      "input": "const t: sql = 5",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "Uma variável sql guarda um texto, e recebeu 5."
+      }
+    },
+    {
+      "name": "sql vindo de uma expressão",
+      "engine": null,
+      "input": "const p = 'ped'\nconst t: sql = p + 'ido'",
+      "seed": null,
+      "value": "pedido",
+      "type": "sql"
+    },
+    {
+      "name": "sql escolhido pelo random.pick",
+      "engine": null,
+      "input": "const t: sql = random.pick(['pedido', 'item'])",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": "pedido",
+      "type": "sql"
+    },
+    {
+      "name": "sql termina dentro de um texto",
+      "engine": null,
+      "input": "const f: sql = \"it's\"",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "O valor de f (sql) termina dentro de um texto e engoliria o resto do comando."
+      }
+    },
+    {
+      "name": "sql termina dentro de um nome entre aspas",
+      "engine": null,
+      "input": "const f: sql = '\"abc'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "O valor de f (sql) termina dentro de um nome entre aspas e engoliria o resto do comando."
+      }
+    },
+    {
+      "name": "sql termina dentro de um comentário de linha",
+      "engine": null,
+      "input": "const f: sql = 'a = 1 -- b'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "O valor de f (sql) termina dentro de um comentário e engoliria o resto do comando."
+      }
+    },
+    {
+      "name": "sql termina dentro de um comentário de bloco",
+      "engine": null,
+      "input": "const f: sql = '/* x'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "O valor de f (sql) termina dentro de um comentário e engoliria o resto do comando."
+      }
+    },
+    {
+      "name": "sql com $tag$ aberto no PostgreSQL",
+      "engine": 1,
+      "input": "const f: sql = '$$ x'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "O valor de f (sql) termina dentro de um $tag$ e engoliria o resto do comando."
+      }
+    },
+    {
+      "name": "sql com $$ no Db2 é texto comum",
+      "engine": 2,
+      "input": "const f: sql = '$$ x'",
+      "seed": null,
+      "value": "$$ x",
+      "type": "sql"
+    },
+    {
+      "name": "sql com { aberto no Informix",
+      "engine": 3,
+      "input": "const f: sql = '{ x'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "O valor de f (sql) termina dentro de um comentário e engoliria o resto do comando."
+      }
+    },
+    {
+      "name": "sql com { no Db2 é texto comum",
+      "engine": 2,
+      "input": "const f: sql = '{ x'",
+      "seed": null,
+      "value": "{ x",
+      "type": "sql"
+    },
+    {
+      "name": "sql com parêntese aberto",
+      "engine": null,
+      "input": "const f: sql = '(a'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "O valor de f (sql) não tem os parênteses equilibrados e engoliria o resto do comando."
+      }
+    },
+    {
+      "name": "sql com parêntese fechado a mais",
+      "engine": null,
+      "input": "const f: sql = 'a)'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "O valor de f (sql) não tem os parênteses equilibrados e engoliria o resto do comando."
+      }
+    },
+    {
+      "name": "sql com parênteses equilibrados",
+      "engine": null,
+      "input": "const f: sql = '(a) AND (b)'",
+      "seed": null,
+      "value": "(a) AND (b)",
+      "type": "sql"
+    },
+    {
+      "name": "sql com texto fechado",
+      "engine": null,
+      "input": "const f: sql = \"nome = 'x'\"",
+      "seed": null,
+      "value": "nome = 'x'",
+      "type": "sql"
+    },
+    {
+      "name": "variável sql numa expressão",
+      "engine": null,
+      "input": "const t: sql = 'a'\nconst u = t + 'b'",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "t é sql, e uma variável sql só entra no SQL (@t)."
+      }
+    },
+    {
+      "name": "o sql só pela anotação, não pelo valor",
+      "engine": null,
+      "input": "const t: sql = 'a'\nlet s: string = t",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 17,
+        "message": "t é sql, e uma variável sql só entra no SQL (@t)."
+      }
+    },
+    {
+      "name": "o bigint de 2^53 + 1 vai inteiro",
+      "engine": null,
+      "input": "const id = 9007199254740993",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "12.50 é exato e guarda o texto",
+      "engine": null,
+      "input": "const a = 12.50",
+      "seed": null,
+      "value": 12.5,
+      "type": "number",
+      "exact": "12.50"
+    },
+    {
+      "name": "100.00 é exato",
+      "engine": null,
+      "input": "const a = 100.00",
+      "seed": null,
+      "value": 100,
+      "type": "number",
+      "exact": "100.00"
+    },
+    {
+      "name": "1e3 é exato",
+      "engine": null,
+      "input": "const a = 1e3",
+      "seed": null,
+      "value": 1000,
+      "type": "number",
+      "exact": "1e3"
+    },
+    {
+      "name": "0.1 é exato",
+      "engine": null,
+      "input": "const a = 0.1",
+      "seed": null,
+      "value": 0.1,
+      "type": "number"
+    },
+    {
+      "name": "1234567890123.4567 não é exato e guarda o texto",
+      "engine": null,
+      "input": "const a = 1234567890123.4567",
+      "seed": null,
+      "value": 1234567890123.4568,
+      "type": "number",
+      "exact": "1234567890123.4567"
+    },
+    {
+      "name": "o - unário num literal mantém o texto exato",
+      "engine": null,
+      "input": "const a = -9007199254740993",
+      "seed": null,
+      "value": -9007199254740992,
+      "type": "number",
+      "exact": "-9007199254740993"
+    },
+    {
+      "name": "o + unário num literal mantém o texto exato",
+      "engine": null,
+      "input": "const a = +9007199254740993",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "a conta com o inexato (inteiro)",
+      "engine": null,
+      "input": "const a = 9007199254740993 + 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 28,
+        "message": "9007199254740993 passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)."
+      }
+    },
+    {
+      "name": "a conta com o inexato (decimal)",
+      "engine": null,
+      "input": "const a = 1234567890123.4567 * 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 30,
+        "message": "1234567890123.4567 tem mais dígitos do que o JavaScript conta sem perder precisão."
+      }
+    },
+    {
+      "name": "a comparação com o inexato",
+      "engine": null,
+      "input": "const a = 9007199254740993 < 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 28,
+        "message": "9007199254740993 passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)."
+      }
+    },
+    {
+      "name": "o === com o inexato",
+      "engine": null,
+      "input": "const a = 9007199254740993 === 9007199254740992",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 28,
+        "message": "9007199254740993 passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)."
+      }
+    },
+    {
+      "name": "Math.abs com o inexato",
+      "engine": null,
+      "input": "const a = Math.abs(9007199254740993)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "9007199254740993 passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)."
+      }
+    },
+    {
+      "name": "Number com o inexato",
+      "engine": null,
+      "input": "const a = Number(9007199254740993)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "9007199254740993 passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)."
+      }
+    },
+    {
+      "name": "toFixed com o inexato",
+      "engine": null,
+      "input": "const a = 9007199254740993 .toFixed(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "9007199254740993 passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)."
+      }
+    },
+    {
+      "name": "String leva o inexato como está",
+      "engine": null,
+      "input": "const a = String(9007199254740993)",
+      "seed": null,
+      "value": "9007199254740993",
+      "type": "string"
+    },
+    {
+      "name": "o + com texto leva o inexato como está",
+      "engine": null,
+      "input": "const a = '' + 9007199254740993",
+      "seed": null,
+      "value": "9007199254740993",
+      "type": "string"
+    },
+    {
+      "name": "o modelo leva o inexato como está",
+      "engine": null,
+      "input": "const a = `${9007199254740993}`",
+      "seed": null,
+      "value": "9007199254740993",
+      "type": "string"
+    },
+    {
+      "name": "a lista leva o inexato como está",
+      "engine": null,
+      "input": "const l = [9007199254740993]\nconst a = l[0]",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "o ?? leva o inexato como está",
+      "engine": null,
+      "input": "const a = null ?? 9007199254740993",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "o ? : leva o inexato como está",
+      "engine": null,
+      "input": "const a = true ? 9007199254740993 : 1",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "o join leva o inexato como está",
+      "engine": null,
+      "input": "const a = [9007199254740993, 1].join('-')",
+      "seed": null,
+      "value": "9007199254740993-1",
+      "type": "string"
+    },
+    {
+      "name": "a conta com o exato sem texto",
+      "engine": null,
+      "input": "const a = 12.50 + 1",
+      "seed": null,
+      "value": 13.5,
+      "type": "number"
+    },
+    {
+      "name": "0.1 + 0.2 como no JavaScript",
+      "engine": null,
+      "input": "const a = 0.1 + 0.2",
+      "seed": null,
+      "value": 0.30000000000000004,
+      "type": "number"
+    },
+    {
+      "name": "arredonda a duas casas",
+      "engine": null,
+      "input": "const a = Math.round(2.345 * 100) / 100",
+      "seed": null,
+      "value": 2.35,
+      "type": "number"
+    },
+    {
+      "name": "divisão por zero",
+      "engine": null,
+      "input": "const a = 1 / 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "0 / 0",
+      "engine": null,
+      "input": "const a = 0 / 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "raiz de negativo",
+      "engine": null,
+      "input": "const a = Math.sqrt(-1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "resto por zero",
+      "engine": null,
+      "input": "const a = 5 % 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "o número maior que o double",
+      "engine": null,
+      "input": "const a = 1e999",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "1e999 não é um número."
+      }
+    },
+    {
+      "name": "o texto com U+0000",
+      "engine": null,
+      "input": "const a = 'x\\0y'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto não pode ter o caractere U+0000."
+      }
+    },
+    {
+      "name": "o texto com meio par UTF-16",
+      "engine": null,
+      "input": "const a = '\\uD83D'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto tem um caractere incompleto (\\uD83D)."
+      }
+    },
+    {
+      "name": "o par UTF-16 inteiro",
+      "engine": null,
+      "input": "const a = '\\uD83D\\uDE00'",
+      "seed": null,
+      "value": "😀",
+      "type": "string"
+    },
+    {
+      "name": "a marca de direção é texto comum",
+      "engine": null,
+      "input": "const a = '\\u202E'",
+      "seed": null,
+      "value": "‮",
+      "type": "string"
+    },
+    {
+      "name": "o caractere de controle é texto comum",
+      "engine": null,
+      "input": "const a = '\\x07'",
+      "seed": null,
+      "value": "\u0007",
+      "type": "string"
+    },
+    {
+      "name": "a comparação de textos é pela unidade UTF-16",
+      "engine": null,
+      "input": "const a = 'B' < 'a'",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "a comparação de textos 'a' < 'b'",
+      "engine": null,
+      "input": "const a = 'a' < 'b'",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "a comparação de textos com acento",
+      "engine": null,
+      "input": "const a = 'á' > 'z'",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "o texto vazio",
+      "engine": null,
+      "input": "const a = ''",
+      "seed": null,
+      "value": "",
+      "type": "string"
+    },
+    {
+      "name": "new Date('aaaa-mm-dd') é de dia",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20')",
+      "seed": null,
+      "value": "2026-10-20",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "new Date com hora é de instante",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30')",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com espaço no lugar do T",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20 10:30')",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com segundos e milissegundos",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:15.123')",
+      "seed": null,
+      "value": "2026-10-20 10:30:15.123",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com um dígito de milissegundo",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:15.5')",
+      "seed": null,
+      "value": "2026-10-20 10:30:15.500",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com Z converte para a hora local",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T13:30:00Z')",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com -03:00",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:00-03:00')",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com +05:30",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:00+05:30')",
+      "seed": null,
+      "value": "2026-10-20 02:00:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date(ms)",
+      "engine": null,
+      "input": "const d = new Date(1792503000000)",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date(0) na hora local",
+      "engine": null,
+      "input": "const d = new Date(0)",
+      "seed": null,
+      "value": "1969-12-31 21:00:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date() é o agora",
+      "engine": null,
+      "input": "const d = new Date()",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)",
+      "now": "2026-10-20T10:30:00"
+    },
+    {
+      "name": "date.today() é de dia",
+      "engine": null,
+      "input": "const d = date.today()",
+      "seed": null,
+      "value": "2026-10-20",
+      "type": "Date (dia)",
+      "now": "2026-10-20T10:30:00"
+    },
+    {
+      "name": "Date.now() em UTC",
+      "engine": null,
+      "input": "const n = Date.now()",
+      "seed": null,
+      "value": 1792503000000,
+      "type": "number",
+      "now": "2026-10-20T10:30:00"
+    },
+    {
+      "name": "new Date('20/10/2026')",
+      "engine": null,
+      "input": "const d = new Date('20/10/2026')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "new Date('20/10/2026') não é uma data: use 'aaaa-mm-dd' ou 'aaaa-mm-ddThh:mm:ss'."
+      }
+    },
+    {
+      "name": "new Date('hoje')",
+      "engine": null,
+      "input": "const d = new Date('hoje')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "new Date('hoje') não é uma data: use 'aaaa-mm-dd' ou 'aaaa-mm-ddThh:mm:ss'."
+      }
+    },
+    {
+      "name": "new Date('2026-02-30')",
+      "engine": null,
+      "input": "const d = new Date('2026-02-30')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 2026-02-30 não existe."
+      }
+    },
+    {
+      "name": "new Date('2026-13-01')",
+      "engine": null,
+      "input": "const d = new Date('2026-13-01')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 2026-13-01 não existe."
+      }
+    },
+    {
+      "name": "new Date('2026-10-20T25:00')",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T25:00')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 2026-10-20 não existe."
+      }
+    },
+    {
+      "name": "new Date(ano, mês, dia)",
+      "engine": null,
+      "input": "const d = new Date(2026, 9, 20)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Use date.of(2026, 10, 20): o mês vai de 1 a 12."
+      }
+    },
+    {
+      "name": "new Date(true)",
+      "engine": null,
+      "input": "const d = new Date(true)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "new Date espera number ou string no argumento 1, e recebeu true."
+      }
+    },
+    {
+      "name": "date.of de dia",
+      "engine": null,
+      "input": "const d = date.of(2026, 10, 20)",
+      "seed": null,
+      "value": "2026-10-20",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.of com a hora",
+      "engine": null,
+      "input": "const d = date.of(2026, 10, 20, 8, 5, 3, 40)",
+      "seed": null,
+      "value": "2026-10-20 08:05:03.040",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "date.of com a hora e minuto",
+      "engine": null,
+      "input": "const d = date.of(2026, 10, 20, 8, 5)",
+      "seed": null,
+      "value": "2026-10-20 08:05:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "date.of(99, 1, 1) é o ano 99",
+      "engine": null,
+      "input": "const d = date.of(99, 1, 1)",
+      "seed": null,
+      "value": "0099-01-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "o dia 0001-01-01",
+      "engine": null,
+      "input": "const d = date.of(1, 1, 1)",
+      "seed": null,
+      "value": "0001-01-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "o dia 9999-12-31",
+      "engine": null,
+      "input": "const d = date.of(9999, 12, 31)",
+      "seed": null,
+      "value": "9999-12-31",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "o último instante do ano 9999",
+      "engine": null,
+      "input": "const d = date.of(9999, 12, 31, 23, 59, 59, 999)",
+      "seed": null,
+      "value": "9999-12-31 23:59:59.999",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "29 de fevereiro de ano bissexto",
+      "engine": null,
+      "input": "const d = date.of(2024, 2, 29)",
+      "seed": null,
+      "value": "2024-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "29 de fevereiro de 2000",
+      "engine": null,
+      "input": "const d = date.of(2000, 2, 29)",
+      "seed": null,
+      "value": "2000-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "29 de fevereiro de 2023",
+      "engine": null,
+      "input": "const d = date.of(2023, 2, 29)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 2023-02-29 não existe."
+      }
+    },
+    {
+      "name": "29 de fevereiro de 1900",
+      "engine": null,
+      "input": "const d = date.of(1900, 2, 29)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 1900-02-29 não existe."
+      }
+    },
+    {
+      "name": "31 de abril",
+      "engine": null,
+      "input": "const d = date.of(2026, 4, 31)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 2026-04-31 não existe."
+      }
+    },
+    {
+      "name": "o ano 0",
+      "engine": null,
+      "input": "const d = date.of(0, 1, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 0000-01-01 não existe."
+      }
+    },
+    {
+      "name": "o ano 10000",
+      "engine": null,
+      "input": "const d = date.of(10000, 1, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 10000-01-01 não existe."
+      }
+    },
+    {
+      "name": "depois de 9999",
+      "engine": null,
+      "input": "const d = date.addDays(date.of(9999, 12, 31), 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data passou do ano 9999 (ou ficou antes do ano 1)."
+      }
+    },
+    {
+      "name": "antes do ano 1",
+      "engine": null,
+      "input": "const d = date.addDays(date.of(1, 1, 1), -1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data passou do ano 9999 (ou ficou antes do ano 1)."
+      }
+    },
+    {
+      "name": "new Date(ms) fora da faixa",
+      "engine": null,
+      "input": "const d = new Date(9007199254740991)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data passou do ano 9999 (ou ficou antes do ano 1)."
+      }
+    },
+    {
+      "name": "a hora que o horário de verão pula é a de depois",
+      "engine": null,
+      "input": "const n = date.of(2018, 11, 4, 0, 30).getTime()",
+      "seed": null,
+      "value": 1541302200000,
+      "type": "number"
+    },
+    {
+      "name": "a hora que o horário de verão repete é a primeira",
+      "engine": null,
+      "input": "const n = date.of(2019, 2, 16, 23, 30).getTime()",
+      "seed": null,
+      "value": 1550367000000,
+      "type": "number"
+    },
+    {
+      "name": "getTime numa hora comum",
+      "engine": null,
+      "input": "const n = date.of(2026, 10, 20, 10, 30).getTime()",
+      "seed": null,
+      "value": 1792503000000,
+      "type": "number"
+    },
+    {
+      "name": "a hora do relógio não muda ao somar dias na troca do horário de verão",
+      "engine": null,
+      "input": "const d = date.addDays(date.of(2018, 11, 3, 23, 30), 1)",
+      "seed": null,
+      "value": "2018-11-04 23:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "o texto da data de dia",
+      "engine": null,
+      "input": "const s = String(date.of(2026, 10, 20))",
+      "seed": null,
+      "value": "2026-10-20",
+      "type": "string"
+    },
+    {
+      "name": "o texto da data de instante",
+      "engine": null,
+      "input": "const s = String(new Date('2026-10-20T10:30'))",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "string"
+    },
+    {
+      "name": "o texto da data no +",
+      "engine": null,
+      "input": "const s = 'em ' + date.of(2026, 10, 20)",
+      "seed": null,
+      "value": "em 2026-10-20",
+      "type": "string"
+    },
+    {
+      "name": "o texto da data no modelo",
+      "engine": null,
+      "input": "const s = `${new Date('2026-10-20T10:30:15.5')}`",
+      "seed": null,
+      "value": "2026-10-20 10:30:15.500",
+      "type": "string"
+    },
+    {
+      "name": "date.format",
+      "engine": null,
+      "input": "const s = date.format(date.of(2026, 1, 2))",
+      "seed": null,
+      "value": "2026-01-02",
+      "type": "string"
+    },
+    {
+      "name": "duas datas iguais são ===",
+      "engine": null,
+      "input": "const b = date.of(2026, 1, 1) === new Date('2026-01-01')",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "dia e instante à meia-noite são o mesmo instante",
+      "engine": null,
+      "input": "const b = date.of(2026, 1, 1) === date.of(2026, 1, 1, 0, 0)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "a comparação de datas",
+      "engine": null,
+      "input": "const b = date.of(2026, 1, 1) < date.of(2026, 1, 1, 0, 0, 1)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "inferência de number decimal",
+      "engine": null,
+      "input": "let f = 1.5",
+      "seed": null,
+      "value": 1.5,
+      "type": "number"
+    },
+    {
+      "name": "o zero é number",
+      "engine": null,
+      "input": "let z = 0",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": ".5 sem zero à esquerda é 0.5",
+      "engine": null,
+      "input": "const h = .5",
+      "seed": null,
+      "value": 0.5,
+      "type": "number"
+    },
+    {
+      "name": "inferência de boolean falso",
+      "engine": null,
+      "input": "let ok = false",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "inferência de string com aspas duplas",
+      "engine": null,
+      "input": "let s = \"dupla\"",
+      "seed": null,
+      "value": "dupla",
+      "type": "string"
+    },
+    {
+      "name": "inferência de string com crases",
+      "engine": null,
+      "input": "let s = `crase`",
+      "seed": null,
+      "value": "crase",
+      "type": "string"
+    },
+    {
+      "name": "date.today() com let é Date de dia",
+      "engine": null,
+      "input": "let d = date.today()",
+      "seed": null,
+      "value": "2026-10-20",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "inferência da lista de boolean",
+      "engine": null,
+      "input": "let l = [true, false]",
+      "seed": null,
+      "value": [
+        true,
+        false
+      ],
+      "type": "boolean[]"
+    },
+    {
+      "name": "a lista de dois nulos é null[]",
+      "engine": null,
+      "input": "let l = [null, null]",
+      "seed": null,
+      "value": [
+        null,
+        null
+      ],
+      "type": "null[]"
+    },
+    {
+      "name": "a lista com null no meio é (string | null)[]",
+      "engine": null,
+      "input": "let l = ['a', null, 'b']",
+      "seed": null,
+      "value": [
+        "a",
+        null,
+        "b"
+      ],
+      "type": "(string | null)[]"
+    },
+    {
+      "name": "a lista de number com null no meio é (number | null)[]",
+      "engine": null,
+      "input": "let l = [1, null, 2]",
+      "seed": null,
+      "value": [
+        1,
+        null,
+        2
+      ],
+      "type": "(number | null)[]"
+    },
+    {
+      "name": "a lista de Date de dia com null é (Date (dia) | null)[]",
+      "engine": null,
+      "input": "let l = [date.of(2026, 1, 1), null]",
+      "seed": null,
+      "value": [
+        "2026-01-01",
+        null
+      ],
+      "type": "(Date (dia) | null)[]"
+    },
+    {
+      "name": "a lista de number e boolean é mista",
+      "engine": null,
+      "input": "let l = [1, true]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "A lista mistura number e boolean."
+      }
+    },
+    {
+      "name": "o objeto vazio",
+      "engine": null,
+      "input": "let o = {}",
+      "seed": null,
+      "value": {},
+      "type": "objeto"
+    },
+    {
+      "name": "o objeto com null num campo",
+      "engine": null,
+      "input": "let o = { x: null }",
+      "seed": null,
+      "value": {
+        "x": null
+      },
+      "type": "objeto"
+    },
+    {
+      "name": "o objeto com uma data de dia e um número",
+      "engine": null,
+      "input": "let o = { d: date.of(2026, 1, 1), n: 1 }",
+      "seed": null,
+      "value": {
+        "d": "2026-01-01",
+        "n": 1
+      },
+      "type": "objeto"
+    },
+    {
+      "name": "o null vindo de uma variável é null",
+      "engine": null,
+      "input": "let a = null\nconst b = a",
+      "seed": null,
+      "value": null,
+      "type": "null"
+    },
+    {
+      "name": "Math.max não é valor",
+      "engine": null,
+      "input": "let f = Math.max",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "Math.max é uma função, e funções não são valores aqui: chame-a, como Math.max(…)."
+      }
+    },
+    {
+      "name": "string anotada",
+      "engine": null,
+      "input": "let s: string = 'a'",
+      "seed": null,
+      "value": "a",
+      "type": "string"
+    },
+    {
+      "name": "lista anotada vazia de string",
+      "engine": null,
+      "input": "let l: string[] = []",
+      "seed": null,
+      "value": [],
+      "type": "string[]"
+    },
+    {
+      "name": "lista anotada vazia de Date",
+      "engine": null,
+      "input": "let l: Date[] = []",
+      "seed": null,
+      "value": [],
+      "type": "Date[]"
+    },
+    {
+      "name": "string | null com null",
+      "engine": null,
+      "input": "let s: string | null = null",
+      "seed": null,
+      "value": null,
+      "type": "string | null"
+    },
+    {
+      "name": "boolean | null com valor",
+      "engine": null,
+      "input": "let b: boolean | null = true",
+      "seed": null,
+      "value": true,
+      "type": "boolean | null"
+    },
+    {
+      "name": "lista | null com lista",
+      "engine": null,
+      "input": "let l: string[] | null = ['a']",
+      "seed": null,
+      "value": [
+        "a"
+      ],
+      "type": "string[] | null"
+    },
+    {
+      "name": "lista | null com null",
+      "engine": null,
+      "input": "let l: string[] | null = null",
+      "seed": null,
+      "value": null,
+      "type": "string[] | null"
+    },
+    {
+      "name": "lista vazia num tipo que não é lista",
+      "engine": null,
+      "input": "let l: number | null = []",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 24,
+        "message": "l é number | null, mas recebeu []."
+      }
+    },
+    {
+      "name": "string não recebe null",
+      "engine": null,
+      "input": "let s: string = null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 17,
+        "message": "s é string, mas recebeu null."
+      }
+    },
+    {
+      "name": "number não recebe booleano",
+      "engine": null,
+      "input": "let n: number = true",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 17,
+        "message": "n é number, mas recebeu true."
+      }
+    },
+    {
+      "name": "boolean não recebe número",
+      "engine": null,
+      "input": "let b: boolean = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 18,
+        "message": "b é boolean, mas recebeu 1."
+      }
+    },
+    {
+      "name": "number[] não recebe número",
+      "engine": null,
+      "input": "let n: number[] = 5",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 19,
+        "message": "n é number[], mas recebeu 5."
+      }
+    },
+    {
+      "name": "Date não recebe texto",
+      "engine": null,
+      "input": "let d: Date = 'x'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "d é Date, mas recebeu 'x'."
+      }
+    },
+    {
+      "name": "Date não recebe null",
+      "engine": null,
+      "input": "let d: Date = null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "d é Date, mas recebeu null."
+      }
+    },
+    {
+      "name": "number | null não recebe texto",
+      "engine": null,
+      "input": "let x: number | null = 'abc'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 24,
+        "message": "x é number | null, mas recebeu 'abc'."
+      }
+    },
+    {
+      "name": "number não recebe null de uma variável",
+      "engine": null,
+      "input": "let a = null\nlet y: number = a",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 17,
+        "message": "y é number, mas recebeu null."
+      }
+    },
+    {
+      "name": "number | null reatribuído a null",
+      "engine": null,
+      "input": "let x: number | null = 1\nx = null",
+      "seed": null,
+      "value": null,
+      "type": "number | null"
+    },
+    {
+      "name": "null reatribuído a null",
+      "engine": null,
+      "input": "let x = null\nx = null",
+      "seed": null,
+      "value": null,
+      "type": "null"
+    },
+    {
+      "name": "string reatribuída a null",
+      "engine": null,
+      "input": "let s = 'a'\ns = null",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 5,
+        "message": "s é string, mas recebeu null."
+      }
+    },
+    {
+      "name": "number | null reatribuído a texto",
+      "engine": null,
+      "input": "let x: number | null = null\nx = 'a'",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 5,
+        "message": "x é number | null, mas recebeu 'a'."
+      }
+    },
+    {
+      "name": "null reatribuído a número pede o tipo",
+      "engine": null,
+      "input": "let nada = null\nnada = 1",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 8,
+        "message": "nada é null: para guardar outro valor, anote o tipo, como let nada: number | null = null"
+      }
+    },
+    {
+      "name": "sql vazio",
+      "engine": null,
+      "input": "const t: sql = ''",
+      "seed": null,
+      "value": "",
+      "type": "sql"
+    },
+    {
+      "name": "sql com apóstrofo escapado dentro de um texto",
+      "engine": null,
+      "input": "const t: sql = \"'it''s'\"",
+      "seed": null,
+      "value": "'it''s'",
+      "type": "sql"
+    },
+    {
+      "name": "sql com -- dentro de um texto não é comentário",
+      "engine": null,
+      "input": "const t: sql = \"'a--b'\"",
+      "seed": null,
+      "value": "'a--b'",
+      "type": "sql"
+    },
+    {
+      "name": "sql com /* dentro de um texto não é comentário",
+      "engine": null,
+      "input": "const t: sql = \"'/*'\"",
+      "seed": null,
+      "value": "'/*'",
+      "type": "sql"
+    },
+    {
+      "name": "sql com comentário de bloco fechado",
+      "engine": null,
+      "input": "const t: sql = '/* x */ a'",
+      "seed": null,
+      "value": "/* x */ a",
+      "type": "sql"
+    },
+    {
+      "name": "sql com comentário de linha que a quebra fecha",
+      "engine": null,
+      "input": "const t: sql = 'a = 1 -- b\\n'",
+      "seed": null,
+      "value": "a = 1 -- b\n",
+      "type": "sql"
+    },
+    {
+      "name": "sql com parêntese dentro de um texto não conta",
+      "engine": null,
+      "input": "const t: sql = \"'('\"",
+      "seed": null,
+      "value": "'('",
+      "type": "sql"
+    },
+    {
+      "name": "sql com $$ fechado no PostgreSQL",
+      "engine": 1,
+      "input": "const f: sql = '$$ x $$'",
+      "seed": null,
+      "value": "$$ x $$",
+      "type": "sql"
+    },
+    {
+      "name": "sql com { } fechado no Informix",
+      "engine": 3,
+      "input": "const f: sql = '{ x }'",
+      "seed": null,
+      "value": "{ x }",
+      "type": "sql"
+    },
+    {
+      "name": "sql de consulta direta",
+      "engine": null,
+      "input": "const t: sql = (SELECT count(*) FROM pedido)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "Um valor sql não pode vir de uma consulta."
+      }
+    },
+    {
+      "name": "número fora da faixa escrito num let vale como texto exato",
+      "engine": null,
+      "input": "let id = 9007199254740993",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "a conta com o número fora da faixa de um let",
+      "engine": null,
+      "input": "let id = 9007199254740993\nconst a = id + 1",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 14,
+        "message": "9007199254740993 passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)."
+      }
+    },
+    {
+      "name": "2^53 - 1 é exato e a soma com 1 é um número comum",
+      "engine": null,
+      "input": "const a = 9007199254740991 + 1",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number"
+    },
+    {
+      "name": "2^53 é exato e a soma com 1 não recusa",
+      "engine": null,
+      "input": "const a = 9007199254740992 + 1",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number"
+    },
+    {
+      "name": "o - unário no literal fora da faixa entra na conta e recusa",
+      "engine": null,
+      "input": "const a = -9007199254740993 + 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 29,
+        "message": "-9007199254740993 passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)."
+      }
+    },
+    {
+      "name": "1.5e2 é exato e guarda o texto",
+      "engine": null,
+      "input": "const a = 1.5e2",
+      "seed": null,
+      "value": 150,
+      "type": "number",
+      "exact": "1.5e2"
+    },
+    {
+      "name": "1234567890123.45 é exato sem texto próprio",
+      "engine": null,
+      "input": "const a = 1234567890123.45",
+      "seed": null,
+      "value": 1234567890123.45,
+      "type": "number"
+    },
+    {
+      "name": "o === de números exatos",
+      "engine": null,
+      "input": "const b = 12.50 === 12.5",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "a conta com número exato",
+      "engine": null,
+      "input": "const a = 100.00 / 8",
+      "seed": null,
+      "value": 12.5,
+      "type": "number"
+    },
+    {
+      "name": "o slice leva o número inexato como está",
+      "engine": null,
+      "input": "const a = [9007199254740993].slice(0)[0]",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "o concat leva o número inexato como está",
+      "engine": null,
+      "input": "const a = [9007199254740993].concat([1])[0]",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "o espalhar leva o número inexato como está",
+      "engine": null,
+      "input": "const a = [...[9007199254740993]][0]",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "o random.pick leva o número inexato como está",
+      "engine": null,
+      "input": "const a = random.pick([9007199254740993])",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "o texto de 1.000.000 unidades cabe (padStart, que conta no limite)",
+      "engine": null,
+      "input": "let a = 'x'.padStart(1000000)\nconst n = a.length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "o tamanho do texto conta unidades UTF-16",
+      "engine": null,
+      "input": "const n = '😀'.length",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "o modelo com booleano",
+      "engine": null,
+      "input": "const s = `${true}`",
+      "seed": null,
+      "value": "true",
+      "type": "string"
+    },
+    {
+      "name": "o modelo com lista",
+      "engine": null,
+      "input": "const s = `${[1, 2]}`",
+      "seed": null,
+      "value": "1,2",
+      "type": "string"
+    },
+    {
+      "name": "String de lista de textos separa por vírgula",
+      "engine": null,
+      "input": "const s = String(['a', 'b'])",
+      "seed": null,
+      "value": "a,b",
+      "type": "string"
+    },
+    {
+      "name": "String(null), escrito pela pessoa, dá o texto null",
+      "engine": null,
+      "input": "const s = String(null)",
+      "seed": null,
+      "value": "null",
+      "type": "string"
+    },
+    {
+      "name": "new Date com milissegundos zero não os mostra",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:00.000')",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date sem milissegundos",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:15')",
+      "seed": null,
+      "value": "2026-10-20 10:30:15",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com Z e milissegundos converte para a hora local",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:15.123Z')",
+      "seed": null,
+      "value": "2026-10-20 07:30:15.123",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com Z sem segundos converte para a hora local",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30Z')",
+      "seed": null,
+      "value": "2026-10-20 07:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com +00:00 converte para a hora local",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:00+00:00')",
+      "seed": null,
+      "value": "2026-10-20 07:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com fuso que muda o dia converte para a hora local",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T01:00:00+05:00')",
+      "seed": null,
+      "value": "2026-10-19 17:00:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date de dia é a meia-noite local, em UTC",
+      "engine": null,
+      "input": "const s = new Date('2026-10-20').toISOString()",
+      "seed": null,
+      "value": "2026-10-20T03:00:00.000Z",
+      "type": "string"
+    },
+    {
+      "name": "new Date de dia é a meia-noite local (getHours)",
+      "engine": null,
+      "input": "const h = new Date('2026-10-20').getHours()",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "new Date de dia em milissegundos",
+      "engine": null,
+      "input": "const n = new Date('2026-10-20').getTime()",
+      "seed": null,
+      "value": 1792465200000,
+      "type": "number"
+    },
+    {
+      "name": "new Date no ano 0001 é de dia",
+      "engine": null,
+      "input": "const d = new Date('0001-01-01')",
+      "seed": null,
+      "value": "0001-01-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "new Date no último instante de 9999",
+      "engine": null,
+      "input": "const d = new Date('9999-12-31T23:59:59.999')",
+      "seed": null,
+      "value": "9999-12-31 23:59:59.999",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com ano 0000 não existe",
+      "engine": null,
+      "input": "const d = new Date('0000-01-01')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 0000-01-01 não existe."
+      }
+    },
+    {
+      "name": "new Date com 29 de fevereiro de ano não bissexto",
+      "engine": null,
+      "input": "const d = new Date('2026-02-29')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 2026-02-29 não existe."
+      }
+    },
+    {
+      "name": "new Date com 29 de fevereiro de ano bissexto",
+      "engine": null,
+      "input": "const d = new Date('2024-02-29')",
+      "seed": null,
+      "value": "2024-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "new Date com mês zero não existe",
+      "engine": null,
+      "input": "const d = new Date('2026-00-10')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 2026-00-10 não existe."
+      }
+    },
+    {
+      "name": "new Date com dia zero não existe",
+      "engine": null,
+      "input": "const d = new Date('2026-10-00')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A data 2026-10-00 não existe."
+      }
+    },
+    {
+      "name": "new Date com ano de cinco dígitos é forma recusada",
+      "engine": null,
+      "input": "const d = new Date('10000-01-01')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "new Date('10000-01-01') não é uma data: use 'aaaa-mm-dd' ou 'aaaa-mm-ddThh:mm:ss'."
+      }
+    },
+    {
+      "name": "new Date com barras é forma recusada",
+      "engine": null,
+      "input": "const d = new Date('2026/10/20')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "new Date('2026/10/20') não é uma data: use 'aaaa-mm-dd' ou 'aaaa-mm-ddThh:mm:ss'."
+      }
+    },
+    {
+      "name": "new Date com hora sem minuto é forma recusada",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "new Date('2026-10-20T10') não é uma data: use 'aaaa-mm-dd' ou 'aaaa-mm-ddThh:mm:ss'."
+      }
+    },
+    {
+      "name": "new Date com fuso sem dois pontos é forma recusada",
+      "engine": null,
+      "input": "const d = new Date('2026-10-20T10:30:00+0300')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "new Date('2026-10-20T10:30:00+0300') não é uma data: use 'aaaa-mm-dd' ou 'aaaa-mm-ddThh:mm:ss'."
+      }
+    },
+    {
+      "name": "new Date vazio é forma recusada",
+      "engine": null,
+      "input": "const d = new Date('')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "new Date('') não é uma data: use 'aaaa-mm-dd' ou 'aaaa-mm-ddThh:mm:ss'."
+      }
+    },
+    {
+      "name": "new Date(ms) na hora que a troca do horário pula",
+      "engine": null,
+      "input": "const d = new Date(1541302200000)",
+      "seed": null,
+      "value": "2018-11-04 01:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "a hora que a troca pula guarda a que a pessoa escreveu",
+      "engine": null,
+      "input": "const d = new Date('2018-11-04T00:30')",
+      "seed": null,
+      "value": "2018-11-04 00:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "a hora que a troca pula, em milissegundos",
+      "engine": null,
+      "input": "const n = new Date('2018-11-04T00:30').getTime()",
+      "seed": null,
+      "value": 1541302200000,
+      "type": "number"
+    },
+    {
+      "name": "new Date(ms) na hora que a troca repete é a primeira",
+      "engine": null,
+      "input": "const d = new Date(1550367000000)",
+      "seed": null,
+      "value": "2019-02-16 23:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "date.of de dias diferentes é !==",
+      "engine": null,
+      "input": "const b = date.of(2026, 1, 1) !== date.of(2026, 1, 2)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "a comparação de dia com instante é pelos campos",
+      "engine": null,
+      "input": "const b = date.of(2026, 1, 2) > new Date('2026-01-01T23:59:59')",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "o texto de instante sem milissegundos",
+      "engine": null,
+      "input": "const s = String(new Date('2026-10-20T10:30:00.000'))",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "string"
+    },
+    {
+      "name": "o texto de instante com milissegundos",
+      "engine": null,
+      "input": "const s = String(new Date('2026-10-20T10:30:00.120'))",
+      "seed": null,
+      "value": "2026-10-20 10:30:00.120",
+      "type": "string"
+    },
+    {
+      "name": "date.format de instante",
+      "engine": null,
+      "input": "const s = date.format(new Date('2026-10-20T10:30'))",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "string"
+    },
+    {
+      "name": "date.addDays que volta o ano",
+      "engine": null,
+      "input": "const d = date.addDays(date.of(2026, 1, 1), -1)",
+      "seed": null,
+      "value": "2025-12-31",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.addDays até o fim do ano 9999",
+      "engine": null,
+      "input": "const d = date.addDays(date.of(9999, 12, 30), 1)",
+      "seed": null,
+      "value": "9999-12-31",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.addMonths prende o dia no fim do mês",
+      "engine": null,
+      "input": "const d = date.addMonths(date.of(2026, 1, 31), 1)",
+      "seed": null,
+      "value": "2026-02-28",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.addMonths no ano bissexto prende em 29",
+      "engine": null,
+      "input": "const d = date.addMonths(date.of(2024, 1, 31), 1)",
+      "seed": null,
+      "value": "2024-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.addYears de 29 de fevereiro prende em 28",
+      "engine": null,
+      "input": "const d = date.addYears(date.of(2024, 2, 29), 1)",
+      "seed": null,
+      "value": "2025-02-28",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.startOfMonth de instante é de dia",
+      "engine": null,
+      "input": "const d = date.startOfMonth(new Date('2026-10-20T10:30'))",
+      "seed": null,
+      "value": "2026-10-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.endOfMonth no ano bissexto",
+      "engine": null,
+      "input": "const d = date.endOfMonth(date.of(2024, 2, 10))",
+      "seed": null,
+      "value": "2024-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.of de instante no ano 1",
+      "engine": null,
+      "input": "const d = date.of(1, 1, 1, 0, 0)",
+      "seed": null,
+      "value": "0001-01-01 00:00:00",
+      "type": "Date (instante)"
+    }
+  ]
+}

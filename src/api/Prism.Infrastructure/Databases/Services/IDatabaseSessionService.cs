@@ -51,6 +51,12 @@ public interface IDatabaseSessionService
 
     Task CloseAllAsync();
 
+    /// <summary>
+    /// RN-DBEAVER-017: se a conexão está conectada, em qualquer janela (o registro de sessões é um só, seção 8, item 3): tem ao menos uma sessão aberta do cofre da
+    /// geração <paramref name="vaultGeneration"/>. É o que a prévia do "Importar do DBeaver" diz da conexão que a reimportação sobrescreveria.
+    /// </summary>
+    bool HasSession(Guid connectionID, long vaultGeneration);
+
     /// <summary>RN-DRIVER-007: se há sessão aberta de algum destes bancos. O driver de um banco não é removido com sessão aberta dele.</summary>
     bool HasOpenSession(IReadOnlyCollection<EDatabaseEngine> engines);
 
@@ -107,6 +113,15 @@ public interface IDatabaseSessionService
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, CancellationToken cancellationToken);
 
     /// <summary>
+    /// RN-VAR-032 e 033: o mesmo, com os valores dos marcadores do comando (`params`), na ordem do texto. O texto montado (com o filtro) tem de ter exatamente esses
+    /// marcadores (`ParametersMismatch`, com `Markers` e `Values`), e cada valor tem de caber no banco da sessão (`QueryInvalid`, no campo `params[i].value`); o
+    /// filtro com marcador é `FilterInvalid`. Nada disso vai ao banco, e o resultado anterior continua. Os parâmetros ficam na memória da sessão com o texto do
+    /// resultado (o atual e os guardados) e com o do "contar total", e vão de novo em tudo o que executa o comando outra vez (a contagem, a coluna inteira).
+    /// Vazios, o comando vai como veio, sem parâmetros.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken);
+
+    /// <summary>
     /// RN-GRADE-011: o mesmo, com o filtro do resultado (condição, ordem ou as duas) junto ao comando, ou por fora dele quando ele não é
     /// um `SELECT` que a leitura do comando reconheça; a página diz como (`FilterApplied`), e o comando embrulhado é só leitura. O
     /// comando montado é o que roda, o que o "contar total" conta e o que a edição lê; a falha do banco vem sem a posição do erro, que
@@ -120,6 +135,9 @@ public interface IDatabaseSessionService
     /// ele se junta. Não toma a vez da sessão nem fala com o banco. Sem a sessão, nulo: quem responde é a execução.
     /// </summary>
     string? FilterRefusal(Guid sessionID, string? filter);
+
+    /// <summary>RN-VAR-032: o mesmo, sabendo se o comando leva `params`: com eles, o filtro não pode ter marcador de parâmetro.</summary>
+    string? FilterRefusal(Guid sessionID, string? filter, bool withParameters);
 
     Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken);
 

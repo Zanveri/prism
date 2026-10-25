@@ -2,15 +2,16 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, 
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 
 import type { GridZoom } from "@/app/settings/_lib/preferences";
-import { ArrowDownIcon, ArrowsUpDownIcon, ArrowUpIcon } from "@/components/ui";
+import { ArrowDownIcon, ArrowsUpDownIcon, ArrowUpIcon, useHost } from "@/components/ui";
+import { isElement } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 import { isMacPlatform } from "@/lib/utils/platform";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
 import { movementOf, moveCell, type GridCell } from "../_lib/grid-cursor";
-import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
+import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowMarkClasses, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { cellAtPoint, columnStarts, edgeScroll, pageRows, type GridBox } from "../_lib/grid-pointer";
-import { choseWholeColumns, choseWholeRows, collapse, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
+import { choseWholeColumns, collapse, deleteKeyRows, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { multiEditCopy } from "../_lib/multi-edit.copy";
 import type { EditValue } from "../_lib/record-edits";
@@ -93,17 +94,18 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
   const role = cellIdOf === undefined ? "cell" : "gridcell";
   const deleted = mark?.deleted === true;
   const rowChosen = selectedFrom >= 0;
+  const markClasses = rowMarkClasses(mark, rowChosen);
 
   return (
     // A linha com o campo de edição aberto fica por cima das outras (cada linha é um contexto de empilhamento, pelo `transform`): a dica do campo
     // (RN-EDIT-017) passa por cima da linha de baixo, e continua por baixo do cabeçalho preso.
-    <div role="row" aria-rowindex={index + 2} className={cn("group absolute top-0 left-0 h-(--grid-row) w-full border-b border-selected leading-(--grid-row) hover:bg-raised", mark?.failed && "bg-danger/15", editor !== null && "z-[15]")} style={{ transform: `translateY(${start}px)` }}>
+    <div role="row" aria-rowindex={index + 2} className={cn("group absolute top-0 left-0 h-(--grid-row) w-full border-b border-selected leading-(--grid-row)", markClasses.row, editor !== null && "z-[15]")} style={{ transform: `translateY(${start}px)` }}>
       <div
         role="rowheader"
         // Só na grade editável: a posição que o clique, o arraste e o botão direito no número da linha leem (RN-GRADE-001).
         {...(cellIdOf === undefined ? {} : { "data-rowheader": index })}
         title={mark?.kind === "new" ? editCopy.newRowMark : deleted ? editCopy.deletedMark : undefined}
-        className={cn("sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-selected bg-panel px-2 text-right text-subtle group-hover:bg-raised", rowChosen && "bg-selected font-semibold text-ink group-hover:bg-selected", deleted && "line-through", mark?.failed && "font-semibold text-danger")}
+        className={cn("sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-selected bg-panel px-2 text-right text-subtle group-hover:bg-raised", markClasses.number)}
       >
         {mark?.kind === "new" ? (
           <>
@@ -124,7 +126,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
         // pendência, da exclusão e da célula ativa. A escolhida tem o fundo de escolha do tema, o do item escolhido do navegador.
         const chosen = (rowChosen && item.index >= selectedFrom && item.index <= selectedTo) || wholeColumns?.has(item.index) === true;
         const cell = cellIdOf === undefined ? {} : { id: cellIdOf(index, item.index), "data-row": index, "data-col": item.index, "aria-selected": chosen };
-        const marked = cn(chosen && "bg-selected", activeColumn === item.index && "outline-2 -outline-offset-2 outline-accent", deleted && "text-subtle line-through");
+        const marked = cn(chosen && "bg-selected", activeColumn === item.index && "outline-2 -outline-offset-2 outline-accent", markClasses.cell);
 
         if (editor?.column === item.index) {
           return (
@@ -201,7 +203,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
                 onClick={() => onFollow(item.index, value)}
                 title={copy.followTitle(link.table.name, link.column)}
                 aria-label={copy.followLabel(link.table.name, link.column, value)}
-                className="max-w-full cursor-pointer truncate text-left text-postgres underline underline-offset-[3px] hover:brightness-125"
+                className={cn("max-w-full cursor-pointer truncate text-left text-postgres underline underline-offset-[3px] hover:brightness-125", markClasses.cell)}
               >
                 {value}
               </button>
@@ -461,9 +463,18 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   // A altura estimada da linha é a do zoom (a de verdade, porque nada é medido), e o cabeçalho preso no topo é o `paddingStart`, da mesma altura.
   // O cabeçalho e o número da linha, presos, cobrem o começo da caixa: o `scrollPaddingStart` do mesmo tamanho faz o `scrollToIndex` deixar a célula ativa
   // logo depois deles, e não por baixo (RN-GRADE-001: a grade rola para manter a célula ativa à vista, também no Ctrl+Home, no PageUp e no Home).
+  // RN-ABAS-017: a área de resultado muda de página quando vai para a janela do resultado (ou volta). O virtualizador guarda a janela do elemento de rolagem
+  // (`ownerDocument.defaultView`) quando o liga, e o `ResizeObserver` dela com ela: o de outra janela não avisaria o tamanho. Ao mudar de página ele é desligado e
+  // ligado de novo na mesma passada, antes de pintar, e passa a observar pela janela de agora.
+  const hostDocument = useHost().document;
+  const [observedDocument, setObservedDocument] = useState(hostDocument);
+  const observing = observedDocument === hostDocument;
+  useLayoutEffect(() => {
+    if (!observing) setObservedDocument(hostDocument);
+  }, [observing, hostDocument]);
   // eslint-disable-next-line react-hooks/incompatible-library -- o virtualizador devolve funções que não se memorizam; nada aqui depende disso.
-  const rowVirtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scroll.current, estimateSize: () => metrics.rowHeight, overscan: 6, paddingStart: metrics.rowHeight, scrollPaddingStart: metrics.rowHeight, observeElementOffset: observeRenderedOffset });
-  const columnVirtualizer = useVirtualizer({ horizontal: true, count: columns.length, getScrollElement: () => scroll.current, estimateSize: (index) => drawn[index], overscan: 2, paddingStart: metrics.gutterWidth, scrollPaddingStart: metrics.gutterWidth, observeElementOffset: observeRenderedOffset });
+  const rowVirtualizer = useVirtualizer({ enabled: observing, count: rows.length, getScrollElement: () => scroll.current, estimateSize: () => metrics.rowHeight, overscan: 6, paddingStart: metrics.rowHeight, scrollPaddingStart: metrics.rowHeight, observeElementOffset: observeRenderedOffset });
+  const columnVirtualizer = useVirtualizer({ enabled: observing, horizontal: true, count: columns.length, getScrollElement: () => scroll.current, estimateSize: (index) => drawn[index], overscan: 2, paddingStart: metrics.gutterWidth, scrollPaddingStart: metrics.gutterWidth, observeElementOffset: observeRenderedOffset });
   const virtualColumns = columnVirtualizer.getVirtualItems();
 
   // Uma largura mudou (a divisa, o zoom, o tipo no cabeçalho), ou a altura da linha (o zoom): o virtualizador só relê `estimateSize` quando lhe pedem, e
@@ -552,13 +563,14 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   const wasOpen = useRef(editorOpen);
   useEffect(() => {
     const element = scroll.current;
-    if (wasOpen.current && !editorOpen && element !== null && (document.activeElement === document.body || element.contains(document.activeElement))) element.focus({ preventScroll: true });
+    const page = element?.ownerDocument;
+    if (wasOpen.current && !editorOpen && element != null && page != null && (page.activeElement === page.body || element.contains(page.activeElement))) element.focus({ preventScroll: true });
     wasOpen.current = editorOpen;
   }, [editorOpen]);
 
   /** A célula do evento, pela posição que ela leva (`data-row`, `data-col`), ou nula fora de uma. */
   function cellOf(target: EventTarget): GridCell | null {
-    const element = target instanceof Element ? target.closest<HTMLElement>("[data-col]") : null;
+    const element = isElement(target) ? target.closest<HTMLElement>("[data-col]") : null;
     if (element === null || scroll.current?.contains(element) !== true) return null;
     return { row: Number(element.dataset.row), column: Number(element.dataset.col) };
   }
@@ -567,7 +579,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
 
   /** O número da linha do evento (`data-rowheader`, RN-GRADE-001), ou nulo fora de um. */
   function rowHeaderOf(target: EventTarget): number | null {
-    const element = target instanceof Element ? target.closest<HTMLElement>("[data-rowheader]") : null;
+    const element = isElement(target) ? target.closest<HTMLElement>("[data-rowheader]") : null;
     if (element === null || scroll.current?.contains(element) !== true) return null;
     return Number(element.dataset.rowheader);
   }
@@ -620,22 +632,24 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       follow();
     }, 50);
     const settled = editing.onSelecting;
+    // RN-ABAS-017: o ponteiro é seguido na janela do elemento (a da aba ou a do resultado), e não na da tela que desenha.
+    const view = element.ownerDocument.defaultView ?? window;
     const stop = () => {
       clearInterval(timer);
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", stop);
+      view.removeEventListener("mousemove", move);
+      view.removeEventListener("mouseup", stop);
       if (drag.current === stop) drag.current = null;
       settled(false);
     };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", stop);
+    view.addEventListener("mousemove", move);
+    view.addEventListener("mouseup", stop);
     drag.current = stop;
     settled(true);
   }
 
   /** O nome da coluna do evento (`data-colheader`, RN-GRADE-021), ou nulo fora de um. */
   function columnHeaderOf(target: EventTarget): number | null {
-    const element = target instanceof Element ? target.closest<HTMLElement>("[data-colheader]") : null;
+    const element = isElement(target) ? target.closest<HTMLElement>("[data-colheader]") : null;
     if (element === null || scroll.current?.contains(element) !== true) return null;
     return Number(element.dataset.colheader);
   }
@@ -652,7 +666,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     }
     if (event.button !== 0) return;
     // RN-GRADE-021: o botão de ordenar age no clique dele; o `mousedown` só é cancelado, e o foco fica na grade.
-    if (event.target instanceof Element && event.target.closest("[data-sort]") !== null) return void event.preventDefault();
+    if (isElement(event.target) && event.target.closest("[data-sort]") !== null) return void event.preventDefault();
     heldRow.current = column === null ? null : (editing.active?.row ?? 0);
     if (column !== null) {
       // RN-GRADE-022: o clique no nome escolhe a coluna inteira; Shift estende da coluna da âncora; Ctrl (Cmd no macOS) acrescenta ou tira, e o arraste com
@@ -716,7 +730,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
 
   /** O pé da célula, onde o menu aberto pelo teclado aparece; sem ela na página, o canto da grade. */
   function pointOf(cell: GridCell): { x: number; y: number } {
-    const rect = (document.getElementById(cellIdOf(cell.row, cell.column)) ?? scroll.current)?.getBoundingClientRect();
+    const rect = ((scroll.current?.ownerDocument ?? document).getElementById(cellIdOf(cell.row, cell.column)) ?? scroll.current)?.getBoundingClientRect();
     return rect === undefined ? { x: 0, y: 0 } : { x: rect.left, y: rect.bottom };
   }
 
@@ -745,9 +759,10 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       else editing.onDeleteRow();
       return;
     }
-    // RN-EDIT-015: o Delete sozinho exclui as linhas inteiras escolhidas, e só elas; com um retângulo, colunas inteiras ou só a célula ativa, a tecla não faz nada.
+    // RN-EDIT-015: o Delete sozinho marca na hora para exclusão as linhas das células escolhidas (a ativa, um retângulo, linhas inteiras), como o Alt+Delete;
+    // com colunas inteiras, a tecla não faz nada.
     if (deletesRows(event, platform)) {
-      if (choseWholeRows(editing.selection, editing.layout)) {
+      if (deleteKeyRows(editing.selection, editing.layout).length > 0) {
         event.preventDefault();
         editing.onDeleteRows();
       }
@@ -824,6 +839,8 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   const editorElement =
     editor === null ? null : (
       <CellEditor
+        key={`${editor.row}:${editor.column}`}
+        typed={editor.touched === true}
         label={editCopy.editorLabel(columns[editor.column]?.name ?? "", editor.row < read.length ? editCopy.rowLabel(editor.row + 1) : editCopy.newRowMark)}
         draft={editor.draft}
         hint={editor.hint ?? null}

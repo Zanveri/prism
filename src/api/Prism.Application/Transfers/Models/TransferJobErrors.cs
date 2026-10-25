@@ -1,5 +1,6 @@
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Databases.Clients;
+using Prism.Infrastructure.Databases.Models;
 
 namespace Prism.Application.Transfers.Models;
 
@@ -32,6 +33,16 @@ internal static class TransferJobErrors
     /// <summary>RN-EXPORT-011: o Informix não aceita várias linhas num `INSERT … VALUES`.</summary>
     public static ApiErrorDto InformixRowsPerStatement()
         => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", OptionsInvalidCode, "options.rowsPerStatement", "O Informix não aceita várias linhas num INSERT.");
+
+    /// <summary>
+    /// RN-VAR-032: os `source.params` que não servem ao comando montado, antes do trabalho: os marcadores do texto não batem com os valores (422
+    /// `QUERY_PARAMETERS_MISMATCH`, com `markers` e `values`) ou um valor que o banco da conexão não guarda (o código de opções da rota, `invalidCode`, no campo
+    /// `source.params[i].value`).
+    /// </summary>
+    public static ApiErrorDto From(DatabaseFailure failure, string invalidCode)
+        => failure.Kind == EDatabaseFailure.ParametersMismatch
+            ? ApiErrorDto.CreateUnprocessableEntity("Os marcadores não batem com os valores.", "QUERY_PARAMETERS_MISMATCH", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["markers"] = failure.Markers, ["values"] = failure.Values })
+            : ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", invalidCode, failure.Field ?? "source.params", failure.Message);
 
     /// <summary>RN-EXPORT-002 e 016: o comando recusado pelo texto, antes do trabalho: mais de um comando, o filtro, o que não é leitura.</summary>
     public static ApiErrorDto From(ExportSqlRefusal refusal)

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Engine } from "@/components/ui";
 import { freezeParseBudget } from "@/lib/testing/parse-budget";
+import { withoutCursor } from "@/lib/testing/text";
 
 // A configuração que `filterCompletion` entrega à biblioteca, anotada: é por ela que o teste confere a chave do autocompletar ao digitar (RN-CONFIG-004) e
 // roda a fonte de verdade do campo, e não uma cópia dela.
@@ -35,8 +36,7 @@ const columns: FilterColumn[] = [
 ];
 
 function run(text: string, { engine = 1 as Engine, explicit = false, cols = columns } = {}) {
-  const at = text.indexOf("|");
-  const doc = text.replace("|", "");
+  const { doc, at } = withoutCursor(text);
   const state = EditorState.create({ doc, extensions: [sql({ dialect: engine === 1 ? PostgreSQL : StandardSQL })] });
   return filterCompletionSource(() => cols, () => engine)(new CompletionContext(state, at, explicit)) as CompletionResult | null;
 }

@@ -9,7 +9,7 @@ const hub = readFileSync(new URL("./window-hub.ts", import.meta.url), "utf8");
 
 /** Os canais (`"prism:..."`) que um arquivo passa à chamada dada, como `ipcMain.handle(` ou `ipcRenderer.invoke(`, sem repetir. */
 const channelsOf = (source: string, call: string) => {
-  const pattern = new RegExp(`${call.replace(/[.()]/g, "\\$&")}\\(\\s*"(prism:[a-z-]+)"`, "g");
+  const pattern = new RegExp(`${call.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\(\\s*"(prism:[a-z-]+)"`, "g");
   return [...new Set([...source.matchAll(pattern)].map((match) => match[1]))].sort();
 };
 
@@ -45,7 +45,9 @@ describe("os canais entre a tela e o processo principal", () => {
     const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:(?:windows|session)-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);/g)].map((match) => match[1]);
     const windowChannels = channelsOf(main, "ipcMain.handle").filter((channel) => /^prism:(windows|session)-/.test(channel));
 
-    expect(windowChannels.length).toBe(7);
+    // RN-ABAS-010: o fim do arraste da aba (`prism:windows-drag-end`) é o oitavo.
+    expect(windowChannels).toContain("prism:windows-drag-end");
+    expect(windowChannels.length).toBe(8);
     expect(handlers.sort()).toEqual(windowChannels);
     expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
   });
@@ -86,9 +88,10 @@ describe("os canais entre a tela e o processo principal", () => {
 
     expect(sourceChannels).toEqual(["prism:transfer-source", "prism:transfer-source-release", "prism:transfer-source-status"]);
     for (const channel of sourceChannels) expect(channel).toMatch(/^prism:[a-z-]+$/);
-    // A escolha: o diálogo, o título, os filtros e a pasta são do processo principal; a tela não manda nada.
-    expect(main).toMatch(/ipcMain\.handle\("prism:transfer-source", \(event\) => \{\s*assertFromApp\(event\);\s*return transferSource\.choose\(windowIdOf\(event\.sender\)\);\s*\}\);/);
-    expect(preload).toMatch(/chooseSource: \(\) => ipcRenderer\.invoke\("prism:transfer-source"\)/);
+    // A escolha: o diálogo, o título, os filtros e a pasta são do processo principal; a tela manda no máximo o nome da janela do resultado (RN-ABAS-017), que o
+    // `transferSource` confere com o schema.
+    expect(main).toMatch(/ipcMain\.handle\("prism:transfer-source", \(event, request: unknown\) => \{\s*assertFromApp\(event\);\s*return transferSource\.choose\(windowIdOf\(event\.sender\), request\);\s*\}\);/);
+    expect(preload).toMatch(/chooseSource: \(request\) => ipcRenderer\.invoke\("prism:transfer-source", request\)/);
     // A consulta e o soltar levam só o pedido, que o `transferSource` confere com o schema, e o número da janela que o processo principal sabe.
     for (const channel of ["prism:transfer-source-status", "prism:transfer-source-release"]) {
       expect(main).toMatch(new RegExp(`ipcMain\\.handle\\("${channel}", \\(event, request: unknown\\) => \\{\\s*assertFromApp\\(event\\);\\s*return transferSource\\.[a-zA-Z]+\\(windowIdOf\\(event\\.sender\\), request\\);`));
@@ -97,6 +100,25 @@ describe("os canais entre a tela e o processo principal", () => {
     // A janela que recarrega, cai ou fecha solta os arquivos dela, e a saída e o reinício do serviço soltam todos.
     expect(main.match(/transferSource\.releaseWindow\(id\)/g)).toHaveLength(3);
     expect(main.match(/transferSource\.releaseAll\(\)/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
+  });
+
+  it("a procura e a cópia do DBeaver (RN-DBEAVER-006): dois pedidos, sem dígito no nome, cada um confere a origem e passa ao `dbeaverSource` com o número da janela; nenhum devolve aviso nem leva caminho", () => {
+    const dbeaverChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:dbeaver-"));
+
+    expect(dbeaverChannels).toEqual(["prism:dbeaver-source", "prism:dbeaver-source-release"]);
+    for (const channel of dbeaverChannels) expect(channel).toMatch(/^prism:[a-z-]+$/);
+    // O pedido leva só o objeto que o schema de `dbeaver-messages.ts` confere (o modo, ou o `sourceId`), e o número da janela é o que o processo principal sabe.
+    for (const channel of dbeaverChannels) {
+      expect(main).toMatch(new RegExp(`ipcMain\\.handle\\("${channel}", \\(event, request: unknown\\) => \\{\\s*assertFromApp\\(event\\);\\s*return dbeaverSource\\.[a-zA-Z]+\\(windowIdOf\\(event\\.sender\\), request\\);`));
+      expect(preload).toMatch(new RegExp(`\\(request\\) => ipcRenderer\\.invoke\\("${channel}", request\\)`));
+    }
+    expect(channelsOf(main, "webContents.send").some((channel) => channel.startsWith("prism:dbeaver-"))).toBe(false);
+    // A janela que recarrega, cai ou fecha solta a cópia dela, e a saída e o reinício do serviço soltam todas.
+    expect(main.match(/dbeaverSource\.releaseWindow\(id\)/g)).toHaveLength(3);
+    expect(main.match(/dbeaverSource\.releaseAll\(\)/g)?.length).toBeGreaterThanOrEqual(3);
+    // A procura abre o diálogo de pasta com os ocultos à vista, e nenhum nome da ponte é de caminho.
+    expect(main).toMatch(/properties: \["openDirectory", "showHiddenFiles"\]/);
     expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
   });
 

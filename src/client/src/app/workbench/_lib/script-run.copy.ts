@@ -18,6 +18,8 @@ export const scriptRunCopy = {
     // "3 · SELECT * FROM pedido…": o número do comando no script e o começo do texto. O texto inteiro vai na dica.
     result: (number: number, head: string) => `${number} · ${head}`,
     statistics: "Estatísticas",
+    // RN-VAR-024: o painel das variáveis, antes das Estatísticas.
+    variables: "Variáveis",
   },
 
   // A barra da área de resultado, em qualquer aba e com ela recolhida.
@@ -41,6 +43,9 @@ export const scriptRunCopy = {
     elapsed: (elapsedMs: number) => formatElapsed(elapsedMs),
     sqlState: "SQLSTATE",
     executed: (ok: number, total: number) => `Comandos executados: ${ok.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")}`,
+    // RN-VAR-022: as declarações e as reatribuições têm o total delas, que só aparece no script que as tem.
+    declarationsEvaluated: (ok: number, total: number) => `Declarações avaliadas: ${ok.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")}`,
+    declaration: "declaração",
     withErrors: (count: number) => `Com erro: ${count.toLocaleString("pt-BR")}`,
     // RN-SQL-013: o comando que gravou e devolveu linhas não soma (a API diz quantas ele devolveu, e não quantas alterou), e o total diz quantos ficaram de fora.
     changed: (count: number, returning = 0) =>
@@ -79,7 +84,8 @@ export const scriptRunCopy = {
 
   // Um aviso no fim, e não um por comando (RN-SQL-020), com o nome da aba: o script de uma aba que não está à vista também termina.
   toasts: {
-    done: (tab: string | null, total: number) => `Script executado${inTab(tab)}: ${formatCount(total, "comando", "comandos")}.`,
+    done: (tab: string | null, total: number, declarations = 0) =>
+      `Script executado${inTab(tab)}: ${[...(total === 0 && declarations > 0 ? [] : [formatCount(total, "comando", "comandos")]), ...(declarations === 0 ? [] : [formatCount(declarations, "declaração avaliada", "declarações avaliadas")])].join(" e ")}.`,
     doneWithErrors: (tab: string | null, errors: number, ok: number, total: number) =>
       `Script executado${inTab(tab)} com ${formatCount(errors, "erro", "erros")}: ${ok.toLocaleString("pt-BR")} de ${formatCount(total, "comando executado", "comandos executados")}.`,
     stopped: (tab: string | null, ok: number, total: number) => `Script parado${inTab(tab)}: ${ok.toLocaleString("pt-BR")} de ${formatCount(total, "comando executado", "comandos executados")}.`,

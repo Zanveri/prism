@@ -57,11 +57,16 @@ internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVa
         if (sourceRecord.IsFailure)
             return Result.Failure<TransferStartedDto, ApiErrorDto>(sourceRecord.Error);
 
+        var parameters = QueryParameterRules.Read(source.Params);
         var sql = source.Kind == "table"
             ? ExportSql.Table(source.Schema!, source.Table!, columns.OrderBy(column => column.Position).Select(column => column.Name!))
-            : ExportSql.Query(source.Sql!, source.Filter, sourceRecord.Value.Engine);
+            : ExportSql.Query(source.Sql!, source.Filter, sourceRecord.Value.Engine, parameters.Count > 0);
         if (sql.IsFailure)
             return Result.Failure<TransferStartedDto, ApiErrorDto>(TransferJobErrors.From(sql.Error));
+
+        // RN-VAR-032 e 033: os marcadores do comando montado contra os `source.params`, e o que o banco da origem não guarda.
+        if (QueryParameterRules.Refusal(sql.Value, sourceRecord.Value.Engine, parameters, "source.params") is { } mismatch)
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(TransferJobErrors.From(mismatch, ImportErrors.OptionsInvalidCode));
 
         var targetRecord = await CopyChecks.ConnectionAsync(connectionQueries, driverService, target.ConnectionID, target.Database, source: false, credentials: true, cancellationToken);
         if (targetRecord.IsFailure)
@@ -78,7 +83,7 @@ internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVa
         var targetSettings = TransferConnections.SettingsOf(targetRecord.Value, target.Database);
         var forcedCount = sourceSettings.Engine is EDatabaseEngine.Db2 or EDatabaseEngine.Informix && TablePlaces.SameServer(sourceSettings, targetSettings);
         var (load, _) = ImportRequestRules.Load(request.Load, copy: true);
-        var job = new CopyJob(sourceRecord.Value.ID, sourceSettings, sql.Value, [.. columns.Select(column => new ExportColumnChoice(column.Position, column.Name!))], source.Kind == "query", request.Count, forcedCount, targetRecord.Value.ID, targetSettings, target.Schema!, target.Table!, ImportRequestRules.MappingOf(request.Mapping!), load!, generation, request.WindowID, TransferConnections.StopNow(connectionQueries, targetRecord.Value.ID));
+        var job = new CopyJob(sourceRecord.Value.ID, sourceSettings, sql.Value, [.. columns.Select(column => new ExportColumnChoice(column.Position, column.Name!))], source.Kind == "query", request.Count, forcedCount, targetRecord.Value.ID, targetSettings, target.Schema!, target.Table!, ImportRequestRules.MappingOf(request.Mapping!), load!, generation, request.WindowID, TransferConnections.StopNow(connectionQueries, targetRecord.Value.ID), parameters);
 
         var started = transferService.StartCopy(job);
         if (started.IsFailure)

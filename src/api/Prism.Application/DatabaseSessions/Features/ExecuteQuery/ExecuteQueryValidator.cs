@@ -1,5 +1,6 @@
 using FluentValidation;
 using FluentValidation.Results;
+using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
 using System.Text.Json;
@@ -21,8 +22,16 @@ public sealed class ExecuteQueryValidator : AbstractValidator<ExecuteQueryComman
         // da sessão; sem a sessão, nada aqui, e a execução responde que ela não existe.
         RuleFor(request => request.Filter).Custom((filter, context) =>
         {
-            if (databaseSessionService.FilterRefusal(context.InstanceToValidate.SessionID, filter) is { } refusal)
+            if (databaseSessionService.FilterRefusal(context.InstanceToValidate.SessionID, filter, HasParameters(context.InstanceToValidate.Params)) is { } refusal)
                 context.AddFailure(new ValidationFailure(nameof(ExecuteQueryCommand.Filter), refusal) { ErrorCode = "FILTER_INVALID" });
+        });
+
+        // RN-VAR-032: a forma dos `params`, campo por campo (`params[3].value`, `params[3].type`) ou a lista (`params`): `QUERY_INVALID`, sem nada ir ao banco. Os marcadores
+        // do texto contra os valores, e o que o banco da sessão não guarda, são do registro de sessões (`QUERY_PARAMETERS_MISMATCH`, `QUERY_INVALID` no campo).
+        RuleFor(request => request.Params).Custom((parameters, context) =>
+        {
+            foreach (var (field, message) in QueryParameterRules.Refusals(parameters, "params"))
+                context.AddFailure(new ValidationFailure(field, message) { ErrorCode = "QUERY_INVALID" });
         });
 
         // RN-SQL-024: uma lista de até 20 identificadores de resultado, ou nada (a sessão esquece os guardados). Mais que isso, ou uma entrada que
@@ -30,6 +39,10 @@ public sealed class ExecuteQueryValidator : AbstractValidator<ExecuteQueryComman
         RuleFor(request => request.Keep).Must(BeAbsentOrAList).WithMessage("Informe em keep uma lista de identificadores de resultado (resultID).").WithErrorCode("QUERY_INVALID");
         RuleFor(request => request.Keep).Must(keep => keep is not { ValueKind: JsonValueKind.Array } list || list.GetArrayLength() <= QueryPaging.MaxKeptResults).WithMessage($"Guarde no máximo {QueryPaging.MaxKeptResults} resultados (keep).").WithErrorCode("QUERY_INVALID");
     }
+
+    /// <summary>Os `params` têm ao menos um valor? Só então o filtro não pode ter marcador. A forma errada é recusada pela regra dos próprios `params`.</summary>
+    private static bool HasParameters(JsonElement? parameters)
+        => parameters is { ValueKind: JsonValueKind.Array } list && list.GetArrayLength() > 0;
 
     private static bool BeAbsentOrAnAcceptedPageSize(JsonElement? pageSize)
         => pageSize is null or { ValueKind: JsonValueKind.Null } || (pageSize.Value.ValueKind == JsonValueKind.Number && pageSize.Value.TryGetInt32(out var size) && size is >= QueryPaging.MinPageSize and <= QueryPaging.MaxPageSize);

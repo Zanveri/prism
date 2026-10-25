@@ -1,7 +1,10 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { isHtmlElement, type Host } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
+
+import { HostProvider, useHost, useOnHostGone } from "./host-context";
 
 export type DialogSize = "sm" | "md" | "lg";
 
@@ -77,7 +80,7 @@ const focusable = "button:not([disabled]), [href], input:not([disabled]), textar
  *
  * `ConfirmDialog` é a pergunta de sim ou não, montada sobre este; aqui está o recipiente, com
  * cabeçalho, corpo que rola e rodapé fixo, e tudo o que um diálogo precisa saber fazer. Vai num
- * portal `position: fixed` em `document.body`, como a lista do `Select` e os avisos: dentro da
+ * portal `position: fixed` em `document.body` da página onde abriu (a da janela da aba, ou a da janela do resultado, RN-ABAS-017), como a lista do `Select` e os avisos: dentro da
  * árvore, o `overflow-hidden` de um painel o recortaria.
  *
  * O foco entra no diálogo — num campo com `autoFocus`, se houver, senão no próprio painel —,
@@ -90,17 +93,25 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
   // O foco a devolver é lido na renderização em que o diálogo abre. No efeito seria tarde: um
   // filho com `autoFocus` já o tomou no commit, e fechar devolveria o foco a um campo que acabou
   // de sair da tela.
-  const [opener, setOpener] = useState<{ open: boolean; element: HTMLElement | null }>({ open: false, element: null });
-  if (opener.open !== open) setOpener({ open, element: open && document.activeElement instanceof HTMLElement ? document.activeElement : null });
+  // RN-ABAS-017: a página (a janela da aba ou a do resultado) é a de quando o diálogo abre, e fica a mesma até ele fechar; o foco entra, fica preso e volta nela.
+  const current = useHost();
+  const [opener, setOpener] = useState<{ open: boolean; element: HTMLElement | null; host: Host }>({ open: false, element: null, host: current });
+  if (opener.open !== open) setOpener({ open, element: open && isHtmlElement(current.document.activeElement) ? current.document.activeElement : null, host: open ? current : opener.host });
   const returnFocus = opener.element;
+  const host = open ? opener.host : current;
 
   useEffect(() => {
     if (!open) return;
 
-    if (!panel.current?.contains(document.activeElement)) panel.current?.focus();
+    if (!panel.current?.contains(host.document.activeElement)) panel.current?.focus();
 
     return () => returnFocus?.focus();
-  }, [open, returnFocus]);
+  }, [open, returnFocus, host]);
+
+  // A página da janela do resultado que sai fecha o diálogo, como o Esc faria (RN-ABAS-011); com a ação rodando, ele fica.
+  useOnHostGone(host, open, () => {
+    if (!pending) onClose();
+  });
 
   if (!open) return null;
 
@@ -128,10 +139,10 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
     const first = items[0];
     const last = items[items.length - 1];
 
-    if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) {
+    if (event.shiftKey && (host.document.activeElement === first || host.document.activeElement === panel.current)) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && host.document.activeElement === last) {
       event.preventDefault();
       first.focus();
     }
@@ -140,6 +151,7 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
   const descriptionBlock = description === undefined ? null : <div id={descriptionID} className={cn("text-muted", icon === undefined ? "mt-1.5" : "mt-3")}>{description}</div>;
 
   return createPortal(
+    <HostProvider host={host}>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
       onPointerDown={(event) => {
@@ -182,7 +194,8 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
         {children === undefined || children === null ? null : <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">{children}</div>}
         {footer === undefined ? null : <div className="flex flex-wrap justify-end gap-3 px-6 pb-6">{footer}</div>}
       </div>
-    </div>,
-    document.body,
+    </div>
+    </HostProvider>,
+    host.document.body,
   );
 }

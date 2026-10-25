@@ -25,6 +25,22 @@ public sealed class WorkspaceTests
         Assert.Equal(WorkspaceTab.QueryKind, tab.Kind);
         Assert.Equal((connectionID, "vendas", sql, scriptID, true, false), (tab.ConnectionID, tab.Database, tab.Sql, tab.ScriptID, tab.Dirty, tab.SqlTooLarge));
         Assert.Equal((null, null, null), (tab.Schema, tab.Table, tab.View));
+        Assert.Equal("panel", tab.ResultPlace);
+    }
+
+    [Trait("WorkspaceTab", "CreateQuery")]
+    [Theory(DisplayName = "OK a aba de consulta guarda o lugar do resultado, e sem ele é o painel")]
+    [InlineData("panel", "panel")]
+    [InlineData("tab", "tab")]
+    [InlineData("window", "window")]
+    [InlineData(null, "panel")]
+    public void Query_KeepsTheResultPlace_AndWithoutItIsThePanel(string? place, string expected)
+    {
+        //Act
+        var tab = WorkspaceTab.CreateQuery(null, null, "SELECT 1", null, dirty: false, sqlTooLarge: false, resultPlace: place);
+
+        //Assert
+        Assert.Equal(expected, tab.ResultPlace);
     }
 
     [Trait("WorkspaceTab", "CreateQuery")]
@@ -42,7 +58,7 @@ public sealed class WorkspaceTests
     }
 
     [Trait("WorkspaceTab", "CreateTable")]
-    [Fact(DisplayName = "OK a aba de uma tabela guarda a conexão, o banco, o esquema, a tabela e a vista, e nada de texto")]
+    [Fact(DisplayName = "OK a aba de uma tabela guarda a conexão, o banco, o esquema, a tabela e a vista, e nada de texto nem de lugar do resultado")]
     public void Table_ShouldBeOK()
     {
         //Arrange
@@ -55,6 +71,7 @@ public sealed class WorkspaceTests
         Assert.Equal(WorkspaceTab.TableKind, tab.Kind);
         Assert.Equal((connectionID, null, "loja", "clientes", "structure"), (tab.ConnectionID, tab.Database, tab.Schema, tab.Table, tab.View));
         Assert.Equal((null, null, false, false), (tab.Sql, tab.ScriptID, tab.Dirty, tab.SqlTooLarge));
+        Assert.Null(tab.ResultPlace);
     }
 
     [Trait("Workspace", "Create")]

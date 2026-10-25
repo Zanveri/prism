@@ -83,7 +83,7 @@ internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries,
         var (options, _) = ImportReaderOptionsReader.Read(request.Format!, request.Reader, keys: true);
         var settings = TransferConnections.SettingsOf(record, target.Database);
         var mapping = request.Mapping?.Select(entry => new ImportMappingEntry(entry!.Source, entry.Target!)).ToList();
-        var preview = await importPreviewService.PreviewAsync(new ImportPreviewRequest(fileID, request.Format!, options!, ImportRequestRules.Formats(request.Values), settings, target.Schema!, target.Table!, mapping), cancellationToken);
+        var preview = await importPreviewService.PreviewAsync(new ImportPreviewRequest(fileID, ImportFormats.Canonical(request.Format!), options!, ImportRequestRules.Formats(request.Values), settings, target.Schema!, target.Table!, mapping), cancellationToken);
 
         return preview.IsFailure ? ImportErrors.From(preview.Error) : preview.Value.ToDto();
     }

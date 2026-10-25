@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { readTransfer, serializeTab, type TabSnapshot } from "./tab-transfer";
+import { Random } from "./variables/random";
+import { ScriptRun } from "./variables/run";
+import { readScript } from "./variables/script";
 import type { RowsState, RunnerState } from "./use-query-runner";
 import type { QueryTab } from "./workbench-model";
 
@@ -56,6 +59,21 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(adopted?.selection).toEqual({ anchor: 7, head: 13 });
     expect(adopted?.state).toEqual(rows);
     expect(adopted?.memory).toEqual({ layout: { mode: "maximized", resultPercent: 70 }, grid: { key: "[]", widths: { 0: 120 } } });
+  });
+
+  it("RN-ABAS-016: a aba leva o lugar do resultado (a aba do resultado vai junto); a que não o tem chega sem ele, no painel", () => {
+    for (const resultPlace of ["panel", "tab", "window"] as const) expect(roundTrip(serializeTab(snapshot({ tab: { ...tab, resultPlace } })))?.tab.resultPlace).toBe(resultPlace);
+    expect(roundTrip(serializeTab(snapshot()))?.tab).not.toHaveProperty("resultPlace");
+    // Um lugar que a tela não conhece não é uma aba: a janela não a abre.
+    const transfer = serializeTab(snapshot()) as unknown as { tab: Record<string, unknown> };
+    expect(roundTrip({ ...transfer, tab: { ...transfer.tab, resultPlace: "flutuante" } })).toBeNull();
+  });
+
+  it("RN-ABAS-016: a janela do resultado que não fechou a tempo vai dita na passagem, e a janela que recebe a lê; sem ela, a passagem não diz nada", () => {
+    const transfer = serializeTab(snapshot({ tab: { ...tab, resultPlace: "panel" } }));
+    expect(roundTrip(transfer)?.resultWindowLost).toBe(false);
+    expect(roundTrip({ ...transfer, resultWindowLost: true })?.resultWindowLost).toBe(true);
+    expect(roundTrip({ ...transfer, resultWindowLost: "sim" })).toBeNull();
   });
 
   it("o resultado filtrado leva o filtro com o comando e diz como ele entrou (RN-GRADE-011): Executar de novo na outra janela repete os dois", () => {
@@ -195,5 +213,48 @@ describe("a aba de consulta que salvou a edição vai com a grade salva (RN-EDIT
     const state = roundTrip(serializeTab(snapshot({ state: saved })))?.state as RowsState;
 
     expect(state.sourceRows).toEqual([1, null]);
+  });
+});
+
+describe("o comando com variáveis e os valores da aba passam com ela (RN-VAR-023 e 033)", () => {
+  const sent = {
+    sql: "select * from pedido where id = $1 and ids in ($2, $3)",
+    params: [
+      { type: "number" as const, value: "7", variable: "id", item: null },
+      { type: "number" as const, value: "1", variable: "ids", item: 0 },
+      { type: "number" as const, value: "2", variable: "ids", item: 1 },
+    ],
+    replacements: [
+      { name: "id", kind: "parameter" as const, start: 28, end: 31, sentStart: 28, sentEnd: 30, firstParameter: 0, parameterCount: 1 },
+      { name: "ids", kind: "list" as const, start: 41, end: 45, sentStart: 40, sentEnd: 46, firstParameter: 1, parameterCount: 2 },
+    ],
+  };
+  const bound: RowsState = { ...rows, target: { sql: "select * from pedido where id = @id and ids in (@ids)", offset: 10, engine: 1, sent } };
+
+  it("o texto do editor, o enviado, os parâmetros e o mapa das posições chegam inteiros", () => {
+    const state = roundTrip(serializeTab(snapshot({ state: bound })))?.state as RowsState;
+    expect(state.target).toEqual(bound.target);
+  });
+
+  it("um parâmetro com uma terceira chave estranha não atravessa: o schema não o aceita calado", () => {
+    const transfer = JSON.parse(JSON.stringify(serializeTab(snapshot({ state: bound })))) as { result: { target: { sent: { params: object[] } } } };
+    transfer.result.target.sent.params[0] = { type: "bitcoin", value: "7", variable: "id", item: null };
+    expect(readTransfer(transfer)).toBeNull();
+  });
+
+  it("os valores da aba vão e voltam, com o contador de avaliações", () => {
+    const model = readScript("let x = 5\nconst nome = 'Ana'\nlet ids = [1, 2]", undefined, { blankLines: true });
+    const run = new ScriptRun(model, { random: new Random([1, 2, 3, 4]), clock: () => 0, now: () => 1 });
+    for (const item of model.items) run.evaluate(item.index);
+    const values = { values: run.tab, counter: run.counter };
+
+    const adopted = roundTrip(serializeTab(snapshot({ values })));
+    expect(adopted?.values.counter).toBe(3);
+    expect([...(adopted?.values.values.keys() ?? [])].sort()).toEqual(["ids", "nome", "x"]);
+    expect(adopted?.values.values.get("nome")?.value).toEqual(run.tab.get("nome")?.value);
+  });
+
+  it("a aba sem valores chega sem valores", () => {
+    expect(roundTrip(serializeTab(snapshot()))?.values.values.size).toBe(0);
   });
 });

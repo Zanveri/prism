@@ -17,16 +17,18 @@ import { navigatorMetrics, rowIndent } from "../_lib/navigator-density";
 import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { appearanceChanged, normalizeScriptName, refusalProblem, savedPlaceOfTab, scriptFolderMenu, scriptIconOf, scriptMenu, scriptNameProblem, scriptPlace, type ScriptAction, type ScriptAppearance, type ScriptFolderAction } from "../_lib/saved-scripts";
 import { scriptFoldersQuery } from "../_lib/script-folders.service";
-import { ancestorKeys, buildScriptTree, scriptKey, scriptTreeMove, scriptTreeRowKey, visibleScriptRows, type ScriptTreeRow } from "../_lib/script-tree";
+import { ancestorKeys, buildScriptTree, scriptKey, scriptTreeLabels, scriptTreeMove, scriptTreeRowKey, visibleScriptRows, type ScriptTreeRow } from "../_lib/script-tree";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import type { Script, ScriptFolder, ScriptSummary } from "../_lib/scripts.schema";
 import { changeScriptPlace, deleteScript, editScriptOrRefuse, getScript, renameScriptOrRefuse, scriptsQuery } from "../_lib/scripts.service";
 import { connectionChecks } from "../_lib/use-connection-checks";
 import { useScriptsCollapsed } from "../_lib/use-navigator-layout";
+import { useTypeAhead, type TypeAhead } from "../_lib/use-type-ahead";
 import { connectedConnectionIds } from "../_lib/workbench-model";
 import { useWorkbench } from "../_lib/workbench-state";
 import { EditScriptDialog, ScriptNameDialog } from "./script-dialogs";
 import { ScriptIconView } from "./script-icon";
+import { TypeAheadIndicator } from "./type-ahead-indicator";
 import { useScriptFolderActions } from "./use-script-folder-actions";
 
 const copy = scriptsCopy;
@@ -54,16 +56,19 @@ type ScriptsTreeViewProps = {
   onRequest: (row: ScriptTreeRow, request: ScriptRowRequest) => void;
   onMenu: (row: ScriptTreeRow, point: { x: number; y: number }, initialFocus: "first" | "menu") => void;
   onRetry: () => void;
+  /** RN-ARVORE-009: o texto digitado para ir a uma linha pelo nome e o indicador dele (`useTypeAhead`, da seção). Sem ele, a árvore não responde às letras. */
+  typeAhead?: TypeAhead;
 };
 
 /**
  * A árvore da seção "Scripts" (RN-SCRIPT-008): as pastas de scripts e os scripts, com o papel de árvore e o nome "Scripts salvos", cada linha com o nível
  * dela, e a pasta que tem alguma coisa dentro dizendo se está aberta (a vazia não tem a seta). Só desenha: em cada nível as subpastas e depois os scripts, por
  * nome (`buildScriptTree`); uma linha só no Tab, a escolhida, ou a primeira; as setas, Home e End andam e abrem e fecham (`scriptTreeMove`); Enter e o duplo
- * clique abrem e fecham a pasta e abrem o script, F2 renomeia, Delete exclui, Shift+F10 e a tecla de menu abrem o menu. A pasta tem o ícone neutro; o
+ * clique abrem e fecham a pasta e abrem o script, F2 renomeia, Delete exclui, Shift+F10 e a tecla de menu abrem o menu; digitar as primeiras letras de um nome
+ * leva a escolha e o foco à linha à vista que começa por elas (RN-ARVORE-009, `typeAhead`). A pasta tem o ícone neutro; o
  * script, o ícone e a cor dele (RN-SCRIPT-006) e a marca discreta do genérico (RN-SCRIPT-005). A densidade (RN-NAV-011) dá a altura e o recuo.
  */
-export function ScriptsTreeView({ rows, density = "comfortable", failed, selectedKey, onSelect, onToggle, onRequest, onMenu, onRetry }: ScriptsTreeViewProps) {
+export function ScriptsTreeView({ rows, density = "comfortable", failed, selectedKey, onSelect, onToggle, onRequest, onMenu, onRetry, typeAhead }: ScriptsTreeViewProps) {
   if (failed)
     return (
       <div className="flex flex-col items-start gap-2 px-3 py-2 text-sm text-muted">
@@ -80,6 +85,15 @@ export function ScriptsTreeView({ rows, density = "comfortable", failed, selecte
   const tabbable = rows.some((row) => row.node.key === selectedKey) ? selectedKey : rows[0].node.key;
 
   function handleKeyDown(event: KeyboardEvent<HTMLLIElement>, row: ScriptTreeRow, index: number) {
+    const jump = typeAhead?.press(event, () => scriptTreeLabels(rows!), index) ?? null;
+    if (jump !== null) {
+      // Sem linha que comece pelo texto, o foco fica onde está (o indicador diz). O foco rola a seção até a linha.
+      if (jump.target === null) return;
+      onSelect(rows![jump.target].node.key);
+      (event.currentTarget.parentElement?.children[jump.target] as HTMLElement | undefined)?.focus();
+      return;
+    }
+
     const move = scriptTreeMove(event.key, rows!, index);
     if (move !== null) {
       event.preventDefault();
@@ -98,62 +112,70 @@ export function ScriptsTreeView({ rows, density = "comfortable", failed, selecte
   }
 
   return (
-    <ul id={treeId} role="tree" aria-label={copy.section.list} className="flex flex-col pb-2">
-      {rows.map((row, index) => {
-        const { node, expanded } = row;
-        const isFolder = node.kind === "folder";
-        const name = isFolder ? node.folder.name : node.script.name;
-        const generic = !isFolder && node.script.connectionID === null;
+    <>
+      <ul id={treeId} role="tree" aria-label={copy.section.list} className="flex flex-col pb-2">
+        {rows.map((row, index) => {
+          const { node, expanded } = row;
+          const isFolder = node.kind === "folder";
+          const name = isFolder ? node.folder.name : node.script.name;
+          const generic = !isFolder && node.script.connectionID === null;
 
-        return (
-          <li
-            key={node.key}
-            id={scriptRowDomId(node.key)}
-            role="treeitem"
-            aria-level={node.depth + 1}
-            aria-expanded={expanded ?? undefined}
-            aria-selected={node.key === selectedKey}
-            tabIndex={node.key === tabbable ? 0 : -1}
-            title={isFolder ? copy.section.folderHint(name) : generic ? copy.section.rowHintGeneric(name) : copy.section.rowHint(name)}
-            onClick={() => onSelect(node.key)}
-            onDoubleClick={() => onRequest(row, "enter")}
-            onKeyDown={(event) => handleKeyDown(event, row, index)}
-            onContextMenu={(event: MouseEvent<HTMLLIElement>) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onSelect(node.key);
-              onMenu(row, { x: event.clientX, y: event.clientY }, "menu");
-            }}
-            style={{ paddingLeft: rowIndent(metrics, node.depth) }}
-            className={cn(
-              "mx-1.5 flex cursor-pointer items-center gap-1.5 rounded-md pr-2 text-sm outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent",
-              metrics.rowClass,
-              node.key === selectedKey ? "bg-selected text-ink" : "text-body hover:bg-selected/60 hover:text-ink",
-            )}
-          >
-            {expanded === null ? (
-              <span aria-hidden className="size-4 flex-none" />
-            ) : (
-              <span
-                aria-hidden
-                data-chevron
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelect(node.key);
-                  onToggle(node.key);
-                }}
-                className="-m-1 flex-none p-1"
-              >
-                <ChevronIcon className={cn("text-subtle transition-transform", !expanded && "-rotate-90")} />
-              </span>
-            )}
-            {isFolder ? <FolderIcon className="flex-none text-muted" /> : <ScriptIconView icon={scriptIconOf(node.script)} color={node.script.color} className="flex-none text-subtle" />}
-            <span className="min-w-0 truncate">{name}</span>
-            {generic ? <span className="ml-auto flex-none text-xs text-subtle">{copy.section.generic}</span> : null}
-          </li>
-        );
-      })}
-    </ul>
+          return (
+            <li
+              key={node.key}
+              id={scriptRowDomId(node.key)}
+              role="treeitem"
+              aria-level={node.depth + 1}
+              aria-expanded={expanded ?? undefined}
+              aria-selected={node.key === selectedKey}
+              tabIndex={node.key === tabbable ? 0 : -1}
+              title={isFolder ? copy.section.folderHint(name) : generic ? copy.section.rowHintGeneric(name) : copy.section.rowHint(name)}
+              onClick={() => onSelect(node.key)}
+              onDoubleClick={() => onRequest(row, "enter")}
+              onKeyDown={(event) => handleKeyDown(event, row, index)}
+              onContextMenu={(event: MouseEvent<HTMLLIElement>) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSelect(node.key);
+                onMenu(row, { x: event.clientX, y: event.clientY }, "menu");
+              }}
+              style={{ paddingLeft: rowIndent(metrics, node.depth) }}
+              className={cn(
+                "mx-1.5 flex cursor-pointer items-center gap-1.5 rounded-md pr-2 text-sm outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent",
+                metrics.rowClass,
+                node.key === selectedKey ? "bg-selected text-ink" : "text-body hover:bg-selected/60 hover:text-ink",
+              )}
+            >
+              {expanded === null ? (
+                <span aria-hidden className="size-4 flex-none" />
+              ) : (
+                <span
+                  aria-hidden
+                  data-chevron
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelect(node.key);
+                    onToggle(node.key);
+                  }}
+                  className="-m-1 flex-none p-1"
+                >
+                  <ChevronIcon className={cn("text-subtle transition-transform", !expanded && "-rotate-90")} />
+                </span>
+              )}
+              {isFolder ? <FolderIcon className="flex-none text-muted" /> : <ScriptIconView icon={scriptIconOf(node.script)} color={node.script.color} className="flex-none text-subtle" />}
+              <span className="min-w-0 truncate">{name}</span>
+              {generic ? <span className="ml-auto flex-none text-xs text-subtle">{copy.section.generic}</span> : null}
+            </li>
+          );
+        })}
+      </ul>
+      {/* No pé da seção, sobre as linhas: grudado na borda de baixo de quem rola, sem altura, para o indicador não empurrar nada. */}
+      {typeAhead === undefined ? null : (
+        <div className="sticky bottom-0 h-0">
+          <TypeAheadIndicator shown={typeAhead.shown} />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -197,6 +219,7 @@ export function ScriptsSection() {
   const tree = useMemo(() => buildScriptTree(folderList, scriptList), [folderList, scriptList]);
   const loaded = scripts.data !== undefined && folders.data !== undefined;
   const rows = useMemo(() => (loaded ? visibleScriptRows(tree, closedFolders) : undefined), [loaded, tree, closedFolders]);
+  const typeAhead = useTypeAhead();
 
   // Depois de cada renderização: a linha esperada que já está na página ganha o foco, uma vez.
   useEffect(() => {
@@ -462,6 +485,7 @@ export function ScriptsSection() {
           onToggle={toggle}
           onRequest={request}
           onMenu={openMenu}
+          typeAhead={typeAhead}
           onRetry={() => {
             void scripts.refetch();
             void folders.refetch();

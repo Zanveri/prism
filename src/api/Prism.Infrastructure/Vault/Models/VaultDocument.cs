@@ -7,5 +7,8 @@ namespace Prism.Infrastructure.Vault.Models;
 /// (RN-SCRIPT-011), no formato 4: um cofre de formato anterior não os tem, e ganha as listas vazias e a área de
 /// trabalho vazia ao ser migrado (RN-VERSAO-005, `VaultMigration`). As pastas de scripts vêm no fim, para as
 /// construções de antes só ganharem a lista nova.
+///
+/// O que o cofre guarda da importação do DBeaver (`Dbeaver`, RN-DBEAVER-018: o convite e a última importação) veio depois, no fim e sem subir o formato: nulo
+/// até acontecer algo, e uma versão anterior do Prism o ignora.
 /// </summary>
-public sealed record VaultDocument(string UserName, IReadOnlyList<VaultFolderRecord> Folders, IReadOnlyList<VaultConnectionRecord> Connections, IReadOnlyList<VaultScriptRecord> Scripts, VaultWorkspaceRecord Workspace, IReadOnlyList<VaultScriptFolderRecord> ScriptFolders);
+public sealed record VaultDocument(string UserName, IReadOnlyList<VaultFolderRecord> Folders, IReadOnlyList<VaultConnectionRecord> Connections, IReadOnlyList<VaultScriptRecord> Scripts, VaultWorkspaceRecord Workspace, IReadOnlyList<VaultScriptFolderRecord> ScriptFolders, VaultDbeaverRecord? Dbeaver = null);

@@ -3,8 +3,6 @@ import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult 
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { DeleteConnectionDialog } from "@/app/connections/_components/delete-connection-dialog";
-import { ExportConnectionsDialog } from "@/app/connections/_components/export-connections-dialog";
-import { ImportConnectionsDialog } from "@/app/connections/_components/import-connections-dialog";
 import { MoveConnectionDialog } from "@/app/connections/_components/move-connection-dialog";
 import { RenameConnectionDialog } from "@/app/connections/_components/rename-connection-dialog";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
@@ -12,14 +10,14 @@ import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
-import type { ExportOrigin } from "@/app/connections/_lib/export-model";
+import { dbeaverCopy } from "@/app/connections/_lib/dbeaver.copy";
 import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { userEnvironments } from "@/app/connections/_lib/user-environments";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DownloadIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, UploadIcon, useToast, type ContextMenuItem } from "@/components/ui";
+import { dbeaverAvailable } from "@/lib/api/bridge";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
-import { vaultLock } from "@/lib/api/vault-lock";
 
 import { notConnectedIds, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
@@ -28,18 +26,21 @@ import { openExportWizard } from "../_lib/data-export/data-exports";
 import { openImportWizard } from "../_lib/data-import/data-imports";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
-import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { filterConnected } from "../_lib/navigator-connected";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
-import { importArrived, importRevealOf, revealOf, type ImportedItems } from "../_lib/navigator-reveal";
+import { importArrived, importRevealOf, revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
+import { invalidateStructure } from "../_lib/table-structure.service";
 import { refreshKey } from "../_lib/grid-editing";
+import { importedReveal, type TransferRequest } from "../_lib/transfer-requests";
 import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useConnectionChecksSnapshot } from "../_lib/use-connection-checks";
+import { useTypeAhead } from "../_lib/use-type-ahead";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { connectedConnectionIds, isConnected } from "../_lib/workbench-model";
 import { useWorkbench } from "../_lib/workbench-state";
@@ -50,6 +51,7 @@ import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs"
 import { NavigatorConnectedFilter, NavigatorFilteredEmpty } from "./navigator-connected-filter";
 import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
 import { NavigatorSearchField } from "./navigator-search-field";
+import { TypeAheadIndicator } from "./type-ahead-indicator";
 import { NavigatorRow, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
 
@@ -130,17 +132,13 @@ type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connec
 /** O diálogo de cada ação de conexão do menu que tem diálogo. */
 const connectionActionTypes = { renameConnection: "rename", moveConnection: "move", deleteConnection: "delete" } as const;
 
-/**
- * O "Exportar conexões" ou o "Importar conexões" aberto (RN-TRANSF-001), um de cada por janela, com a época do bloqueio em que abriu: o bloqueio, o "Sair" e
- * o quinto erro de senha os fecham, e o que estava neles (as marcas, as senhas digitadas, o arquivo lido, a prévia) não sobrevive.
- */
-type TransferDialog = { type: "export"; origin: ExportOrigin; epoch: number } | { type: "import"; targetFolderID: string | null; epoch: number };
-
 type NavigatorProps = {
   /** "Nova conexão" (RN-NAV-002 e 003): na pasta dada, ou na raiz (`null`). */
   onNewConnection: (folderID: string | null) => void;
   /** "Editar conexão" (RN-MENU-001): o diálogo de edição, ali mesmo. */
   onEditConnection: (connectionId: string) => void;
+  /** O "Exportar conexões", o "Importar conexões" e o "Importar do DBeaver" (RN-TRANSF-001, RN-DBEAVER-003): os diálogos são da página da área de trabalho. */
+  onTransfer: (request: TransferRequest) => void;
   onRevealed?: () => void;
   /** O botão de esconder da barra de ações (RN-NAV-008): quem esconde é a página, que também cuida do foco. */
   onHide: () => void;
@@ -174,7 +172,7 @@ function folderIdOf(node: NavNode): string | null {
  * estava escondido. O formulário é um diálogo sobre a área de trabalho (RN-NAV-004), e quem o abre é a página: o navegador só pede
  * (`onNewConnection`, na pasta onde a conexão nasce; `onEditConnection`).
  */
-export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHide, hideShortcut }: NavigatorProps) {
+export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRevealed, onHide, hideShortcut }: NavigatorProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const folders = useQuery(foldersQuery);
@@ -187,12 +185,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null);
   const [connectionAction, setConnectionAction] = useState<ConnectionAction | null>(null);
-  // RN-TRANSF-001: o diálogo de exportar ou de importar, que some quando o cofre fecha (a época do bloqueio mudou), com o que tinha.
-  const lockEpoch = useSyncExternalStore(vaultLock.subscribe, vaultLock.epoch, vaultLock.epoch);
-  const [transfer, setTransfer] = useState<TransferDialog | null>(null);
-  if (transfer !== null && transfer.epoch !== lockEpoch) setTransfer(null);
-  // RN-TRANSF-014: o que a importação acabou de criar, à espera de as listas o trazerem para a árvore mostrá-lo.
-  const [imported, setImported] = useState<ImportedItems | null>(null);
+  // RN-TRANSF-014 e RN-DBEAVER-014: o que a importação acabou de criar (o diálogo é da página, e o pedido vem por `importedReveal`), à espera de as listas o
+  // trazerem para a árvore mostrá-lo. `handledImport` é o pedido que a árvore já atendeu.
+  const importedRequest = useSyncExternalStore(importedReveal.subscribe, importedReveal.pending, importedReveal.pending);
+  const [handledImport, setHandledImport] = useState(0);
   // A linha a trazer à vista e a receber o foco (a conexão salva ou duplicada, RN-NAV-004; a primeira importada, RN-TRANSF-014), uma vez por pedido.
   const [rowFocus, setRowFocus] = useState<{ key: string; seq: number } | null>(null);
   const focusRow = (key: string) => setRowFocus((current) => ({ key, seq: (current?.seq ?? 0) + 1 }));
@@ -316,9 +312,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   // RN-TRANSF-014: depois da importação, com as listas já trazendo o que entrou, as pastas até ele abrem e a primeira linha importada, na ordem da árvore, é
   // escolhida e recebe o foco. Os filtros ficam como estavam: se um deles a esconde, o foco vai à pasta de destino, ou, quando o destino é a raiz ou também
   // está escondido, à primeira linha à vista. Ajuste durante a renderização, uma vez, como o da conexão salva.
-  if (imported !== null && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(imported, folders.data, connections.data)) {
-    const plan = importRevealOf(imported, folders.data, connections.data);
-    setImported(null);
+  if (importedRequest !== null && importedRequest.seq !== handledImport && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(importedRequest.value, folders.data, connections.data)) {
+    const plan = importRevealOf(importedRequest.value, folders.data, connections.data);
+    setHandledImport(importedRequest.seq);
     setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     const shownKeys = new Set([...shown.folders.map((folder) => navKey({ type: "folder", id: folder.id })), ...shown.connections.map((connection) => navKey({ type: "connection", connectionId: connection.id }))]);
     const onView = (key: string | null): key is string => key !== null && shownKeys.has(key) && (search === null || search.rows.some((row) => row.key === key));
@@ -335,6 +331,15 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       setNodeOpen(navKey({ type: "database", connectionId }), false);
     }
   }, [lackingKey, setNodeOpen]);
+
+  // RN-DBEAVER-014: com o navegador escondido (RN-NAV-008), a importação o mostra antes de levar o foco à linha; o pedido sai quando a árvore o atendeu.
+  const announcedImport = useRef(0);
+  useEffect(() => {
+    if (handledImport === 0 || announcedImport.current === handledImport) return;
+    announcedImport.current = handledImport;
+    importedReveal.take(handledImport);
+    onRevealed?.();
+  }, [handledImport, onRevealed]);
 
   const announcedReveal = useRef(0);
   useEffect(() => {
@@ -421,6 +426,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     const lost = lostSessionsUnder(prefixes);
     for (const database of lost) void reopen(path.connectionId, database);
     for (const queryKey of prefixes) void queryClient.invalidateQueries({ queryKey, predicate: (query) => !lost.has(databaseOfKey(query.queryKey)) });
+    // As colunas e as chaves que o autocompletar buscou sozinho estão na família da Estrutura (RN-CONFIG-004): ninguém as mostra, então só a invalidação as faz velhas.
+    invalidateStructure(queryClient, path, lost);
   }
 
   /** Na tela filtrada, abrir e fechar é só do que se vê: recolher um ancestral não mexe nos nós abertos da árvore (`expanded`). */
@@ -456,7 +463,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     const connectionId = node.kind === "connection" ? ownerConnectionId(node) : null;
     // RN-IMPORT-001: na tabela, a conexão dela somente leitura desabilita o "Importar dados…".
     const owner = node.kind === "table" ? ownerConnectionId(node) : null;
-    return { status: (connectionId === null ? undefined : statuses.get(connectionId)) ?? "disconnected", busy: connectionId !== null && disconnecting === connectionId, readOnly: owner !== null && readOnlyHints.has(owner) } as const;
+    return { status: (connectionId === null ? undefined : statuses.get(connectionId)) ?? "disconnected", busy: connectionId !== null && disconnecting === connectionId, readOnly: owner !== null && readOnlyHints.has(owner), dbeaverAvailable: dbeaverAvailable() } as const;
   }
 
   /**
@@ -473,7 +480,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   }
 
   /** Os itens do menu: os da linha, ou os do espaço vazio do navegador (`null`), que sem nada no cofre não tem o que exportar (RN-TRANSF-001). */
-  const menuGroupsOf = (node: NavNode | null) => (node === null ? backgroundMenu((folders.data ?? []).length + connectionList.length > 0) : menuFor(node, menuStateOf(node)));
+  const menuGroupsOf = (node: NavNode | null) => (node === null ? backgroundMenu((folders.data ?? []).length + connectionList.length > 0, dbeaverAvailable()) : menuFor(node, menuStateOf(node)));
 
   /** Abre o menu da linha (RN-MENU-001), ou o do espaço vazio (`null`); a linha sem itens (Carregando…, erro) não tem menu. */
   function openMenu(node: NavNode | null, point: OpenMenu["point"], initialFocus: OpenMenu["initialFocus"]): boolean {
@@ -498,8 +505,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     if (node === null) {
       if (action.type === "newConnection") onNewConnection(null);
       else if (action.type === "newFolder") setFolderAction({ type: "create", parentID: null });
-      else if (action.type === "exportConnections") setTransfer({ type: "export", origin: { type: "all" }, epoch: lockEpoch });
-      else if (action.type === "importConnections") setTransfer({ type: "import", targetFolderID: null, epoch: lockEpoch });
+      else if (action.type === "exportConnections") onTransfer({ type: "export", origin: { type: "all" } });
+      else if (action.type === "importConnections") onTransfer({ type: "import", targetFolderID: null });
+      else if (action.type === "importDbeaver") onTransfer({ type: "dbeaver", targetFolderID: null, start: { type: "find" } });
       return;
     }
 
@@ -559,13 +567,19 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       // RN-TRANSF-001: exportar a conexão (só ela marcada) ou a pasta (ela e tudo o que está dentro), e importar na pasta.
       case "exportConnections": {
         const folderId = folderIdOf(node);
-        if (connectionId !== null && node.kind === "connection") setTransfer({ type: "export", origin: { type: "connection", id: connectionId }, epoch: lockEpoch });
-        else if (folderId !== null) setTransfer({ type: "export", origin: { type: "folder", id: folderId }, epoch: lockEpoch });
+        if (connectionId !== null && node.kind === "connection") onTransfer({ type: "export", origin: { type: "connection", id: connectionId } });
+        else if (folderId !== null) onTransfer({ type: "export", origin: { type: "folder", id: folderId } });
         return;
       }
       case "importConnections": {
         const folderId = folderIdOf(node);
-        if (folderId !== null) setTransfer({ type: "import", targetFolderID: folderId, epoch: lockEpoch });
+        if (folderId !== null) onTransfer({ type: "import", targetFolderID: folderId });
+        return;
+      }
+      // RN-DBEAVER-003: "Importar do DBeaver aqui…", com a pasta da linha já escolhida em "Onde colocar".
+      case "importDbeaver": {
+        const folderId = folderIdOf(node);
+        if (folderId !== null) onTransfer({ type: "dbeaver", targetFolderID: folderId, start: { type: "find" } });
         return;
       }
       case "newConnection":
@@ -685,6 +699,12 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
         <div className="flex flex-col gap-1 px-3 py-2">
           <p className="font-semibold text-ink">{copy.empty.title}</p>
           <p className="text-muted">{navigatorCopy.empty.hint}</p>
+          {/* RN-DBEAVER-003: o estado vazio do navegador também tem "Importar do DBeaver…" (fora do app, desabilitado, com o motivo). */}
+          <div>
+            <Button type="button" variant="secondary" size="sm" onClick={() => onTransfer({ type: "dbeaver", targetFolderID: null, start: { type: "find" } })} disabled={!dbeaverAvailable()} title={dbeaverAvailable() ? undefined : dbeaverCopy.outside}>
+              {dbeaverCopy.empty.importDbeaver}
+            </Button>
+          </div>
         </div>
       );
     }
@@ -775,16 +795,6 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       {failure?.kind === "failed" && failureConnection !== undefined ? <CheckFailureDialog connection={failureConnection.name} state={failure} onClose={() => setCheckFailure(null)} /> : null}
       {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} />}
       {connectionAction?.type === "rename" ? <RenameConnectionDialog connection={connectionAction.connection} onClose={() => setConnectionAction(null)} /> : null}
-      {transfer?.type === "export" ? <ExportConnectionsDialog origin={transfer.origin} onClose={() => setTransfer(null)} /> : null}
-      {transfer?.type === "import" ? (
-        <ImportConnectionsDialog
-          targetFolderID={transfer.targetFolderID}
-          onImported={(result, targetFolderID) => {
-            if (result.folderIDs.length + result.connectionIDs.length > 0) setImported({ folderIDs: result.folderIDs, connectionIDs: result.connectionIDs, targetFolderID });
-          }}
-          onClose={() => setTransfer(null)}
-        />
-      ) : null}
       {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} /> : null}
       {connectionAction?.type === "delete" ? (
         <DeleteConnectionDialog
@@ -840,10 +850,11 @@ type NavigatorListProps = {
 /**
  * A lista virtualizada (RN-ARVORE: milhares de tabelas): só as linhas à vista existem no DOM. Fica
  * num componente à parte para a rolagem, que re-renderiza quem usa o virtualizador, não refaça a
- * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
- * entra na ordem do Tab.
+ * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; digitar as primeiras letras de um
+ * nome leva a escolha e o foco ao item visível que começa por elas (RN-ARVORE-009); só uma linha entra na ordem do Tab. Exportada para o teste do teclado, que
+ * a monta com os ganchos simulados.
  */
-function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, checks, onCheckFailure, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+export function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, checks, onCheckFailure, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -910,19 +921,53 @@ function NavigatorList({ rows, density, open, connectionById, environments, fold
     scrollRef.current?.querySelector<HTMLElement>(`[data-index="${target}"] [data-row-toggle]`)?.focus();
   }
 
-  /** Põe o foco na linha pedida, rolando até ela antes quando ela está fora das desenhadas. */
+  /**
+   * Põe o foco na linha pedida, rolando até ela antes quando ela está fora das desenhadas: a lista só a desenha depois da rolagem, e a distância (o type-ahead
+   * salta para qualquer ponto da árvore) pode pedir mais de um quadro, então a cada quadro se pede a rolagem de novo e se tenta, até a linha existir.
+   * Nesse meio-tempo a linha que tinha o foco sai da janela e deixa de existir, e o foco cairia no `body`, que perderia a tecla seguinte: por isso o foco
+   * espera na própria árvore (`pendingFocus` guarda o destino, e o `onKeyDown` dela segue o type-ahead a partir dele).
+   */
+  const focusFrame = useRef(0);
+  const pendingFocus = useRef<number | null>(null);
+  useEffect(() => () => cancelAnimationFrame(focusFrame.current), []);
   function focusRow(target: number | null) {
     if (target === null) return;
-    const focus = () => scrollRef.current?.querySelector<HTMLElement>(`[data-index="${target}"] [data-row-toggle]`)?.focus();
-    if (scrollRef.current?.querySelector(`[data-index="${target}"]`)) focus();
-    else {
+    cancelAnimationFrame(focusFrame.current);
+    let frames = 0;
+    const attempt = () => {
+      const row = scrollRef.current?.querySelector<HTMLElement>(`[data-index="${target}"] [data-row-toggle]`);
+      if (row !== null && row !== undefined) {
+        pendingFocus.current = null;
+        row.focus();
+        return;
+      }
+
+      if (frames === 0) {
+        pendingFocus.current = target;
+        scrollRef.current?.focus({ preventScroll: true });
+      }
       virtualizer.scrollToIndex(target, { align: "auto" });
-      requestAnimationFrame(focus);
-    }
+      if (++frames < 30) focusFrame.current = requestAnimationFrame(attempt);
+      else pendingFocus.current = null;
+    };
+    attempt();
+  }
+
+  // RN-ARVORE-009: digitar as primeiras letras de um nome leva a escolha e o foco ao item visível que começa por elas.
+  const typeAhead = useTypeAhead();
+
+  // Sem item que comece pelo texto, o foco fica onde está (o indicador diz). A seleção vai junto com o foco, como na seta, e a linha ainda pode não
+  // estar desenhada: o foco dela só chega depois da rolagem.
+  function goTo(jump: { target: number | null }) {
+    if (jump.target === null) return;
+    onSelect(rows[jump.target].key);
+    focusRow(jump.target);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>, node: NavNode, index: number) {
-    if (event.key === "ArrowDown") move(event, index, 1);
+    const jump = typeAhead.press(event, () => typeAheadLabels(rows), index);
+    if (jump !== null) goTo(jump);
+    else if (event.key === "ArrowDown") move(event, index, 1);
     else if (event.key === "ArrowUp") move(event, index, -1);
     else if (event.key === "Enter" && tableTargetOf(node) !== null) {
       // Enter numa tabela ou visão abre a aba dela (RN-TABELA-001); sem o preventDefault o botão da linha ainda alternaria o nó.
@@ -953,74 +998,84 @@ function NavigatorList({ rows, density, open, connectionById, environments, fold
   }
 
   return (
-    <div
-      ref={scrollRef}
-      role="tree"
-      aria-label={copy.tree}
-      // O espaço vazio da árvore recebe o foco do clique (o botão direito nele abre o menu do navegador, e o foco volta para cá quando ele fecha), sem
-      // entrar no Tab: as linhas são a parada de tabulação. Com o foco aqui, Shift+F10 e a tecla de menu abrem o mesmo menu (RN-MENU-001).
-      tabIndex={-1}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
-        event.preventDefault();
-        const { left, top } = event.currentTarget.getBoundingClientRect();
-        onContextMenu(null, { x: left + 28, y: top + 8 }, "first");
-      }}
-      onScroll={(event) => {
-        treeScroll.current = rememberedTreeScroll(treeScroll.current, { scrollTop: event.currentTarget.scrollTop, clientHeight: event.currentTarget.clientHeight, searching });
-      }}
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 outline-none"
-    >
-      <div role="presentation" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-        {items.map((item) => {
-          const node = rows[item.index];
-          // Só a linha da conexão recebe a conexão salva (a etiqueta do banco, o ambiente e as ações); as outras linhas têm dono, mas não a recebem.
-          const connectionId = node.kind === "connection" ? ownerConnectionId(node) : null;
-          const connection = connectionId === null ? undefined : connectionById.get(connectionId);
-          const folderId = node.kind === "folder" ? folderIdOf(node) : null;
-          const environment = folderId !== null ? environments.folder(folderId) : connection ? environments.connection(connection) : null;
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scrollRef}
+        role="tree"
+        aria-label={copy.tree}
+        // O espaço vazio da árvore recebe o foco do clique (o botão direito nele abre o menu do navegador, e o foco volta para cá quando ele fecha), sem
+        // entrar no Tab: as linhas são a parada de tabulação. Com o foco aqui, Shift+F10 e a tecla de menu abrem o mesmo menu (RN-MENU-001).
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          // O foco espera aqui a linha de um salto longo ser desenhada (`focusRow`): a tecla desse intervalo segue o type-ahead a partir do destino.
+          const jump = pendingFocus.current === null ? null : typeAhead.press(event, () => typeAheadLabels(rows), pendingFocus.current);
+          if (jump !== null) {
+            goTo(jump);
+            return;
+          }
+          if (!(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+          event.preventDefault();
+          const { left, top } = event.currentTarget.getBoundingClientRect();
+          onContextMenu(null, { x: left + 28, y: top + 8 }, "first");
+        }}
+        onScroll={(event) => {
+          treeScroll.current = rememberedTreeScroll(treeScroll.current, { scrollTop: event.currentTarget.scrollTop, clientHeight: event.currentTarget.clientHeight, searching });
+        }}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 outline-none"
+      >
+        <div role="presentation" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+          {items.map((item) => {
+            const node = rows[item.index];
+            // Só a linha da conexão recebe a conexão salva (a etiqueta do banco, o ambiente e as ações); as outras linhas têm dono, mas não a recebem.
+            const connectionId = node.kind === "connection" ? ownerConnectionId(node) : null;
+            const connection = connectionId === null ? undefined : connectionById.get(connectionId);
+            const folderId = node.kind === "folder" ? folderIdOf(node) : null;
+            const environment = folderId !== null ? environments.folder(folderId) : connection ? environments.connection(connection) : null;
 
-          return (
-            <div
-              key={item.key}
-              ref={virtualizer.measureElement}
-              data-index={item.index}
-              role="treeitem"
-              aria-level={node.depth + 1}
-              aria-expanded={node.hasChildren ? open.has(node.key) : undefined}
-              aria-selected={node.key === selectedKey}
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${item.start}px)` }}
-            >
-              <NavigatorRow
-                node={node}
-                density={density}
-                index={item.index}
-                open={open.has(node.key)}
-                tabbable={node.key === tabbable}
-                selected={node.key === selectedKey}
-                connection={connection}
-                environment={environment}
-                folderColor={folderId === null ? null : (folderColors.get(folderId) ?? null)}
-                readOnly={connection ? (readOnlyHints.get(connection.id) ?? null) : null}
-                status={connection ? statuses.get(connection.id) : undefined}
-                check={connection ? (checks.get(connection.id) ?? null) : null}
-                onCheckFailure={onCheckFailure}
-                busy={connection !== undefined && disconnecting === connection.id}
-                match={matches?.get(node.key)}
-                onSelect={(selected) => onSelect(selected.key)}
-                onToggle={onToggle}
-                onRetry={onRetry}
-                onRefresh={onRefresh}
-                onNewQuery={onNewQuery}
-                onDisconnect={onDisconnect}
-                onOpenTable={onOpenTable}
-                onContextMenu={(target, point) => onContextMenu(target, point, "menu")}
-                onKeyDown={handleKeyDown}
-              />
-            </div>
-          );
-        })}
+            return (
+              <div
+                key={item.key}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                role="treeitem"
+                aria-level={node.depth + 1}
+                aria-expanded={node.hasChildren ? open.has(node.key) : undefined}
+                aria-selected={node.key === selectedKey}
+                style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${item.start}px)` }}
+              >
+                <NavigatorRow
+                  node={node}
+                  density={density}
+                  index={item.index}
+                  open={open.has(node.key)}
+                  tabbable={node.key === tabbable}
+                  selected={node.key === selectedKey}
+                  connection={connection}
+                  environment={environment}
+                  folderColor={folderId === null ? null : (folderColors.get(folderId) ?? null)}
+                  readOnly={connection ? (readOnlyHints.get(connection.id) ?? null) : null}
+                  status={connection ? statuses.get(connection.id) : undefined}
+                  check={connection ? (checks.get(connection.id) ?? null) : null}
+                  onCheckFailure={onCheckFailure}
+                  busy={connection !== undefined && disconnecting === connection.id}
+                  match={matches?.get(node.key)}
+                  onSelect={(selected) => onSelect(selected.key)}
+                  onToggle={onToggle}
+                  onRetry={onRetry}
+                  onRefresh={onRefresh}
+                  onNewQuery={onNewQuery}
+                  onDisconnect={onDisconnect}
+                  onOpenTable={onOpenTable}
+                  onContextMenu={(target, point) => onContextMenu(target, point, "menu")}
+                  onKeyDown={handleKeyDown}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
+      <TypeAheadIndicator shown={typeAhead.shown} />
     </div>
   );
 }

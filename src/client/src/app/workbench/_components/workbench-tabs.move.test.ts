@@ -11,11 +11,11 @@ const rt = await vi.hoisted(async () => {
   const { createHookRuntime } = await import("@/lib/testing/react-hooks");
 
   /** O executor de uma aba, com a execução automática em andamento até a prova soltar (`finish`). */
-  type FakeRunner = { state: unknown; getState: () => unknown; autoRunSettled: () => Promise<void>; autoRefresh: { pause: ReturnType<typeof vi.fn> }; sessionOf: () => string | null; finish: () => void };
+  type FakeRunner = { values: { snapshot: () => unknown }; state: unknown; getState: () => unknown; autoRunSettled: () => Promise<void>; autoRefresh: { pause: ReturnType<typeof vi.fn> }; sessionOf: () => string | null; finish: () => void };
   function makeRunner(state: unknown): FakeRunner {
     let finish = () => {};
     const settled = new Promise<void>((resolve) => (finish = resolve));
-    const runner: FakeRunner = { state, getState: () => runner.state, autoRunSettled: () => settled, autoRefresh: { pause: vi.fn() }, sessionOf: () => "s-1", finish: () => finish() };
+    const runner: FakeRunner = { values: { snapshot: () => ({ values: new Map(), counter: 0 }) }, state, getState: () => runner.state, autoRunSettled: () => settled, autoRefresh: { pause: vi.fn() }, sessionOf: () => "s-1", finish: () => finish() };
     return runner;
   }
 
@@ -32,14 +32,16 @@ const rt = await vi.hoisted(async () => {
   };
   const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
   const sendTabAway = vi.fn<(request: unknown) => Promise<{ ok: boolean; reason?: string }>>(async () => ({ ok: true }));
+  // RN-ABAS-010: o fim do arraste, que o processo principal decide; a prova diz a resposta.
+  const endTabDrag = vi.fn<(request: unknown) => Promise<{ action: "none" } | { action: "newWindow"; at: { x: number; y: number } | null }>>(async () => ({ action: "none" }));
 
-  return { ...createHookRuntime(), makeRunner, runners, workbench, toast, sendTabAway };
+  return { ...createHookRuntime(), makeRunner, runners, workbench, toast, sendTabAway, endTabDrag };
 });
 
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQuery: () => ({ data: undefined }), useQueryClient: () => ({}) }));
 vi.mock("@/components/ui", () => ({ ConfirmDialog: () => null, useToast: () => rt.toast }));
-vi.mock("@/lib/api/bridge", () => ({ currentWindowId: () => 1, onTabWanted: () => () => {}, onWindowCloseRequested: () => () => {}, sendTabAway: rt.sendTabAway, tellWindows: () => {} }));
+vi.mock("@/lib/api/bridge", () => ({ currentWindowId: () => 1, endTabDrag: rt.endTabDrag, onTabWanted: () => () => {}, onWindowCloseRequested: () => () => {}, sendTabAway: rt.sendTabAway, tellWindows: () => {}, resultWindowsAvailable: () => false, onResultWindowClosed: () => () => {}, onResultWindowState: () => () => {} }));
 // RN-EXPORT-023: a janela sem exportação em andamento (a pergunta delas não entra nesta prova).
 vi.mock("../_lib/data-export/data-exports", () => ({ exportTracker: { count: () => 0, cancelAll: async () => {} } }));
 vi.mock("../_lib/data-import/data-imports", () => ({ loadTracker: { cancelAll: async () => {} }, windowTransfers: () => ({ exports: 0, imports: 0, copies: 0 }) }));
@@ -75,6 +77,17 @@ function render(): (tabId: string, target: unknown) => void {
   if (strip === undefined) throw new Error("A faixa não está na árvore.");
   return strip.props.onMove as (tabId: string, target: unknown) => void;
 }
+
+/** A faixa da renderização de agora: o arraste da janela (`drag`) e o fim dele (`onDragEnd`), como ela os recebe. */
+function stripProps() {
+  const tree = rt.render(() => WorkbenchTabs() as ReactElement);
+  const strip = elementsOf(tree).find((element) => element.type === TabStrip);
+  if (strip === undefined) throw new Error("A faixa não está na árvore.");
+  return strip.props as { drag: { begin: (tabId: string, kind: "tab") => void; mark: (where: "strip" | "veil") => void }; onDragEnd: (tabId: string, event: unknown) => void };
+}
+
+/** O `dragend` de uma soltura dentro da janela (o ponto dele só vale no Wayland). */
+const dragEnd = { effect: "move", screen: { x: 400, y: 300 }, client: { x: 300, y: 260 }, viewport: { width: 1200, height: 800 } };
 
 /** Deixa as promessas em andamento chegarem ao fim. */
 const settle = () => new Promise((done) => setTimeout(done, 0));
@@ -142,5 +155,87 @@ describe("WorkbenchTabs: a aba que vai para outra janela enquanto a execução a
     expect(rt.workbench.detachTab).not.toHaveBeenCalled();
     expect(rt.toast.warning).not.toHaveBeenCalled();
     expect(rt.toast.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("WorkbenchTabs: o fim do arraste da aba (RN-ABAS-010)", () => {
+  beforeEach(() => {
+    // Sem execução automática em andamento: a espera da ida termina na hora.
+    for (const id of ["a", "b"]) {
+      const runner = rt.makeRunner(rows);
+      runner.finish();
+      rt.runners.set(id, runner);
+    }
+    rt.workbench.tabs = [tab("a"), tab("b")];
+    rt.workbench.activeTabId = "a";
+  });
+
+  it("solta no véu desta janela: o processo principal decide pelo ponteiro, e a aba vai para a janela nova com o canto onde foi solta", async () => {
+    rt.endTabDrag.mockResolvedValueOnce({ action: "newWindow", at: { x: 420, y: 330 } });
+    const { drag, onDragEnd } = stripProps();
+
+    drag.begin("a", "tab");
+    drag.mark("veil");
+    onDragEnd("a", dragEnd);
+    await settle();
+
+    expect(rt.endTabDrag).toHaveBeenCalledExactlyOnceWith({ tabId: "a", kind: "tab", dropped: "veil", effect: "move", at: { x: 400, y: 300 }, inPage: true });
+    expect(rt.sendTabAway).toHaveBeenCalledOnce();
+    expect((rt.sendTabAway.mock.calls[0][0] as { target: unknown }).target).toEqual({ kind: "new", at: { x: 420, y: 330 } });
+    expect(rt.workbench.detachTab).toHaveBeenCalledExactlyOnceWith("a");
+  });
+
+  it("sem ponto que sirva (o Wayland), a janela nova vem do caminho do menu, ao lado da de origem", async () => {
+    rt.endTabDrag.mockResolvedValueOnce({ action: "newWindow", at: null });
+    const { drag, onDragEnd } = stripProps();
+
+    drag.begin("a", "tab");
+    onDragEnd("a", dragEnd);
+    await settle();
+
+    expect((rt.sendTabAway.mock.calls[0][0] as { target: unknown }).target).toEqual({ kind: "new" });
+  });
+
+  it("o processo principal diz que não há o que fazer (o Esc, a outra janela recebeu): a aba fica", async () => {
+    const { drag, onDragEnd } = stripProps();
+
+    drag.begin("a", "tab");
+    onDragEnd("a", { ...dragEnd, effect: "none" });
+    await settle();
+
+    expect(rt.endTabDrag).toHaveBeenCalledOnce();
+    expect(rt.sendTabAway).not.toHaveBeenCalled();
+  });
+
+  it("solta na própria faixa (a aba mudou de lugar) e com uma aba só na janela, nada se pede", async () => {
+    const first = stripProps();
+    first.drag.begin("a", "tab");
+    first.drag.mark("strip");
+    first.onDragEnd("a", dragEnd);
+
+    rt.workbench.tabs = [tab("a")];
+    const only = stripProps();
+    only.drag.begin("a", "tab");
+    only.drag.mark("veil");
+    only.onDragEnd("a", dragEnd);
+    await settle();
+
+    expect(rt.endTabDrag).not.toHaveBeenCalled();
+    expect(rt.sendTabAway).not.toHaveBeenCalled();
+  });
+
+  it("a aba que outra janela recebeu antes do fim do arraste só sai da faixa quando o arraste termina: o elemento dela fica na página até lá", async () => {
+    const { drag, onDragEnd } = stripProps();
+    const move = render();
+
+    drag.begin("a", "tab");
+    // O pedido da outra janela chega antes do `dragend` daqui (RN-ABAS-003).
+    move("a", { kind: "window", windowId: 2, index: 0 });
+    await settle();
+    expect(rt.sendTabAway).toHaveBeenCalledOnce();
+    expect(rt.workbench.detachTab).not.toHaveBeenCalled();
+
+    onDragEnd("a", { ...dragEnd, effect: "none" });
+    expect(rt.workbench.detachTab).toHaveBeenCalledExactlyOnceWith("a");
   });
 });

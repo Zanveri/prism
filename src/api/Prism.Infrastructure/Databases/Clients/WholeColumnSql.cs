@@ -135,7 +135,7 @@ internal static class WholeColumnSql
     /// <param name="sql">O comando do resultado como a API o executou, com o filtro junto; nulo quando ela não o tem (não é leitura).</param>
     /// <param name="read">A página do resultado disse que o comando é uma leitura e não gravou (o `read` da seção 6).</param>
     /// <param name="requiresRows">É o "Salvar": a alteração tem de trazer o número de linhas confirmado.</param>
-    public static Result<WholeColumnPlan, DatabaseFailure> Plan(ESqlDialect dialect, string? sql, bool read, EditTarget target, IReadOnlyList<QueryColumn> columns, EditChange change, int index, bool requiresRows)
+    public static Result<WholeColumnPlan, DatabaseFailure> Plan(ESqlDialect dialect, string? sql, bool read, EditTarget target, IReadOnlyList<QueryColumn> columns, EditChange change, int index, bool requiresRows, IReadOnlyList<QueryParameter>? parameters = null)
     {
         if (requiresRows && change.Rows is null)
             return new DatabaseFailure(EDatabaseFailure.EditInvalid, "Informe quantas linhas a contagem deu (rows).", Change: index);
@@ -143,7 +143,7 @@ internal static class WholeColumnSql
         if (requiresRows && change.Rows < 0)
             return new DatabaseFailure(EDatabaseFailure.EditInvalid, "O número de linhas (rows) tem de ser um inteiro de 0 em diante.", Change: index);
 
-        var shaped = Shape(dialect, sql, read, target, columns, change, index);
+        var shaped = Shape(dialect, sql, read, target, columns, change, index, parameters);
         if (shaped.IsFailure)
             return shaped.Error;
 
@@ -153,12 +153,13 @@ internal static class WholeColumnSql
         if (assigned.IsFailure)
             return assigned.Error;
 
+        // RN-VAR-033: o caminho por lotes lê as chaves do próprio `<Q>`, com os valores dele; os lotes levam só o `SET` e as chaves.
         if (shape.Form == EForm.Batches)
-            return new WholeColumnPlan(index, change.Rows, shape.Q, null, shape.Table.Key, keys => Batches(dialect, shape, keys, index));
+            return new WholeColumnPlan(index, change.Rows, shape.Q, null, shape.Table.Key, keys => Batches(dialect, shape, keys, index), shape.Parameters);
 
-        var (count, update) = Statements(shape, assigned.Value);
+        var statements = Statements(shape, assigned.Value, writer.Parameters.Count);
 
-        return new WholeColumnPlan(index, change.Rows, count, new EditCommand(index, update, writer.Parameters));
+        return new WholeColumnPlan(index, change.Rows, statements.Count, new EditCommand(index, statements.Update, [.. writer.Parameters, .. statements.UpdateValues.Select(value => new EditParameter(null, Query: value))]), CountParameters: statements.CountValues);
     }
 
     /// <summary>
@@ -166,9 +167,9 @@ internal static class WholeColumnSql
     /// `values`, quando ele não tem literal). No caminho por lotes, o comando que lê as chaves (o próprio `<Q>`) e o `UPDATE` do primeiro lote, com `?`
     /// no lugar das chaves.
     /// </summary>
-    public static Result<IReadOnlyList<EditStatement>, DatabaseFailure> Preview(ESqlDialect dialect, string? sql, bool read, EditTarget target, IReadOnlyList<QueryColumn> columns, EditChange change, int index)
+    public static Result<IReadOnlyList<EditStatement>, DatabaseFailure> Preview(ESqlDialect dialect, string? sql, bool read, EditTarget target, IReadOnlyList<QueryColumn> columns, EditChange change, int index, IReadOnlyList<QueryParameter>? parameters = null)
     {
-        var shaped = Shape(dialect, sql, read, target, columns, change, index);
+        var shaped = Shape(dialect, sql, read, target, columns, change, index, parameters);
         if (shaped.IsFailure)
             return shaped.Error;
 
@@ -183,12 +184,14 @@ internal static class WholeColumnSql
             var keys = shape.Table.Key.Select(position => EditPlanner.Quote(target.Columns[position].BaseColumn!)).ToList();
             var condition = keys.Count == 1 ? $"{keys[0]} IN (?, ?, …)" : $"({string.Join(" AND ", keys.Select(key => $"{key} = ?"))}) OR …";
 
-            return Result.Success<IReadOnlyList<EditStatement>, DatabaseFailure>([new EditStatement(shape.Q, [], CountNote), new EditStatement($"UPDATE {shape.Name} SET {assigned.Value} WHERE {condition}", writer.Unwritten, BatchNote)]);
+            var reading = Literals(shape, 0, shape.Q.Length);
+
+            return Result.Success<IReadOnlyList<EditStatement>, DatabaseFailure>([new EditStatement(reading.Text, reading.Unwritten, CountNote), new EditStatement($"UPDATE {shape.Name} SET {assigned.Value} WHERE {condition}", writer.Unwritten, BatchNote)]);
         }
 
-        var (count, update) = Statements(shape, assigned.Value);
+        var statements = Statements(shape, assigned.Value, setCount: 0, preview: true);
 
-        return Result.Success<IReadOnlyList<EditStatement>, DatabaseFailure>([new EditStatement(count, [], CountNote), new EditStatement(update, writer.Unwritten)]);
+        return Result.Success<IReadOnlyList<EditStatement>, DatabaseFailure>([new EditStatement(statements.Count, statements.CountUnwritten, CountNote), new EditStatement(statements.Update, [.. writer.Unwritten, .. statements.UpdateUnwritten])]);
     }
 
     /// <summary>A forma que o comando leva, pelo texto e pelo banco (RN-EDIT-020). Para os testes do leitor, sem o resto do plano.</summary>
@@ -200,7 +203,7 @@ internal static class WholeColumnSql
         => Read(Cleaned(sql, dialect), dialect, singleTableWithoutAlias: true).Condition;
 
     /// <summary>As recusas da RN-EDIT-018, na ordem dela, e a forma do comando.</summary>
-    private static Result<WholeColumnShape, DatabaseFailure> Shape(ESqlDialect dialect, string? sql, bool read, EditTarget target, IReadOnlyList<QueryColumn> columns, EditChange change, int index)
+    private static Result<WholeColumnShape, DatabaseFailure> Shape(ESqlDialect dialect, string? sql, bool read, EditTarget target, IReadOnlyList<QueryColumn> columns, EditChange change, int index, IReadOnlyList<QueryParameter>? parameters)
     {
         DatabaseFailure Invalid(string message, int? column = null)
             => new(EDatabaseFailure.EditInvalid, message, Change: index, Column: column);
@@ -258,7 +261,10 @@ internal static class WholeColumnSql
         if (command.Sample)
             return NotSupported(SampleReason, index);
 
-        return new WholeColumnShape(dialect, table, target, columns, set, q, command.Form, command.Condition);
+        // RN-VAR-033: cada marcador do `<Q>`, com a posição, para numerar de novo os que ficam em cada forma.
+        var values = parameters ?? [];
+
+        return new WholeColumnShape(dialect, table, target, columns, set, q, command.Form, command.Condition, command.ConditionStart, values, values.Count == 0 ? [] : ParameterMarkers.Find(q, dialect));
     }
 
     /// <summary>O `SET`: uma atribuição por coluna, na ordem do pedido, com o valor em parâmetro (ou como literal, no "Ver SQL").</summary>
@@ -277,24 +283,78 @@ internal static class WholeColumnSql
         return string.Join(", ", assigned);
     }
 
-    /// <summary>A contagem e o `UPDATE` da forma direta e da forma pela chave.</summary>
-    private static (string Count, string Update) Statements(WholeColumnShape shape, string assignments)
+    /// <summary>
+    /// A contagem e o `UPDATE` da forma direta e da forma pela chave, com os parâmetros do `<Q>` numerados de novo, na ordem do texto final (RN-VAR-033): no
+    /// PostgreSQL, os do `SET` são `$1` a `$k` e os do `<Q>` que ficam passam a `$k+1` em diante, sem buraco (na forma direta, só a condição fica, e os marcadores
+    /// fora dela, no `SELECT` por exemplo, saem com os valores); a contagem não tem `SET`, e a dela começa em `$1`. No Db2 e no Informix, os `?` do `SET` e depois os
+    /// do `<Q>` que ficaram, na ordem. No "Ver SQL" (`preview`) cada marcador vira o literal do valor, ou `?` com o valor ao lado quando ele não tem literal.
+    /// </summary>
+    private static StatementSet Statements(WholeColumnShape shape, string assignments, int setCount, bool preview = false)
     {
         if (shape.Form == EForm.Direct)
         {
-            var where = shape.Condition is { } condition ? $" WHERE {condition}\n" : string.Empty;
+            if (shape.Condition is not { } condition)
+                return new StatementSet($"SELECT COUNT(*) FROM {shape.Name}", $"UPDATE {shape.Name} SET {assignments}", [], [], [], []);
 
-            return ($"SELECT COUNT(*) FROM {shape.Name}{where}", $"UPDATE {shape.Name} SET {assignments}{where}");
+            var end = shape.ConditionStart + condition.Length;
+            var counting = preview ? Literals(shape, shape.ConditionStart, end) : Numbered(shape, shape.ConditionStart, end, offset: 0);
+            var updating = preview ? counting : Numbered(shape, shape.ConditionStart, end, offset: setCount);
+
+            return new StatementSet($"SELECT COUNT(*) FROM {shape.Name} WHERE {counting.Text}\n", $"UPDATE {shape.Name} SET {assignments} WHERE {updating.Text}\n", counting.Values, updating.Values, counting.Unwritten, updating.Unwritten);
         }
 
-        var derived = $"(\n{shape.Q}\n) AS {QAlias}";
-        var count = $"SELECT COUNT(*) FROM {derived}";
+        // A contagem leva o `<Q>` inteiro como está, com todos os valores; o `UPDATE`, o `<Q>` com os marcadores numerados depois dos do `SET`.
+        var counted = preview ? Literals(shape, 0, shape.Q.Length) : new Numbering(shape.Q, shape.Parameters, []);
+        var updated = preview ? counted : Numbered(shape, 0, shape.Q.Length, offset: setCount);
+        var countDerived = $"(\n{counted.Text}\n) AS {QAlias}";
+        var updateDerived = $"(\n{updated.Text}\n) AS {QAlias}";
+        var count = $"SELECT COUNT(*) FROM {countDerived}";
         var keys = shape.Table.Key.Select(position => (Base: EditPlanner.Quote(shape.Target.Columns[position].BaseColumn!), Output: $"{QAlias}.{EditPlanner.Quote(shape.Columns[position].Name)}")).ToList();
 
         if (keys.Count == 1)
-            return (count, $"UPDATE {shape.Name} SET {assignments}\nWHERE {keys[0].Base} IN (SELECT {keys[0].Output} FROM {derived})");
+            return new StatementSet(count, $"UPDATE {shape.Name} SET {assignments}\nWHERE {keys[0].Base} IN (SELECT {keys[0].Output} FROM {updateDerived})", counted.Values, updated.Values, counted.Unwritten, updated.Unwritten);
 
-        return (count, $"UPDATE {shape.Name} AS {UAlias} SET {assignments}\nWHERE EXISTS (SELECT 1 FROM {derived} WHERE {string.Join(" AND ", keys.Select(key => $"{key.Output} = {UAlias}.{key.Base}"))})");
+        return new StatementSet(count, $"UPDATE {shape.Name} AS {UAlias} SET {assignments}\nWHERE EXISTS (SELECT 1 FROM {updateDerived} WHERE {string.Join(" AND ", keys.Select(key => $"{key.Output} = {UAlias}.{key.Base}"))})", counted.Values, updated.Values, counted.Unwritten, updated.Unwritten);
+    }
+
+    /// <summary>
+    /// RN-VAR-033: o pedaço `[from, to)` do `<Q>` (ele todo, ou a condição da forma direta) com os marcadores numerados de novo depois dos `offset` do `SET`, e os valores
+    /// deles, na ordem dos números novos. No PostgreSQL a ordem é a da primeira vez que cada `$n` aparece no pedaço (os repetidos ficam repetidos, com o mesmo número); no
+    /// Db2 e no Informix, o texto não muda e os valores são os dos `?` do pedaço, pela posição de cada um no `<Q>` inteiro.
+    /// </summary>
+    private static Numbering Numbered(WholeColumnShape shape, int from, int to, int offset)
+    {
+        var inside = shape.Markers.Where(marker => marker.Start >= from && marker.End <= to).ToList();
+        if (inside.Count == 0)
+            return new Numbering(shape.Q[from..to], [], []);
+
+        if (shape.Dialect != ESqlDialect.PostgreSql)
+            return new Numbering(shape.Q[from..to], [.. inside.Select(marker => shape.Parameters[marker.Index])], []);
+
+        var order = ParameterMarkers.DistinctNumbers(inside);
+        var numbers = order.Select((number, position) => (number, position)).ToDictionary(item => item.number, item => offset + item.position + 1);
+        var text = ParameterMarkers.Rewrite(shape.Q[from..to], [.. inside.Select(marker => marker with { Start = marker.Start - from, End = marker.End - from })], marker => $"${numbers[marker.Number]}");
+
+        return new Numbering(text, [.. order.Select(number => shape.Parameters[number - 1])], []);
+    }
+
+    /// <summary>RN-EDIT-008 e RN-VAR-033: o mesmo pedaço para o "Ver SQL", cada marcador com o literal do valor; sem literal, `?` e o valor em `Unwritten`.</summary>
+    private static Numbering Literals(WholeColumnShape shape, int from, int to)
+    {
+        var inside = shape.Markers.Where(marker => marker.Start >= from && marker.End <= to).ToList();
+        var unwritten = new List<string?>();
+        var text = ParameterMarkers.Rewrite(shape.Q[from..to], [.. inside.Select(marker => marker with { Start = marker.Start - from, End = marker.End - from })], marker =>
+        {
+            var parameter = shape.Parameters[shape.Dialect == ESqlDialect.PostgreSql ? marker.Number - 1 : marker.Index];
+            if (QueryParameterBinding.Literal(shape.Dialect, parameter) is { } literal)
+                return literal;
+
+            unwritten.Add(parameter.Value);
+
+            return "?";
+        });
+
+        return new Numbering(text, [], unwritten);
     }
 
     /// <summary>
@@ -399,12 +459,12 @@ internal static class WholeColumnSql
         limitWithoutOrder |= outer.Limit && !outer.Order;
 
         if (dialect == ESqlDialect.Informix && outer.Tail)
-            return new CommandRead(limitWithoutOrder, sample, EForm.Batches, null);
+            return new CommandRead(limitWithoutOrder, sample, EForm.Batches, null, 0);
 
         if (singleTableWithoutAlias && !outer.Limit && !sample && Direct(q, tokens, dialect) is { Valid: true } direct)
-            return new CommandRead(limitWithoutOrder, sample, EForm.Direct, direct.Condition);
+            return new CommandRead(limitWithoutOrder, sample, EForm.Direct, direct.Condition, direct.ConditionStart);
 
-        return new CommandRead(limitWithoutOrder, sample, EForm.Key, null);
+        return new CommandRead(limitWithoutOrder, sample, EForm.Key, null, 0);
     }
 
     /// <summary>
@@ -447,13 +507,15 @@ internal static class WholeColumnSql
             return DirectRead.None;
 
         string? condition = null;
+        var conditionStart = 0;
         if (where is { } whereAt)
         {
             var end = order ?? tokens.Count;
             if (end <= whereAt + 1 || DepthZero(tokens, whereAt + 1, end).Any(index => tokens[index].Kind == ETokenKind.Word && !Qualified(tokens, index) && NotInTheCondition.Contains(tokens[index].Upper)))
                 return DirectRead.None;
 
-            condition = q[tokens[whereAt + 1].Start..tokens[end - 1].End];
+            conditionStart = tokens[whereAt + 1].Start;
+            condition = q[conditionStart..tokens[end - 1].End];
         }
 
         string? list = null;
@@ -470,7 +532,7 @@ internal static class WholeColumnSql
         if (!Lex(rebuilt, dialect).Select(Piece).SequenceEqual(tokens.Select(Piece)))
             return DirectRead.None;
 
-        return new DirectRead(true, condition);
+        return new DirectRead(true, condition, conditionStart);
     }
 
     private static string Lines(long count)
@@ -535,15 +597,27 @@ internal static class WholeColumnSql
         public bool Tail;
     }
 
-    private sealed record DirectRead(bool Valid, string? Condition)
+    private sealed record DirectRead(bool Valid, string? Condition, int ConditionStart)
     {
-        public static readonly DirectRead None = new(false, null);
+        public static readonly DirectRead None = new(false, null, 0);
     }
 
-    private sealed record CommandRead(bool LimitWithoutOrder, bool Sample, EForm Form, string? Condition);
+    private sealed record CommandRead(bool LimitWithoutOrder, bool Sample, EForm Form, string? Condition, int ConditionStart);
+
+    /// <summary>RN-VAR-033: um pedaço do `&lt;Q&gt;` com os marcadores numerados de novo, os valores deles (na ordem) e, no "Ver SQL", os valores dos `?` sem literal. Não se imprime.</summary>
+    private sealed record Numbering(string Text, IReadOnlyList<QueryParameter> Values, IReadOnlyList<string?> Unwritten)
+    {
+        public override string ToString() => nameof(Numbering);
+    }
+
+    /// <summary>A contagem e o `UPDATE`, com os valores do `&lt;Q&gt;` de cada um (e, no "Ver SQL", os dos `?` sem literal). Não se imprime.</summary>
+    private sealed record StatementSet(string Count, string Update, IReadOnlyList<QueryParameter> CountValues, IReadOnlyList<QueryParameter> UpdateValues, IReadOnlyList<string?> CountUnwritten, IReadOnlyList<string?> UpdateUnwritten)
+    {
+        public override string ToString() => nameof(StatementSet);
+    }
 
     /// <summary>A coluna inteira já conferida: a tabela, as colunas do `SET` (com a posição no resultado e o valor), o `<Q>` e a forma.</summary>
-    private sealed record WholeColumnShape(ESqlDialect Dialect, EditTable Table, EditTarget Target, IReadOnlyList<QueryColumn> Columns, IReadOnlyList<(EditColumn Column, int Position, string? Value)> Set, string Q, EForm Form, string? Condition)
+    private sealed record WholeColumnShape(ESqlDialect Dialect, EditTable Table, EditTarget Target, IReadOnlyList<QueryColumn> Columns, IReadOnlyList<(EditColumn Column, int Position, string? Value)> Set, string Q, EForm Form, string? Condition, int ConditionStart, IReadOnlyList<QueryParameter> Parameters, IReadOnlyList<ParameterMarker> Markers)
     {
         public string Name => $"{EditPlanner.Quote(Table.Schema)}.{EditPlanner.Quote(Table.Name)}";
 

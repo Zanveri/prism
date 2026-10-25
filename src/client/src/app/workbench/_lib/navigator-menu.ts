@@ -1,3 +1,4 @@
+import { dbeaverCopy } from "@/app/connections/_lib/dbeaver.copy";
 import { transferCopy } from "@/app/connections/_lib/transfer.copy";
 
 import { dataExportCopy } from "./data-export/data-export.copy";
@@ -13,6 +14,7 @@ const copy = workbenchCopy.navigator.menu;
 const moved = navigatorCopy.menu;
 /** Exportar e importar conexões (RN-TRANSF-001). */
 const transfer = transferCopy.menu;
+const dbeaver = dbeaverCopy.menu;
 
 /**
  * O que um item do menu faz. O modelo só descreve; quem executa é a tela (`navigator.tsx`), que tem a conexão, a aba e o cache. Por
@@ -44,7 +46,9 @@ export type MenuAction =
   // RN-TRANSF-001: o "Exportar conexões" com a linha (a conexão, ou a pasta com tudo dentro) marcada, ou nada no espaço vazio; o "Importar conexões" com a
   // pasta da linha como o lugar, ou a raiz no espaço vazio.
   | { type: "exportConnections" }
-  | { type: "importConnections" };
+  | { type: "importConnections" }
+  // RN-DBEAVER-003: o "Importar do DBeaver" com a pasta da linha como o lugar, ou a raiz no espaço vazio.
+  | { type: "importDbeaver" };
 
 /**
  * `hint` diz por que a ação desabilitada não se aplica, embaixo do rótulo: "Não há pastas nem conexões para exportar.", ou o "Importar dados…" numa
@@ -56,7 +60,16 @@ export type MenuItem = { id: string; label: string; action: MenuAction; shortcut
  * O que o menu precisa saber além da linha: o estado da conexão (só conta na linha da conexão), se ela está sendo desconectada e, na tabela, se a conexão
  * dela é somente leitura (pela opção dela ou de uma pasta acima): importar grava na tabela (RN-IMPORT-001).
  */
-export type MenuState = { status: "connected" | "connecting" | "disconnected" | "failed"; busy: boolean; readOnly?: boolean };
+export type MenuState = {
+  status: "connected" | "connecting" | "disconnected" | "failed";
+  busy: boolean;
+  readOnly?: boolean;
+  /** Há processo principal para procurar o DBeaver? Fora do Electron o "Importar do DBeaver" fica desabilitado, com o motivo (RN-DBEAVER-003). Ausente vale sim. */
+  dbeaverAvailable?: boolean;
+};
+
+/** O "Importar do DBeaver…" do menu, ou o "aqui" da pasta; desabilitado, com o motivo, fora do app. */
+const dbeaverItem = (id: "importDbeaver" | "importDbeaverHere", label: string, available: boolean) => item(id, label, { type: "importDbeaver" }, available ? {} : { disabled: true, hint: dbeaverCopy.outside });
 
 const item = (id: string, label: string, action: MenuAction, extra: Partial<Pick<MenuItem, "shortcut" | "disabled" | "hint">> = {}): MenuItem => ({ id, label, action, ...extra });
 
@@ -80,16 +93,17 @@ export function keyActionFor(node: NavNode, press: KeyPress): MenuAction | null 
 
 /**
  * O menu do botão direito no espaço vazio do navegador (RN-NAV-003, pedido do dono): "Nova conexão" e "Nova pasta", que criam na raiz, sempre
- * habilitadas (RN-NAV-002), e, num grupo depois delas, "Exportar conexões…" (nada marcado) e "Importar conexões…" (na raiz) (RN-TRANSF-001). Sem nenhuma
+ * habilitadas (RN-NAV-002), e, num grupo depois delas, "Exportar conexões…" (nada marcado) e "Importar conexões…" (na raiz) (RN-TRANSF-001) e, depois deste, "Importar do DBeaver…" (RN-DBEAVER-003). Sem nenhuma
  * pasta e nenhuma conexão no cofre (`hasItems` falso) não há o que exportar: o item fica desabilitado, com o motivo. É o mesmo `ContextMenu` das linhas, nas
  * mesmas regras de teclado e de foco.
  */
-export function backgroundMenu(hasItems = true): MenuItem[][] {
+export function backgroundMenu(hasItems = true, dbeaverAvailable = true): MenuItem[][] {
   return [
     [item("newConnection", moved.newConnection, { type: "newConnection" }), item("newFolder", moved.newFolder, { type: "newFolder" })],
     [
       item("exportConnections", transfer.exportConnections, { type: "exportConnections" }, hasItems ? {} : { disabled: true, hint: transfer.nothingToExport }),
       item("importConnections", transfer.importConnections, { type: "importConnections" }),
+      dbeaverItem("importDbeaver", dbeaver.importDbeaver, dbeaverAvailable),
     ],
   ];
 }
@@ -201,7 +215,11 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
           item("moveFolder", copy.moveFolder, { type: "moveFolder" }),
           item("deleteFolder", copy.deleteFolder, { type: "deleteFolder" }),
         ],
-        [item("exportConnections", transfer.exportConnections, { type: "exportConnections" }), item("importHere", transfer.importHere, { type: "importConnections" })],
+        [
+          item("exportConnections", transfer.exportConnections, { type: "exportConnections" }),
+          item("importHere", transfer.importHere, { type: "importConnections" }),
+          dbeaverItem("importDbeaverHere", dbeaver.importDbeaverHere, state.dbeaverAvailable !== false),
+        ],
         [copyName],
       ];
 

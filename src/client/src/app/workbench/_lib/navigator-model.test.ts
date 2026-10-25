@@ -4,7 +4,7 @@ import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { newVerification, unprotected, type Connection, type Folder } from "@/app/connections/_lib/connections.schema";
 
 import type { DatabaseObject } from "./database-sessions.schema";
-import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "./navigator-model";
+import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "./navigator-model";
 import { workbenchCopy } from "./workbench.copy";
 
 const connectionPath: NavPath = { type: "connection", connectionId: "c1" };
@@ -293,6 +293,23 @@ describe("treeNodes", () => {
     const { roots } = treeNodes(buildConnectionTree([folder], []));
 
     expect(roots[0].hasChildren).toBe(false);
+  });
+});
+
+describe("typeAheadLabels (os nomes do type-ahead, RN-ARVORE-009)", () => {
+  it("o nome que a linha mostra, sem o selo, o detalhe nem a contagem", () => {
+    const table = node({ type: "table", connectionId: "c1", schema: "public", table: "batch_pallet_items" }, "batch_pallet_items", { kind: "table", detail: "12 colunas" });
+    const column = node({ type: "tableLevel", connectionId: "c1", schema: "public", table: "t", level: "columns" }, "id", { kind: "column", detail: "integer", badge: "PK" });
+
+    expect(typeAheadLabels([connection, { ...database, badge: workbenchCopy.navigator.defaultDatabase }, table, column])).toEqual(["MES Produção", "mes", "batch_pallet_items", "id"]);
+  });
+
+  it("a linha de Carregando… e a de erro não têm nome: a mensagem delas não é item que se procure", () => {
+    const rows = flattenVisible([connection], new Set([connection.key]), levels([connection, { status: "error", message: "falhou ao conectar" }]));
+    const loading = flattenVisible([connection], new Set([connection.key]), new Map());
+
+    expect(typeAheadLabels(rows)).toEqual(["MES Produção", ""]);
+    expect(typeAheadLabels(loading)).toEqual(["MES Produção", ""]);
   });
 });
 

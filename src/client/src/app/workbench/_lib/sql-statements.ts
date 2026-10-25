@@ -20,15 +20,26 @@ type Scanned = SqlStatement & { boundary: number; cut: boolean };
  * quebra de linha. `body` é o que cada banco entende por bloco com `;` no corpo (RN-SQL-001). `beginBlock` diz que o `BEGIN` abre um bloco que vai
  * até o fim do texto (no Db2, `db2Body`): para a linha em branco (RN-SQL-018), também quando ele não é a primeira palavra do comando.
  */
-type Dialect = { nestedComments: boolean; braceComments: boolean; dollarQuotes: boolean; carriageReturnEndsComment: boolean; body: () => Body; beginBlock: boolean };
+type Dialect = {
+  nestedComments: boolean;
+  braceComments: boolean;
+  dollarQuotes: boolean;
+  carriageReturnEndsComment: boolean;
+  body: () => Body;
+  beginBlock: boolean;
+  /** O `E'...'` do PostgreSQL, em que a barra invertida escapa a aspa (RN-SQL-002). */
+  escapeStrings: boolean;
+  /** O `//` no começo de uma linha é comentário (RN-VAR-001): só no modo das declarações. */
+  slashComments: boolean;
+};
 
-const postgres: Dialect = { nestedComments: true, braceComments: false, dollarQuotes: true, carriageReturnEndsComment: true, body: standardBody, beginBlock: false };
+const postgres: Dialect = { nestedComments: true, braceComments: false, dollarQuotes: true, carriageReturnEndsComment: true, body: standardBody, beginBlock: false, escapeStrings: true, slashComments: false };
 
 /** Pelo número do banco na API: PostgreSQL 1, Db2 2, Informix 3. */
 const dialects: Record<Engine, Dialect> = {
   1: postgres,
-  2: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true },
-  3: { nestedComments: false, braceComments: true, dollarQuotes: false, carriageReturnEndsComment: false, body: informixBody, beginBlock: false },
+  2: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  3: { nestedComments: false, braceComments: true, dollarQuotes: false, carriageReturnEndsComment: false, body: informixBody, beginBlock: false, escapeStrings: false, slashComments: false },
 };
 
 /** Sem o banco, vale o PostgreSQL. */
@@ -56,6 +67,44 @@ function afterQuoted(sql: string, quote: string, from: number): number {
     if (sql[found + 1] !== quote) return found + 1;
     position = found + 2;
   }
+}
+
+/**
+ * O texto `E'...'` do PostgreSQL (RN-SQL-002): a barra invertida escapa o caractere seguinte, a aspa inclusive (`E'it\\'s'` é um texto só), e a aspa dobrada continua
+ * sendo uma aspa. É como a API o lê (`SqlText.SkipQuoted` com `backslashEscapes`). `from` é a posição depois da aspa que abre.
+ */
+function afterEscaped(sql: string, from: number): number {
+  let position = from;
+  while (position < sql.length) {
+    const code = sql.charCodeAt(position);
+    if (code === 92) position += 2;
+    else if (code === 39) {
+      if (sql.charCodeAt(position + 1) !== 39) return position + 1;
+      position += 2;
+    } else position++;
+  }
+  return sql.length;
+}
+
+/** Se a aspa em `at` abre um `E'...'`: um `E` (em qualquer caixa) logo antes, que não faz parte de um nome mais comprido (`NE'x'` e `a$E'x'` não são). */
+function opensEscapeString(sql: string, at: number): boolean {
+  const letter = sql.charCodeAt(at - 1);
+  if (letter !== 69 && letter !== 101) return false;
+  if (at < 2) return true;
+  const before = sql.charCodeAt(at - 2);
+  return !isNameChar(before) && before !== 36;
+}
+
+/** A posição logo depois do texto entre aspas simples que abre em `at`, com a barra invertida do `E'...'` onde o banco a tem (PostgreSQL). */
+function afterString(sql: string, at: number, dialect: Dialect): number {
+  return dialect.escapeStrings && opensEscapeString(sql, at) ? afterEscaped(sql, at + 1) : afterQuoted(sql, "'", at + 1);
+}
+
+/** Se a linha de `at` só tem espaços e tabulações antes dele. */
+function startsLine(sql: string, at: number): boolean {
+  let position = at - 1;
+  while (position >= 0 && (sql.charCodeAt(position) === 32 || sql.charCodeAt(position) === 9)) position--;
+  return position < 0 || sql.charCodeAt(position) === 10 || sql.charCodeAt(position) === 13;
 }
 
 /** A posição logo depois do fim da linha de um comentário `--`: a quebra de linha e, onde o banco também a aceita, o retorno de carro. */
@@ -100,6 +149,8 @@ function afterComment(sql: string, at: number, dialect: Dialect): number | null 
 
   if (code === 45) return sql.charCodeAt(at + 1) === 45 ? afterLine(sql, at + 2, dialect.carriageReturnEndsComment) : null;
   if (code === 47) {
+    // O `//` só é comentário no modo das declarações, no começo de uma linha (RN-VAR-001); nos três bancos ele não é comentário.
+    if (sql.charCodeAt(at + 1) === 47) return dialect.slashComments && startsLine(sql, at) ? afterLine(sql, at + 2, dialect.carriageReturnEndsComment) : null;
     if (sql.charCodeAt(at + 1) !== 42) return null;
     return dialect.nestedComments ? afterNestedComment(sql, at + 2) : after(sql, "*/", at + 2);
   }
@@ -174,7 +225,7 @@ function scan(sql: string, dialect: Dialect, cuts: readonly number[] = [], inner
 
     if (!isWhitespace(code)) hasCode = true;
 
-    if (code === 39) position = afterQuoted(sql, "'", position + 1);
+    if (code === 39) position = afterString(sql, position, dialect);
     else if (code === 34) position = afterQuoted(sql, '"', position + 1);
     else if (code === 36 && dialect.dollarQuotes) {
       const tag = dollarTag(sql, position);
@@ -189,17 +240,54 @@ function scan(sql: string, dialect: Dialect, cuts: readonly number[] = [], inner
 const toStatement = ({ text, start, end }: Scanned): SqlStatement => ({ text, start, end });
 
 /**
- * Como achar os comandos do texto. `blankLines` é a preferência "A linha em branco separa os comandos" (RN-SQL-018), que vale só para o
- * comando do cursor; sem ela, só o `;` separa, como antes.
+ * Quem sabe ler as declarações da linguagem das variáveis (RN-VAR-001): o leitor do SQL acha onde um item pode começar, e esta função diz se ali começa uma
+ * declaração (`let` e `const`) ou uma reatribuição (`nome = valor`) e onde ela acaba (depois do `;` e dos comentários que sobram na linha). Nulo quando o texto
+ * ali é SQL. `reassignment` diz se uma reatribuição vale ali (só nas posições de item). Vem de fora (`variables/script-items.ts`) para o leitor do SQL não
+ * depender da linguagem, que depende dele.
  */
-export type StatementOptions = { blankLines?: boolean };
+export type DeclarationReader = (sql: string, start: number, reassignment: boolean) => { kind: "declaration" | "reassignment"; end: number } | null;
+
+/**
+ * Como achar os comandos do texto. `blankLines` é a preferência "A linha em branco separa os comandos" (RN-SQL-018), que vale só para o
+ * comando do cursor; sem ela, só o `;` separa, como antes. `declarations` liga as declarações de variável (RN-VAR-001): cada uma é um item, a linha que começa
+ * por `let` ou `const` termina o comando de cima, e o `//` no começo de uma linha é comentário (nos lugares da RN-VAR-001).
+ */
+export type StatementOptions = { blankLines?: boolean; declarations?: DeclarationReader };
+
+/** Um item do script (RN-VAR-019): um comando, uma declaração ou uma reatribuição. `text` é `sql.slice(start, end)`; o da declaração inclui o `;` dela. */
+export type ScriptItem = SqlStatement & { kind: "statement" | "declaration" | "reassignment" };
 
 const noSemicolons: ReadonlySet<number> = new Set();
 
-/** Os comandos do texto, separados por `;` (RN-SQL-002) e, com `blankLines`, pela linha em branco (RN-SQL-018), pelas regras do banco da aba. */
-export function splitStatements(sql: string, engine?: Engine, { blankLines = false }: StatementOptions = {}): SqlStatement[] {
-  const dialect = dialectOf(engine);
-  return scan(sql, dialect, blankLines ? blankLineCuts(sql, dialect) : []).map(toStatement);
+/** Onde começa e acaba uma declaração ou uma reatribuição no texto, com o `;` e os comentários da mesma linha, e os `//` de cima. */
+type Region = { start: number; end: number; kind: "declaration" | "reassignment" };
+
+/**
+ * O texto como o leitor o vê, nas opções dadas: sem declarações, o próprio texto e as linhas em branco de `blankLineCuts`, como sempre. Com elas, o texto com cada
+ * declaração trocada por um `;` seguido de espaços (do mesmo tamanho: as posições não mudam), que termina o comando de cima como a pessoa terminaria, e o `//` do
+ * começo da linha como comentário.
+ */
+function viewOf(sql: string, dialect: Dialect, { blankLines = false, declarations }: StatementOptions): { text: string; dialect: Dialect; cuts: number[]; regions: Region[] } {
+  if (declarations === undefined) return { text: sql, dialect, cuts: blankLines ? blankLineCuts(sql, dialect) : [], regions: [] };
+
+  const slashed: Dialect = { ...dialect, slashComments: true };
+  const { cuts, regions } = itemCuts(sql, slashed, declarations, blankLines);
+  if (regions.length === 0) return { text: sql, dialect: slashed, cuts, regions };
+
+  const pieces: string[] = [];
+  let from = 0;
+  for (const region of regions) {
+    pieces.push(sql.slice(from, region.start), ";", " ".repeat(region.end - region.start - 1));
+    from = region.end;
+  }
+  pieces.push(sql.slice(from));
+  return { text: pieces.join(""), dialect: slashed, cuts, regions };
+}
+
+/** Os comandos do texto, separados por `;` (RN-SQL-002) e, com `blankLines`, pela linha em branco (RN-SQL-018), pelas regras do banco da aba. As declarações não entram. */
+export function splitStatements(sql: string, engine?: Engine, options: StatementOptions = {}): SqlStatement[] {
+  const view = viewOf(sql, dialectOf(engine), options);
+  return scan(view.text, view.dialect, view.cuts).map(toStatement);
 }
 
 /**
@@ -214,8 +302,8 @@ const piece = (text: string, start: number, end: number): SqlToken => ({ text, w
  * O texto em pedaços, sem espaços nem comentários, como a API o lê (`SqlText.Tokens`). O `statementCount` o usa uma vez por
  * execução: o caminho de cada tecla (`hasStatement`) não passa por aqui.
  */
-function* tokens(sql: string, dialect: Dialect): Generator<SqlToken> {
-  let position = 0;
+function* tokens(sql: string, dialect: Dialect, from = 0): Generator<SqlToken> {
+  let position = from;
   while (position < sql.length) {
     const start = position;
     const code = sql.charCodeAt(position);
@@ -225,7 +313,7 @@ function* tokens(sql: string, dialect: Dialect): Generator<SqlToken> {
     if (comment !== null) position = comment;
     else if (isWhitespace(code)) position++;
     else if (code === 39 || code === 34) {
-      position = afterQuoted(sql, sql[position], position + 1);
+      position = code === 39 ? afterString(sql, position, dialect) : afterQuoted(sql, '"', position + 1);
       yield piece("'", start, position);
     } else if (tag !== null) {
       position = after(sql, tag, position + tag.length);
@@ -363,13 +451,15 @@ function standardBody(): Body {
  * `statementAt`, que acham o comando do cursor, seguem separando pelo `;` (a linha em branco, RN-SQL-018,
  * é que nunca separa dentro do bloco). A conta é sempre só pelo `;`: a linha em branco não divide a seleção.
  */
-export function statementCount(sql: string, engine?: Engine): number {
-  const dialect = dialectOf(engine);
-  let count = 0;
+export function statementCount(sql: string, engine?: Engine, { declarations }: Pick<StatementOptions, "declarations"> = {}): number {
+  // A conta é só pelo `;`, mais as declarações (RN-VAR-020): cada uma é um item, com `;` ou sem ele.
+  const view = viewOf(sql, dialectOf(engine), { declarations });
+  const dialect = view.dialect;
+  let count = view.regions.length;
   let started = false;
   let body = dialect.body();
 
-  for (const token of tokens(sql, dialect)) {
+  for (const token of tokens(view.text, dialect)) {
     body.next(token);
 
     if (token.text !== ";") started = true;
@@ -609,17 +699,90 @@ function blankLinesBetween(sql: string, from: number, to: number, dialect: Diale
  * vai até o fim do texto, e começa também no `BEGIN` que não é a primeira palavra do comando).
  */
 function blankLineCuts(sql: string, dialect: Dialect): number[] {
-  const list = [...tokens(sql, dialect)];
+  return itemCuts(sql, dialect, undefined, true).cuts;
+}
+
+/** Se depois dos espaços e das tabulações a partir de `at` vem um `=`: a pergunta barata antes de ler uma reatribuição. */
+function followedByEquals(sql: string, at: number): boolean {
+  let position = at;
+  while (sql.charCodeAt(position) === 32 || sql.charCodeAt(position) === 9) position++;
+  return sql.charCodeAt(position) === 61;
+}
+
+/**
+ * Onde a declaração que começa em `at` começa de fato: os comentários `//` das linhas logo acima dela vão com ela (RN-VAR-001), até `floor`, onde o pedaço de cima
+ * acaba. A linha em branco entre eles vale se ainda há um `//` mais acima.
+ */
+function regionStart(sql: string, at: number, floor: number): number {
+  let accepted = at;
+  let cursor = sql.lastIndexOf("\n", at - 1) + 1;
+  while (cursor > floor) {
+    // `lastIndexOf` com posição negativa vale 0: sem este cuidado a primeira linha do texto voltaria a si mesma.
+    const previous = cursor < 2 ? 0 : sql.lastIndexOf("\n", cursor - 2) + 1;
+    if (previous < floor || previous >= cursor) break;
+    const line = sql.slice(previous, cursor - 1);
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("//")) accepted = previous + line.length - trimmed.length;
+    else if (trimmed.trim() !== "") break;
+    cursor = previous;
+  }
+  return accepted;
+}
+
+/**
+ * As linhas em branco que separam (`blankLineCuts`) e, com o leitor das declarações, onde elas estão (RN-VAR-001). Cada declaração termina o comando de cima como um
+ * `;` e recomeça a leitura do zero depois dela: o comando e o corpo de antes não passam por ela. O texto dela foi lido pelo SQL e pode ter pedaços que ele lê de outro
+ * jeito (um `\'` de JavaScript), por isso, se um pedaço atravessa o fim dela, o resto do texto se lê de novo dali.
+ */
+function itemCuts(sql: string, dialect: Dialect, reader: DeclarationReader | undefined, blankLines: boolean): { cuts: number[]; regions: Region[] } {
+  const list: SqlToken[] = [];
+  for (const token of tokens(sql, dialect)) list.push(token);
   const cuts: number[] = [];
+  const regions: Region[] = [];
   let body = dialect.body();
   let command = commandAbove(list);
+  // Onde o espaço entre dois pedaços começa: o fim do pedaço de cima, ou o fim da última declaração.
+  let floor = 0;
+  // Se um item pode começar aqui: no começo do texto, depois do `;` que fecha um comando e depois de uma declaração.
+  let boundary = true;
 
   for (let index = 0; index < list.length; index++) {
     const token = list[index];
-    const from = index === 0 ? 0 : list[index - 1].end;
+    const from = floor;
+    const gap = token.start - from > 1;
+
+    if (reader !== undefined && token.word && !body.open()) {
+      const lexeme = sql.slice(token.start, token.end);
+      const keyword = lexeme === "let" || lexeme === "const";
+      // A linha que começa por `let` ou `const` termina o comando de cima; a reatribuição só começa um item no começo, depois do `;`, depois de outra declaração e
+      // depois da linha em branco que separa, com o comando de cima fechado (RN-SQL-018).
+      let reassignment = boundary;
+      if (!reassignment && !keyword && blankLines && gap && command.started() && !command.open() && followedByEquals(sql, token.end))
+        reassignment = blankLinesBetween(sql, from, token.start, dialect) !== null;
+
+      if ((keyword && (boundary || startsLine(sql, token.start))) || (!keyword && reassignment) || (keyword && reassignment)) {
+        const read = reader(sql, token.start, reassignment);
+        if (read !== null) {
+          regions.push({ start: regionStart(sql, token.start, from), end: read.end, kind: read.kind });
+          floor = read.end;
+          boundary = true;
+          body = dialect.body();
+          command = commandAbove(list);
+
+          let next = index + 1;
+          while (next < list.length && list[next].end <= read.end) next++;
+          if (next < list.length && list[next].start < read.end) {
+            list.length = next;
+            for (const again of tokens(sql, dialect, read.end)) list.push(again);
+          }
+          index = next - 1;
+          continue;
+        }
+      }
+    }
 
     // Uma linha em branco precisa de duas quebras de linha: o espaço de um caractere entre dois pedaços, o caso comum, nem é lido.
-    if (token.start - from > 1 && command.started() && !body.open() && !command.open()) {
+    if (blankLines && gap && command.started() && !body.open() && !command.open()) {
       const blank = blankLinesBetween(sql, from, token.start, dialect);
       if (blank !== null && startsCommand(list, index, command.first())) {
         cuts.push(blank.first);
@@ -628,7 +791,7 @@ function blankLineCuts(sql: string, dialect: Dialect): number[] {
       }
     }
 
-    if (!command.started() && !body.open() && token.text !== ";") {
+    if (blankLines && !command.started() && !body.open() && token.text !== ";") {
       const loose = blankLinesBetween(sql, from, token.start, dialect)?.loose ?? null;
       if (loose !== null && loose > (cuts.at(-1) ?? 0)) cuts.push(loose);
     }
@@ -636,15 +799,20 @@ function blankLineCuts(sql: string, dialect: Dialect): number[] {
     // O `db2Body` só vê o bloco nas primeiras palavras do comando, e o `BEGIN` não começa comando: depois de uma linha em branco (`SELECT …`, a
     // linha em branco e `BEGIN … END`), de um rótulo (`nome: BEGIN`) ou do `ALTER MODULE … ADD PROCEDURE`, o primeiro `;` do bloco recomeçaria a
     // conta, e a linha em branco seguinte separaria o `DELETE` de dentro dele. O bloco vai até o fim do texto: dali em diante, nada separa.
-    if (dialect.beginBlock && token.text === "begin") return cuts;
+    if (dialect.beginBlock && token.text === "begin") return { cuts, regions };
 
     body.next(token);
     if (token.text === ";") {
       if (!body.open()) body = dialect.body();
       command = commandAbove(list);
-    } else command.next(token, index);
+      boundary = !body.open();
+    } else {
+      command.next(token, index);
+      boundary = false;
+    }
+    floor = token.end;
   }
-  return cuts;
+  return { cuts, regions };
 }
 
 /** Se de `from` até `to` só há espaços e quebras de linha. */
@@ -683,20 +851,84 @@ function onBlankLineCut(sql: string, offset: number, cuts: readonly number[]): b
  * acima), `null`, mesmo que haja um abaixo: "se não há nada acima, nada abaixo também". Nas outras linhas em branco fora de comando (depois de um
  * comando terminado no `;`) a resposta é a de antes, o comando seguinte: o `;` não muda de resposta com a preferência ligada.
  */
-export function statementAt(sql: string, offset: number, engine?: Engine, { blankLines = false }: StatementOptions = {}): SqlStatement | null {
-  const dialect = dialectOf(engine);
-  const cuts = blankLines ? blankLineCuts(sql, dialect) : [];
-  const statements = scan(sql, dialect, cuts);
-  const found = statements.find((statement) => offset <= statement.boundary) ?? statements.at(-1);
+export function statementAt(sql: string, offset: number, engine?: Engine, options: StatementOptions = {}): SqlStatement | null {
+  const found = itemAt(sql, offset, engine, options);
+  return found === null ? null : { text: found.text, start: found.start, end: found.end };
+}
+
+/** Onde o primeiro comando começa de fato: depois dos `//` do topo do script, que são comentário (RN-VAR-001). */
+function afterTopComments(sql: string, first: SqlStatement, dialect: Dialect): number {
+  let start = first.start;
+  for (;;) {
+    let position = start;
+    while (position < first.end && isWhitespace(sql.charCodeAt(position))) position++;
+    if (sql.startsWith("//", position) && startsLine(sql, position)) start = afterLine(sql, position + 2, dialect.carriageReturnEndsComment);
+    else return position;
+  }
+}
+
+/** Os itens do texto com onde cada um acaba, para achar o do cursor: os comandos de `scan` e as declarações (que acabam onde acabam). */
+type Located = Scanned & { kind: ScriptItem["kind"] };
+
+function locatedItems(sql: string, view: ReturnType<typeof viewOf>): Located[] {
+  const statements: Located[] = scan(view.text, view.dialect, view.cuts).map((statement) => ({ ...statement, kind: "statement" }));
+  // O `//` do topo é comentário, e não faz parte do primeiro comando (o mesmo de `scriptItems`); só com as declarações ligadas.
+  const first = statements[0];
+  if (first !== undefined && view.dialect.slashComments) {
+    const start = afterTopComments(sql, first, view.dialect);
+    if (start !== first.start) statements[0] = { ...first, text: sql.slice(start, first.end), start };
+  }
+  if (view.regions.length === 0) return statements;
+
+  // O `;` que a leitura põe no lugar de uma declaração fecha o comando de cima um caractere depois do começo dela: o cursor no começo da declaração é dela, e não
+  // do comando de cima.
+  const closers = new Set(view.regions.map((region) => region.start + 1));
+  for (let index = 0; index < statements.length; index++) {
+    const statement = statements[index];
+    if (closers.has(statement.boundary)) statements[index] = { ...statement, boundary: Math.max(statement.end, statement.boundary - 2) };
+  }
+  return mergeItems(sql, statements, view.regions, (region) => ({ ...declarationItem(sql, region), boundary: region.end, cut: false }));
+}
+
+/** O item de uma declaração: o texto desde o primeiro caractere que não é espaço (os `//` de cima vão com ela). */
+function declarationItem(sql: string, region: Region): ScriptItem {
+  return { kind: region.kind, text: sql.slice(region.start, region.end), start: region.start, end: region.end };
+}
+
+/** Junta, na ordem do texto, os comandos e as declarações. */
+function mergeItems<T extends { start: number }>(sql: string, statements: readonly T[], regions: readonly Region[], make: (region: Region) => T): T[] {
+  const merged: T[] = [];
+  let next = 0;
+  for (const statement of statements) {
+    while (next < regions.length && regions[next].start < statement.start) merged.push(make(regions[next++]));
+    merged.push(statement);
+  }
+  while (next < regions.length) merged.push(make(regions[next++]));
+  return merged;
+}
+
+/**
+ * O item onde está o cursor (RN-SQL-001): o mesmo de `statementAt`, com a declaração como um item (RN-VAR-020). Com o cursor numa linha em branco logo depois de uma
+ * declaração, é a declaração, tenha ela `;` ou não.
+ */
+export function itemAt(sql: string, offset: number, engine?: Engine, options: StatementOptions = {}): ScriptItem | null {
+  const { blankLines = false } = options;
+  const view = viewOf(sql, dialectOf(engine), options);
+  const items = locatedItems(sql, view);
+  const found = items.find((item) => offset <= item.boundary) ?? items.at(-1);
   if (found === undefined) return null;
 
-  if (blankLines && (offset < found.start || offset > found.end) && isBlankLine(sql, offset)) {
-    const previous = statements.findLast((statement) => statement.end <= offset);
-    if (previous === undefined) return null;
+  const result = (item: Located): ScriptItem => ({ kind: item.kind, text: item.text, start: item.start, end: item.end });
+
+  if ((offset < found.start || offset > found.end) && isBlankLine(sql, offset)) {
+    const previous = items.findLast((item) => item.end <= offset);
+    if (previous === undefined) return blankLines ? null : result(found);
+    if (previous.kind !== "statement" && onlyWhitespace(sql, previous.end, offset)) return result(previous);
     // O de cima que terminou no `;` não é desta regra: vale a resposta de antes.
-    if (previous.cut && onBlankLineCut(sql, offset, cuts)) return toStatement(previous);
+    if (blankLines && previous.cut && onBlankLineCut(sql, offset, view.cuts)) return result(previous);
+    // Sem a preferência a resposta é a de antes: o comando seguinte.
   }
-  return toStatement(found);
+  return result(found);
 }
 
 /**
@@ -739,10 +971,26 @@ function innerSemicolons(sql: string, dialect: Dialect, cuts: readonly number[])
  * `statementCount`: cada comando daqui conta 1 lá, e a API, que repete a conferência, o aceita. O pedaço só com espaços, `;` e comentários não é
  * comando. `start` e `end` são posições em `sql`.
  */
-export function scriptStatements(sql: string, engine?: Engine, { blankLines = false }: StatementOptions = {}): SqlStatement[] {
-  const dialect = dialectOf(engine);
-  const cuts = blankLines ? blankLineCuts(sql, dialect) : [];
-  return scan(sql, dialect, cuts, innerSemicolons(sql, dialect, cuts)).map(toStatement);
+export function scriptStatements(sql: string, engine?: Engine, options: StatementOptions = {}): SqlStatement[] {
+  const view = viewOf(sql, dialectOf(engine), options);
+  return scan(view.text, view.dialect, view.cuts, innerSemicolons(view.text, view.dialect, view.cuts)).map(toStatement);
+}
+
+/**
+ * Os itens do script (RN-VAR-019), na ordem do texto: os comandos de `scriptStatements` e as declarações e reatribuições, cada uma um item (RN-VAR-001). O `//` do
+ * começo do primeiro comando é comentário (RN-VAR-001) e não faz parte dele. Sem `declarations`, são só os comandos.
+ */
+export function scriptItems(sql: string, engine?: Engine, options: StatementOptions = {}): ScriptItem[] {
+  const view = viewOf(sql, dialectOf(engine), options);
+  const statements: ScriptItem[] = scan(view.text, view.dialect, view.cuts, innerSemicolons(view.text, view.dialect, view.cuts)).map((statement) => ({ ...toStatement(statement), kind: "statement" }));
+
+  // No topo do script, antes do primeiro comando, o `//` é comentário (RN-VAR-001): o primeiro comando começa depois deles.
+  const first = statements[0];
+  if (first !== undefined && options.declarations !== undefined) {
+    const start = afterTopComments(sql, first, view.dialect);
+    if (start !== first.start) statements[0] = { kind: "statement", text: sql.slice(start, first.end), start, end: first.end };
+  }
+  return mergeItems(sql, statements, view.regions, (region) => declarationItem(sql, region));
 }
 
 /**
@@ -804,7 +1052,7 @@ export function isInsideComment(sql: string, index: number, engine?: Engine): bo
     }
 
     let end = position + 1;
-    if (code === 39) end = afterQuoted(sql, "'", position + 1);
+    if (code === 39) end = afterString(sql, position, dialect);
     else if (code === 34) end = afterQuoted(sql, '"', position + 1);
     else if (code === 36 && dialect.dollarQuotes) {
       const tag = dollarTag(sql, position);
@@ -815,6 +1063,174 @@ export function isInsideComment(sql: string, index: number, engine?: Engine): bo
     position = end;
   }
   return false;
+}
+
+/**
+ * Chama `visit` para cada caractere do texto que é SQL de verdade, pelas regras do banco: fora de texto entre aspas (também o `E'...'`), de nome entre aspas
+ * duplas, de comentário (também o `{ ... }` do Informix) e de `$tag$ ... $tag$` (RN-SQL-002). É a pergunta do `@nome` (RN-VAR-015) e do marcador de parâmetro
+ * (RN-VAR-032): quem quer achar um caractere no SQL a faz por aqui, e não com outro leitor.
+ */
+export function visitCode(sql: string, engine: Engine | undefined, visit: (position: number, code: number) => void): void {
+  const dialect = dialectOf(engine);
+
+  let position = 0;
+  while (position < sql.length) {
+    const code = sql.charCodeAt(position);
+
+    const comment = code === 45 || code === 47 || code === 123 ? afterComment(sql, position, dialect) : null;
+    if (comment !== null) {
+      position = comment;
+      continue;
+    }
+
+    if (code === 39) position = afterString(sql, position, dialect);
+    else if (code === 34) position = afterQuoted(sql, '"', position + 1);
+    else if (code === 36 && dialect.dollarQuotes) {
+      const tag = dollarTag(sql, position);
+      if (tag === null) {
+        visit(position, code);
+        position++;
+      } else position = after(sql, tag, position + tag.length);
+    } else {
+      visit(position, code);
+      position++;
+    }
+  }
+}
+
+/** O que fica aberto no fim do texto: um texto entre aspas simples, um nome entre aspas duplas, um comentário ou um `$tag$`. */
+export type Unclosed = "text" | "quoted" | "comment" | "dollar";
+
+/**
+ * Se o texto, lido sozinho pelas regras do banco, termina dentro de um texto, de um nome entre aspas, de um comentário (de linha ou de bloco) ou de um `$tag$`
+ * (RN-VAR-004): o valor `sql` que faria isso engoliria o resto do comando. Nulo quando tudo o que abre fecha.
+ */
+export function unclosedConstruct(sql: string, engine?: Engine): Unclosed | null {
+  const dialect = dialectOf(engine);
+
+  let position = 0;
+  while (position < sql.length) {
+    const code = sql.charCodeAt(position);
+    const next = sql.charCodeAt(position + 1);
+
+    if (code === 45 && next === 45) {
+      let end = position + 2;
+      while (end < sql.length && sql.charCodeAt(end) !== 10 && !(dialect.carriageReturnEndsComment && sql.charCodeAt(end) === 13)) end++;
+      if (end >= sql.length) return "comment";
+      position = end + 1;
+    } else if (code === 47 && next === 42) {
+      let depth = 1;
+      let end = position + 2;
+      while (end < sql.length && depth > 0) {
+        if (dialect.nestedComments && sql.charCodeAt(end) === 47 && sql.charCodeAt(end + 1) === 42) {
+          depth++;
+          end += 2;
+        } else if (sql.charCodeAt(end) === 42 && sql.charCodeAt(end + 1) === 47) {
+          depth--;
+          end += 2;
+        } else end++;
+      }
+      if (depth > 0) return "comment";
+      position = end;
+    } else if (code === 123 && dialect.braceComments) {
+      const close = sql.indexOf("}", position + 1);
+      if (close < 0) return "comment";
+      position = close + 1;
+    } else if (code === 39) {
+      let end = position + 1;
+      const escaped = dialect.escapeStrings && opensEscapeString(sql, position);
+      let closed = false;
+      while (end < sql.length) {
+        const current = sql.charCodeAt(end);
+        if (escaped && current === 92) end += 2;
+        else if (current === 39) {
+          if (sql.charCodeAt(end + 1) === 39) end += 2;
+          else {
+            closed = true;
+            end++;
+            break;
+          }
+        } else end++;
+      }
+      if (!closed) return "text";
+      position = end;
+    } else if (code === 34) {
+      let end = position + 1;
+      let closed = false;
+      while (end < sql.length) {
+        if (sql.charCodeAt(end) === 34) {
+          if (sql.charCodeAt(end + 1) === 34) end += 2;
+          else {
+            closed = true;
+            end++;
+            break;
+          }
+        } else end++;
+      }
+      if (!closed) return "quoted";
+      position = end;
+    } else if (code === 36 && dialect.dollarQuotes) {
+      const tag = dollarTag(sql, position);
+      if (tag === null) position++;
+      else {
+        const close = sql.indexOf(tag, position + tag.length);
+        if (close < 0) return "dollar";
+        position = close + tag.length;
+      }
+    } else position++;
+  }
+  return null;
+}
+
+/**
+ * Se o comando tem um corpo que o banco guarda e executa depois: a rotina, o gatilho e o bloco composto (RN-VAR-001 e 015). Ali o `@nome` vai como está. É o corpo de
+ * `statementCount` aberto em algum ponto do texto, ou um `CREATE [OR REPLACE] [DBA] PROCEDURE|FUNCTION|TRIGGER`.
+ */
+export function statementHasBody(sql: string, engine?: Engine): boolean {
+  const dialect = dialectOf(engine);
+  const body = dialect.body();
+  const words: string[] = [];
+
+  for (const token of tokens(sql, dialect)) {
+    body.next(token);
+    if (body.open()) return true;
+    if (token.word && !beforeKind.has(token.text) && words.length < 2) {
+      words.push(token.text);
+      if (words.length === 2 && words[0] === "create" && (isRoutine(words[1]) || words[1] === "trigger")) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * A posição do `)` que fecha o `(` em `open`, ou `null` quando ele não fecha, lendo o SQL pelas regras do banco (RN-VAR-011): o `)` dentro de texto entre aspas
+ * (também o `E'...'`), de nome entre aspas duplas, de comentário (também o `{ ... }` do Informix) e de `$tag$ ... $tag$` não conta.
+ */
+export function matchingParenthesis(sql: string, open: number, engine?: Engine): number | null {
+  const dialect = dialectOf(engine);
+  let depth = 0;
+
+  let position = open;
+  while (position < sql.length) {
+    const code = sql.charCodeAt(position);
+
+    const comment = code === 45 || code === 47 || code === 123 ? afterComment(sql, position, dialect) : null;
+    if (comment !== null) {
+      position = comment;
+      continue;
+    }
+
+    if (code === 40) depth++;
+    else if (code === 41 && --depth === 0) return position;
+
+    if (code === 39) position = afterString(sql, position, dialect);
+    else if (code === 34) position = afterQuoted(sql, '"', position + 1);
+    else if (code === 36 && dialect.dollarQuotes) {
+      const tag = dollarTag(sql, position);
+      position = tag === null ? position + 1 : after(sql, tag, position + tag.length);
+    } else position++;
+  }
+  return null;
 }
 
 /**
