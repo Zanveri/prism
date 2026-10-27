@@ -743,7 +743,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 - **Nada reconecta sozinho (RN-SESSAO-004).** "Desconectar" é uma decisão da pessoa, e nada na tela a desfaz. `createDisconnectLog`
   (`_lib/connection-intent.ts`) observa o cache e registra a conexão cuja consulta `["database-session", id]` foi REMOVIDA (o "Desconectar"
   a remove), menos com o cofre bloqueado (o bloqueio também a remove, e o desbloqueio restaura tudo); a conexão sai do registro quando uma
-  sessão volta a ter dado, e o `WorkbenchTabs` a esquece (`forget`) quando uma aba dela tem sessão. As vistas das tabelas dessa conexão não
+  sessão volta a ter dado, e o `WorkbenchTabs` a esquece (`forget`) quando uma aba dela tem sessão. O registro é do `WorkbenchProvider` (`disconnectLog` no
+  `useWorkbench`), e não da área das abas: as conexões das abas de tabela que voltaram na entrada entram nele antes de as abas existirem (ver "Abas que voltam na próxima entrada"). As vistas das tabelas dessa conexão não
   abrem sessão por conta própria: a Estrutura e o Diagrama mostram "A conexão está desconectada." com "Conectar" (`DisconnectedView`, que
   abre a sessão da árvore por `connectTree`), e os Registros esperam o "Atualizar", que conecta e carrega (abre a sessão da aba). As
   consultas do catálogo (`columnsQuery`, `indexesQuery`, `foreignKeysQuery` e `treeQuery`) têm o parâmetro `enabled` por isso. O foco que
@@ -1130,9 +1131,15 @@ suas abas ao processo principal, que junta as de todas e grava.
   passa à vizinha. O schema é um só, `electron/workspace-messages.ts`, com os nomes da API (`connectionID`, `scriptID`), conferido no processo principal (o
   relato de cada janela) e na tela (a resposta do `GET`, `workspace.service.ts`: a aba que não confere fica de fora, sem derrubar as outras).
 - **Nada conecta nem executa sozinho.** As abas voltam sem sessão; as conexões das abas de tabela que voltaram são marcadas como desconectadas
-  (`DisconnectLog.mark`, pelo `restoredTableConnections` do provedor), e as vistas delas esperam o clique, como as de uma conexão que a pessoa desconectou. A
+  (`DisconnectLog.mark`, no `restoreSaved` do provedor), e as vistas delas esperam o clique, como as de uma conexão que a pessoa desconectou. A
   árvore não abre nada: os nós abertos da conexão para baixo (a conexão, os bancos, os esquemas, os grupos e as tabelas) não são gravados, e só as pastas
   voltam abertas (RN-NAV-014, ver "As pastas abertas lembradas"), o que não conecta nada.
+  **Armadilha: a marca tem de existir ANTES da renderização que mostra as abas.** A primeira carga dos Registros (`needsFirstRun`, em `RecordsView`) é um efeito
+  do painel da aba, roda antes de qualquer efeito do pai e lê o `disconnected` da renderização em que a aba apareceu. Até a 0.6.0 as conexões iam do provedor à
+  área das abas pelo estado (`restoredTableConnections`) e o `mark` era um `useEffect` do `WorkbenchTabs`, que vinha DEPOIS: a aba de tabela ATIVA que voltava lia
+  "conectável" e abria a sessão sozinha (as escondidas só carregam quando se abrem, e aí a marca já estava). Vinha desde o `mark` da 0.3.0, e o foco da
+  RN-ABAS-019 não tem nada com ele (focar o filtro não executa nada). Por isso o registro é do provedor, que marca as conexões no `restoreSaved` antes do
+  `setTabs`; não volte a entregá-las por estado e efeito, nem leia o registro por um efeito. `workbench-tabs.restore.test.ts` guarda a primeira renderização.
 - **Quem reabre** (`WorkbenchProvider`): ao montar, a área de trabalho pergunta ao processo principal se reabre (`claimWorkspaceRestore`, canal
   `prism:workspace-claim`: só a janela principal, a primeira das vivas, e uma vez por entrada; a que recarrega com outra janela aberta não reabre, porque as abas
   estão nas janelas). A principal lê (`getWorkspace`), as conexões e os scripts, e só DEPOIS começa a contar as suas; uma falha em qualquer leitura não reabre
