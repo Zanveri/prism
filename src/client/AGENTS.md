@@ -681,9 +681,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   que estiver na tela some (também a do erro que ficou na tela enquanto outro comando roda), e o erro de um comando que
   ainda roda chega sem posição (`textEdited`).
 - **A grade do resultado** (`result-grid.tsx`) é virtualizada nas duas direções, com linhas de altura fixa e larguras de
-  coluna calculadas uma vez, da primeira página, contando caracteres (a fonte é de largura fixa). Não meça célula no DOM
-  nem recalcule largura ao carregar mais: é isso que deixa "Carregar mais 200" sem redesenhar o que está na tela. A grade
-  recebe `key` por execução (`state.id`), não por página. **No cabeçalho, quem cede espaço é o tipo, e o nome da coluna não cede nada**
+  coluna medidas uma vez, da primeira página, pela largura de cada caractere na fonte da interface (canvas, `grid-text.ts`; ver "A fonte da
+  grade" abaixo). Não meça célula no DOM nem recalcule largura ao carregar mais: é isso que deixa "Carregar mais 200" sem redesenhar o que está
+  na tela. A grade recebe `key` por execução (`state.id`), não por página. **No cabeçalho, quem cede espaço é o tipo, e o nome da coluna não cede nada**
   (`GridHeaderCell`): a largura é calculada sem o botão de ordenar, e o espaço dele (sempre reservado, RN-GRADE-021) alguém cede; era o nome, e o `id`
   ordenado virava `integer ▲`. O nome é `shrink-0` (não encolhe) e o tipo, `min-w-0 truncate`, absorve o que falta INTEIRO, até sumir; os dois
   moram numa caixa (`flex min-w-0 overflow-hidden`) que encolhe com a célula e fica ao lado da seta, e o `max-w-full` do nome só o corta (com
@@ -696,6 +696,34 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   tempo do comando (`formatElapsed`, em `lib/utils/format.ts`) sai em `ms` abaixo de um segundo, em segundos com um décimo até um minuto
   (`1,3 s`), em minutos e segundos até uma hora (`1 min 10 s`) e em horas e minutos daí em diante (`2 h 5 min`); a unidade é a do valor já
   arredondado, e o que não é um tempo (não finito, ou negativo) sai como um traço.
+- **A fonte da árvore e da grade é a da interface, sempre** (RN-CONFIG-008, seção 42), também a do app (IBM Plex Sans): a caixa que rola da grade tem
+  `font-sans` explícito, e o cabeçalho, as células e o `textarea` do `CellEditor` herdam (o preflight põe `font: inherit`); o `navigator-row.tsx` não
+  escolhe fonte (sem `monoKinds`). O número da linha e o canto têm `tabular-nums`; **as células não**: o canvas não aplica `tnum`, e a medida divergiria
+  da tela (a Plex Sans já tem dígitos de largura igual). Seguem a interface o "N linhas afetadas", o número das Estatísticas e o campo do texto do nulo
+  (a prévia da grade); o comando das Estatísticas é SQL e vai em `font-editor`. **Continuam mono do app**: a mensagem do banco (`<pre>`, o `^` do
+  PostgreSQL só se alinha em largura fixa), o SQLSTATE, a linha da variável, as etiquetas, a Estrutura, o Diagrama, o título da aba da tabela e os diálogos.
+- **A largura das colunas é medida na fonte** (`grid-text.ts`, puro, e `use-grid-text.ts`), porque a fonte da interface é proporcional e contar
+  caracteres erra: o nome `WAREHOUSE_ID` em seminegrito desenha 102,5 px onde 7,8 px por caractere reservava 93,6, e o nome em maiúsculas do Informix e
+  do Db2 virava reticências (o E1 de volta). `measuredGridText(pilha, measure)` mede **cada ponto de código uma vez por fonte** (`for…of`, um mapa por
+  fonte) em três fontes do canvas: `400 13px` (célula), `600 13px` (o nome: o cabeçalho é `font-semibold`) e `400 11px` (o tipo e a marca "somente
+  leitura"), e soma, com **1 px de folga por texto** e `Math.ceil`. Sem o ajuste entre pares de letras a soma sobra, que é o lado seguro: o que não
+  pode é cortar. **Não meça o texto inteiro** (`measureText` por valor, ~10 mil chamadas na primeira página, cada uma com o desenho do texto) nem a
+  célula no DOM. O `limit` para a soma assim que passa dele: o valor de 10.000 caracteres custa só o que cabe (`baseWidths` passa 455 e `fitWidth`,
+  575, o teto menos o respiro). O caractere que o canvas mede como 0 ou como número que não serve vale o que valia na mono (sobra). `monoGridText` é a
+  conta de antes (7,8 e 6,6 por unidade de `.length`) e o **padrão** de `baseWidths`, `fitWidth` e `GridRow`: sem documento ou sem contexto 2d (o
+  vitest roda em Node) a grade usa ele, e os testes de larguras por tabela de casos continuam os de antes. `useGridText(fonte)`: o canvas é um
+  `<canvas>` que nunca entra na página, **um por documento** (`WeakMap`) e pelo `useHost().document` (a janela do resultado mede no documento dela:
+  é a regra de "código novo na área de resultado não usa `document` global"); a pilha é `resolvedFontFamily("ui", nome)` (`fonts.ts`: a escolhida
+  entre aspas e a do app atrás, **sem `var()`**, que o canvas não resolve), e um teste confere `appFontFamilies` contra `--font-app-sans` e
+  `--font-mono` do `globals.css`: mudar uma sem a outra faz o canvas medir outra fonte. O `ctx.font` atribuído é conferido (o canvas ignora em silêncio
+  a atribuição inválida: sentinela de `10px sans-serif` antes) e o "0" tem de medir mais que zero, senão mono. Antes de medir, `document.fonts.check`
+  nas três fontes: a que não carregou (só as do `@fontsource` podem estar assim; a do sistema nem está na lista) mede a reserva, o gancho pede
+  `fonts.load` e, quando ela chega, troca o `GridText` **uma vez** (o contador `loads`; a fonte que falha não faz laço). O `GridText` só muda de
+  identidade com a fonte, a página ou a carga: a grade (`ResultGrid` recebe a prop `font`; a `ResultPanel` passa `preferences.ui.fontFamily`) refaz só
+  as larguras de saída (`base`, no `useMemo`) e o efeito de `measure()` do virtualizador cuida do resto; as larguras escolhidas (`ColumnSizing`, em px
+  de 100%) ficam, e "Carregar mais" continua sem refazer nada (`firstPage` congelado). A dica do valor cortado (`GridRow`) usa a mesma medida:
+  `text.cell(valor, espaço + 1) <= espaço`, com o espaço na escala de 100% (`item.size / scale - cellPadding`). A altura da linha (32 px × zoom) e o
+  zoom não mudam: a medida é a de 100% vezes o fator, a mesma suposição linear de antes.
 - **"Conectada" tem uma definição só**, `isConnected` (`workbench-model.ts`): a árvore abriu a sessão da conexão, ou
   alguma aba tem a sua. Vale para o ponto e o "Desconectar" do navegador e para a barra de status. As listas das conectadas
   (`connectedConnectionIds`: a conta e o "Só as conectadas" do navegador, a lista do botão da conexão da aba e o script genérico) tiram dela a que a
@@ -3440,9 +3468,11 @@ fechar não apaga as abas.
   classe), porque a escolha troca a `--font-sans`. Ao sair do cofre o `FontSync` desmonta e a janela volta às fontes do app: **diferente do
   tema, nada das fontes é lembrado no dispositivo**, e o login sempre abre na IBM Plex Sans. Em todas as janelas pelo `storage`, como o resto
   das preferências (conferido com uma aba levada a outra janela: a fonte do editor dela mudou com a escolha feita na primeira). **Onde vale**: a
-  da interface, em todo o texto fora do código; a do editor, no CodeMirror e no SQL que a tela mostra fora dele (`font-editor`): o campo do
-  filtro dos Registros e o comando executado embaixo dele, o "Ver SQL" e o DDL aproximado. A grade, a árvore, as etiquetas e o resto do que é
-  `font-mono` não mudam. **A lista** é a da API de fontes locais do Chromium (`window.queryLocalFonts`, liberada em `permissions.ts`), lida na
+  da interface, em todo o texto fora do código **e também na árvore do navegador e nas grades** (consulta, abas do Executar script e Registros),
+  mesmo quando é a do app (seção 42, pedido do dono de 2026-10-27: antes eram `font-mono`; a grade mede as colunas nela, ver "A largura das colunas é
+  medida na fonte"); a do editor, no CodeMirror e no SQL que a tela mostra fora dele (`font-editor`): o campo do filtro dos Registros e o comando
+  executado embaixo dele, o "Ver SQL", o "SQL enviado", o DDL aproximado e o comando de cada linha das Estatísticas. A mensagem de erro do banco, as
+  etiquetas, a Estrutura, o Diagrama e o resto do que é `font-mono` não mudam. As dicas dos dois campos (`settings.copy.ts`) dizem isso. **A lista** é a da API de fontes locais do Chromium (`window.queryLocalFonts`, liberada em `permissions.ts`), lida na
   primeira vez que um dos campos recebe o foco (`systemFontsQuery`, a mesma para os dois, `gcTime: 0`: volta a ser lida a cada visita às
   Configurações): uma entrada por família, em ordem de nome (`Intl.Collator` pt-BR, sem caixa, numérica), sem o nome que não pode virar CSS.
   Sem a API, com a permissão negada, com erro ou com a lista vazia ela é `null`, e o campo aceita o nome digitado (Enter), se ele serve (senão,
@@ -4040,7 +4070,8 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que
-  não muda (grade, árvore, etiquetas). Texto novo que é SQL usa `font-editor`; dado do banco, `font-mono`.
+  nenhuma escolha muda (a mensagem do banco, as etiquetas, a Estrutura e o Diagrama). Texto novo que é SQL usa `font-editor`; **o dado do banco
+  na grade e na árvore usa a da interface (`font-sans`, herdada)**; a mensagem do banco, o código e as etiquetas, `font-mono`.
 
 ## Dependências
 
@@ -4070,6 +4101,27 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 - **Fontes do sistema (RN-CONFIG-008)**: a lista e a medida foram vistas só no Linux, sob Xvfb, em desenvolvimento (`http://localhost`); no app
   empacotado (`app://prism`), no Windows e no macOS ainda não. O caminho "não deu para ler a lista" (o campo que aceita o nome digitado) só foi
   visto nos testes: no Electron a permissão é dada.
+- **A largura das colunas medida na fonte da interface (RN-CONFIG-008, seção 42)**: a soma dos caracteres do canvas mais 1 px por texto foi conferida contra o
+  texto na tela, no Chromium do Electron no Linux, sob Xvfb: o nome e a célula medidos no DOM contra o que a coluna deixa ao texto (`Math.round((largura + 25)
+  × fator) − 24 × fator − 1`), e o `GridHeaderCell` e a `ResultGrid` de verdade, montados com o CSS do app. Com a IBM Plex Sans e com a DejaVu Sans, na grade
+  de 100% a 200% (e, com a escala do dispositivo em 1, 1,25, 1,5 e 2 e o zoom do programa em 125% e 150%, a 100% e 150%), nenhum dos mais de 1.100 textos
+  (nomes em MAIÚSCULAS e em minúsculas, com acento, números, aleatórios; 500 UUIDs, 300 datas com hora, 300 números, 400 nomes em maiúsculas com `_`) passou
+  da coluna: a menor sobra foi 0,39 px no nome e 0,63 px na célula, e 27 nomes de coluna, com o tipo ligado e desligado, a marca "somente leitura" e a seta de
+  ordenar, não vieram cortados em nenhum zoom de 100% a 200% (a conta de antes, da mono, cortava 17 dessas combinações a 100% ou mais). **O que a soma não
+  vê**: o ajuste entre pares de letras. Quase sempre sobra (a soma é maior), mas há pares com ajuste positivo (`TT`, `WW`, `g_`, `_j`, `fT`: até 0,7 px por
+  par), e um texto de um par só repetido passa da soma e da folga: `TTTTTTTT` por 0,6 px, 32 `W` por 0,7 px (a célula ganha as reticências sem a dica). Dados
+  de verdade não chegam lá. **Abaixo de 100% da grade (50% a 80%)** alguns textos passam da coluna, por até 0,45 px (um nome aleatório de 16 caracteres; entre
+  67 nomes de coluna comuns, só 3, por até 0,16 px), e o cabeçalho que ordena e não mostra o tipo corta o nome em até 2 px: é a aritmética do zoom, que já era
+  assim com a mono (140 de 1.512 combinações cortadas, 17 delas a 100% ou mais, contra 48 com a IBM Plex Sans e 61 com a DejaVu Sans, nenhuma a 100% ou mais):
+  a largura vira pixels inteiros (`gridMetrics.width` usa `Math.round`), e a margem de 4 px do botão de ordenar e a borda de 1 px não escalam (o tipo, quando
+  está à vista, absorve a diferença). Com uma fonte de alternativas contextuais (a Inter troca o `x` entre algarismos) um texto de letras e algarismos pode
+  passar da soma por alguns décimos. **No Windows (e no macOS) não foi conferida**: se o Chromium arredondar o avanço de cada glifo ali (sem posição de
+  subpixel), a soma do canvas e a tela podem divergir, e a folga de 1 px por texto cobre pouco disso. Conferir os cabeçalhos em MAIÚSCULAS (`WAREHOUSE_ID`,
+  `NOME_MUNICIPIO`), com o tipo ligado e desligado, ordenados, em 50, 100, 150 e 200%, e, se divergir, calibrar a folga por uma régua única (um texto fora do
+  fluxo, medido uma vez por fonte). Com a fonte do app ainda carregando no primeiro desenho da grade, o canvas já pede a fonte e a primeira medida é a da
+  reserva (o `WAREHOUSE_ID` de 105 px passa a 104 px, e uma célula de 104 a 101 px, quando ela chega): a grade se refaz uma vez, como previsto. A conferência
+  e o carregamento olham a faixa latina do `@fontsource` (a que cobre o português): um caractere de outra faixa (cirílico, latino estendido) é medido na
+  reserva até a faixa chegar, e a medida não é refeita por ele (um `loadingdone` de `document.fonts` refaria).
 - Pacote de macOS: não provado por inteiro: o `dmg` só se gera no macOS, e nenhum pacote foi aberto no macOS. Num contêiner Linux o electron-builder aceita a
   configuração e gera o `zip`, e recusa o `dmg` (`sips process failed ENOENT`: o `dmg` só se gera no macOS). O `.icns` existe e
   traz a ilustração inteira, mas o app nunca foi aberto no macOS.
