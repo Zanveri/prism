@@ -24,7 +24,7 @@ import { connectionReveal } from "../_lib/connection-intent";
 import { credentialsMissingField } from "../_lib/credentials-missing";
 import { openExportWizard } from "../_lib/data-export/data-exports";
 import { openImportWizard } from "../_lib/data-import/data-imports";
-import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
+import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, objectNamesKey, objectNamesQuery, openSessionForSearch, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { filterConnected } from "../_lib/navigator-connected";
@@ -33,7 +33,9 @@ import { allEnvironments, choiceAvailable, filterByEnvironment, type Environment
 import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { importArrived, importRevealOf, revealOf } from "../_lib/navigator-reveal";
-import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
+import { indexLevels } from "../_lib/navigator-index";
+import { cachedTree, fold, loadedLevels, searchTree, type CachedNames, type MatchRange } from "../_lib/navigator-search";
+import { cachedTreeSessions, indexesInScope, searchScope, searchStatusOf, type IndexReport, type SearchRetry } from "../_lib/navigator-search-scope";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
 import { invalidateStructure } from "../_lib/table-structure.service";
 import { refreshKey } from "../_lib/grid-editing";
@@ -52,6 +54,7 @@ import { CheckFailureDialog } from "./connection-check";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
 import { NavigatorFilteredEmpty } from "./navigator-connected-filter";
 import { NavigatorFilters } from "./navigator-filters";
+import { NavigatorSearchStatus } from "./navigator-search-status";
 import { TypeAheadIndicator } from "./type-ahead-indicator";
 import { NavigatorRow, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
@@ -89,6 +92,10 @@ function lacksCredentials(treeSession: UseQueryResult): boolean {
 const isFetched = (path: NavPath): path is FetchedPath => path.type === "connection" || path.type === "database" || path.type === "objects" || path.type === "tableLevel";
 
 const noKeys: ReadonlySet<string> = new Set();
+const noIndexes: CachedNames[] = [];
+
+/** Os ids de uma lista guardada como texto (separados por espaço), como conjunto. */
+const idsOf = (signature: string): ReadonlySet<string> => new Set(signature === "" ? [] : signature.split(" "));
 
 /** O ícone de cada item do menu, onde o app já tem o desenho. "Copiar" não tem, e os rótulos alinham do mesmo jeito. */
 const menuIcons: Readonly<Record<string, ReactNode>> = {
@@ -247,12 +254,25 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     (connectionId) => sessionById.get(connectionId)?.isSuccess === true,
     new Set(notConnectedIds(checks)),
   );
-  const connectedKey = onlyConnected ? connectedIds.join(" ") : null;
+  const connectedSignature = connectedIds.join(" ");
+  const connectedKey = onlyConnected ? connectedSignature : null;
 
   // RN-NAV-010 e 013: o seletor de ambiente e "Só as conectadas" se combinam; a busca filtra depois, sobre a árvore que sai daqui.
   const inEnvironment = useMemo(() => filterByEnvironment(folders.data ?? [], connectionList, environmentChoice, environments), [folders.data, connectionList, environmentChoice, environments]);
   const shown = useMemo(() => filterConnected(inEnvironment.folders, inEnvironment.connections, connectedKey === null ? null : new Set(connectedKey.split(" "))), [inEnvironment, connectedKey]);
   const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
+
+  // RN-BUSCA-002: o escopo da busca, a partir das conexões à vista (acima), das conectadas e das sessões da árvore abertas, que vêm do cache (`cachedTreeSessions`, só lê). Não
+  // é uma loja assinada (`useSyncExternalStore`) de propósito: uma renderização a mais no meio do "Desconectar" (que recolhe os nós, solta as abas e SÓ ENTÃO esquece as
+  // consultas, no mesmo lote) veria o cache já limpo com as abas e os nós ainda no ar, e os observadores refariam a sessão que a pessoa acabou de fechar. As renderizações
+  // que importam já vêm das consultas observadas (a sessão de cada conexão, os níveis abertos e os próprios índices). As conexões entram como texto (como `connectedKey`),
+  // para o escopo, e o filtro que sai dele, só se refazerem quando uma delas muda.
+  const treeSessions = cachedTreeSessions(queryClient);
+  const connectingSignature = shown.connections.filter((connection) => statuses.get(connection.id) === "connecting").map((connection) => connection.id).join(" ");
+  const scope = useMemo(
+    () => searchScope({ connections: shown.connections, connected: idsOf(connectedSignature), connecting: idsOf(connectingSignature), sessions: treeSessions }),
+    [shown.connections, connectedSignature, connectingSignature, treeSessions],
+  );
 
   // RN-TRANSF-016: a conexão que a API recusou por faltar o usuário ou a senha fica fechada, como estava antes do clique; um efeito a fecha de vez.
   const lackingCredentials = connectionList.filter((connection) => {
@@ -294,12 +314,26 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   });
 
   const searching = searchText.trim() !== "";
-  // A busca olha o que o cache da árvore já guarda, aberto ou não, e nunca abre nó nem busca nível: só lê (`cachedTree`). O que ela precisa do cache é tudo o
-  // que há de carregado (os níveis dos nós abertos são consultas dele), então o ponto de partida são só as pastas e as conexões (`tree.levels`). O filtro só
-  // se refaz quando muda o texto, o que a pessoa recolheu, a árvore ou o cache (`cachedTree` devolve o mesmo objeto enquanto nada dele mudou).
+  // RN-BUSCA-002: o índice de nomes de cada banco do escopo, pedido quando o campo tem texto. Uma vez por banco: depois disso a busca não vai mais à API até o "Atualizar", o
+  // "Desconectar" ou o bloqueio (`keepUntilRefreshed`). Os observadores ficam montados com o campo vazio (`enabled: false`) para a consulta que falhou, ou que o "Atualizar"
+  // deixou velha, buscar de novo na busca seguinte; nada é pedido sem texto. A sessão do banco abre pela consulta, sem abrir o nó (`objectNamesQuery`).
+  const indexQueries = useQueries({ queries: scope.databases.map((database) => objectNamesQuery(database.connectionId, database.database, queryClient, searching)) });
+
+  // A busca olha o que o cache da árvore já guarda, aberto ou não, e os índices de nomes dos bancos do escopo; nunca abre nó nem busca nível, e nada entra em `expanded`: só lê
+  // (`cachedTree`). O que ela precisa do cache é tudo o que há de carregado (os níveis dos nós abertos são consultas dele), então o ponto de partida são só as pastas e as
+  // conexões (`tree.levels`), e o índice só acrescenta o que falta (`indexLevels`). O filtro só se refaz quando muda o texto, o que a pessoa recolheu, a árvore, o cache ou o
+  // escopo (`cachedTree` devolve o mesmo objeto enquanto nada dele mudou, e `scopedIndexes` o mesmo enquanto nenhum índice nem o escopo mudou).
   const cache = searching ? cachedTree(queryClient) : null;
+  const cachedIndexes = cache === null ? noIndexes : cache.indexes;
+  const scopedIndexes = useMemo(() => indexesInScope(cachedIndexes, scope.databases), [cachedIndexes, scope.databases]);
   const collapsedKeys = searchCollapsed.query === searchText ? searchCollapsed.keys : noKeys;
-  const search = useMemo(() => (cache === null ? null : searchTree(tree.roots, loadedLevels(tree.levels, cache.cached), searchText, collapsedKeys)), [cache, tree, searchText, collapsedKeys]);
+  const searched = useMemo(() => {
+    if (cache === null) return null;
+
+    const indexed = indexLevels(loadedLevels(tree.levels, cache.cached), scopedIndexes, fold(searchText.trim()));
+    return { view: searchTree(tree.roots, indexed.levels, searchText, collapsedKeys), cut: indexed.cuts.length > 0, hidden: indexed.hidden };
+  }, [cache, tree, searchText, collapsedKeys, scopedIndexes]);
+  const search = searched === null ? null : searched.view;
   const rows = search === null ? flattenVisible(tree.roots, open, levels) : search.rows;
 
   // Salvar no formulário volta à área de trabalho com a conexão à vista e escolhida (RN-NAV-004): com a área de trabalho de novo na tela e a
@@ -716,6 +750,47 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     group.map((item): ContextMenuItem => ({ id: item.id, label: item.label, shortcut: item.shortcut, disabled: item.disabled, hint: item.hint, icon: menuIcons[item.id], onSelect: () => menu && runMenuAction(menu.node, item.action) })),
   );
 
+  // RN-BUSCA-002: a linha de estado da busca. Cada banco do escopo diz o que a consulta do índice dele respondeu. A conexão de fora cuja sessão da árvore falhou ao abrir
+  // (por um "Buscar nelas também" ou por um nó aberto antes) diz a mensagem do banco ali, e não no nó, que continua fechado; a recusa por faltar usuário ou senha não entra:
+  // quem a trata é o "Editar conexão" (`lacksCredentials`).
+  const searchStatus =
+    searched === null
+      ? null
+      : searchStatusOf({
+          reports: scope.databases.map((database, index): IndexReport => {
+            const result = indexQueries[index];
+            return { database, names: result.data, failure: result.isError && !result.isFetching ? { message: messageOf(result.error), lost: isSessionLost(result.error) } : null };
+          }),
+          openFailures: scope.openable.flatMap((connection) => {
+            const session = sessionById.get(connection.id);
+            return session !== undefined && session.isError && !session.isFetching && !lacksCredentials(session) ? [{ connection, message: messageOf(session.error) }] : [];
+          }),
+          cut: searched.cut,
+          scope,
+        });
+
+  /**
+   * O "Tentar de novo" da linha de estado: o índice de novo (a sessão que caiu abre outra, como na árvore) ou a abertura da sessão da conexão de fora. O botão sai da
+   * tela assim que o pedido começa (a linha passa a dizer "Buscando…"), e o foco que estava nele iria ao corpo da página: vai ao campo da busca.
+   */
+  function retrySearch(retry: SearchRetry) {
+    searchInput.current?.focus();
+    if (retry.type === "open") {
+      void openSessionForSearch(queryClient, retry.connectionId);
+      return;
+    }
+
+    const { connectionId, database } = retry.database;
+    if (retry.lost) void reopen(connectionId, database);
+    else void queryClient.refetchQueries({ queryKey: objectNamesKey(connectionId, database), exact: true });
+  }
+
+  /** O "Buscar nelas também" (RN-BUSCA-002): abre a sessão da árvore de cada conexão de fora que tem usuário e senha gravados, sem abrir o nó. É conectar, a pedido. */
+  function searchThem() {
+    searchInput.current?.focus();
+    for (const connection of scope.openable) void openSessionForSearch(queryClient, connection.id);
+  }
+
   /** O que há abaixo da barra de ações: a falha das listas, a espera por elas, o estado vazio, ou a busca e a árvore. */
   function body() {
     if (folders.isError || connections.isError) {
@@ -777,17 +852,22 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
           onlyConnected={onlyConnected}
           onToggleConnected={() => setOnlyConnected((current) => !current)}
         />
+        {/* RN-BUSCA-002: a linha de estado da busca, logo abaixo dos filtros, nunca ao lado do campo. */}
+        {searchStatus === null ? null : <NavigatorSearchStatus {...searchStatus} failures={searchStatus.failures.map(({ retry, ...failure }) => ({ ...failure, onRetry: () => retrySearch(retry) }))} onSearchThem={searchThem} />}
         {/* A lista fica sempre montada: a rolagem da árvore mora nela, e "nada encontrado" não pode levá-la embora. */}
         {filtering && tree.roots.length === 0 ? (
           <NavigatorFilteredEmpty environment={environmentChoice.type === "environment" ? (savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : environmentChoice.type === "none" ? null : undefined} onlyConnected={onlyConnected} onShowAll={() => setOnlyConnected(false)} />
         ) : search === null ? null : search.rows.length === 0 ? (
-          <div role="status" className="flex flex-col gap-1 px-3 py-2">
-            <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
-            <p className="text-xs text-muted">{copy.search.onlyLoaded}</p>
-          </div>
+          // Enquanto um índice ainda vem, "nada encontrado" não é verdade ainda: a linha de estado acima diz "Buscando…" e é só ela.
+          searchStatus !== null && searchStatus.loading > 0 ? null : (
+            <div role="status" className="flex flex-col gap-1 px-3 py-2">
+              <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
+              <p className="text-xs text-muted">{copy.search.onlyLoaded}</p>
+            </div>
+          )
         ) : (
           <p role="status" className="sr-only">
-            {copy.search.results(search.count)}
+            {searched !== null && searched.hidden > 0 ? copy.search.resultsShown(search.count + searched.hidden, search.count) : copy.search.results(search.count)}
           </p>
         )}
         <NavigatorList

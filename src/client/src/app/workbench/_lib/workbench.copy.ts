@@ -42,6 +42,7 @@ export const workbenchCopy = {
       resultsShown: (found: number, shown: number) => `${formatCount(found, "resultado", "resultados")}, ${shown.toLocaleString("pt-BR")} à vista`,
 
       // RN-BUSCA-002: a linha de estado, logo abaixo dos filtros. O nome de um banco é "Conexão › banco".
+      databaseName: (connection: string, database: string) => `${connection} › ${database}`,
       loading: (databases: number) => `Buscando nas tabelas e visões de ${formatCount(databases, "banco", "bancos")}…`,
       cut: (cap: number) => `Muitos resultados: cada banco mostra as ${cap.toLocaleString("pt-BR")} primeiras tabelas e visões. Escreva mais do nome para ver as outras.`,
       truncated: (database: string, limit: number) => `${database} tem mais de ${limit.toLocaleString("pt-BR")} tabelas e visões: a busca olhou as ${limit.toLocaleString("pt-BR")} primeiras e o que já está aberto na árvore.`,

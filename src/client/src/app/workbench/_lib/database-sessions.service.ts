@@ -115,9 +115,29 @@ export function databaseSessionQuery(connectionId: string, database?: string) {
 
 /**
  * A sessão da árvore aberta PELA BUSCA (RN-BUSCA-002): a conexão que só uma aba conectou, ou a que "Buscar nelas também" conecta, sem abrir o nó. É a mesma consulta da
- * sessão (a mesma chave e o mesmo cache), calada: a falha de abrir aparece na linha de estado da busca, e não no aviso central.
+ * sessão (a mesma chave e o mesmo cache), calada: a falha de abrir aparece na linha de estado da busca (`openSessionForSearch` tem a ressalva do aviso central).
  */
 export const searchSessionQuery = (connectionId: string, database?: string) => ({ ...databaseSessionQuery(connectionId, database), meta: { silent: true } });
+
+/**
+ * "Buscar nelas também" (RN-BUSCA-002): abre a sessão da árvore da conexão de fora, sem abrir o nó (é conectar, a pedido). Devolve se abriu; a falha NÃO é lançada: ela
+ * fica na consulta da sessão, e é dali que a linha de estado da busca a lê (`sessions` do navegador), com o "Tentar de novo". A conexão de fora que ainda tem a sessão
+ * em cache é a que a verificação achou sem sessão na API (RN-VERIF-003, `connectedConnectionIds`): ela morreu, a consulta nunca fica velha sozinha (`keepUntilRefreshed`),
+ * e só uma abertura forçada a troca por uma sessão nova.
+ *
+ * O `meta` calado de `searchSessionQuery` só vale enquanto ninguém mais observa a consulta: o navegador observa a de cada conexão (o ponto de estado), e a observação
+ * troca o `meta` a cada render, então a falha de abrir pode também chegar ao aviso central, como a de abrir o nó.
+ */
+export async function openSessionForSearch(queryClient: QueryClient, connectionId: string): Promise<boolean> {
+  const dead = queryClient.getQueryData(databaseSessionKey(connectionId)) !== undefined;
+
+  try {
+    await queryClient.fetchQuery({ ...searchSessionQuery(connectionId), ...(dead ? { staleTime: 0 } : {}) });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** As sessões da árvore abertas de todos os bancos da conexão (RN-ARVORE-006): é o que "Desconectar" fecha, além das abas. */
 export function treeSessionIds(queryClient: QueryClient, connectionId: string): string[] {

@@ -2,12 +2,10 @@ import { Button } from "@/components/ui";
 
 import { objectNamesLimit } from "../_lib/database-sessions.service";
 import { searchIndexCap } from "../_lib/navigator-index";
+import type { SearchTarget } from "../_lib/navigator-search-scope";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
 const copy = workbenchCopy.navigator.search;
-
-/** Um banco da busca: a chave dele (única na linha) e o nome que a pessoa lê, "Conexão › banco". */
-export type SearchTarget = { key: string; name: string };
 
 /** O banco cuja busca falhou: a mensagem do banco, como veio (RN-SQL-009), e o gesto de pedir de novo. */
 export type SearchFailure = SearchTarget & { message: string; onRetry: () => void };
