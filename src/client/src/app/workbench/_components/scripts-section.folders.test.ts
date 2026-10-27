@@ -395,6 +395,49 @@ describe("as pastas abertas ficam lembradas (RN-NAV-014, RN-SCRIPT-008)", () => 
     expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), scriptKey("s1"), folderKey("f3"), scriptKey("s2")]);
   });
 
+  it("a linha de um script não é pasta: abrir ou fechar nela não grava nada", () => {
+    view().onToggle(scriptKey("s2"));
+    view().onToggle(scriptKey("s1"));
+
+    expect(remembered()).toEqual([]);
+    expect([...folderMemoryStore.get(rt.userName, "connections")]).toEqual([]);
+  });
+
+  it("outro usuário do cofre na mesma janela começa com tudo fechado, e quem volta encontra o que deixou", () => {
+    view().onToggle(folderKey("f1"));
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), folderKey("f3"), scriptKey("s2")]);
+    const first = rt.userName;
+
+    rt.unmount();
+    rt.userName = `${first}.outro`;
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
+
+    rt.unmount();
+    rt.userName = first;
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), folderKey("f3"), scriptKey("s2")]);
+  });
+
+  it("a poda dos scripts não toca na lista das pastas de conexões, que tem os identificadores dela", () => {
+    folderMemoryStore.change(rt.userName, "connections", { open: ["pasta-de-conexoes"] });
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["f1", "excluida"] });
+
+    view();
+    expect(remembered()).toEqual(["f1"]);
+    expect([...folderMemoryStore.get(rt.userName, "connections")]).toEqual(["pasta-de-conexoes"]);
+  });
+
+  it("a pasta excluída em outra janela some da árvore na hora e sai da lembrança na entrada seguinte", () => {
+    view().onToggle(folderKey("f1"));
+    view().onToggle(folderKey("f3"));
+    rt.folders = rt.folders.filter((candidate) => candidate.id !== "f3");
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), scriptKey("s2")]);
+    expect(remembered()).toEqual(["f1", "f3"]);
+
+    rt.unmount();
+    view();
+    expect(remembered()).toEqual(["f1"]);
+  });
+
   it("o identificador lembrado de uma pasta que não existe não tem efeito na árvore", () => {
     folderMemoryStore.change(rt.userName, "scripts", { open: ["sumiu", "f3"] });
 

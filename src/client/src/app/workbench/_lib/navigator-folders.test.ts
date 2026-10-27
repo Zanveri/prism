@@ -4,6 +4,7 @@ import { allEnvironments, noEnvironment, type EnvironmentChoice } from "./naviga
 import {
   collapsedAllInFilter,
   collapsedInFilter,
+  filterFoldersFor,
   filterViewOf,
   folderIdOfKey,
   folderIdsOfKeys,
@@ -105,6 +106,32 @@ describe("a vista filtrada: o seletor de ambiente e \"Só as conectadas\" (RN-NA
     const state = toggledInFilter(noFilterFolders, one, f1, true);
 
     expect(collapsedInFilter(toggledInFilter(state, other, f2, true), other)).toEqual(new Set([f2]));
+  });
+
+  it("filterFoldersFor: o recolhido vale só enquanto a MESMA vista segue ligada; outra vista, ou nenhuma, o esquece na hora, e voltar à primeira não o traz de volta", () => {
+    const production = filterViewOf({ type: "environment", key: "producao" }, false);
+    const connected = filterViewOf(allEnvironments, true);
+    const state = toggledInFilter(noFilterFolders, production, f1, true);
+
+    // A vista de agora é a dele: o MESMO estado. Outra vista ou nenhuma: nada recolhido.
+    expect(filterFoldersFor(state, production)).toBe(state);
+    expect(filterFoldersFor(state, connected)).toBe(noFilterFolders);
+    expect(filterFoldersFor(state, filterViewOf(noEnvironment, false))).toBe(noFilterFolders);
+    expect(filterFoldersFor(state, filterViewOf({ type: "environment", key: "producao" }, true))).toBe(noFilterFolders);
+    expect(filterFoldersFor(state, null)).toBe(noFilterFolders);
+
+    // Ida e volta pela vista do meio, com o estado que a renderização guardou a cada passo: o recolhido da primeira não volta.
+    let held = state;
+    for (const view of [connected, production]) held = filterFoldersFor(held, view);
+    expect(collapsedInFilter(held, production)).toEqual(new Set());
+  });
+
+  it("filterFoldersFor: sem nada recolhido devolve o MESMO estado em qualquer vista (o ajuste durante a renderização não se repete)", () => {
+    const view = filterViewOf(noEnvironment, false);
+
+    for (const empty of [noFilterFolders, { filter: view ?? "", keys: new Set<string>() }]) {
+      for (const now of [view, filterViewOf(allEnvironments, true), null]) expect(filterFoldersFor(empty, now)).toBe(empty);
+    }
   });
 
   it("\"Recolher tudo\" recolhe todas as pastas da árvore à vista, só na vista; sem filtro não guarda nada", () => {

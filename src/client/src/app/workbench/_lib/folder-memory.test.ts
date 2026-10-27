@@ -194,6 +194,75 @@ describe("createFolderMemoryStore: as pastas abertas lembradas por usuário (RN-
     expect(stored(items)?.connections).toEqual([b]);
   });
 
+  describe("a mudança vale sobre o gravado agora, também quando a janela não vê diferença", () => {
+    /** Duas janelas sobre o mesmo armazenamento; a outra abre `opened` na árvore pedida depois de a primeira ter lido. */
+    function windows(opened: Partial<Record<"connections" | "scripts", string[]>>) {
+      const { items, storage } = memoryStorage();
+      const mine = createFolderMemoryStore(() => storage);
+      const other = createFolderMemoryStore(() => storage);
+      expect(mine.get("ana", "connections").size).toBe(0);
+      for (const tree of ["connections", "scripts"] as const) if (opened[tree] !== undefined) other.change("ana", tree, { open: opened[tree] });
+      return { items, storage, mine, other };
+    }
+
+    it("\"Recolher tudo\" numa janela que mostra tudo fechado esvazia o que a outra abriu depois: é o que volta na próxima entrada", () => {
+      const { items, storage, mine } = windows({ connections: [a, b] });
+      const listener = vi.fn();
+      mine.subscribe(listener);
+
+      expect(mine.change("ana", "connections", { closeAll: true })).toBe(false);
+      expect(stored(items)?.connections).toEqual([]);
+      expect(mine.get("ana", "connections").size).toBe(0);
+      expect(listener).not.toHaveBeenCalled();
+      expect(createFolderMemoryStore(() => storage).get("ana", "connections").size).toBe(0);
+    });
+
+    it("fechar e podar também valem sobre o gravado: a pasta que só a outra janela conhece sai quando esta a fecha ou a poda", () => {
+      const closing = windows({ connections: [a, b] });
+      closing.mine.change("ana", "connections", { close: [a] });
+      expect(stored(closing.items)?.connections).toEqual([b]);
+
+      const pruning = windows({ connections: [a, b, c] });
+      pruning.mine.change("ana", "connections", { retain: [b] });
+      expect(stored(pruning.items)?.connections).toEqual([b]);
+    });
+
+    it("só a árvore pedida muda: a lista da outra árvore, que outra janela abriu, fica como está", () => {
+      const { items, mine } = windows({ connections: [a], scripts: [c] });
+
+      mine.change("ana", "connections", { closeAll: true });
+      expect(stored(items)).toEqual({ connections: [], scripts: [c] });
+
+      mine.change("ana", "scripts", { retain: [] });
+      expect(stored(items)).toEqual({ connections: [], scripts: [] });
+    });
+
+    it("o gravado que sumiu (limpo por fora) volta a ser escrito quando a janela abre de novo, sem avisar quem olha", () => {
+      const { items, storage } = memoryStorage();
+      const store = createFolderMemoryStore(() => storage);
+      store.change("ana", "connections", { open: [a] });
+      items.delete(folderMemoryKey("ana"));
+      const listener = vi.fn();
+      store.subscribe(listener);
+
+      expect(store.change("ana", "connections", { open: [a] })).toBe(false);
+      expect(stored(items)?.connections).toEqual([a]);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it("sem diferença nenhuma, nem na janela nem no gravado, não grava", () => {
+      const { storage, mine } = windows({ connections: [a] });
+      const setItem = vi.spyOn(storage, "setItem");
+
+      expect(mine.change("ana", "scripts", { closeAll: true })).toBe(false);
+      expect(mine.change("ana", "scripts", { close: [b] })).toBe(false);
+      expect(mine.change("ana", "connections", { open: [a] })).toBe(true);
+      setItem.mockClear();
+      expect(mine.change("ana", "connections", { open: [a] })).toBe(false);
+      expect(setItem).not.toHaveBeenCalled();
+    });
+  });
+
   it("a janela aberta fica como está quando a outra muda; a que abre depois começa como a última escolha de cada pasta", () => {
     const { storage } = memoryStorage();
     const first = createFolderMemoryStore(() => storage);

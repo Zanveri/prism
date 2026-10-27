@@ -19,6 +19,10 @@ const rt = await vi.hoisted(async () => {
     /** Se a renderização do navegador está em curso: a loja não pode ser escrita nela. */
     rendering: false,
     changesWhileRendering: 0,
+    /** Se a área de trabalho está à vista: sem ela, as revelações esperam. */
+    onScreen: true,
+    /** Os nós abertos do provedor (as conexões e o que está abaixo delas; as pastas não entram). */
+    expanded: new Set<string>(),
     setNodeOpen: vi.fn(),
     onRevealed: vi.fn(),
   };
@@ -44,9 +48,9 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { ui: { navigatorDensity: "comfortable" } } }) }));
 vi.mock("@/components/ui", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui")>()), useToast: () => ({ success() {}, warning() {}, error() {} }) }));
 vi.mock("../_lib/workbench-state", () => ({
-  useWorkbench: () => ({ tabs: [], expanded: new Set<string>(), setNodeOpen: rt.setNodeOpen, openQueryTab() {}, openTableTab() {}, disconnect() {}, disconnecting: null }),
+  useWorkbench: () => ({ tabs: [], expanded: rt.expanded, setNodeOpen: rt.setNodeOpen, openQueryTab() {}, openTableTab() {}, disconnect() {}, disconnecting: null }),
 }));
-vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => true }));
+vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => rt.onScreen }));
 vi.mock("../_lib/use-connection-checks", () => ({ useConnectionChecksSnapshot: () => new Map() }));
 
 import { MoveConnectionDialog } from "@/app/connections/_components/move-connection-dialog";
@@ -113,7 +117,17 @@ const chooseProduction = () => {
   const bar = filters();
   bar.onEnvironmentChange({ type: "environment", key: bar.environments[0].key });
 };
+/** Escolhe o ambiente de nome `name` (os que as conexões trazem: "Produção" e, com o laboratório, "Teste"). */
+const chooseEnvironment = (name: string) => {
+  const bar = filters();
+  bar.onEnvironmentChange({ type: "environment", key: bar.environments.find((environment) => environment.name === name)!.key });
+};
 const clearEnvironment = () => filters().onEnvironmentChange({ type: "all" });
+/** Acrescenta o Laboratório (pasta da raiz) com a conexão c4 em "Teste": só o ambiente "Teste" a mostra. */
+const addLaboratory = () => {
+  rt.folders = [...rt.folders, folder("lab", null, "Laboratório")];
+  rt.connections = [...rt.connections, connection("c4", "lab", "Bancada", "Teste")];
+};
 
 let users = 0;
 const realChange = folderMemoryStore.change;
@@ -123,6 +137,8 @@ beforeEach(() => {
   rt.userName = `navegador.${++users}`;
   rt.fetchedAfterMount = true;
   rt.changesWhileRendering = 0;
+  rt.onScreen = true;
+  rt.expanded = new Set();
   Object.assign(rt, base());
   connectionReveal.clear();
   importedReveal.clear();
@@ -363,5 +379,231 @@ describe("o seletor de ambiente abre as pastas do caminho só na vista, sem grav
 
     expect(list().rows).toEqual([]);
     expect(remembered()).toEqual([]);
+  });
+});
+
+describe("a vista filtrada começa de novo a cada troca de filtro (RN-NAV-010 e 013)", () => {
+  it("o que se recolheu num ambiente não volta ao voltar a ele, tenha-se mexido ou não numa pasta do ambiente do meio", () => {
+    addLaboratory();
+    chooseEnvironment("Produção");
+    list().onToggle(nodeOf(keyOf("fabrica")));
+    expect(rows()).toEqual([keyOf("arquivo"), connectionKey("c2"), keyOf("fabrica")]);
+
+    chooseEnvironment("Teste");
+    expect(rows()).toEqual([keyOf("lab"), connectionKey("c4")]);
+
+    chooseEnvironment("Produção");
+    expect(rows()).toEqual([keyOf("arquivo"), connectionKey("c2"), keyOf("fabrica"), keyOf("linhas"), connectionKey("c1")]);
+    expect(remembered()).toEqual([]);
+  });
+
+  it("ligar \"Só as conectadas\" por cima do ambiente também é outra vista, e desligar de novo não traz o recolhido de volta", () => {
+    chooseEnvironment("Produção");
+    list().onToggle(nodeOf(keyOf("fabrica")));
+    expect(rows()).toEqual([keyOf("arquivo"), connectionKey("c2"), keyOf("fabrica")]);
+
+    filters().onToggleConnected();
+    expect(rows()).toEqual([]);
+
+    filters().onToggleConnected();
+    expect(rows()).toEqual([keyOf("arquivo"), connectionKey("c2"), keyOf("fabrica"), keyOf("linhas"), connectionKey("c1")]);
+  });
+
+  it("a mesma vista segue valendo entre uma renderização e outra: o recolhido fica enquanto o filtro está ligado", () => {
+    chooseEnvironment("Produção");
+    list().onToggle(nodeOf(keyOf("fabrica")));
+
+    render();
+    render();
+    expect(rows()).toEqual([keyOf("arquivo"), connectionKey("c2"), keyOf("fabrica")]);
+  });
+});
+
+describe("as revelações com os filtros e a busca ligados (RN-NAV-004, RN-TRANSF-014, RN-NAV-014)", () => {
+  it("a conexão salva que o ambiente escolhido esconde: o filtro sai, e as pastas até ela abrem e ficam lembradas", () => {
+    addLaboratory();
+    chooseEnvironment("Produção");
+    expect(rows()).not.toContain(connectionKey("c4"));
+
+    connectionReveal.request("c4");
+    render();
+
+    expect(filters().environmentChoice).toEqual({ type: "all" });
+    expect(remembered()).toEqual(["lab"]);
+    expect(rows()).toContain(connectionKey("c4"));
+    expect(list().selectedKey).toBe(connectionKey("c4"));
+    expect(rt.changesWhileRendering).toBe(0);
+  });
+
+  it("a importação que o ambiente escolhido esconde: o filtro fica, as pastas abrem e ficam lembradas, e a escolha vai à primeira linha à vista", () => {
+    addLaboratory();
+    chooseEnvironment("Produção");
+
+    importedReveal.request({ folderIDs: [], connectionIDs: ["c4"], targetFolderID: "lab" });
+    render();
+
+    expect(filters().environmentChoice).toMatchObject({ type: "environment" });
+    expect(remembered()).toEqual(["lab"]);
+    expect(list().selectedKey).toBe(rows()[0]);
+    expect(importedReveal.pending()).toBeNull();
+    expect(rt.changesWhileRendering).toBe(0);
+  });
+
+  it("a conexão salva enquanto a área de trabalho não está à vista espera: nada é gravado até ela voltar, e então as pastas abrem uma vez", () => {
+    rt.onScreen = false;
+    connectionReveal.request("c1");
+
+    render();
+    render();
+    expect(remembered()).toEqual([]);
+    expect(connectionReveal.pending()).not.toBeNull();
+    expect(rt.onRevealed).not.toHaveBeenCalled();
+
+    rt.onScreen = true;
+    render();
+    expect(remembered()).toEqual(["linhas", "fabrica"]);
+    expect(connectionReveal.pending()).toBeNull();
+    expect(rt.onRevealed).toHaveBeenCalledOnce();
+  });
+
+  it("o pedido para uma conexão que a lista ainda não traz espera por ela: nada é gravado, e chegando, as pastas abrem", () => {
+    connectionReveal.request("nova");
+
+    render();
+    expect(remembered()).toEqual([]);
+    expect(rt.onRevealed).not.toHaveBeenCalled();
+
+    rt.connections = [...rt.connections, connection("nova", "linhas", "Nova")];
+    render();
+    expect(remembered()).toEqual(["linhas", "fabrica"]);
+    expect(rows()).toContain(connectionKey("nova"));
+  });
+
+  it("a conexão salva que uma busca esconde: a busca é limpa, e as pastas abrem e ficam lembradas", () => {
+    filters().onQueryChange("Histórico");
+    expect(rows()).toEqual([keyOf("arquivo"), connectionKey("c2")]);
+
+    connectionReveal.request("c1");
+    render();
+
+    expect(filters().query).toBe("");
+    expect(remembered()).toEqual(["linhas", "fabrica"]);
+    expect(rows()).toContain(connectionKey("c1"));
+  });
+
+  it("\"Nova pasta\" numa pasta que a vista filtrada recolheu a abre nela e a lembra", () => {
+    chooseEnvironment("Produção");
+    list().onToggle(nodeOf(keyOf("fabrica")));
+    expect(rows()).toEqual([keyOf("arquivo"), connectionKey("c2"), keyOf("fabrica")]);
+
+    list().onKeyAction(nodeOf(keyOf("fabrica")), { type: "newFolder" });
+    expect(remembered()).toEqual(["fabrica"]);
+    expect(rows()).toContain(keyOf("linhas"));
+  });
+});
+
+describe("\"Mover para…\" e \"Recolher tudo\" nas bordas (RN-NAV-002, RN-NAV-003, RN-NAV-014)", () => {
+  const moveDialog = () => tree().find((element) => element.type === MoveConnectionDialog)!.props as unknown as ComponentProps<typeof MoveConnectionDialog>;
+  const moveTo = (connectionId: string, folderID: string | null) => {
+    rt.connections = rt.connections.map((candidate) => ((candidate as Connection).id === connectionId ? { ...(candidate as Connection), folderID } : candidate));
+    moveDialog().onMoved?.(rt.connections.find((candidate) => (candidate as Connection).id === connectionId) as Connection);
+    render();
+  };
+
+  it("mover a mesma conexão duas vezes a revela nas duas, com as pastas de cada destino abertas", () => {
+    list().onKeyAction(nodeOf(connectionKey("c3")), { type: "moveConnection" });
+    moveTo("c3", "linhas");
+    expect(remembered()).toEqual(["linhas", "fabrica"]);
+    const first = list().reveal!.seq;
+
+    list().onKeyAction(nodeOf(connectionKey("c3")), { type: "moveConnection" });
+    moveTo("c3", "arquivo");
+    expect(new Set(remembered())).toEqual(new Set(["linhas", "fabrica", "arquivo"]));
+    expect(list().reveal!.seq).toBeGreaterThan(first);
+    expect(list().selectedKey).toBe(connectionKey("c3"));
+    expect(rows()).toContain(connectionKey("c3"));
+  });
+
+  it("mover uma conexão para a raiz não abre nada, e ela fica escolhida", () => {
+    folderMemoryStore.change(rt.userName, "connections", { open: ["fabrica", "linhas"] });
+    list().onKeyAction(nodeOf(connectionKey("c1")), { type: "moveConnection" });
+    moveTo("c1", null);
+
+    expect(remembered()).toEqual(["fabrica", "linhas"]);
+    expect(list().selectedKey).toBe(connectionKey("c1"));
+  });
+
+  it("mover uma pasta com uma busca no campo só abre as pastas do destino: a pasta pode não estar na lista filtrada, e o pedido de foco ficaria armado", () => {
+    filters().onQueryChange("Arq");
+    expect(rows()).toContain(keyOf("arquivo"));
+    list().onKeyAction(nodeOf(keyOf("arquivo")), { type: "moveFolder" });
+    const dialogs = tree().find((element) => element.type === FolderActionDialogs)!.props as unknown as ComponentProps<typeof FolderActionDialogs>;
+
+    rt.folders = rt.folders.map((candidate) => ((candidate as Folder).id === "arquivo" ? { ...(candidate as Folder), parentID: "linhas" } : candidate));
+    dialogs.onMoved?.(rt.folders.find((candidate) => (candidate as Folder).id === "arquivo") as Folder);
+    render();
+
+    expect(new Set(remembered())).toEqual(new Set(["fabrica", "linhas"]));
+    expect(list().selectedKey).toBeNull();
+    expect(list().reveal).toBeNull();
+  });
+
+  it("\"Recolher tudo\" também fecha o que está aberto sob as conexões, e não toca na lista das pastas de scripts", () => {
+    const database = navKey({ type: "database", connectionId: "c1" });
+    folderMemoryStore.change(rt.userName, "connections", { open: ["fabrica", "linhas"] });
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["s1"] });
+    rt.expanded = new Set([connectionKey("c1"), database]);
+
+    toolbar().onAction("collapseAll");
+
+    expect(rt.setNodeOpen).toHaveBeenCalledWith(connectionKey("c1"), false);
+    expect(rt.setNodeOpen).toHaveBeenCalledWith(database, false);
+    expect(remembered()).toEqual([]);
+    expect([...folderMemoryStore.get(rt.userName, "scripts")]).toEqual(["s1"]);
+  });
+
+  it("\"Recolher tudo\" com uma busca no campo fecha as pastas lembradas: a ação é da pessoa, e a busca só olha", () => {
+    folderMemoryStore.change(rt.userName, "connections", { open: ["fabrica", "linhas"] });
+    filters().onQueryChange("Extrusão");
+    expect(remembered()).toEqual(["fabrica", "linhas"]);
+
+    toolbar().onAction("collapseAll");
+    expect(remembered()).toEqual([]);
+
+    filters().onQueryChange("");
+    expect(rows()).toEqual([keyOf("arquivo"), keyOf("fabrica"), connectionKey("c3")]);
+  });
+});
+
+describe("o que se lembra segue o identificador, e a poda olha a lista inteira (RN-NAV-014)", () => {
+  it("a pasta movida ou renomeada leva o estado com ela: o identificador é o mesmo", () => {
+    folderMemoryStore.change(rt.userName, "connections", { open: ["arquivo", "linhas"] });
+    expect(rows()).toEqual([keyOf("arquivo"), connectionKey("c2"), keyOf("fabrica"), connectionKey("c3")]);
+
+    rt.folders = rt.folders.map((candidate) => ((candidate as Folder).id === "linhas" ? { ...(candidate as Folder), parentID: "arquivo", name: "Renomeada" } : candidate));
+    expect(rows()).toEqual([keyOf("arquivo"), keyOf("linhas"), connectionKey("c1"), connectionKey("c2"), keyOf("fabrica"), connectionKey("c3")]);
+    expect(remembered()).toEqual(["arquivo", "linhas"]);
+  });
+
+  it("a pasta que o filtro esconde continua lembrada na poda: quem decide o que existe é a lista de pastas, e não a árvore à vista", () => {
+    addLaboratory();
+    folderMemoryStore.change(rt.userName, "connections", { open: ["lab", "excluida"] });
+    rt.fetchedAfterMount = false;
+    render();
+    chooseEnvironment("Produção");
+    expect(rows()).not.toContain(keyOf("lab"));
+
+    rt.fetchedAfterMount = true;
+    render();
+    expect(remembered()).toEqual(["lab"]);
+  });
+
+  it("a poda das conexões não toca na lista das pastas de scripts, que tem os identificadores dela", () => {
+    folderMemoryStore.change(rt.userName, "connections", { open: ["excluida", "linhas"] });
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["pasta-de-script"] });
+
+    render();
+    expect(remembered()).toEqual(["linhas"]);
+    expect([...folderMemoryStore.get(rt.userName, "scripts")]).toEqual(["pasta-de-script"]);
   });
 });
