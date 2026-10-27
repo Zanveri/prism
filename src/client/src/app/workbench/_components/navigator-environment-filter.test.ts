@@ -72,6 +72,10 @@ describe("o seletor de ambiente do navegador (RN-NAV-010)", () => {
     expect(drawn(noEnvironment).clear).toBeDefined();
   });
 
+  it("a lista do seletor é larga (`wideList`): as opções não quebram, e a lista cresce até o maior texto (\"Todos os ambientes\")", () => {
+    expect(drawn(allEnvironments).select.props.wideList).toBe(true);
+  });
+
   it("o seletor fechado desenha a etiqueta do escolhido", () => {
     const markup = renderToStaticMarkup(createElement(NavigatorEnvironmentFilter, { environments, value: { type: "environment", key: "produção" }, onChange: () => {} }));
 

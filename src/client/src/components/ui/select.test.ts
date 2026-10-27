@@ -16,14 +16,14 @@ vi.mock("react-dom", async (importOriginal) => ({ ...(await importOriginal<typeo
 
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
-import { Select } from "./select";
+import { panelWidthOf, Select } from "./select";
 
 /** O controle: ganhar o foco é virar o `document.activeElement` da página de mentira. */
 const control = {
   focus: vi.fn(() => {
     page.activeElement = control;
   }),
-  getBoundingClientRect: () => ({ left: 300, right: 480, top: 40, bottom: 72 }),
+  getBoundingClientRect: () => ({ left: 300, right: 480, width: 180, top: 40, bottom: 72 }),
 };
 const body = { name: "body" };
 const page = { activeElement: body as unknown, body, addEventListener: vi.fn(), removeEventListener: vi.fn() };
@@ -107,5 +107,50 @@ describe("Select: a opção desabilitada", () => {
     expect(list.options()).toHaveLength(3);
     (list.options()[2].props.onClick as () => void)();
     expect(onChange).toHaveBeenCalledWith("total");
+  });
+});
+
+describe("panelWidthOf: a largura da lista aberta", () => {
+  it("sem `wideList`, a do controle", () => {
+    expect(panelWidthOf({ left: 300, width: 180 }, 1280, false)).toEqual({ width: 180 });
+  });
+
+  it("com `wideList`, no mínimo o controle, no máximo o que resta da janela à direita dele (menos o espaço de 6 px), e a do maior texto no meio", () => {
+    expect(panelWidthOf({ left: 300, width: 180 }, 1280, true)).toEqual({ width: "max-content", minWidth: 180, maxWidth: 974 });
+    expect(panelWidthOf({ left: 8, width: 130 }, 1024, true)).toEqual({ width: "max-content", minWidth: 130, maxWidth: 1010 });
+  });
+
+  it("o controle junto da borda direita não deixa o máximo abaixo do mínimo: a lista nunca fica mais estreita que o controle", () => {
+    expect(panelWidthOf({ left: 1200, width: 130 }, 1280, true)).toEqual({ width: "max-content", minWidth: 130, maxWidth: 130 });
+  });
+});
+
+describe("Select com `wideList`: as opções não quebram", () => {
+  const options = [
+    { value: "", label: "Todos os ambientes" },
+    { value: "erp", label: "erp (padrão)" },
+  ];
+  const listbox = (list: ReturnType<typeof openList>) => list.show().find((element) => element.props.role === "listbox")!;
+  const classesOf = (element: { props: { className?: unknown } }) => String(element.props.className).split(" ");
+
+  it("a lista mede no mínimo o controle e cresce até o maior texto, sem passar da janela; o texto da opção não quebra e termina em reticências quando a janela não deixa mais", () => {
+    const list = openList({ value: "", options, onChange: vi.fn(), "aria-label": "Ambiente", wideList: true });
+
+    expect(listbox(list).props.style).toMatchObject({ position: "fixed", left: 300, width: "max-content", minWidth: 180, maxWidth: 974 });
+    for (const option of list.options()) {
+      expect(classesOf(option)).toEqual(expect.arrayContaining(["whitespace-nowrap", "overflow-hidden", "text-ellipsis"]));
+      expect(classesOf(option)).not.toContain("break-words");
+    }
+  });
+
+  it("sem ela, a lista tem a largura do controle e o texto quebra, como sempre foi", () => {
+    const list = openList({ value: "", options, onChange: vi.fn(), "aria-label": "Banco" });
+
+    expect(listbox(list).props.style).toMatchObject({ position: "fixed", left: 300, width: 180 });
+    expect(listbox(list).props.style).not.toHaveProperty("maxWidth");
+    for (const option of list.options()) {
+      expect(classesOf(option)).toContain("break-words");
+      expect(classesOf(option)).not.toContain("whitespace-nowrap");
+    }
   });
 });

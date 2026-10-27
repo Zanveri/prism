@@ -31,7 +31,8 @@ type NavigatorEnvironmentFilterProps = {
  * (teclado e leitor de tela como os outros), com "Todos os ambientes", cada ambiente do usuário como a etiqueta colorida dele (na lista e no controle fechado,
  * com o nome inteiro na dica) e "Sem ambiente". Ocupa o resto da linha (`flex-[1_1_8rem] min-w-28`, o "Limpar" dentro do lugar dele: escolher ou limpar não
  * muda a largura de nada) e desce para uma linha só dele quando não cabe ao lado do botão; o controle fechado fica numa linha só, cortado com reticências
- * quando o nome não cabe, e na lista o texto quebra. Com um filtro escolhido, o "Limpar" (o `x`, como o do campo de busca) volta a "Todos". Sem estado: a
+ * quando o nome não cabe. A lista aberta (`wideList`) não quebra o texto: tem no mínimo a largura do seletor, cresce até o maior texto ("Todos os ambientes" num
+ * seletor de 130 px) e não passa da janela. Com um filtro escolhido, o "Limpar" (o `x`, como o do campo de busca) volta a "Todos". Sem estado: a
  * escolha é do navegador.
  */
 export function NavigatorEnvironmentFilter({ environments, value, onChange }: NavigatorEnvironmentFilterProps) {
@@ -48,7 +49,7 @@ export function NavigatorEnvironmentFilter({ environments, value, onChange }: Na
   return (
     <div className="flex min-w-28 flex-[1_1_8rem] items-center gap-1">
       <div className="min-w-0 flex-1">
-        <Select value={valueOf(value)} onChange={(chosen) => onChange(choiceOf(chosen))} options={options} aria-label={copy.label} className="h-8 min-h-8 gap-1.5 px-2 py-0 text-xs [&>span:first-child]:truncate" />
+        <Select value={valueOf(value)} onChange={(chosen) => onChange(choiceOf(chosen))} options={options} aria-label={copy.label} wideList className="h-8 min-h-8 gap-1.5 px-2 py-0 text-xs [&>span:first-child]:truncate" />
       </div>
       {value.type === "all" ? null : (
         <button
