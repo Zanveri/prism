@@ -32,9 +32,16 @@ export const fontNameSchema = z.string().refine(isSafeFontName);
 
 /**
  * A pilha do app de cada campo, que fica atrás da escolhida. A da interface é uma variável à parte (`--font-app-sans`, em `globals.css`), porque a
- * que o app usa (`--font-sans`) é a que a escolha troca; a do editor é a mono do app, que a grade também usa e que não muda.
+ * que o app usa (`--font-sans`) é a que a escolha troca; a do editor é a mono do app, que a mensagem de erro do banco, as etiquetas e o resto do
+ * código usam e que nenhuma escolha muda.
  */
 export const appFontStacks = { ui: "var(--font-app-sans)", editor: "var(--font-mono)" } as const;
+
+/**
+ * As mesmas pilhas do app, escritas sem `var()`: o `canvas` que mede a largura das colunas da grade (`grid-text.ts`) não resolve variável de CSS. Têm de
+ * ser, letra por letra, as de `--font-app-sans` e `--font-mono` em `globals.css`; um teste confere.
+ */
+export const appFontFamilies = { ui: '"IBM Plex Sans", "Segoe UI", system-ui, sans-serif', editor: '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace' } as const;
 
 /** A variável do CSS de cada campo, no <html>: `font-sans` e o corpo leem `--font-sans`; `font-editor`, a `--font-editor`. */
 export const fontVariables = { ui: "--font-sans", editor: "--font-editor" } as const;
@@ -43,6 +50,15 @@ export const fontVariables = { ui: "--font-sans", editor: "--font-editor" } as c
 export function fontStack(role: FontRole, name: string): string {
   if (name === appFonts[role] || !isSafeFontName(name)) return appFontStacks[role];
   return `"${name}", ${appFontStacks[role]}`;
+}
+
+/**
+ * A pilha do campo para o `canvas`, sem `var()`: a mesma de `fontStack`, com as famílias do app escritas por extenso. A escolhida vem entre aspas e a do
+ * app atrás; a do app, ou um nome que não serve, é só a do app.
+ */
+export function resolvedFontFamily(role: FontRole, name: string): string {
+  if (name === appFonts[role] || !isSafeFontName(name)) return appFontFamilies[role];
+  return `"${name}", ${appFontFamilies[role]}`;
 }
 
 /** O mínimo que se usa do <html>: o teste passa um objeto qualquer no lugar. */

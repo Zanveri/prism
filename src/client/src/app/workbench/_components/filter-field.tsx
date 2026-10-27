@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { history, historyKeymap, standardKeymap } from "@codemirror/commands";
 import { PostgreSQL, sql, StandardSQL } from "@codemirror/lang-sql";
 import { syntaxHighlighting } from "@codemirror/language";
@@ -49,7 +49,37 @@ export const fieldThemeSpec = {
 
 const fieldTheme = EditorView.theme(fieldThemeSpec);
 
+/**
+ * Leva o foco ao campo, com o cursor no fim do texto (RN-ABAS-019): quem entra no campo vai acrescentar à condição ou à ordem que já está lá, ou escrever o
+ * filtro do zero. Duas peças do editor, e não a vista inteira, para a prova não precisar de uma página.
+ */
+export function focusAtEnd(editor: Pick<EditorView, "state" | "dispatch" | "focus">): void {
+  editor.dispatch({ selection: EditorSelection.cursor(editor.state.doc.length) });
+  editor.focus();
+}
+
+/** A repetição do teclado do Enter (a tecla segurada), que não é um Enter novo. */
+export const isHeldEnter = (event: Pick<KeyboardEvent, "key" | "repeat">): boolean => event.key === "Enter" && event.repeat;
+
+/**
+ * O Enter segurado não aplica o filtro de novo: quem abre a aba com o Enter numa linha do navegador e o segura um pouco mais cai com ele no campo (RN-ABAS-019), e
+ * cada repetição do teclado rodaria a consulta outra vez, vinte e tantas por segundo enquanto a tecla estivesse apertada. Antes do mapa do campo (`Prec.highest`).
+ */
+const ignoreHeldEnter: Extension = Prec.highest(
+  EditorView.domEventHandlers({
+    keydown(event) {
+      if (!isHeldEnter(event)) return false;
+      event.preventDefault();
+      return true;
+    },
+  }),
+);
+
+/** O que o campo entrega a quem o desenha: levar o foco a ele (RN-ABAS-019: a entrada da aba de uma tabela, onde o Ctrl+Espaço completa). */
+export type FilterFieldHandle = { focus: () => void };
+
 type FilterFieldProps = {
+  ref?: Ref<FilterFieldHandle>;
   value: string;
   onChange: (text: string) => void;
   /** Enter (sem sugestão escolhida na lista): aplicar o filtro. */
@@ -72,11 +102,13 @@ type FilterFieldProps = {
  * tecla chega a `onChange`. Enter aplica; com a lista de sugestões aberta e uma escolhida, Enter a aceita (a lista abre sem nada escolhido). Desfazer e
  * refazer valem no campo. A lista de sugestões vai para o `body`, para a barra do filtro não a recortar.
  *
+ * RN-ABAS-019: o campo é a entrada da aba de uma tabela na vista Registros, e `ref` entrega o `focus()` (o cursor vai ao fim do texto).
+ *
  * RN-ABAS-017: o CodeMirror guarda o documento em que nasceu (`root`: a seleção, o foco e os estilos dele), e o campo muda de documento quando a área de
  * resultado vai para a janela do resultado (ou volta). Ao mudar, o editor é criado de novo na página de agora, com o texto que o campo tem; a lista de sugestões
  * vai para o `body` dessa página.
  */
-export function FilterField({ value, onChange, onSubmit, label, describedBy, invalid, placeholder, engine, columns, autocomplete }: FilterFieldProps) {
+export function FilterField({ ref, value, onChange, onSubmit, label, describedBy, invalid, placeholder, engine, columns, autocomplete }: FilterFieldProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const [slots] = useState(() => ({ language: new Compartment(), completion: new Compartment(), attributes: new Compartment(), placeholder: new Compartment() }));
@@ -89,6 +121,8 @@ export function FilterField({ value, onChange, onSubmit, label, describedBy, inv
     now.current = { columns, engine };
     latest.current = { value, engine, autocomplete, attributes: fieldAttributes({ label, describedBy, invalid }), placeholder };
   });
+
+  useImperativeHandle(ref, () => ({ focus: () => (view.current === null ? undefined : focusAtEnd(view.current)) }), []);
 
   const emitChange = useEffectEvent((text: string) => onChange(text));
   const emitSubmit = useEffectEvent(() => onSubmit());
@@ -115,6 +149,7 @@ export function FilterField({ value, onChange, onSubmit, label, describedBy, inv
           syntaxHighlighting(highlight),
           fieldTheme,
           tooltips({ parent: page.body }),
+          ignoreHeldEnter,
           // O autocompletar vem antes do Enter do campo: com uma sugestão escolhida, o Enter a aceita.
           slots.completion.of(completionFor(start.autocomplete)),
           Prec.high(keymap.of([{ key: "Enter", run: submit }, { key: "Mod-Enter", run: submit }])),

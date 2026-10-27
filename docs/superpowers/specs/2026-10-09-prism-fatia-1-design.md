@@ -331,7 +331,9 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   (seção 35): entraram as exportações de dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as
   importações e as cópias.*
 - **RN-CONN-015.** O ambiente aparece como etiqueta colorida ao lado do nome da conexão, na
-  lista, na árvore, na aba e na barra de status.
+  lista, na árvore, na aba e na barra de status, e a cor dele pinta os destaques da área de
+  resultado da aba (RN-AMB-002). *Alterada a pedido do dono em 2026-10-27 (seção 42): entraram os
+  destaques da área de resultado.*
 
 ### 5.3 Sessões com o banco
 
@@ -370,7 +372,10 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 - **RN-ARVORE-001.** Níveis: pasta › conexão › bancos do servidor (RN-ARVORE-006) › esquemas › Tabelas, Visões e
   Rotinas (procedimentos e funções) › tabela › Colunas, Índices e Chaves estrangeiras.
 - **RN-ARVORE-002.** Cada nível é buscado só quando o usuário expande, e fica em memória até ele
-  pedir "Atualizar" naquele nó.
+  pedir "Atualizar" naquele nó. O índice de nomes da busca (RN-BUSCA-002) não é nível: não enche
+  nenhum nível nem abre nó, e o "Atualizar" num nó do banco dele, ou na conexão, faz a busca seguinte
+  pedi-lo de novo. *Alterada a pedido do dono em 2026-10-27 (seção 42): entrou o índice de nomes da
+  busca.*
 - **RN-ARVORE-003.** Coluna mostra nome, tipo, se aceita nulo e se faz parte da chave primária.
   Índice mostra nome, colunas e se é único. Chave estrangeira mostra nome, colunas e a tabela e
   as colunas referenciadas.
@@ -624,6 +629,7 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET api/user/database-sessions/{id}/databases` | 200 lista de `{ name, isCurrent }` (RN-ARVORE-006; espera a vez na sessão, como as consultas de catálogo) | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `DELETE api/user/database-sessions/{id}` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
 | `GET api/user/database-sessions/{id}/schemas` | 200 lista | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
+| `GET api/user/database-sessions/{id}/object-names` (o índice de nomes da busca, RN-BUSCA-002, seção 42; espera a vez na sessão, como as consultas de catálogo) | 200 `{ schemas: [{ name, isSystem, tables, views }], truncated }` | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `GET .../schemas/{schema}/objects?kind=` | 200 lista (`tables`, `views`, `routines`) | as mesmas, mais 422 `OBJECT_KIND_INVALID` |
 | `GET .../schemas/{schema}/tables/{table}/columns` | 200 lista | as mesmas |
 | `GET .../schemas/{schema}/tables/{table}/indexes` | 200 lista | as mesmas |
@@ -708,7 +714,8 @@ campos nas notas dela; `QUERY_PARAMETERS_MISMATCH` (422), os marcadores do texto
 `markers` e `values`; `VARIABLE_QUERY_NOT_READ` e `VARIABLE_QUERY_TOO_LARGE` (422), a consulta da variável que não é
 uma leitura e a que passa dos limites, esta com `reason` e `limit`; `VALUES_INVALID` (422, na forma do erro de campo)
 e `VALUES_TABLE_NOT_FOUND` (404), das rotas dos valores; e `SCRIPT_RUN_VALUES_INVALID` (422, no campo), dos valores
-lembrados de um script.
+lembrados de um script. Com a seção 42: a rota do índice de nomes da busca (`object-names`), com os campos nas notas
+dela, sem código novo.
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
@@ -868,6 +875,13 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   segue o "Ver SQL"; o ícone de executar com `{x}` e o da aba de execução (o de executar) seguem o traço dos do
   canvas (16 px, traço 1,5); e a cor da variável no editor é um token novo do tema, derivado como as cores que o
   canvas não define (RN-CONFIG-003).
+- O canvas desenha a árvore do navegador e as grades na IBM Plex Mono: elas usam a fonte da interface, que sem escolha
+  é a IBM Plex Sans, e a largura das colunas da grade é medida nela (RN-CONFIG-008, seção 42). A barra do navegador
+  tem o campo "Filtrar objetos" sozinho, na largura toda, como no canvas, e, numa linha abaixo dele, "Só as
+  conectadas" e o seletor de ambiente (RN-NAV-010 e 013), que o canvas não tem, nem a linha de estado da busca, que
+  vem abaixo deles (RN-BUSCA-002). O sublinhado do título "Registros" e o das abas da área de resultado, o contorno da
+  célula ativa e as barras de rolagem da grade, que o canvas pinta no acento e na cor de rolagem do tema, levam a cor
+  do ambiente da conexão da aba, quando ela tem uma (RN-AMB-002).
 
 ## 10. Riscos e sondas
 
@@ -1369,11 +1383,18 @@ fatia (seção 13) entra agora, na ordem abaixo. O canvas é a medida de desenho
 `TabelaDados`, `TabelaDetalhe`, `DiagramaER`, `Configuracoes`); onde o canvas mostra algo que
 depende de uma parte da API que ainda não existe, a tela não desenha um controle de mentira.
 
-- **RN-BUSCA-001.** O navegador tem um campo de busca. Ele filtra pelo nome, sem diferenciar
-  maiúsculas nem acentos, o que já está carregado na árvore (pastas, conexões, esquemas, tabelas,
-  visões, rotinas, colunas); o que casa aparece com os ancestrais abertos, e o trecho que casou
-  fica destacado. Limpar o campo devolve a árvore como estava. A busca não abre conexão nem
-  carrega nível que o usuário não abriu.
+- **RN-BUSCA-001.** O navegador tem um campo de busca, sozinho na linha dele, na largura toda,
+  abaixo da barra de ações (RN-NAV-002); "Só as conectadas" e o seletor de ambiente ficam na linha de
+  baixo (RN-NAV-010 e 013). Ele filtra pelo nome, sem diferenciar maiúsculas nem acentos, o que já
+  está carregado na árvore (pastas, conexões, esquemas, tabelas, visões, rotinas, colunas) e, nas
+  conexões conectadas, as tabelas e as visões de todos os esquemas, também dos que ninguém abriu, pelo
+  índice de nomes de cada banco (RN-BUSCA-002); o que casa aparece com os ancestrais abertos, e o
+  trecho que casou fica destacado. Limpar o campo devolve a árvore como estava: a busca não abre nó,
+  não carrega nível da árvore (RN-ARVORE-002) e não muda o que se lembra das pastas (RN-NAV-014). A
+  busca não conecta sozinha: a conexão desconectada fica de fora, e só o "Buscar nelas também" a
+  conecta, a pedido (RN-BUSCA-002). *Alterada a pedido do dono em 2026-10-27 (seção 42): o campo
+  dividia a linha com o seletor de ambiente; e a busca olhava só o que a árvore tinha carregado, e
+  não achava a tabela de um esquema que ninguém tinha aberto.*
 - **RN-MENU-001.** O botão direito (e Shift+F10, e a tecla de menu) sobre um item do navegador abre um menu de
   contexto com o tema do app, com as ações daquele tipo de item. Conexão: conectar ou desconectar, nova consulta,
   atualizar, editar conexão, exportar conexão, copiar nome. Esquema: nova consulta, atualizar, copiar nome. Tabela
@@ -1382,14 +1403,18 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   coluna, índice e chave: copiar nome. Pasta: as ações que a tela de Conexões já oferece para ela, e exportar as
   conexões dela, importar conexões nela e importar do DBeaver nela (RN-TRANSF-001). O espaço vazio: nova conexão, nova
   pasta, exportar e importar conexões e importar do DBeaver (RN-NAV-003). O menu tem papel de menu, anda pelas setas, executa com
-  Enter, fecha com Esc e com clique fora, e devolve o foco ao item. Ação que não se aplica no estado atual aparece
-  desabilitada, não some. *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram exportar e importar
-  conexões. Alterada a pedido do dono em 2026-10-16 (seção 35): entrou exportar dados, na tabela e na visão.
-  Alterada a pedido do dono em 2026-10-16 (seção 36): entrou importar dados, na tabela. Alterada a pedido do dono
-  em 2026-10-20 (seção 40): entrou importar do DBeaver, na pasta e no espaço vazio.*
+  Enter, fecha com Esc e com clique fora, e devolve o foco ao item, menos quando a ação abre uma aba: aí o foco vai à
+  aba (RN-ABAS-019). Ação que não se aplica no estado atual aparece desabilitada, não some. *Alterada a pedido do dono
+  em 2026-10-16 (seção 34): entraram exportar e importar conexões. Alterada a pedido do dono em 2026-10-16 (seção 35):
+  entrou exportar dados, na tabela e na visão. Alterada a pedido do dono em 2026-10-16 (seção 36): entrou importar
+  dados, na tabela. Alterada a pedido do dono em 2026-10-20 (seção 40): entrou importar do DBeaver, na pasta e no
+  espaço vazio. Alterada a pedido do dono em 2026-10-27 (seção 42): a ação que abre uma aba leva o foco a ela.*
 - **RN-TABELA-001.** Duplo clique (ou Enter) numa tabela ou visão do navegador abre a aba dela,
-  uma por tabela: abrir de novo volta para a aba que já existe. A aba tem a sessão dela, como uma
-  aba de consulta (RN-SESSAO-001), e três vistas: Registros, Estrutura e Diagrama.
+  uma por tabela: abrir de novo volta para a aba que já existe. Nos dois casos o foco vai para a
+  aba: no campo de filtro dos Registros, onde o Ctrl+Espaço completa, ou no painel da Estrutura ou do
+  Diagrama, quando a vista é essa (RN-ABAS-019). A aba tem a sessão dela, como uma aba de consulta
+  (RN-SESSAO-001), e três vistas: Registros, Estrutura e Diagrama. *Alterada a pedido do dono em
+  2026-10-27 (seção 42): o foco ficava no navegador.*
 - **RN-TABELA-002.** Registros: a tela executa `SELECT * FROM` a tabela, com o esquema e o nome
   entre aspas duplas (a aspa dobrada dentro do nome), exatamente como o catálogo os devolve, nos
   três bancos: no Informix o driver abre a sessão com identificadores delimitados (sonda de
@@ -1734,7 +1759,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
 
 - **RN-GRADE-001.** Seleção, como no DBeaver, nas grades dos Registros, do resultado da aba de consulta e de cada
   aba de resultado do script.
-  - A grade tem uma célula ativa (a do foco, com o contorno de hoje) e uma seleção, que tem uma de três formas: um
+  - A grade tem uma célula ativa (a do foco, com o contorno, RN-AMB-002) e uma seleção, que tem uma de três formas: um
     retângulo de células, da âncora até a célula ativa; linhas inteiras, uma ou várias, seguidas ou não; ou colunas
     inteiras, uma ou várias, seguidas ou não, com todas as linhas do resultado, também as que ainda não foram
     carregadas (RN-GRADE-022). Sem nada
@@ -1789,13 +1814,15 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
 
     A grade rola para manter a célula ativa à vista.
   - O desenho: as células escolhidas têm o fundo de escolha do tema, o mesmo do item escolhido do navegador, e a
-    célula ativa continua com o contorno; o número das linhas escolhidas e o cabeçalho das colunas da seleção ficam
+    célula ativa continua com o contorno, na cor do ambiente da conexão da aba ou, sem ela, no acento do tema
+    (RN-AMB-002); o número das linhas escolhidas e o cabeçalho das colunas da seleção ficam
     destacados. Com mais de uma célula escolhida, a barra do resultado diz quantas, ao lado do resumo (no resultado,
     de "Primeiras 200 linhas"; nos Registros, da contagem das linhas carregadas): "3 linhas escolhidas", com linhas
     inteiras, e "12 células escolhidas", com um retângulo ("1 linha escolhida", "2 células escolhidas"); com
     colunas inteiras, "Coluna preco: todas as linhas" (RN-GRADE-022). Esse texto
     tem o papel de status (`role="status"`) e muda quando a seleção para de mudar (ao soltar o botão ou a tecla), e
-    não a cada célula do arraste.
+    não a cada célula do arraste. *Alterada a pedido do dono em 2026-10-27 (seção 42): o contorno da célula ativa
+    leva a cor do ambiente.*
   - Para o leitor de tela, a grade tem `aria-multiselectable="true"`, cada célula desenhada diz se está escolhida
     (`aria-selected`), e a célula ativa continua anunciada pelo `aria-activedescendant`. A grade continua com uma
     parada só do Tab.
@@ -2816,8 +2843,12 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
   janela está aberta. A aba do resultado anda com a aba dela, e uma posição passa por uma aba com a do resultado
   (RN-ABAS-012). Solta fora da faixa, a aba vai para uma janela nova (RN-ABAS-010). Ctrl+W (Cmd+W no macOS) fecha a
   aba ativa, com as perguntas de fechar (RN-ABAS-004); com a aba do resultado ativa, volta o resultado ao painel
-  (RN-ABAS-012). As medidas da faixa estão na RN-ABAS-009. *Alterada a pedido do dono em 2026-10-20 (seção 39):
-  entraram a aba do resultado e o soltar fora da faixa, e o Ctrl+W, que já existia, passou a estar escrito.*
+  (RN-ABAS-012). O Ctrl+W vale em toda a janela da área de trabalho, também com o foco no navegador ou perdido no
+  corpo da página, e nunca com um diálogo, um menu ou uma lista aberta; nunca fecha a janela. Depois dele, o foco vai à
+  aba que ficou ativa, e o Ctrl+W seguinte fecha a próxima (RN-ABAS-019). As medidas da faixa estão na RN-ABAS-009. *Alterada a
+  pedido do dono em 2026-10-20 (seção 39): entraram a aba do resultado e o soltar fora da faixa, e o Ctrl+W, que já
+  existia, passou a estar escrito. Alterada a pedido do dono em 2026-10-27 (seção 42): o Ctrl+W valia só com o foco na
+  área das abas, e, depois de fechar uma, o foco caía fora dela, e o seguinte não fechava nada.*
 - **RN-ABAS-002.** Uma aba vai para uma janela nova arrastando-a para fora da faixa e soltando-a em qualquer lugar que
   não seja uma faixa de abas, fora da janela ou dentro dela (a janela nova abre com o canto de cima à esquerda onde
   ela foi solta, no ponto que o processo principal lê, RN-ABAS-010), ou por "Mover para nova janela" no menu da aba.
@@ -2887,8 +2918,9 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
   para outra pasta ("Mover para…", RN-SCRIPT-009), se exclui (com confirmação), tem "Copiar SQL" e,
   conforme o script, "Tornar genérico" ou "Vincular à conexão da aba" (RN-SCRIPT-005). O script
   lembra a conexão e o banco da aba em que foi salvo, menos o genérico, que não lembra nenhum
-  (RN-SCRIPT-005); aberto, vira uma aba de consulta já nessa conexão e nesse banco. Se a conexão
-  não existe mais, a aba abre sem conexão e pede para escolher uma.
+  (RN-SCRIPT-005); aberto, vira uma aba de consulta já nessa conexão e nesse banco, com o foco no
+  editor dela, também quando a aba já estava aberta (RN-ABAS-019). Se a conexão não existe mais, a aba
+  abre sem conexão e pede para escolher uma.
   - Mudança não salva é o texto, a conexão (RN-ARVORE-008) ou o banco (RN-ARVORE-007) da aba
     diferente do que o script tem gravado. O Ctrl+S grava a conexão e o banco da aba junto com o
     texto. No script genérico só o texto conta.
@@ -2901,6 +2933,8 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
   - O script que declara variáveis no topo tem, logo depois de "Abrir", "Executar com valores…" (Shift+Alt+X),
     que executa o script sem abri-lo, com os valores escolhidos num diálogo, numa aba de execução (RN-VAR-026 a
     029). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
+  - *Alterada a pedido do dono em 2026-10-27 (seção 42): o script que já estava aberto voltava à aba
+    dele com o foco na árvore.*
 - **RN-SCRIPT-004.** Nome de 1 a 200 caracteres, sem caractere de controle e único por usuário
   (sem diferenciar maiúsculas); SQL de até 1 MB.
 
@@ -2965,12 +2999,33 @@ fechada, assim, ao reabrir já retorna as queries feitas".
     do editor mostra as monoespaçadas primeiro.
   - A escolha vale na hora, em todas as janelas, e fica nas preferências desta instalação, por
     usuário (RN-CONFIG-001).
-  - A fonte da interface vale para todo o texto do app fora do código. A do editor vale para o
-    editor SQL e para os campos de SQL que usam o mesmo editor (o filtro dos Registros, o "Ver SQL").
+  - A fonte da interface vale para todo o texto do app fora do código, e também para a árvore do
+    navegador (o nome e o detalhe de todos os nós: bancos, esquemas, tabelas, visões, rotinas, colunas,
+    índices e chaves) e para as grades de resultado (a da aba de consulta, a das abas do Executar
+    script e a dos Registros: o cabeçalho, as células, o número da linha e o campo de edição da
+    célula). Vale sempre, também quando é a do app: a árvore e a grade não ficam na IBM Plex Mono.
+    Seguem a interface também o "N linhas afetadas" do resultado, o número de cada comando nas
+    Estatísticas (com os algarismos de largura igual) e o campo do texto do nulo em Configurações ›
+    Resultados, que é a prévia da grade. A largura das colunas da grade é medida nessa fonte, e não
+    contada em caracteres (seção 42).
+  - A do editor vale para o editor SQL, para os campos de SQL que usam o mesmo editor (o filtro dos
+    Registros, o "Ver SQL") e para o SQL que o app mostra só para ler: o "SQL enviado" (RN-VAR-018),
+    o DDL aproximado da Estrutura (RN-TABELA-008) e o comando de cada linha das Estatísticas
+    (RN-SQL-020).
+  - Continuam na fonte mono do app, que nenhuma escolha muda: a mensagem de erro do banco (o `^` que
+    o PostgreSQL põe sob a posição do erro só se alinha numa fonte de largura fixa) e o SQLSTATE, o
+    número da linha na lista dos erros nas variáveis (RN-VAR-012), as etiquetas (a do banco, a da
+    situação), a Estrutura (fora o DDL), o Diagrama, o título da aba da tabela e o que os diálogos já
+    escrevem nela.
+  - Em Configurações › Aparência, a dica da fonte da interface diz "Vale para todo o texto do Prism
+    fora do código, também para o navegador e para as grades do resultado e dos Registros."; a da
+    fonte do editor, "Vale para o editor SQL, o filtro dos Registros e o “Ver SQL”.".
   - Uma fonte escolhida que não está mais instalada volta à do app, sem erro.
   - A lista é lida na máquina, sem rede, de preferência sem dependência nova (a API de fontes locais
     do Chromium ou o processo principal). Se a lista não puder ser lida, o campo aceita o nome
     digitado.
+  - *Alterada a pedido do dono em 2026-10-27 (seção 42): a árvore do navegador e as grades ficavam
+    na fonte mono do app, e a dica do editor dizia que a grade continuava nela.*
 
 ### Trocar o banco da aba de consulta
 
@@ -3114,8 +3169,10 @@ lá, e entraram pela seção 32 (pedido do dono em 2026-10-15).
     renomear, pelo F2, que agora muda só o nome (RN-NAV-009).*
   - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
   - A conexão sem ambiente próprio herda o da pasta mais próxima acima dela que tenha um. Ela mostra
-    o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba e barra de
-    status). O ambiente próprio da conexão sempre ganha.
+    o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba, barra de
+    status e os destaques da área de resultado, RN-AMB-002). O ambiente próprio da conexão sempre
+    ganha. *Alterada a pedido do dono em 2026-10-27 (seção 42): entraram os destaques da área de
+    resultado.*
   - Mover a conexão ou a pasta muda o que ela herda. O formulário da conexão sem ambiente próprio
     diz qual ela herda e de qual pasta.
   - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem
@@ -3225,13 +3282,21 @@ ambiente".
     usuário como etiquetas coloridas. Escolher uma preenche o nome e a cor, que continuam
     editáveis.
   - O campo do nome também completa com eles ao digitar.
-- **RN-NAV-010.** O navegador ganha, ao lado do campo de filtro, um seletor de ambiente: "Todos os
-  ambientes" (o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente".
+- **RN-NAV-010.** O navegador ganha um seletor de ambiente, na linha abaixo do campo de filtro, à
+  direita de "Só as conectadas" (RN-NAV-013), com o resto da largura: "Todos os ambientes" (o padrão),
+  cada ambiente do usuário (RN-AMB-001) e "Sem ambiente".
+  - O campo de filtro fica sozinho na linha dele, na largura toda (RN-BUSCA-001). Quando o seletor não
+    cabe ao lado de "Só as conectadas" (o navegador estreito), ele desce para uma linha só dele, na
+    largura toda. Fechado, o nome que não cabe nele termina em reticências.
   - Com um ambiente escolhido, a árvore mostra só as conexões cujo ambiente (próprio ou herdado da
-    pasta, RN-PASTA-005) é esse, e as pastas no caminho até elas.
+    pasta, RN-PASTA-005) é esse, e as pastas no caminho até elas, abertas só nessa vista, sem mudar o
+    que se lembra delas (RN-NAV-014).
   - Ele se combina com o campo de filtro de objetos.
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
+  - *Alterada a pedido do dono em 2026-10-27 (seção 42): as pastas no caminho abrem só na vista
+    filtrada, sem gravar; e o seletor saiu da linha do campo de filtro, que ficou com a largura toda,
+    e foi para o lado de "Só as conectadas".*
 
 ## 26. Complemento de 2026-10-15, versão 0.4.0: a linha em branco separa os comandos (issue #7)
 
@@ -4019,9 +4084,10 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
 
 ### Só as conectadas
 
-- **RN-NAV-013.** A barra do navegador ganha "Só as conectadas", um botão de alternar ao lado do
-  seletor de ambiente (RN-NAV-010), que mostra quantas conexões estão conectadas ("3 conectadas"),
-  ligado ou não: é o que o colega pediu, saber se há conexões abertas.
+- **RN-NAV-013.** A barra do navegador ganha "Só as conectadas", um botão de alternar na linha abaixo
+  do campo de filtro, à esquerda, antes do seletor de ambiente (RN-NAV-010), que mostra quantas
+  conexões estão conectadas ("3 conectadas"), ligado ou não: é o que o colega pediu, saber se há
+  conexões abertas. O botão tem a largura do texto, que nunca é cortado.
   - Conectada é a conexão com a sessão da árvore aberta ou com uma aba conectada, a mesma conta da
     lista do botão da conexão da aba (RN-ARVORE-008) e do script genérico (RN-SCRIPT-005).
   - A conexão cuja verificação respondeu que a API não tem sessão aberta com ela (o "Sem sessão
@@ -4029,8 +4095,9 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
     conexão, até uma sessão nova abrir (a próxima ação na árvore ou na aba): o indicador e a conta
     dizem o mesmo. O "Desconectar" do menu continua valendo para ela, e na árvore e na barra de
     status quem diz o estado dela é o indicador.
-  - Ligado, a árvore mostra só as conexões conectadas e as pastas no caminho até elas. Combina com o
-    campo de filtro e com o seletor de ambiente, como os dois entre si.
+  - Ligado, a árvore mostra só as conexões conectadas e as pastas no caminho até elas, abertas só nessa
+    vista, sem mudar o que se lembra delas (RN-NAV-014). Combina com o campo de filtro e com o seletor de
+    ambiente, como os dois entre si.
   - A conexão que desconecta sai da árvore filtrada na hora, e a que conecta (pela árvore, por uma
     aba, por um script) entra.
   - Sem nenhuma conectada, o botão diz "Nenhuma conectada", e, ligado, a árvore diz "Nenhuma conexão
@@ -4038,6 +4105,9 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   - A escolha vale enquanto a janela está aberta, como a do ambiente.
   - A API não muda: a tela já sabe quais conexões estão conectadas, e a verificação diz quais
     perderam a sessão.
+  - *Alterada a pedido do dono em 2026-10-27 (seção 42): as pastas no caminho abrem só na vista
+    filtrada, sem gravar; e o botão foi para a linha de baixo do campo de filtro, antes do seletor de
+    ambiente.*
 
 ### Rotas e respostas
 
@@ -4517,8 +4587,11 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     ou num script, vai à pasta pai (na raiz, não faz nada). Enter e o duplo clique abrem e fecham a
     pasta, e abrem o script, como hoje. F2 renomeia a pasta ou o script; Delete exclui (RN-SCRIPT-009);
     Shift+F10 e a tecla de menu abrem o menu.
-  - As pastas começam abertas, e abrir e fechar vale enquanto a janela está aberta, como as pastas de
-    conexões: não se grava. Recolher a seção inteira continua lembrado (RN-NAV-012).
+  - As pastas começam fechadas e voltam abertas ou fechadas como a pessoa as deixou, como as pastas de
+    conexões (RN-NAV-014). Recolher a seção inteira continua lembrado (RN-NAV-012). *Alterada a pedido do
+    dono em 2026-10-27 (seção 42): as pastas começavam abertas, e abrir e fechar valia enquanto a janela
+    estava aberta, sem gravar; o que se abre para mostrar o que foi criado, renomeado ou movido fica
+    lembrado.*
   - A densidade do navegador vale para ela (RN-NAV-011): as linhas de 30 ou de 22 px, e o recuo de 16
     ou de 12 px a cada nível.
   - Sem pasta e sem script, a seção diz o que diz hoje ("Nenhum script salvo. Ctrl+S numa aba de
@@ -4526,7 +4599,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
   - A pasta ou o script cuja pasta não está na lista (outra janela a excluiu entre duas leituras)
     aparece na raiz, até a leitura seguinte.
   - Depois de criar, renomear ou mover uma pasta ou um script pela seção, ele fica à vista (as pastas
-    acima dele abrem) e escolhido, com o foco.
+    acima dele abrem, e ficam lembradas abertas, RN-NAV-014) e escolhido, com o foco.
 - **RN-SCRIPT-009.** Os menus e os diálogos das pastas de scripts.
   - O botão direito no título da seção ou no espaço vazio dela, e Shift+F10 ou a tecla de menu com o
     foco no título, abrem um menu com "Nova pasta", que cria na raiz.
@@ -4692,8 +4765,8 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   nas abas guardadas.
 - Saber o esquema atual em que cada resultado do Db2 e do Informix foi lido, se o driver um dia o disser
   sem consulta, no lugar da guarda dos comandos que podem trocá-lo (RN-SQL-024).
-- Na seção Scripts: arrastar e soltar, busca e filtro, lembrar as pastas abertas, a cor e o ícone da
-  pasta, e as pastas por conexão que o DBeaver pode criar sozinho.
+- Na seção Scripts: arrastar e soltar, busca e filtro, a cor e o ícone da pasta, e as pastas por conexão
+  que o DBeaver pode criar sozinho. Lembrar as pastas abertas entrou pela seção 42 (RN-NAV-014).
 
 ## 34. Complemento de 2026-10-16, versão 0.4.0: exportar e importar conexões com as pastas
 
@@ -12374,3 +12447,505 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   colunas.
 - Editar os valores no painel Variáveis.
 - A aba de execução que volta na próxima entrada, e executar o mesmo script em várias conexões de uma vez, lado a lado.
+
+## 42. Complemento de 2026-10-27, versão 0.6.0: a fonte na árvore e na grade, as pastas lembradas, a busca em todas as conexões, o foco das abas e a cor do ambiente no resultado
+
+Pedido do dono em 2026-10-27, em sete frases (a última com capturas da área de resultado):
+
+1. "A fonte que escolhi tanto na interface quanto na fonte do editor do SQL não é utilizada na lista da sidebar e nem
+   nos registros da tabela ou nos resultados de um script SQL. Faça com que a fonte da interface também altere essas
+   fontes."
+2. "Ao abrir o prism ele abre todas as pastas da sidebar por padrão. Faça com que abra exatamente igual a como o
+   usuário fechou o Prism e/ou abra com tudo minimizado por padrão."
+3. "Faça com que o filtro de ambientes fique ao lado das conexões em aberto, deixando a busca ocupar toda a largura
+   que atualmente é ocupada pelo filtro de ambientes."
+4. "Ao filtrar por uma tabela específica, mostre-a em todos os bancos que ela existe, pois como eu tenho 3 ambientes
+   que tem todas tabelas identicas, quando eu busco por uma tabela em específico ele só filtra se eu tiver com o banco
+   de dados aberto, mas deveria buscar em todas as conexões."
+5. "Outra coisa, depois que eu abro uma tabela dando duplo clique, o foco permanece na sidebar e não me deixa utilizar
+   o Ctrl+Espaço pois o foco não está na tabela que eu abri."
+6. "Mesma coisa ao fechar abas com o ctrl+w, após fechar a primeira aba não consigo fechar a segunda."
+7. "Faça com que esses contornos tenha a mesma cor do ambiente que o usuário definiu (caso tenha definido, se não
+   utilize como já está do tema mesmo)"
+
+Na sétima, "esses contornos" são os que as capturas marcavam: o sublinhado do título "Registros" da área de resultado,
+o contorno da célula escolhida na grade e as barras de rolagem vertical e horizontal da grade.
+
+O que já existia:
+
+- **A fonte.** A fonte da interface valia para todo o texto do app fora do código (RN-CONFIG-008, seção 24), e a árvore
+  do navegador e as grades contavam como código: os nomes dos bancos, dos esquemas, das tabelas e do que vem abaixo
+  delas, e as células, ficavam na IBM Plex Mono do app, que nenhuma escolha muda (as pastas e as conexões já seguiam a
+  interface). A largura de saída das colunas saía de contar os caracteres, porque a fonte tinha largura fixa.
+- **As pastas.** As pastas de conexões e as de scripts começavam abertas a cada entrada, e abrir e fechar valia
+  enquanto a janela estava aberta, sem gravar (RN-SCRIPT-008). O navegador escondido e a seção Scripts recolhida já eram
+  lembrados, por usuário, nas preferências desta instalação (RN-NAV-008 e 012). As conexões começam fechadas, porque
+  abrir a conexão é conectar (RN-SESSAO-001).
+- **A barra.** O campo de filtro dividia a linha com o seletor de ambiente, e "Só as conectadas" descia para a linha de
+  baixo no navegador de 320 px, o padrão (RN-NAV-010 e 013). O canvas desenha só o campo, na largura toda.
+- **A busca.** Ela filtrava só o que a árvore já tinha carregado (RN-BUSCA-001), e a árvore só carrega o nível que a
+  pessoa abre (RN-ARVORE-002): a tabela de um esquema cujo grupo "Tabelas" nunca foi aberto não aparecia, e, com três
+  ambientes de tabelas iguais, ela aparecia só naquele em que o esquema já estava aberto. A API lista os objetos de um
+  esquema por vez.
+- **O foco.** Abrir uma tabela pelo navegador (o duplo clique, o Enter, o menu) só mudava a aba ativa: o foco ficava na
+  linha da árvore, onde o Ctrl+Espaço abre e fecha o nó da tabela, e não chegava ao filtro dos Registros, que completa
+  com ele (RN-TABELA-011). O script que já estava aberto tinha o mesmo defeito. O Ctrl+W só era tratado com o foco
+  dentro da área das abas, e fechar a aba tirava da página o elemento que tinha o foco, que caía no corpo dela, fora
+  dessa área: o segundo Ctrl+W não chegava a ninguém. No app empacotado do Windows e do Linux, que não tem menu, ele não
+  fazia nada; no desenvolvimento, o menu padrão do Electron o recebia e fechava a janela.
+- **A cor.** O ambiente aparecia como etiqueta (RN-CONN-015 e RN-PASTA-005). Os destaques da área de resultado (o
+  sublinhado do título e das abas do script, o contorno da célula ativa) usavam o acento do tema, e as barras de
+  rolagem da grade, a cor de rolagem do tema, como o canvas os desenha.
+
+A versão: a fonte na árvore e na grade, as pastas lembradas, a busca em todas as conexões e a cor do ambiente são
+funcionalidade nova depois da 0.5.0, e por isso tudo entra na 0.6.0 (RN-VERSAO-002); o foco e o Ctrl+W são correções,
+que vão junto. O campo `version` de `src/client/package.json` passa a `0.6.0` num commit `chore` desta parte
+(RN-VERSAO-003), e os betas dela saem como `v0.6.0-beta.N` (RN-VERSAO-001). Nenhum atalho documentado muda: o Ctrl+W
+passa a valer em mais lugares da janela, o que não quebra o contrato. O formato do cofre não muda: o que se lembra das
+pastas fica nas preferências desta instalação.
+
+Esta seção:
+
+- faz a fonte da interface valer também para a árvore do navegador e para as grades do resultado e dos Registros,
+  também quando é a do app, com a largura das colunas medida nela (RN-CONFIG-008);
+- faz o navegador lembrar as pastas abertas, as de conexões e as de scripts, e começar com todas fechadas quando não
+  há nada lembrado (RN-NAV-014 e RN-SCRIPT-008);
+- deixa o campo "Filtrar objetos" sozinho, na largura toda, e leva o seletor de ambiente para a linha de baixo, ao
+  lado de "Só as conectadas" (RN-NAV-010 e 013);
+- faz a busca procurar as tabelas e as visões de todos os esquemas das conexões conectadas, por um índice de nomes que
+  a API devolve para cada banco, e dizer quais conexões ficaram de fora (RN-BUSCA-001 e 002);
+- leva o foco à aba aberta por um gesto, nova ou já aberta: ao filtro dos Registros, na aba de tabela, e ao editor, na
+  de consulta (RN-ABAS-019, RN-TABELA-001 e RN-SCRIPT-003);
+- leva o foco, quando uma aba fecha, à aba que fica ativa, e faz o Ctrl+W valer na janela inteira, de modo que o
+  seguinte fecha a próxima (RN-ABAS-019 e RN-ABAS-001);
+- e pinta com a cor do ambiente da conexão da aba os destaques da área de resultado: os sublinhados, o contorno da
+  célula ativa e as barras de rolagem da grade (RN-AMB-002).
+
+As regras novas são a RN-NAV-014, a RN-BUSCA-002, a RN-ABAS-019 e a RN-AMB-002. Muda a RN-CONFIG-008, a RN-SCRIPT-003 e
+008, a RN-NAV-010 e 013, a RN-BUSCA-001, a RN-ARVORE-002, a RN-TABELA-001, a RN-ABAS-001, a RN-MENU-001, a RN-CONN-015,
+a RN-PASTA-005, a RN-GRADE-001 e as seções 6, 9 e 33. A API ganha só a rota do índice de nomes (`object-names`). O
+canvas desenha a árvore e a grade na IBM Plex Mono e os destaques do resultado no acento do tema: vale a especificação
+(seção 9).
+
+### A fonte da interface na árvore e nas grades
+
+Está na própria RN-CONFIG-008, alterada no lugar. A fonte da interface vale sempre, também quando é a do app, e a
+árvore e a grade deixam a IBM Plex Mono também para quem nunca escolheu fonte: é a leitura literal do pedido ("a fonte
+da interface também altere essas fontes"), e o DBeaver também usa fonte proporcional na grade. A outra leitura, seguir
+a interface só quando a pessoa escolhe uma fonte diferente da do app, deixaria sem caminho quem quer a grade na IBM Plex
+Sans, porque escolhê-la é escolher a do app.
+
+O que muda por baixo é a largura das colunas. Ela contava caracteres, porque a fonte tinha largura fixa, e com uma
+fonte proporcional a conta erra: na IBM Plex Sans em seminegrito, a 13 px, a maiúscula mede em média 8,5 px, e o nome
+`WAREHOUSE_ID` desenha 102,5 px onde a conta reservaria 93,6, e seria cortado. Os nomes em maiúsculas são o comum no
+Informix e no Db2.
+
+- A largura de saída de cada coluna é medida na fonte da interface, caractere por caractere, pelo `measureText` de um
+  `canvas` que não entra na página, em três fontes: a da célula (peso 400, 13 px), a do nome no cabeçalho (600, 13 px)
+  e a do tipo e da marca "somente leitura" (400, 11 px). Cada caractere (cada ponto de código) é medido uma vez por
+  fonte e guardado; a largura do texto é a soma, mais 1 px de folga, arredondada para cima. Sem o ajuste entre pares
+  de letras a soma sobra um pouco, que é o lado seguro: o que não pode é cortar.
+- A conta para no teto da coluna: o valor de 10.000 caracteres custa só o que cabe nele.
+- Fica o que a grade já fazia: as larguras de saída saem do cabeçalho e da primeira página, uma vez, e não mudam com o
+  "Carregar mais"; nenhuma célula é medida na página; o duplo clique na divisa ajusta até o teto (RN-GRADE-009); e o
+  zoom da grade multiplica a medida de 100% (RN-GRADE-010). A dica do valor cortado usa a mesma medida.
+- A medida é feita no documento em que a grade está, também na janela do resultado (RN-ABAS-017). Sem documento ou sem
+  o contexto 2D do `canvas`, como nos testes, vale a conta de antes, a da mono. Se a fonte ainda não carregou quando a
+  grade mede (`document.fonts`), a grade mede com o que há, pede a fonte e mede de novo quando ela chega. A pilha da
+  fonte que o `canvas` recebe é a mesma das variáveis de estilo do app, escrita sem `var()`, e um teste confere que as
+  duas são iguais.
+- As larguras que a pessoa escolheu continuam as dela (RN-GRADE-009). Trocar a fonte da interface com a grade à vista
+  refaz só as larguras de saída.
+- O número da linha e o canto da grade usam algarismos de largura igual (`tabular-nums`); as células não, porque o
+  `canvas` não os aplica e a medida e a tela divergiriam. Os algarismos da IBM Plex Sans já têm a mesma largura.
+- A altura das linhas da grade e do navegador, a densidade (RN-NAV-011), o zoom da grade e o do programa (RN-ZOOM-001)
+  não mudam.
+
+### As pastas lembradas
+
+- **RN-NAV-014.** O navegador lembra as pastas abertas.
+  - As pastas de conexões e as pastas de scripts (RN-SCRIPT-008) voltam abertas ou fechadas como a pessoa as deixou, ao
+    abrir o app e ao entrar de novo, por usuário, nas preferências desta instalação (RN-CONFIG-001), como o navegador
+    escondido (RN-NAV-008) e a seção Scripts recolhida (RN-NAV-012).
+  - Sem nada lembrado (a primeira entrada, quem vem da 0.5.0, as preferências apagadas), todas começam fechadas. A pasta
+    que ainda não foi aberta (a nova, a importada, a criada noutra janela) também começa fechada, menos quando o que a
+    criou a revela (abaixo).
+  - As conexões sempre começam fechadas e desconectadas: abrir a conexão é conectar (RN-SESSAO-001), e nada conecta
+    sozinho (RN-ABAS-006). Os bancos, os esquemas, os grupos e as tabelas abertos não passam de uma entrada para a
+    outra. Na mesma entrada, continua como antes: fechar e abrir de novo a conexão conectada mostra o que estava aberto
+    abaixo dela, e desconectar fecha tudo dela.
+  - Abrir as pastas para mostrar o que foi criado, salvo, duplicado, importado, movido ou revelado conta como abri-las,
+    e fica lembrado: a conexão salva pelo formulário (RN-NAV-004), a duplicada (RN-CONN-016), o que a importação trouxe
+    (RN-TRANSF-014 e RN-DBEAVER-014), a pasta em que se cria uma conexão ou uma pasta nova (RN-NAV-002), o "Mostrar no
+    navegador" (RN-ARVORE-008) e o que a seção Scripts cria, renomeia ou move (RN-SCRIPT-008). Mover uma conexão ou
+    uma pasta de conexões ("Mover para…", RN-NAV-003) passa a revelá-la, como o salvar: as pastas do destino abrem, e
+    ela fica à vista. "Recolher tudo" (RN-NAV-002) fecha também todas as pastas de conexões, e é isso que volta.
+  - A busca (RN-BUSCA-001), o seletor de ambiente (RN-NAV-010) e "Só as conectadas" (RN-NAV-013) não mudam o que se
+    lembra. A busca já abre os ancestrais do que casa só na tela filtrada; o seletor de ambiente e "Só as conectadas",
+    ligados, fazem o mesmo com as pastas no caminho até as conexões que ficam à vista: abertas só nessa vista, sem
+    gravar. Fechar uma delas vale enquanto o filtro está ligado, e desligá-lo devolve as pastas como estavam.
+  - O que se lembra: o identificador de cada pasta aberta, numa lista para as pastas de conexões e noutra para as de
+    scripts, sem nome nem dado de conexão, sem repetidos e até 1.000 em cada lista (ficam os mais recentes). Fica no
+    armazenamento local da tela, na chave `prism:navigator-folders:<usuário>` (o nome do usuário sem os espaços das
+    pontas e em minúsculas, como nas chaves vizinhas), como `{ "connections": [...], "scripts": [...] }`. A pasta
+    renomeada ou movida guarda o identificador, e o estado vai com ela. A pasta excluída sai da lista na primeira
+    leitura das pastas de cada entrada. O que não se lê (o texto quebrado, o que não é identificador) é ignorado, sem
+    erro.
+  - Cada mudança (abrir, fechar, "Recolher tudo", tirar a pasta que não existe mais) é gravada sobre o que está gravado
+    agora, e não sobre o que a janela leu ao abrir, como a seção Scripts recolhida (RN-NAV-012): duas janelas não
+    desfazem a escolha uma da outra. A janela que abre depois começa como a última escolha de cada pasta; a que já está
+    aberta fica como está. Sem armazenamento (o navegador o recusa, ou falha), a escolha vale na memória da sessão, sem
+    erro.
+  - O bloqueio não muda nada: a árvore continua como estava. Outro usuário na mesma instalação tem a lembrança dele.
+  - Quem revela leva as pastas a abrir junto do pedido, e elas abrem (e se gravam) quando o pedido é atendido, e nunca
+    enquanto a tela desenha a árvore.
+
+### A barra de filtros do navegador
+
+Está na RN-NAV-010 e na RN-NAV-013, alteradas no lugar, e no começo da RN-BUSCA-001, que diz onde o campo fica:
+
+- Na primeira linha, abaixo da barra de ações (RN-NAV-002), fica só o campo "Filtrar objetos", na largura toda, como
+  no canvas. No navegador largo ele continua sozinho na linha dele, mesmo quando os três controles caberiam numa só.
+- Na segunda, "N conectadas" (RN-NAV-013) à esquerda, com a largura do texto, que nunca é cortado, e o seletor de
+  ambiente (RN-NAV-010) à direita, com o resto da largura e o X "Limpar o filtro de ambiente" na ponta direita, dentro
+  do lugar do seletor: escolher ou limpar o ambiente não muda a largura de nada.
+- A segunda linha quebra: quando o seletor não cabe ao lado do botão, com pelo menos 128 px, ele desce para uma linha
+  só dele, na largura toda. Na fonte do app, no navegador de 320 px (o padrão), os dois cabem lado a lado também com
+  "Nenhuma conectada"; no de 200 px (o mínimo), o seletor desce. Fechado, o nome que não cabe no seletor termina em
+  reticências.
+- O campo tem a largura toda e a altura fixa de 32 px, sem base flexível: na coluna das duas linhas, a base o faria
+  crescer na altura. Os controles da segunda linha também têm 32 px. Entre as linhas e entre os controles ficam 6 px,
+  onde cabe o anel do foco, e até a árvore, 8 px, como no canvas. No navegador largo, os filtros ocupam uma linha a mais
+  que antes, porque a busca fica sozinha na dela.
+- A ordem do Tab segue a da tela: a barra de ações, o campo, o "Limpar a busca", "Só as conectadas", o seletor, o
+  "Limpar o filtro de ambiente" e a árvore. O Ctrl+F, o Ctrl+Shift+E (RN-NAV-008), o Esc, a seta para baixo e o Enter
+  do campo não mudam, e nenhum texto de tela muda.
+- Quem diz a disposição é um componente só, sem estado (`NavigatorFilters`): o estado dos três controles continua no
+  navegador, e o que cada um faz não muda.
+
+### A busca em todas as conexões
+
+O "Filtrar objetos" continua filtrando o que a árvore já carregou (RN-BUSCA-001, alterada no lugar), e passa a
+procurar também as tabelas e as visões de todos os esquemas dos bancos conectados, num índice de nomes que a API
+devolve para cada banco, numa consulta só ao catálogo. A busca no servidor, a cada tecla, ficou de fora: seria uma ida
+ao banco de cada ambiente a cada pausa da digitação, e ignorar os acentos não se escreve do mesmo jeito nos três
+bancos. Carregar os níveis de cada esquema também ficou de fora: seriam duas consultas por esquema, e a árvore ficaria
+cheia do que a pessoa não abriu (RN-ARVORE-002).
+
+- **RN-BUSCA-002.** O índice de nomes da busca.
+  - **O que entra.** As tabelas e as visões de todos os esquemas de cada banco do escopo (abaixo), também os de
+    sistema, que vêm por último, como na árvore (RN-ARVORE-004). São as mesmas que os grupos "Tabelas" e "Visões" da
+    árvore mostram em cada esquema, com os mesmos tipos de objeto em cada banco. As rotinas, as colunas, os índices e
+    as chaves continuam só no que a árvore já carregou (RN-BUSCA-001).
+  - **O escopo.** As conexões que a árvore mostra, depois do seletor de ambiente (RN-NAV-010) e de "Só as conectadas"
+    (RN-NAV-013), e, delas, só as conectadas, na conta da RN-NAV-013: a sessão da árvore aberta ou uma aba conectada.
+    De cada uma, os bancos:
+    - o banco da conexão. Na conexão conectada só por uma aba, a busca abre a sessão da árvore desse banco, sem abrir
+      o nó: a conexão já está conectada, e isso não é conectar;
+    - e cada outro banco do servidor que a pessoa já expandiu (RN-ARVORE-006), que já tem a sessão da árvore.
+
+    A busca não abre a sessão de um banco que ninguém abriu: num servidor com dezenas de bancos, seriam dezenas de
+    sessões.
+  - **Quando o índice vem.** A tela pede o índice de cada banco do escopo quando o campo tem texto, uma vez por banco,
+    pela rota `object-names` (abaixo). Dali em diante cada tecla filtra no próprio app, sem ir ao banco, sem esperar
+    pausa e sem mínimo de letras. O índice fica em memória até o "Atualizar" num nó daquele banco ou na conexão
+    (RN-ARVORE-002), o "Desconectar", a conexão que some, a sessão reaberta e o bloqueio. O banco que conecta durante
+    a busca, e a conexão que um filtro passa a mostrar, entram sozinhos. A tabela criada depois da primeira busca só
+    aparece depois do "Atualizar", como na árvore.
+  - **Não é nível da árvore.** O índice não enche nenhum nível, não abre nó e não muda o que se lembra das pastas
+    (RN-NAV-014): limpar o campo devolve a árvore como estava. O nível que a árvore já carregou vale mais: o índice só
+    acrescenta o que falta. O autocompletar do editor (RN-CONFIG-004) não usa o índice, e continua com o que a árvore
+    carregou. Na tela, o índice mora junto dos níveis da árvore daquela conexão, para o "Desconectar", a conexão que
+    some, o bloqueio, a sessão reaberta e o "Atualizar" cuidarem dele como cuidam deles; quem lê os níveis o pula.
+  - **O que aparece.** Cada tabela e visão achada aparece no caminho dela (a pasta, a conexão, o banco, o esquema, o
+    grupo "Tabelas" ou "Visões"), com os ancestrais abertos e o trecho destacado, como o que está carregado; sem a
+    lista dos bancos carregada, a conexão mostra só o banco dela, marcado como o padrão. A linha é a mesma que a
+    árvore terá quando o nível carregar, com a mesma identidade: o duplo clique, o Enter, o menu e o "Gerar
+    `SELECT`" valem nela, e a escolha continua nela quando o nível carregar. O grupo diz quantas casaram do total que ele tem no
+    índice ("3 de 120"); com o índice cortado na API, só quantas casaram. Com três ambientes de tabelas iguais, a
+    tabela aparece três vezes, uma em cada conexão.
+  - **O corte.** Cada banco mostra no máximo 200 tabelas e visões do índice que casam, na ordem dos esquemas e dos
+    nomes do banco, e a contagem dos achados continua além do corte. O corte é por banco, e não do total: um corte do
+    total deixaria o primeiro ambiente da árvore esconder os outros, que é o caso do pedido.
+  - **A linha de estado.** Fica logo abaixo das duas linhas dos filtros (RN-NAV-010), nunca ao lado do campo, com o
+    texto numa região `role="status"` e os botões fora dela. A chegada de um índice não move o foco nem a rolagem, e a
+    seta para baixo e o Enter do campo continuam indo à lista.
+    - Enquanto algum índice vem: "Buscando nas tabelas e visões de 3 bancos…" ("de 1 banco…").
+    - Com o corte: "Muitos resultados: cada banco mostra as 200 primeiras tabelas e visões. Escreva mais do nome para
+      ver as outras."
+    - Com o índice cortado na API: "Prod › erp tem mais de 50.000 tabelas e visões: a busca olhou as 50.000 primeiras
+      e o que já está aberto na árvore.", com o nome da conexão e o do banco.
+    - Com a falha: "Não foi possível buscar em Prod › erp: <mensagem do banco>", com a mensagem como veio
+      (RN-SQL-009), e "Tentar de novo", que pede o índice de novo e, se a sessão caiu, a reabre, como a árvore faz. A
+      falha não abre o aviso de erro: ela fica na linha.
+    - Com conexões de fora: "2 conexões não estão conectadas e ficaram de fora da busca." ("1 conexão não está
+      conectada e ficou de fora da busca.") e "Buscar nelas também", que abre a sessão da árvore de cada uma, sem abrir
+      o nó: é conectar, a pedido. A conexão sem usuário ou sem senha gravada fica de fora, porque abri-la abriria o
+      "Editar conexão" (RN-TRANSF-016), e a linha diz quantas: "1 sem usuário ou senha gravada ficou de fora." ("2 sem
+      usuário ou senha gravada ficaram de fora."). A conexão que falha ao conectar mostra a mensagem do banco na linha
+      de estado, e não no nó, como faria a árvore (RN-ARVORE-005), porque o nó não foi aberto: ele continua fechado.
+    - Sem nada achado, continua o "Nada encontrado para “x”.", e a explicação embaixo dele passa a ser "A busca olha
+      as tabelas e visões dos bancos conectados e o que já está aberto na árvore.". Ele só aparece com a busca
+      terminada em todo o escopo: com um índice a caminho ("Buscando…") ou um banco que falhou, a linha de estado fala
+      sozinha, porque o banco que falhou pode ter o nome.
+
+### O foco das abas
+
+Os pedidos 5 e 6 têm a mesma raiz: abrir, fechar e trocar de aba mudava a aba ativa sem dizer para onde o foco ia, e
+ele ficava no navegador ou caía no corpo da página, fora da área das abas, onde as teclas da aba (o Ctrl+W, o F5, o
+Alt+X, o Ctrl+S) não chegam. A RN-ABAS-019 diz, num lugar só, para onde ele vai em cada caso, e a RN-TABELA-001, a
+RN-SCRIPT-003 e a RN-ABAS-001, alteradas no lugar, a citam.
+
+- **RN-ABAS-019.** O foco ao abrir, fechar e trocar de aba.
+  - **A entrada de cada aba**, onde o foco cai quando vai "para a aba":
+    - na aba de consulta, o editor SQL, com o cursor onde estava;
+    - na aba de consulta com o editor escondido (o resultado maximizado, RN-PAINEL-001) ou com a aba do resultado dela
+      ativa (RN-ABAS-012), o resultado: a grade, ou o botão "Onde mostrar o resultado" quando não há grade;
+    - na aba de execução (RN-VAR-029), que não tem editor, o resultado, do mesmo jeito;
+    - na aba de tabela, na vista Registros, o campo "Filtro e ordem dos registros", com o cursor no fim: ali o
+      Ctrl+Espaço completa as colunas e as palavras do filtro (RN-TABELA-011), e dá para escrever o filtro na hora;
+    - na aba de tabela, na Estrutura ou no Diagrama, conectada ou não, o painel da vista, onde o F5 vale (RN-GRADE-012).
+  - **Abrir por um gesto.** São gestos: o duplo clique e o Enter numa tabela, numa visão ou num script do navegador
+    (RN-TABELA-001 e RN-SCRIPT-003); os itens de abrir, a "Nova consulta" e o "Gerar `SELECT`" dos menus do navegador
+    (RN-MENU-001); o "Abrir registros" do aviso da importação (RN-IMPORT-020); seguir uma chave estrangeira
+    (RN-TABELA-007); o duplo clique numa tabela do diagrama (RN-TABELA-004); o Ctrl+clique no nome de uma tabela no
+    editor (RN-LINK-001); a aba que chega de outra janela (RN-ABAS-002 e 003); e as abas que voltam na entrada
+    (RN-ABAS-006). Com a aba nova ou com a que já estava aberta, o foco vai à entrada da aba que fica ativa.
+    - Não rouba o foco: se, entre o pedido e a aba aparecer (o script que ainda vem da API, a aba que chega de outra
+      janela), o foco saiu de quem pediu para outro lugar vivo da janela (o type-ahead andou na árvore, RN-ARVORE-009;
+      a pessoa clicou num campo), ele fica onde está.
+    - O editor da aba nova não toma mais o foco sozinho ao nascer: quem o leva é esta regra, com essa guarda.
+  - **Fechar, ou a aba sair da janela**: o Ctrl+W, o X, o botão do meio e o menu da aba, depois das perguntas de fechar
+    (RN-ABAS-004 e RN-EDIT-007); levar a aba para outra janela (RN-ABAS-002, 003 e 010); e a aba que sai porque a
+    conexão dela foi excluída. Se o foco estava na aba que saiu, ele vai à aba que ficou ativa, no mesmo lugar em que
+    estava:
+    - estava na faixa: vai à aba ativa, na faixa;
+    - estava no conteúdo da aba: vai à entrada da aba ativa;
+    - sem aba nenhuma: vai à linha do navegador que o Tab alcança, quando o navegador está à mostra (RN-NAV-008).
+
+    O foco que estava fora das abas (no navegador, na barra superior) fica onde está. O clique do mouse no X não leva o
+    foco ao X, como o do botão do meio já não leva. Quando várias fecham de uma vez ("Fechar as outras", "Fechar as da
+    direita", "Fechar todas"), vale o fim, depois da última. "Cancelar" numa pergunta não fecha nada, e o foco volta a
+    quem o tinha.
+  - **Trocar de aba** pela faixa (o clique, as setas, a lista das abas) e por Voltar e Avançar: o foco fica na aba, na
+    faixa (RN-ABAS-018). O F6 segue a RN-ABAS-014. A troca que esconde o painel em que o foco estava (seguir uma chave
+    estrangeira, o duplo clique no diagrama, o Ctrl+clique no nome no editor) é um abrir por gesto: o foco vai à
+    entrada da aba que ficou ativa.
+  - Onde outra regra já diz para onde vai o foco, vale ela: a troca do lugar do resultado e o F6 (RN-ABAS-014), a aba
+    do resultado que fecha e a janela do resultado que volta ao painel (RN-ABAS-012 e 013), e o Voltar e o Avançar
+    (RN-ABAS-018).
+  - **O Ctrl+W** (Cmd+W no macOS) vale em toda a janela da área de trabalho, como no DBeaver: com o foco na faixa, numa
+    aba, no navegador ou perdido no corpo da página. Nunca com um diálogo, um menu ou uma lista aberta, nem com o cofre
+    bloqueado ou outra tela à mostra (Configurações), e nunca fecha a janela; sem aba, não faz nada. Depois de fechar, o
+    foco vai à aba que ficou ativa (acima), e o Ctrl+W seguinte fecha a próxima. Na janela do resultado, ele continua
+    sendo o "Voltar para o painel" (RN-ABAS-013). No desenvolvimento, em que o menu padrão do Electron tem o Ctrl+W de
+    fechar a janela (Janela › Fechar), a tecla nunca chega a ele: com um diálogo, um menu ou uma lista aberta, ou na tela
+    de entrada, o Ctrl+W não faz nada e não fecha a janela, como no app empacotado.
+  - Nenhum texto de tela muda: o leitor de tela anuncia o campo que recebe o foco ("Filtro e ordem dos registros",
+    "Editor SQL"). Levar o foco não rola a página.
+  - Como: cada aba diz como a entrada dela se foca, e um lugar só, a área das abas, decide quando, depois de a aba
+    aparecer e de os painéis dela montarem, e depois das perguntas de fechar. A última região em que o foco esteve (a
+    faixa ou o conteúdo de uma aba) é guardada a cada mudança do foco, fora dos diálogos, dos menus e das listas, para
+    o fechar saber de onde ele saiu. O que devolve o foco antigo quando a área de trabalho volta à tela só o faz quando
+    o foco está perdido, para não desfazer o foco da entrada.
+
+### A cor do ambiente na área de resultado
+
+O ambiente era só a etiqueta (RN-CONN-015). A RN-AMB-002 leva a cor dele aos destaques que o dono marcou nas capturas, e
+aos que andam com eles, para a área de resultado não misturar a cor do ambiente com a do tema: o contorno do campo de
+edição da célula, que toma o lugar do contorno da célula ativa ao editar, e o anel do foco da grade, que fica em volta
+dela.
+
+- **RN-AMB-002.** A cor do ambiente nos destaques da área de resultado.
+  - Na área de resultado de uma aba (os Registros da aba de tabela; o resultado da aba de consulta, no painel, numa aba
+    ou na janela do resultado, RN-ABAS-011; e o da aba de execução, RN-VAR-029, que usa a mesma área), os destaques
+    levam a cor do ambiente da conexão da aba, o próprio ou o herdado da pasta (RN-PASTA-005):
+    - o sublinhado do título "Registros" ou "Resultado", o da aba escolhida do Executar script (RN-SQL-020) e o da
+      escolhida entre "Resultado" e "Variáveis" (RN-VAR-024);
+    - o contorno da célula ativa da grade (RN-GRADE-001) e o do campo de edição dela (RN-EDIT-001), para o contorno não
+      trocar de cor ao editar;
+    - o anel do foco da grade, para ele não ficar na cor do tema em volta da célula na cor do ambiente;
+    - as barras de rolagem da grade: a vertical, a horizontal e o canto entre elas.
+  - Sem ambiente, com o ambiente sem cor (só o nome), com a cor fora do formato `#RRGGBB` ou na aba sem conexão, tudo
+    fica como no tema: os sublinhados e os contornos no acento, e as barras de rolagem na cor de rolagem dele
+    (`border-strong`). A cor sem nome não faz ambiente (RN-PASTA-005), e não conta.
+  - A cor passa em 3:1 (RN-CONFIG-003) sobre as superfícies de todos os temas, pelo mesmo ajuste do ícone colorido
+    (RN-PASTA-007): nos temas claros, a variante escurecida dela; nos escuros, a clareada, o mínimo que passa. A
+    etiqueta do ambiente continua com a cor escolhida. Trocar o tema, ou seguir o do sistema, troca a variante sem nada
+    a calcular de novo.
+  - Trocar a conexão da aba (RN-ARVORE-008), mudar o ambiente da conexão ou da pasta e mover a conexão de pasta mudam a
+    cor na hora, também na aba e na janela do resultado.
+  - Ficam de fora, no acento ou no token de hoje: a faixa de abas, o editor SQL, o campo de filtro, as marcas de
+    pendência (RN-EDIT-004), a divisa das colunas, as setas de ordenar, os botões, a Estrutura e o Diagrama. As outras
+    barras de rolagem da área de resultado (as das Estatísticas, do painel Variáveis e da lista das abas do script)
+    ficam com a cor do tema.
+  - A cor é só um reforço: o nome do ambiente continua na etiqueta da aba, do cabeçalho da aba de tabela e da barra de
+    status, e nenhum texto de tela muda.
+  - Como: a cor vai numa variável de estilo própria, `--environment-color`, que não é token do tema, posta na própria
+    área de resultado, que vai junto para a aba ou para a janela do resultado (RN-ABAS-017); posta mais acima, na aba
+    de consulta, ela não chegaria lá. A variável só existe com uma cor `#RRGGBB` válida, porque um valor inválido
+    nela não cai na reserva do `var()`, e cada destaque a lê com a cor do tema como reserva. A cor chega por
+    propriedade, da faixa de abas, que já sabe o ambiente de cada aba, até a área de resultado.
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `GET api/user/database-sessions/{id}/object-names` (RN-BUSCA-002) | 200 `{ schemas: [{ name, isSystem, tables, views }], truncated }` | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
+
+Notas:
+
+- `schemas`: os esquemas do banco da sessão que têm ao menos uma tabela ou visão, os comuns primeiro e depois os de
+  sistema, cada grupo na ordem de nome do banco. `isSystem` segue o critério da lista dos esquemas (`GET …/schemas`)
+  de cada banco. `tables` e `views` são listas de nomes, exatamente como o catálogo os guarda e na ordem do banco: com
+  eles a tela monta a identidade da linha e o `SELECT * FROM "esquema"."nome"` dos Registros (RN-TABELA-002). São as
+  tabelas e as visões das listas `objects?kind=tables` e `objects?kind=views` de cada esquema, com os mesmos tipos de
+  objeto em cada banco.
+- O limite: até 50.000 nomes por banco. A API lê 50.001; com o último, `truncated` vem verdadeiro e ele fica de fora.
+  Como os esquemas de sistema vêm por último, o corte tira o catálogo primeiro. O número é uma constante da API e entra
+  no texto da consulta como constante (`LIMIT`, `FETCH FIRST … ROWS ONLY`, `SELECT FIRST`), nunca como dado de fora.
+- O que cada banco lê: no PostgreSQL, o `pg_class` com o `pg_namespace`; no Db2, o `SYSCAT.TABLES`; no Informix, o
+  `systables`, com o dono como esquema (RN-ARVORE-004). Uma consulta por banco, na sessão dele: o outro banco do
+  servidor tem a sessão dele (RN-ARVORE-006), e o índice dele vem por ela; no Db2, só o banco da conexão.
+- A rota espera a vez na sessão, como as outras consultas de catálogo (RN-SESSAO-002), e não recusa com
+  `SESSION_BUSY`. Não tem corpo nem parâmetro, e exige o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`,
+  como as demais). O erro do banco vem como veio (RN-SQL-009).
+- Na API, o handler é de uma linha e devolve os registros do catálogo como estão, como o guia da API
+  (`src/api/AGENTS.md`) pede.
+
+### Testes e sondas
+
+Os testes da tela rodam sem página: a medida, o foco e a rolagem se provam em funções puras e nos testes dos
+componentes, e o que só a tela mostra é conferido à mão, no app de verdade, sob Xvfb. O que não puder ser exercitado é
+dito no relatório, e nunca dado como passando.
+
+- **A fonte.** Testes de unidade: o medidor com uma medida falsa (cada caractere medido uma vez por fonte; as três
+  fontes certas para o nome, a célula e o tipo; o emoji de dois códigos UTF-16 conta como um caractere; o teto que para
+  cedo num texto de 10.000 caracteres; a medida zero e a falta do `canvas`, que voltam à conta da mono); as larguras de
+  saída com uma maiúscula larga, que reservam a medida e não a conta; a pilha da fonte igual à da folha de estilos; a
+  grade (o contêiner na fonte da interface, os algarismos do número da linha, a dica do valor cortado pela medida); a
+  árvore sem a mono no nome e no detalhe; e as duas dicas de Configurações. Sob Xvfb: trocar a fonte da interface (uma
+  do sistema e a do app) e ver mudarem a árvore (tabelas, colunas e detalhes), a grade da consulta, a dos Registros, as
+  abas do Executar script e a janela do resultado, com o editor, o filtro dos Registros e o "Ver SQL" na fonte do
+  editor; os nomes em maiúsculas no cabeçalho (`WAREHOUSE_ID`, `NOME_MUNICIPIO`) inteiros, com o tipo ligado e
+  desligado e ordenados, nos zooms de 50, 100, 150 e 200%, pela largura real do nome contra a do texto inteiro; a dica
+  só no valor cortado; o duplo clique na divisa, que ajusta sem cortar; o "Carregar mais", que não muda as larguras; a
+  densidade compacta, com as linhas de 22 px; e o campo de edição da célula na fonte nova.
+- **S-FONTE-1.** No Windows, a medida do `canvas` contra a tela, na fonte do app e numa do sistema, nos zooms de 50 e
+  100%: o Chromium pode arredondar o avanço de cada letra, e a folga de 1 px por texto cobre pouco disso. Se a tela for
+  mais larga que a medida, a folga é calibrada por fonte, e o guia da tela (`src/client/AGENTS.md`) registra o que a
+  sonda achou.
+- **As pastas.** Testes de unidade: a lembrança (nada gravado, o texto quebrado, a lista inválida, o que não é
+  identificador e os repetidos dão a lista vazia, com tudo fechado; acima de 1.000, ficam os mais recentes; uma chave
+  por usuário, fora da do navegador escondido; abrir, fechar, "Recolher tudo" e tirar a pasta que não existe mais; duas
+  janelas que gravam pastas diferentes e não desfazem uma à outra; a janela aberta, que não muda com a outra; sem
+  armazenamento, a memória da sessão, sem erro; as duas listas separadas); as pastas abertas do navegador (nada
+  lembrado, a pasta que não existe, o seletor de ambiente e "Só as conectadas" ligados); a seção Scripts (as pastas
+  começam fechadas, abrir grava, montar de novo volta como ficou, revelar abre e grava, a pasta excluída sai); e o
+  revelar, que grava quando o pedido é atendido, e não enquanto a árvore se desenha. Sob Xvfb: a primeira entrada, com
+  tudo fechado; duas pastas abertas, o app fechado pelo X e aberto de novo, com as mesmas abertas e as conexões fechadas
+  e desconectadas; "Recolher tudo", fechar e abrir, com tudo fechado; a conexão salva numa pasta fechada, que abre e
+  continua aberta na entrada seguinte; duas janelas mexendo em pastas diferentes; outro usuário na mesma instalação; a
+  pasta excluída; a busca, o seletor de ambiente e "Só as conectadas", ligados e desligados, que não mudam o que se
+  lembra; e o Ctrl+B, que esconde e mostra a árvore como estava.
+- **A barra.** Testes de unidade: a disposição (o campo sozinho na primeira linha; na segunda, "Só as conectadas" e o
+  seletor, nessa ordem; a ordem do Tab pela ordem da página, também com o "Limpar a busca" e o "Limpar o filtro de
+  ambiente" à vista; o botão que não encolhe e o seletor com o resto; a segunda linha que quebra), o campo (a largura
+  toda e a altura fixa, sem base flexível; o Esc, a seta para baixo e o Enter) e as ações que chegam a quem as trata.
+  Sob Xvfb: o navegador de 200, 248, 264, 280, 300, 320, 400 e 640 px; "Nenhuma conectada", "3 conectadas" e "12
+  conectadas"; "Todos os ambientes", um ambiente e um nome longo, com o X; uma fonte de interface mais larga e o zoom
+  do programa a 125%; a 320 px com "Nenhuma conectada", os dois lado a lado e sem reticências; a 200 px, o seletor
+  sozinho na linha dele; a ordem do Tab, o Ctrl+F e o Ctrl+Shift+E.
+- **A busca.** Na API: testes de unidade (o agrupamento por esquema na ordem em que as linhas chegam; o `truncated` só
+  com a linha a mais, que fica de fora; a lista vazia; o handler, com o 404 e o 422); de integração, nos três bancos
+  (dois esquemas, cada um com tabela, visão e rotina, e a rotina fora; os esquemas de sistema depois; os nomes com
+  espaço, aspas e barra, exatos; o corte com um limite pequeno); o contrato (em cada esquema, o índice é igual à lista
+  das tabelas mais a das visões, o que garante que a linha montada pela tela é a da árvore); e a rota (200 com a forma,
+  404 com a sessão que não existe e, no PostgreSQL e no Informix, a sessão de outro banco, com o índice dele). Na tela:
+  o índice que não é nível (os leitores dos níveis, a busca e o autocompletar, o pulam); o nível carregado, que vale
+  mais; a conexão sem a lista dos bancos, com o banco dela; a identidade da visão, igual à da lista inteira; o "3 de
+  120"; o corte por banco e a contagem além dele; os de sistema por último; o acento e a caixa; três conexões com a
+  mesma tabela; o "Atualizar", o "Desconectar" e a sessão reaberta, que descartam o índice; o desempenho (três índices
+  de 50.000 nomes e 20.000 nós carregados, abaixo de 100 ms por tecla, também com uma letra só); e a linha de estado
+  em cada situação. Sob Xvfb: três conexões com as mesmas tabelas, conectadas e recolhidas, e a tabela nas três, com o
+  caminho aberto; o duplo clique, que abre a aba; desconectar uma, que a tira da busca; "Buscar nelas também", que a
+  traz de volta; a conexão que não responde, que não trava as outras; o seletor de ambiente e "Só as conectadas", que
+  mudam o escopo; limpar o campo, que devolve a árvore como estava; e os pedidos à API, contados, um por banco.
+- **S-BUSCA-1.** O tempo e o tamanho do índice nos três bancos, com 5.000 tabelas e no limite de 50.000, também com o
+  catálogo grande do Db2 e do Informix e com a leitura do driver da IBM, que ocupa uma thread enquanto dura. O guia
+  da API (`src/api/AGENTS.md`) registra a medida.
+- **O foco.** Testes de unidade: a decisão, uma linha por caso (o pedido com o foco ainda em quem pediu, que vai à
+  entrada; o type-ahead que andou para outra linha, que fica; o foco perdido; o foco que estava na faixa; o que estava
+  fora das abas; sem aba nenhuma, o navegador; o diálogo ou o menu aberto, o cofre bloqueado e o F6, que não mudam
+  nada); a região do foco (a faixa, o conteúdo, o navegador, dentro de um diálogo, de um menu e de uma lista, o corpo
+  da página); o foco perdido (nulo, o corpo, o elemento que saiu da página, o painel escondido); os pedidos de foco e
+  o registro das entradas; o fechar (com o foco no editor e na faixa, as perguntas, a aba de fundo, a última aba, o
+  Ctrl+W com o foco no corpo da página e as recusas: o menu aberto, o cofre bloqueado, a tecla já tratada, outra tela
+  à mostra); cada gesto de abrir, que pede o foco; a entrada da aba de tabela (o filtro nos Registros, o painel nas
+  outras vistas) e da de consulta (o editor, ou o resultado com o editor escondido); o editor que não toma o foco ao
+  nascer; o X que não toma o foco no clique; e a volta da área de trabalho, que não desfaz um foco que não está
+  perdido. Sob Xvfb, com teclas de verdade (`xdotool`): o duplo clique e o Enter numa tabela, que levam o foco ao
+  filtro, onde o Ctrl+Espaço abre a lista das colunas; a tabela que já estava aberta; três Ctrl+W seguidos, que
+  fecham três abas, a partir do editor, da grade e da faixa; o X com o mouse e depois o Ctrl+W; o "Descartar" de uma
+  pergunta e depois o Ctrl+W; a última aba, que leva o foco ao navegador; seguir uma chave estrangeira; o Alt+←, que
+  deixa o foco na aba; o F6 com o resultado numa aba; e o type-ahead enquanto um script lento abre, que não perde o
+  foco. No desenvolvimento, o menu padrão do Electron não recebe o Ctrl+W (`menuShortcutIgnored`, com teste): a tecla que a
+  página não trata não faz nada, como no app empacotado (`dist:dir`), que não tem menu no Windows e no Linux.
+- **A cor.** Testes de unidade: a variável (a cor nula, vazia, fora do formato ou inválida não a cria; a válida, em
+  maiúsculas ou minúsculas, a cria com a variante de cada tema; as seis cores do canvas e o preto, o branco e um
+  azul-marinho passam em 3:1 sobre todas as superfícies de todos os temas; cada destaque tem a reserva do tema); a área
+  de resultado (a variável na raiz dela, ao lado do estilo de quem a chama, e nenhuma sem cor; o sublinhado do
+  título); as abas do script e as de "Resultado" e "Variáveis"; a grade (o contorno da célula ativa, as barras de
+  rolagem e o anel do foco; as linhas, que não recebem a cor e não se desenham de novo quando ela muda); o campo de
+  edição; e a cor que chega da aba de tabela e da de consulta, a própria e a herdada da pasta, nos três lugares do
+  resultado, e que muda com a conexão da aba. Sob Xvfb: os valores calculados (`getComputedStyle`) do sublinhado, do
+  contorno da célula ativa e das barras de rolagem, com um ambiente verde, um âmbar, o vermelho herdado da pasta, um
+  só com o nome e uma cor clara de "Outra cor"; em todos os temas, com a variante escurecida nos claros; no painel,
+  numa aba e na janela do resultado; e a conexão sem ambiente, igual à 0.5.0.
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-CONFIG-008**: a fonte da interface vale também na árvore do navegador e nas grades, também a do app, com a
+  largura das colunas medida nela; o "N linhas afetadas", o número das Estatísticas e o campo do texto do nulo seguem a
+  interface, e o comando das Estatísticas vai à fonte do editor; o que continua na mono; as dicas dos dois campos.
+- **RN-SCRIPT-008**: as pastas de scripts começam fechadas e lembram se ficaram abertas, e o que se abre para mostrar o
+  que foi criado fica lembrado.
+- **RN-NAV-010**: o seletor de ambiente vai para a linha abaixo do campo de filtro, à direita de "Só as conectadas", e
+  desce para uma linha só dele quando não cabe; com um ambiente escolhido, as pastas no caminho até as conexões abrem
+  só nessa vista, sem gravar.
+- **RN-NAV-013**: o botão vai para a linha abaixo do campo de filtro, à esquerda, e a conta nunca é cortada; as pastas
+  no caminho abrem só na vista filtrada, como no seletor de ambiente.
+- **RN-BUSCA-001**: o campo fica sozinho na linha dele, na largura toda; a busca procura também as tabelas e as visões
+  de todos os esquemas das conexões conectadas, pelo índice de nomes, e não conecta sozinha.
+- **RN-ARVORE-002**: o índice de nomes da busca não é nível da árvore.
+- **RN-TABELA-001**: o foco vai à aba da tabela aberta, nova ou já aberta.
+- **RN-SCRIPT-003**: o foco vai ao editor do script aberto, também quando a aba dele já estava aberta.
+- **RN-ABAS-001**: o Ctrl+W vale em toda a janela da área de trabalho, nunca fecha a janela, e o seguinte fecha a
+  próxima.
+- **RN-MENU-001**: a ação do menu que abre uma aba leva o foco a ela, em vez de devolvê-lo ao item.
+- **RN-CONN-015**: a cor do ambiente pinta os destaques da área de resultado da aba.
+- **RN-PASTA-005**: o ambiente herdado da pasta também pinta esses destaques.
+- **RN-GRADE-001**: o contorno da célula ativa leva a cor do ambiente, ou o acento do tema sem ela.
+- **Seção 6**: a rota `object-names`.
+- **Seção 9**: a árvore e as grades deixam a IBM Plex Mono do canvas; a barra do navegador tem o campo na largura toda,
+  como no canvas, e a linha de baixo e a linha de estado da busca, que ele não tem; e os destaques da área de
+  resultado levam a cor do ambiente no lugar do acento do canvas.
+- **Seção 33**: o "lembrar as pastas abertas" do "Fica para depois" entrou por esta seção.
+
+### Fica para depois
+
+- Uma fonte própria para a grade e o navegador, separada da interface, se o dono quiser.
+- Reabrir, ao conectar, os bancos, os esquemas e os grupos que estavam abertos na última vez. Os nomes deles são dados
+  do banco, que não vão às preferências: teriam de ir ao cofre.
+- O índice da busca com as colunas e as rotinas.
+- A busca nos outros bancos do servidor que ninguém abriu, sem abrir uma sessão para cada um.
+- O autocompletar do editor com todas as tabelas e visões do índice (RN-CONFIG-004).
+- A busca no servidor, pelo termo, para o banco cujo índice passa de 50.000 nomes.
+- Trocar de aba pelo Ctrl+Tab e pelo Ctrl+PageUp e Ctrl+PageDown, que hoje não existem (o Ctrl+Shift+PageUp e
+  PageDown movem a aba, RN-ABAS-001).
+- Levar o foco ao conteúdo da aba também no clique na faixa e no Voltar e Avançar, como no Eclipse (mudaria a
+  RN-ABAS-018).
+- A cor do ambiente na faixa de abas (o sublinhado da aba ativa e o da aba do resultado) e no editor SQL (o cursor e as
+  barras de rolagem).

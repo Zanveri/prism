@@ -13,9 +13,10 @@ type NavigatorConnectedFilterProps = {
 };
 
 /**
- * "Só as conectadas" (RN-NAV-013), ao lado do seletor de ambiente: um botão de alternar (`aria-pressed`) que mostra quantas conexões estão conectadas ("3
- * conectadas", "Nenhuma conectada"). O nome acessível é o rótulo com a conta, e a dica diz o que o clique faz agora, como o botão do navegador da barra
- * superior. É um `<button>`: o Tab o alcança, e Enter e Espaço o alternam. Sem estado: a escolha é do navegador.
+ * "Só as conectadas" (RN-NAV-013), na linha abaixo do campo de busca, à esquerda do seletor de ambiente (`NavigatorFilters`): um botão de alternar
+ * (`aria-pressed`) que mostra quantas conexões estão conectadas ("3 conectadas", "Nenhuma conectada"). Tem a largura do texto (`flex-none`, sem quebra), que
+ * nunca é cortado: quem encolhe e quem desce é o seletor. O nome acessível é o rótulo com a conta, e a dica diz o que o clique faz agora, como o botão do
+ * navegador da barra superior. É um `<button>`: o Tab o alcança, e Enter e Espaço o alternam. Sem estado: a escolha é do navegador.
  */
 export function NavigatorConnectedFilter({ count, on, onToggle }: NavigatorConnectedFilterProps) {
   return (

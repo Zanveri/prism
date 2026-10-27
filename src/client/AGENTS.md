@@ -71,12 +71,13 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
-- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
-  recarrega é o menu padrão de desenvolvimento (Recarregar Ctrl+R, Forçar recarga Ctrl+Shift+R, Tela cheia F11), e o app empacotado do Windows e do
-  Linux não tem menu, e o do macOS não tem Recarregar. Mesmo assim, cada janela ignora o menu para essas teclas: o `before-input-event` de
-  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5, F6 e F11 com qualquer
-  modificador, Ctrl+R e Cmd+R com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria também da página):
-  ela só não vai ao menu, e a tela a recebe como qualquer outra. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
+- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela; **o Ctrl+W nunca a fecha** (RN-ABAS-019). O Chromium do Electron não
+  recarrega nem fecha nada sem menu: quem o faz é o menu padrão de desenvolvimento (Recarregar Ctrl+R, Forçar recarga Ctrl+Shift+R, Tela cheia F11, Janela › Fechar
+  Ctrl+W), e o app empacotado do Windows e do Linux não tem menu, e o do macOS não tem Recarregar nem Fechar. Mesmo assim, cada janela ignora o menu para essas
+  teclas: o `before-input-event` de `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5, F6 e F11 com
+  qualquer modificador, Ctrl+R e Cmd+R com ou sem Shift, Ctrl+W e Cmd+W com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria
+  também da página): ela só não vai ao menu, e a tela a recebe como qualquer outra. O Ctrl+W que a área de trabalho não trata (um diálogo, um menu ou uma lista
+  aberta, o cofre bloqueado, a tela de entrada) não faz nada, e é por isso que o desenvolvimento se comporta como o pacote. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
   F11 abriu o "Filtrar" (e não a tela cheia), e Ctrl+R e Ctrl+Shift+R não recarregaram a página (um marcador em `window` sobreviveu).
 - **O zoom do programa inteiro** (RN-ZOOM-001; `zoom.ts`, puro e sem Node, porque a tela também o importa, e `zoom-file.ts`, com o disco; os dois com
   teste). É **desta instalação**, e não do usuário: `zoom.json` (`{ "zoom": 110 }`) na pasta de dados, fora do cofre, lido uma vez ao carregar o `main.ts`
@@ -431,8 +432,11 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   mover a conexão ou a pasta é outra lista, então a resposta muda sozinha depois do `invalidateLists`. A etiqueta é a
   `ShownEnvironmentPill` (com a dica "Herdado da pasta <pasta>" quando é herdada), na árvore (`NavigatorRow` recebe `environment`), na
   faixa de abas (`environmentOf` do `TabStrip`), no cabeçalho da aba da tabela (`environment` do `TableTabPanel`), na barra de status e no
-  cabeçalho do diálogo da conexão. A conexão continua com o ambiente PRÓPRIO no estado e no `PATCH` (mover e renomear conexão mandam o
-  dela): o herdado nunca é gravado nela. Não há mais "lista" de conexões (RN-NAV-001): a RN-CONN-015 vale na árvore, na aba e na barra.
+  cabeçalho do diálogo da conexão. A COR dele (`ShownEnvironment.color`, o herdado da pasta inclusive) também pinta os destaques da área de resultado
+  da aba (RN-AMB-002, "A cor do ambiente nos destaques da área de resultado", em Design): o `WorkbenchTabs` a leva como texto ao
+  `QueryTabPanel.environmentColor` e, pelo `environment` do `TableTabPanel`, ao `RecordsView.environmentColor`, e os dois ao `ResultPanel`. A conexão
+  continua com o ambiente PRÓPRIO no estado e no `PATCH` (mover e renomear conexão mandam o dela): o herdado nunca é gravado nela. Não há mais "lista" de
+  conexões (RN-NAV-001): a RN-CONN-015 vale na árvore, na aba, na barra e nos destaques da área de resultado.
 - **Os ambientes do usuário** (RN-AMB-001) saem de `userEnvironments(folders, connections)` (`_lib/user-environments.ts`, pura e testada): um
   por nome, sem diferenciar maiúsculas nem os espaços das pontas (`environmentKey`; o acento conta), com o nome e a cor da pasta ou conexão de
   `updatedAt` mais novo (a API manda nas duas; a data que não se lê perde, e no empate fica a primeira encontrada: as pastas antes das conexões,
@@ -468,7 +472,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   quando ela já passa sobre as superfícies do esquema (`iconSurfaces`: o fundo, o painel, a elevada e a linha selecionada de cada tema; o
   `icon-color.test.ts` confere que são as fichas do `globals.css`), e senão a mistura com o preto (claros) ou o branco (escuros) com a menor
   parte, de 1 em 1%, que passa. As seis do canvas são claras: nos escuros ficam como são, e nos claros escurecem (o Âmbar dá 1,7:1 sobre o
-  fundo do Prism Claro). A gravada, e a das bolinhas, é a escolhida. Tema novo: as superfícies dele entram em `iconSurfaces`, e o teste avisa.
+  fundo do Prism Claro). A gravada, e a das bolinhas, é a escolhida. Tema novo: as superfícies dele entram em `iconSurfaces`, e o teste avisa. **A cor do
+  ambiente da aba passa pela mesma conta** (RN-AMB-002): contorno é elemento gráfico, com o mesmo 3:1, então os destaques da área de resultado levam o
+  `iconColorStyle` da cor do ambiente (pela variável `--environment-color`, ver Design), e a etiqueta do ambiente, essa, continua com a cor escolhida.
 - **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente, a cor e as proteções inclusive: o corpo de cada diálogo sai do `folderInputOf` (o que o
   diálogo não perguntou vai como a pasta já tem, senão mover ou renomear tirariam o ambiente e a cor dela, voltariam a confirmação a "Não" e tirariam
   o somente leitura, com a API pedindo a senha). As recusas do ambiente e da cor da pasta são 422 `FOLDER_NAME_INVALID` no campo (`environmentName`,
@@ -540,8 +546,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   enquanto o cofre está aberto e a esconde (`hidden`) e a torna inerte (`inert`: fora do teclado e do leitor de tela, sem atalho) fora
   da rota dela; a rota `/workbench` existe, sem elemento. Ir de uma tela à outra não apaga as abas, os nós abertos da árvore, o que o
   editor guarda (cursor, seleção, desfazer, rolagem), a largura do navegador, a divisão do resultado nem o zoom do diagrama; uma
-  consulta em andamento continua, e ao reaparecer o foco volta ao elemento que o tinha, se ele ainda existe (as linhas de uma lista virtual saem do
-  DOM enquanto ela está escondida, e voltam outras: o foco que estava numa linha da árvore não é devolvido; a seleção, que é estado, fica). Sair do
+  consulta em andamento continua, e ao reaparecer o foco volta ao elemento que o tinha, se ele ainda existe e se o foco está perdido (as linhas de uma lista virtual saem do
+  DOM enquanto ela está escondida, e voltam outras: o foco que estava numa linha da árvore não é devolvido; a seleção, que é estado, fica; o `WorkbenchSlot` é pai da área
+  das abas e o efeito dele roda DEPOIS do dela, então sem o "se o foco está perdido" (`isLost`) ele desfaria o foco que uma aba aberta na mesma volta acabou de levar à entrada). Sair do
   cofre (ou o cofre fechar por qualquer motivo) desmonta tudo, então nada passa ao usuário seguinte: o provedor aposenta os executores e apaga a
   memória das abas e os filtros pedidos que esperavam (`tab-memory.ts` e `filter-handoff.ts` são de módulo). **Escondida com `hidden`, toda caixa
   aqui dentro mede 0x0**: quem observa tamanho tem de tratar o zero como "sem medida" (ver "Lista virtual que MEDE as linhas", abaixo). **O provedor não pode subir para fora do guard**:
@@ -550,7 +557,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `connectionId` (nulo só na aba de consulta: a de um script cuja conexão sumiu, a do script genérico sem uma só conexão conectada e a que voltou na entrada
   sem a conexão dela, ver "Scripts salvos"), `sessionId`, `sql`, na aba de uma tabela `table` (esquema, nome e a
   vista; `isTableTab` estreita o tipo para `TableTab`, que sempre tem a conexão) e, na aba de um script, `script`), `activeTabId`, os nós abertos
-  (`expanded`, sem as pastas, que são só do navegador e começam abertas) e "Desconectar". `openQueryTab(connectionId, sql?)` abre
+  (`expanded`, sem as pastas, que são só do navegador e se lembram à parte: ver "As pastas abertas lembradas") e "Desconectar". `openQueryTab(connectionId, sql?)` abre
   uma consulta (com `sql`, o editor já nasce com esse texto e nada é executado); `openTableTab(connectionId, { schema, name, view? })`
   abre a aba de uma tabela, uma por tabela (de novo, volta à que existe), e `setTableView` troca a vista (ver "Aba de uma tabela e
   área de resultado recolhível"). `closeTab` cancela o que a aba estiver rodando e fecha a sessão dela (404
@@ -680,9 +687,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   que estiver na tela some (também a do erro que ficou na tela enquanto outro comando roda), e o erro de um comando que
   ainda roda chega sem posição (`textEdited`).
 - **A grade do resultado** (`result-grid.tsx`) é virtualizada nas duas direções, com linhas de altura fixa e larguras de
-  coluna calculadas uma vez, da primeira página, contando caracteres (a fonte é de largura fixa). Não meça célula no DOM
-  nem recalcule largura ao carregar mais: é isso que deixa "Carregar mais 200" sem redesenhar o que está na tela. A grade
-  recebe `key` por execução (`state.id`), não por página. **No cabeçalho, quem cede espaço é o tipo, e o nome da coluna não cede nada**
+  coluna medidas uma vez, da primeira página, pela largura de cada caractere na fonte da interface (canvas, `grid-text.ts`; ver "A fonte da
+  grade" abaixo). Não meça célula no DOM nem recalcule largura ao carregar mais: é isso que deixa "Carregar mais 200" sem redesenhar o que está
+  na tela. A grade recebe `key` por execução (`state.id`), não por página. **No cabeçalho, quem cede espaço é o tipo, e o nome da coluna não cede nada**
   (`GridHeaderCell`): a largura é calculada sem o botão de ordenar, e o espaço dele (sempre reservado, RN-GRADE-021) alguém cede; era o nome, e o `id`
   ordenado virava `integer ▲`. O nome é `shrink-0` (não encolhe) e o tipo, `min-w-0 truncate`, absorve o que falta INTEIRO, até sumir; os dois
   moram numa caixa (`flex min-w-0 overflow-hidden`) que encolhe com a célula e fica ao lado da seta, e o `max-w-full` do nome só o corta (com
@@ -695,6 +702,34 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   tempo do comando (`formatElapsed`, em `lib/utils/format.ts`) sai em `ms` abaixo de um segundo, em segundos com um décimo até um minuto
   (`1,3 s`), em minutos e segundos até uma hora (`1 min 10 s`) e em horas e minutos daí em diante (`2 h 5 min`); a unidade é a do valor já
   arredondado, e o que não é um tempo (não finito, ou negativo) sai como um traço.
+- **A fonte da árvore e da grade é a da interface, sempre** (RN-CONFIG-008, seção 42), também a do app (IBM Plex Sans): a caixa que rola da grade tem
+  `font-sans` explícito, e o cabeçalho, as células e o `textarea` do `CellEditor` herdam (o preflight põe `font: inherit`); o `navigator-row.tsx` não
+  escolhe fonte (sem `monoKinds`). O número da linha e o canto têm `tabular-nums`; **as células não**: o canvas não aplica `tnum`, e a medida divergiria
+  da tela (a Plex Sans já tem dígitos de largura igual). Seguem a interface o "N linhas afetadas", o número das Estatísticas e o campo do texto do nulo
+  (a prévia da grade); o comando das Estatísticas é SQL e vai em `font-editor`. **Continuam mono do app**: a mensagem do banco (`<pre>`, o `^` do
+  PostgreSQL só se alinha em largura fixa), o SQLSTATE, a linha da variável, as etiquetas, a Estrutura, o Diagrama, o título da aba da tabela e os diálogos.
+- **A largura das colunas é medida na fonte** (`grid-text.ts`, puro, e `use-grid-text.ts`), porque a fonte da interface é proporcional e contar
+  caracteres erra: o nome `WAREHOUSE_ID` em seminegrito desenha 102,5 px onde 7,8 px por caractere reservava 93,6, e o nome em maiúsculas do Informix e
+  do Db2 virava reticências (o E1 de volta). `measuredGridText(pilha, measure)` mede **cada ponto de código uma vez por fonte** (`for…of`, um mapa por
+  fonte) em três fontes do canvas: `400 13px` (célula), `600 13px` (o nome: o cabeçalho é `font-semibold`) e `400 11px` (o tipo e a marca "somente
+  leitura"), e soma, com **1 px de folga por texto** e `Math.ceil`. Sem o ajuste entre pares de letras a soma sobra, que é o lado seguro: o que não
+  pode é cortar. **Não meça o texto inteiro** (`measureText` por valor, ~10 mil chamadas na primeira página, cada uma com o desenho do texto) nem a
+  célula no DOM. O `limit` para a soma assim que passa dele: o valor de 10.000 caracteres custa só o que cabe (`baseWidths` passa 455 e `fitWidth`,
+  575, o teto menos o respiro). O caractere que o canvas mede como 0 ou como número que não serve vale o que valia na mono (sobra). `monoGridText` é a
+  conta de antes (7,8 e 6,6 por unidade de `.length`) e o **padrão** de `baseWidths`, `fitWidth` e `GridRow`: sem documento ou sem contexto 2d (o
+  vitest roda em Node) a grade usa ele, e os testes de larguras por tabela de casos continuam os de antes. `useGridText(fonte)`: o canvas é um
+  `<canvas>` que nunca entra na página, **um por documento** (`WeakMap`) e pelo `useHost().document` (a janela do resultado mede no documento dela:
+  é a regra de "código novo na área de resultado não usa `document` global"); a pilha é `resolvedFontFamily("ui", nome)` (`fonts.ts`: a escolhida
+  entre aspas e a do app atrás, **sem `var()`**, que o canvas não resolve), e um teste confere `appFontFamilies` contra `--font-app-sans` e
+  `--font-mono` do `globals.css`: mudar uma sem a outra faz o canvas medir outra fonte. O `ctx.font` atribuído é conferido (o canvas ignora em silêncio
+  a atribuição inválida: sentinela de `10px sans-serif` antes) e o "0" tem de medir mais que zero, senão mono. Antes de medir, `document.fonts.check`
+  nas três fontes: a que não carregou (só as do `@fontsource` podem estar assim; a do sistema nem está na lista) mede a reserva, o gancho pede
+  `fonts.load` e, quando ela chega, troca o `GridText` **uma vez** (o contador `loads`; a fonte que falha não faz laço). O `GridText` só muda de
+  identidade com a fonte, a página ou a carga: a grade (`ResultGrid` recebe a prop `font`; a `ResultPanel` passa `preferences.ui.fontFamily`) refaz só
+  as larguras de saída (`base`, no `useMemo`) e o efeito de `measure()` do virtualizador cuida do resto; as larguras escolhidas (`ColumnSizing`, em px
+  de 100%) ficam, e "Carregar mais" continua sem refazer nada (`firstPage` congelado). A dica do valor cortado (`GridRow`) usa a mesma medida:
+  `text.cell(valor, espaço + 1) <= espaço`, com o espaço na escala de 100% (`item.size / scale - cellPadding`). A altura da linha (32 px × zoom) e o
+  zoom não mudam: a medida é a de 100% vezes o fator, a mesma suposição linear de antes.
 - **"Conectada" tem uma definição só**, `isConnected` (`workbench-model.ts`): a árvore abriu a sessão da conexão, ou
   alguma aba tem a sua. Vale para o ponto e o "Desconectar" do navegador e para a barra de status. As listas das conectadas
   (`connectedConnectionIds`: a conta e o "Só as conectadas" do navegador, a lista do botão da conexão da aba e o script genérico) tiram dela a que a
@@ -709,7 +744,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 - **Nada reconecta sozinho (RN-SESSAO-004).** "Desconectar" é uma decisão da pessoa, e nada na tela a desfaz. `createDisconnectLog`
   (`_lib/connection-intent.ts`) observa o cache e registra a conexão cuja consulta `["database-session", id]` foi REMOVIDA (o "Desconectar"
   a remove), menos com o cofre bloqueado (o bloqueio também a remove, e o desbloqueio restaura tudo); a conexão sai do registro quando uma
-  sessão volta a ter dado, e o `WorkbenchTabs` a esquece (`forget`) quando uma aba dela tem sessão. As vistas das tabelas dessa conexão não
+  sessão volta a ter dado, e o `WorkbenchTabs` a esquece (`forget`) quando uma aba dela tem sessão. O registro é do `WorkbenchProvider` (`disconnectLog` no
+  `useWorkbench`), e não da área das abas: as conexões das abas de tabela que voltaram na entrada entram nele antes de as abas existirem (ver "Abas que voltam na próxima entrada"). As vistas das tabelas dessa conexão não
   abrem sessão por conta própria: a Estrutura e o Diagrama mostram "A conexão está desconectada." com "Conectar" (`DisconnectedView`, que
   abre a sessão da árvore por `connectTree`), e os Registros esperam o "Atualizar", que conecta e carrega (abre a sessão da aba). As
   consultas do catálogo (`columnsQuery`, `indexesQuery`, `foreignKeysQuery` e `treeQuery`) têm o parâmetro `enabled` por isso. O foco que
@@ -721,15 +757,16 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   escondida, não tem o que rolar), `revealOffset` traz a aba ativa à vista com folga, `wheelScroll` faz a roda vertical rolar, `stripKeyTarget`
   dá as setas (com a volta), Home e End, e um botão no fim abre a lista de todas as abas. O menu de botão direito (`tabMenu`: Fechar; Fechar
   as outras, as da direita e todas, com o que não se aplica apagado) é o `ContextMenu` do navegador, com a mesma guarda de
-  `ignoresContextMenu`; Shift+F10 e a tecla de menu o abrem, e o botão do meio fecha a aba. Ctrl+W (Cmd+W) fecha a ativa com o foco na área
-  das abas (`isCloseShortcut`, tratado em `WorkbenchTabs`): o app empacotado não tem menu no Windows e no Linux, então nada mais responde a
-  esse atalho. **Fechar várias abas usa uma fila** (`tabsToClose` e o `pendingClose` do `WorkbenchTabs`): `closeTab` parte da lista que viu
+  `ignoresContextMenu`; Shift+F10 e a tecla de menu o abrem, e o botão do meio fecha a aba. Ctrl+W (Cmd+W) fecha a ativa com o foco em qualquer
+  lugar da janela da área de trabalho (`isCloseShortcut`, tratado em `WorkbenchTabs`, ver "O foco ao abrir, fechar e trocar de aba"): o app empacotado não tem
+  menu no Windows e no Linux, então nada mais responde a esse atalho. O X não toma o foco no clique do mouse. **Fechar várias abas usa uma fila** (`tabsToClose` e o `pendingClose` do `WorkbenchTabs`): `closeTab` parte da lista que viu
   quando foi criado, então várias chamadas no mesmo instante valeriam só a última; a primeira fecha agora, e cada mudança de `tabs` fecha a
   seguinte, cada uma pelo caminho de sempre (cancela o que roda e fecha a sessão). Um `closeTabs(ids)` no provedor trocaria a fila.
 - **A árvore é plana e virtualizada** (`@tanstack/react-virtual`): `flattenVisible` (`_lib/navigator-model.ts`, testado)
   achata nós abertos em linhas, e só as que se veem existem no DOM. Como uma linha fora da janela não existe, ela não pode
   buscar nada: **quem busca é o `Navigator`, num `useQueries` só, a partir das chaves dos nós abertos**. A busca por nome não
-  passa por aí: ela só lê o que já está em cache (ver "Navegador: clique, menu e busca").
+  passa por aí: ela lê o que já está em cache e pede, num `useQueries` à parte, o índice de nomes de cada banco do escopo dela (ver "Navegador: clique,
+  menu e busca"); nada disso é nível, e nenhum nó abre.
 - **Lista virtual que MEDE as linhas passa `measureElement: measureRendered`** (`_lib/row-measure.ts`; hoje só a árvore mede, porque a linha
   de erro é mais alta que as outras). A área de trabalho fica escondida por baixo das outras telas com `hidden`, que é `display: none`, e o
   painel da aba inativa também: enquanto dura, TODA caixa lá dentro mede 0x0 e o `ResizeObserver` avisa isso. A biblioteca guardava o ZERO
@@ -997,6 +1034,84 @@ entrada anterior era a delas. A janela de abas passou a ter o histórico das ABA
   com `ctypes`); `xdotool key alt+Left` e `alt+Right` são as teclas. As abas das sondas foram trocadas pelo `click()` do protocolo de depuração (o clique esquerdo de verdade do `xdotool` não ativou a aba nas tentativas), e para ver o defeito de antes basta abrir Configurações, fechá-las pelo "Voltar" da página e apertar o "voltar" do mouse: a rota ia para `#/settings`, e agora
   nada muda na rota. Não conferido: o Windows (o `app-command` `browser-backward` que o Chromium pode receber do sistema; o processo principal não trata nada) e o macOS.
 
+## O foco ao abrir, fechar e trocar de aba (RN-ABAS-019)
+
+Pedidos 5 e 6 de 2026-10-27: depois do duplo clique numa tabela o foco ficava no botão da linha do navegador (o Ctrl+Espaço ativava o botão em vez de completar), e depois
+do Ctrl+W o segundo não fechava a segunda aba. A raiz é uma só: abrir, fechar e trocar de aba mudava a aba ativa SEM dizer para onde o foco ia. Fechar tirava da página o
+painel e a entrada da faixa; o elemento com o foco saía com eles, o Chromium o punha no `body` (sem `blur`), e o `body` está FORA do `section` das abas, o único que tratava o
+Ctrl+W, o F5, o Alt+X e o Ctrl+S. No `pnpm dev` o Ctrl+W que ninguém trata caía em Janela › Fechar do menu padrão do Electron e fechava a janela (visto numa reprodução mínima do
+Electron sob Xvfb, com teclas de verdade); no app empacotado, sem menu no Windows e no Linux, nada acontecia. Hoje o menu não recebe o Ctrl+W (`menuShortcutIgnored`, acima): no
+desenvolvimento, como no pacote, o Ctrl+W sem quem o trate não faz nada.
+
+- **A regra** (`_lib/tab-focus.ts`, sem React, com teste de tabela): `focusAfterChange` decide, depois de uma mudança, entre `"entry"` (a entrada da aba ativa), `"strip"` (a aba
+  dela na faixa), `"navigator"` (a linha do navegador que o Tab alcança) e `null`. Com um **pedido** (alguém abriu a aba), vai à entrada se o foco ainda está em quem pediu ou se
+  perdeu (`stillWithRequester`, `isLost`); se saiu para outro lugar vivo (o type-ahead andou na árvore, a pessoa clicou num campo), fica: **abrir não rouba o foco**. Sem pedido,
+  só age se o foco se PERDEU, e então vai ao mesmo lugar em que estava (`regionOf`: a faixa, o conteúdo de uma aba, fora das abas): faixa -> a aba ativa na faixa; conteúdo ->
+  a entrada da aba ativa; sem aba nenhuma -> o navegador; fora das abas -> nada. Bloqueado (diálogo, menu ou lista que TOMOU o foco, cofre bloqueado, outra tela à mostra) ou prometido
+  por outra regra (`resultFocus.pending`: o F6 e a troca do lugar do resultado, RN-ABAS-014) -> nada. **A lista de sugestões do CodeMirror não bloqueia** (`popupTakesFocus`, que é o
+  `popupOpen` sem o `listbox` dentro de um `.cm-tooltip`): ela é do editor que perde o foco e só fecha quando ele o perde de verdade, mas ainda está no `body` quando o Ctrl+clique no nome de
+  uma tabela, logo depois de digitar, esconde o painel do editor; contada como popup, ela bloqueava o foco da aba nova (visto sob Xvfb: a aba abria e o foco caía no `body`). O `popupOpen`
+  dos atalhos da janela (o Ctrl+W, o Alt+←/→) continua contando todas as listas.
+- **A entrada de cada aba** (`tabEntries`, registro de módulo; cada painel registra a sua e diz COMO se foca, a área das abas decide QUANDO): a de consulta é o editor SQL
+  (`QueryTabPanel`; o cursor fica onde estava), ou o resultado (`focusResultIn(slot)`) com o editor escondido (o resultado maximizado, inerte) ou a aba do resultado ativa; a de
+  tabela é o campo "Filtro e ordem dos registros" na vista Registros (`FilterField` expõe `ref` com `focus()`, que leva o cursor ao fim: `focusAtEnd`; ali o Ctrl+Espaço
+  completa, RN-TABELA-011) e o painel da vista (`tableViewPanelId`, `tabIndex=-1`) na Estrutura e no Diagrama, conectada a conexão ou não. A entrada devolve `false` quando o foco não
+  chegou, e a área das abas cai na aba da faixa: o foco nunca fica perdido. O estado de agora (a vista, o editor à vista) é lido por ref na hora de focar. **No `pnpm dev` o
+  `StrictMode` desmonta e monta de novo, no fim da mesma tarefa, os efeitos do painel que acabou de nascer** (o `FilterField` e o `SqlEditor` criam o CodeMirror num efeito e o
+  destroem na limpeza), e o foco que a entrada acabou de levar cai no `body`: `tabEntries.focus` confere num microtask se ele se perdeu e, só então, chama a entrada de novo (no app
+  empacotado a segunda chamada não acontece; sem `document`, nos testes, não confere nada).
+- **O pedido** (`tabFocus`, loja de módulo como `resultFocus`; um pedido por vez, o seguinte troca o de antes): quem abre uma aba por um gesto pede com `request(tabId, from)`, onde
+  `from` é o elemento com o foco naquela hora. O `WorkbenchProvider` pede em `addTab` (consulta nova, tabela nova, script novo), nos ramos da aba que já estava aberta
+  (`openTableTab`, `openScriptTab`: abrir de novo leva o foco para a aba), em `adoptTab` (a aba que chega de outra janela) e no fim de `restoreSaved` (a ativa que volta na
+  entrada). **Nada escreve no DOM na hora do pedido**: é um pedido, e quem foca é o efeito. **O menu e o diálogo que abriram a aba contam como quem pediu**
+  (`fromPopup`): eles fecham logo depois, devolvem o foco ao item da árvore (RN-MENU-001 diz que a ação que abre uma aba leva o foco a ela), e esse foco devolvido não é "outro lugar vivo".
+  **O script espera a API** (`ScriptsSection.open`): o `from` tem de ser lido ANTES do `await`, quando a pessoa pediu (o duplo clique, o Enter), e `openScriptTab(script, place, askedFrom)`
+  o leva ao pedido; lido quando a aba aparece, ele seria sempre quem tem o foco agora, e a guarda nunca veria o type-ahead que andou na árvore enquanto o texto vinha (conferido
+  num Chromium de verdade: o foco fica na árvore). Limite: o "Abrir" do MENU de um script lento conta como pedido de popup (`fromPopup`), e a aba toma o foco mesmo que a pessoa o tenha
+  levado a outro lugar durante a espera: o item do menu que pediu já morreu, e nada diz se o foco que sobrou é o que o menu devolveu à árvore ou o que a pessoa levou.
+  `take(tabId)` só leva o pedido DA aba; o de uma aba que ainda não é a ativa espera (a loja avisa antes de a lista de abas chegar a quem pede depois de uma espera, como o script
+  que vem da API: o `useSyncExternalStore` da área das abas renderiza no ato, e o `setState` fora de um evento vem depois). `version` muda a cada pedido, para refazer o efeito quando
+  a aba pedida já é a ativa e nada mais mudou.
+- **O efeito** (`WorkbenchTabs`, passivo, declarado DEPOIS do efeito da fila de fechar): roda depois dos efeitos dos painéis (o `register` da entrada) e do `FilterField` (que cria o
+  CodeMirror num efeito), e antes do `WorkbenchSlot` (pai), por isso o `WorkbenchSlot` só devolve o foco antigo se ele está perdido. O `useTabHistory` (irmão que vem antes em `routes.tsx`)
+  roda antes: o Voltar e o Avançar já deixaram o foco na aba da faixa (RN-ABAS-018), e a regra não mexe. Só age com a fila de fechar vazia (`pendingClose` e `closingStep`):
+  "Fechar as outras" decide no fim, depois da última. **Sem pedido, só olha o foco quando as abas, a ativa ou a entrada ativa mudaram** (`seen`): a lista de abas muda a cada
+  texto, título e sessão, e o foco que a pessoa soltou clicando no vazio da janela não é puxado de volta ao editor quando uma consulta termina. A volta da tela (as Configurações por
+  baixo) não conta: o foco perdido por ela é do `WorkbenchSlot`.
+- **A última região** (`lastRegion`): um `focusin` no `document`, na CAPTURA, guarda a região do que recebeu o foco (`regionOf`; `data-tab-strip` na faixa, `data-tab-content` no
+  painel de cada aba e no da aba do resultado). Diálogos, menus e listas (`aria-modal`, `role=menu`, `role=listbox`) NÃO contam: o diálogo que fecha devolve o foco a quem o tinha, e a
+  região de antes tem de continuar valendo. `isLost` é nulo, `body`, desligado da página, ou `checkVisibility() === false` (o painel que acabou de ficar `hidden`: o Chromium só
+  limpa o foco numa tarefa seguinte, e a decisão é tomada antes; nos testes o elemento de mentira precisa dessa função).
+- **O Ctrl+W** (`closeActive()` extraído; o `section` e um ouvinte `keydown` da `window`, na bolha): vale em TODA a janela da área de trabalho, como no DBeaver: com o foco na faixa,
+  numa aba, no navegador (também na busca) ou perdido no `body`. O `section` trata o que nasce dentro dele e marca a tecla (`preventDefault`), então a janela a vê tratada e não fecha duas;
+  o campo de edição de uma célula e os diálogos param a propagação, e o Ctrl+W deles não fecha a aba. Nunca com diálogo, menu ou lista aberta, com o cofre bloqueado ou com outra tela à
+  mostra (o ouvinte só existe com a área de trabalho na tela). Trata a tecla até SEM aba (`preventDefault`: a tecla sem aba fica tratada, e o menu do Electron não a recebe de qualquer modo, `menuShortcutIgnored`), mas as recusas (diálogo, cofre,
+  tecla já tratada) deixam a tecla como está. **A tecla segurada (`repeat`) não fecha outra aba**: é tratada, uma aba por toque (segurar passaria por todas as abas, com o foco
+  agora indo de uma para a outra). Na janela do resultado, ela continua sendo o "Voltar para o painel" (RN-ABAS-013): a `window` daquela página é outra.
+- **O X da faixa** (`keepFocus`, `onMouseDown` com `preventDefault` só no botão principal): o clique não leva o foco ao X, como o do botão do meio já não leva; se o foco estava na
+  aba que fecha, a regra do foco perdido o leva à que ficou ativa. O X pelo teclado (Enter no X, que está na ordem do Tab) deixa o foco na faixa. **Preço conferido num
+  Chromium sob Xvfb: com o `mousedown` cancelado o arrasto da aba NÃO começa pelo X** (o `dragstart` não dispara; sem o `preventDefault` ele dispara, e pelo título dispara sempre).
+  A área de clique do X é de 24 px na ponta da aba. O `pointerdown` cancelado não serve no lugar: ele suprime também o `mousedown` e o arrasto continua morto. Para devolver o arrasto
+  seria preciso deixar o foco ir ao X e devolvê-lo a quem o tinha no `focus` do X (`relatedTarget`), sem cancelar nada.
+- **O editor SQL deixou o `autoFocus`** (a prop saiu de `SqlEditor`): a aba nova é focada pela regra, com a guarda contra roubar o foco no script lento (o `getScript` da API vem
+  depois de a pessoa ter ido digitar na árvore) e na aba que chega de outra janela. A entrada do editor já faz o "cursor onde estava".
+- **Testes sem DOM**: `lib/testing/fake-page.ts` é uma página de mentira (o `activeElement` que o `focus()` do elemento de mentira move e que avisa o `focusin`, o `body`, o
+  `getElementById`, o `querySelector`, os ouvintes de `document` e `window`, `keyEvent`/`press` para a bolha da tecla): os testes da área das abas (`workbench-tabs.*.test.ts`, que
+  precisam dela por causa do `focusin` e do `keydown`) a instalam com `vi.stubGlobal`. `workbench-tabs.focus.test.ts` prova a causa do pedido 6 (dois Ctrl+W com o foco caindo
+  no `body` fecham as duas abas) e a fila de fechar; `tab-focus.test.ts` é a tabela da decisão.
+- **O que ficou fora** (spec, "Fica para depois"): trocar de aba por Ctrl+Tab e Ctrl+PageUp/PageDown (não existem; o Ctrl+Shift+PageUp/PageDown MOVEM a aba) e levar o foco ao
+  conteúdo no clique na faixa e no Voltar/Avançar (mudaria a RN-ABAS-018). Segurar o Enter na linha da tabela fazia a repetição do teclado cair no filtro, que aplicava e
+  executava de novo (34 consultas em 2 s, vistas sob Xvfb): o campo ignora o Enter que o teclado repete (`isHeldEnter`, `ignoreHeldEnter`). Segurar o Enter na linha de um script
+  ainda deixa a repetição cair no editor, que insere linhas em branco. Logo depois de abrir, o Ctrl+Espaço do filtro só sugere as palavras: as colunas vêm do resultado carregado (`columns` de `RecordsView`),
+  que chega com a primeira página (e, na aba restaurada desconectada, só depois do "Atualizar").
+- **Como conferir sob Xvfb** (o app de verdade, `pnpm dev` e o empacotado; `webContents.sendInputEvent` ou `xdotool`): duplo clique e Enter numa tabela levam o foco ao filtro, e o
+  Ctrl+Espaço abre a lista das colunas; a tabela que já estava aberta; três Ctrl+W seguidos fecham três abas, a partir do editor, da grade e da faixa; o X com o mouse e depois o
+  Ctrl+W; "Descartar" numa pergunta e depois o Ctrl+W; a última aba leva o foco ao navegador; seguir uma chave estrangeira e o duplo clique no diagrama; Alt+← deixa o foco na
+  aba; o F6 com o resultado numa aba; o type-ahead enquanto um script lento abre não perde o foco; o clique no cabeçalho de uma aba de tabela e o Ctrl+W; "Abrir numa aba de consulta" dá o
+  foco ao editor. No `pnpm dev` a conferência registra que a tecla foi tratada (`defaultPrevented`): sem isso o menu padrão fecha a janela (também com um diálogo aberto ou o campo de edição de
+  uma célula, onde a tecla não é tratada de propósito), e a prova final é no `dist:dir`. Ao conferir o app construído com `electron-vite preview`, matar o `electron` e não só o
+  `electron-vite` (o filho sobrevive ao pai, segura a porta de depuração e serve o pacote velho), e conferir qual `assets/index-*.js` a página carregou.
+
 ## Abas que voltam na próxima entrada (RN-ABAS-006)
 
 Seção 24 da especificação (issue 2 do repositório público). As abas de TODAS as janelas vão para o cofre do usuário pela API (`PUT api/user/workspace`, ver o
@@ -1018,8 +1133,15 @@ suas abas ao processo principal, que junta as de todas e grava.
   passa à vizinha. O schema é um só, `electron/workspace-messages.ts`, com os nomes da API (`connectionID`, `scriptID`), conferido no processo principal (o
   relato de cada janela) e na tela (a resposta do `GET`, `workspace.service.ts`: a aba que não confere fica de fora, sem derrubar as outras).
 - **Nada conecta nem executa sozinho.** As abas voltam sem sessão; as conexões das abas de tabela que voltaram são marcadas como desconectadas
-  (`DisconnectLog.mark`, pelo `restoredTableConnections` do provedor), e as vistas delas esperam o clique, como as de uma conexão que a pessoa desconectou. A
-  árvore não abre nada (os nós abertos não são gravados).
+  (`DisconnectLog.mark`, no `restoreSaved` do provedor), e as vistas delas esperam o clique, como as de uma conexão que a pessoa desconectou. A
+  árvore não abre nada: os nós abertos da conexão para baixo (a conexão, os bancos, os esquemas, os grupos e as tabelas) não são gravados, e só as pastas
+  voltam abertas (RN-NAV-014, ver "As pastas abertas lembradas"), o que não conecta nada.
+  **Armadilha: a marca tem de existir ANTES da renderização que mostra as abas.** A primeira carga dos Registros (`needsFirstRun`, em `RecordsView`) é um efeito
+  do painel da aba, roda antes de qualquer efeito do pai e lê o `disconnected` da renderização em que a aba apareceu. Até a 0.6.0 as conexões iam do provedor à
+  área das abas pelo estado (`restoredTableConnections`) e o `mark` era um `useEffect` do `WorkbenchTabs`, que vinha DEPOIS: a aba de tabela ATIVA que voltava lia
+  "conectável" e abria a sessão sozinha (as escondidas só carregam quando se abrem, e aí a marca já estava). Vinha desde o `mark` da 0.3.0, e o foco da
+  RN-ABAS-019 não tem nada com ele (focar o filtro não executa nada). Por isso o registro é do provedor, que marca as conexões no `restoreSaved` antes do
+  `setTabs`; não volte a entregá-las por estado e efeito, nem leia o registro por um efeito. `workbench-tabs.restore.test.ts` guarda a primeira renderização.
 - **Quem reabre** (`WorkbenchProvider`): ao montar, a área de trabalho pergunta ao processo principal se reabre (`claimWorkspaceRestore`, canal
   `prism:workspace-claim`: só a janela principal, a primeira das vivas, e uma vez por entrada; a que recarrega com outra janela aberta não reabre, porque as abas
   estão nas janelas). A principal lê (`getWorkspace`), as conexões e os scripts, e só DEPOIS começa a contar as suas; uma falha em qualquer leitura não reabre
@@ -1071,6 +1193,8 @@ script escolhida, o filtro e as pendências ficam, e o executor nem fica sabendo
 aba). **Não troque o portal por renderizar a área num lugar ou noutro**: o React a desmontaria a cada troca (um portal com outro contêiner é outra fibra), e a
 rolagem, a seleção e as larguras sairiam junto.
 
+- **O que depende do DOM da área não pode ir para a raiz da aba de consulta**: variável de CSS herda pelo DOM, e a raiz do portal muda de pai (e de documento). A cor do
+  ambiente (`--environment-color`, RN-AMB-002) é posta por isso na `<section>` do `ResultPanel`, que vai junto (ver Design).
 - **O que o elemento perde ao sair da página, a raiz devolve.** A rolagem: o Chromium zera o `scrollTop` de um elemento que sai da página e volta; a raiz guarda a
   de cada elemento de dentro a cada `scroll` (na fase de captura, porque quando ela sai o elemento já não tem caixa para ler) e a devolve quando volta a ter
   caixa (um `ResizeObserver` na raiz), também quando o lugar novo ainda está escondido (a aba do resultado não ativa) e só aparece depois. O foco: quem troca o
@@ -1245,7 +1369,8 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   (**lembra se ficou recolhida**, RN-NAV-012: `useScriptsCollapsed`, na chave `prism:navigator:<usuário>` ao lado do navegador escondido, `NavigatorLayout`
   com `hidden` e `scriptsCollapsed`; a loja muda só o campo pedido, e o gravado antes, só com `hidden`, vale com a seção aberta. Cada janela tem o seu
   armazém, que não ouve as outras (a janela aberta fica como está, a que abre depois começa como a última escolha): por isso o `set` grava o pedido sobre o
-  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário): uma árvore, com as
+  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário; as pastas abertas dela
+  têm a loja delas, `folder-memory.ts`, na chave `prism:navigator-folders:<usuário>`, e estão em "As pastas abertas lembradas"): uma árvore, com as
   pastas de scripts e os scripts, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem o script, F2 renomeia, Delete exclui (com a confirmação),
   Shift+F10 e a tecla de menu abrem o menu (Abrir; Renomear, Editar script…, Mover para…, Copiar SQL e o lugar; Excluir). Renomear muda o título das abas do
   script; excluir deixa as abas com o texto, como consultas sem script.
@@ -1293,8 +1418,9 @@ da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de
 - **A árvore** (`buildScriptTree`): em cada nível as subpastas e depois os scripts, por nome, com o `byName` da árvore das conexões (o português, sem caixa
   nem acento); a pasta ou o script cuja pasta não está na lista vai à raiz até a leitura seguinte, e as pastas em ciclo não aparecem. As chaves levam o tipo
   (`folder:<id>`, `script:<id>`), porque uma pasta e um script podem ter o mesmo nome no mesmo lugar, e cada pasta sabe o que tem direto dentro
-  (`contents`, a conta da API). `visibleScriptRows` dá as linhas à vista: as pastas começam abertas, e as fechadas são estado da `ScriptsSection`
-  (`closedFolders`), desta janela, sem gravar; a pasta vazia não tem a seta nem o `aria-expanded`. O `ScriptsTreeView` desenha `role="tree"` ("Scripts
+  (`contents`, a conta da API). `visibleScriptRows` dá as linhas à vista a partir das pastas ABERTAS (`open`, as chaves `folder:<id>`): a pasta que não está nele está fechada, e
+  sem nada lembrado a seção mostra só o primeiro nível. Quem sabe quais estão abertas é a loja das pastas lembradas (RN-NAV-014, `useOpenFolders("scripts")`,
+  que guarda GUID, e a seção converte com `folderKey`); a pasta vazia não tem a seta nem o `aria-expanded`. O `ScriptsTreeView` desenha `role="tree"` ("Scripts
   salvos") com `treeitem`s planos, cada um com o `aria-level`, a altura e o recuo da densidade (RN-NAV-011), o ícone de pasta neutro ou o do script
   (RN-SCRIPT-006) e a marca do genérico.
 - **O teclado** (`scriptTreeMove` e `scriptTreeRowKey`): as setas para cima e para baixo sem dar a volta, Home e End; a direita abre a pasta fechada e, na
@@ -1322,8 +1448,9 @@ da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de
   nela) fecha a pergunta, vai ao aviso central e as listas são lidas de novo. Os avisos de sucesso: "Pasta criada.", "Pasta renomeada.", "Pasta movida.",
   "Script movido." e "Pasta excluída.".
 - **A linha à vista** (RN-SCRIPT-008): depois de criar, renomear ou mover uma pasta ou um script (o renomear do script também), a `ScriptsSection` lê as
-  listas de novo, abre as pastas acima dele (`ancestorKeys`, sobre a lista que acabou de chegar), abre a seção recolhida e escolhe a linha. A linha que já
-  está na página (nada acima dela a abrir, a seção aberta) ganha o foco na hora (pelo id, `scriptRowDomId`): sem estado novo não haveria renderização, e um
+  listas de novo, abre as pastas acima dele e as lembra abertas (`ancestorIds`, sobre a lista que acabou de chegar, e `changeFolders({ open })`: é num evento, o fim da chamada à
+  API, e por isso pode escrever na loja), abre a seção recolhida e escolhe a linha. A linha que já está na página (nenhuma pasta acima dela a abrir, que é o que
+  o `changeFolders` devolve, e a seção aberta) ganha o foco na hora (pelo id, `scriptRowDomId`): sem estado novo não haveria renderização, e um
   pedido armado esperaria uma renderização qualquer depois (a primeira tecla no editor) para tirar o foco de lá. A que ainda vai aparecer fica numa
   referência; um efeito sem dependências, depois de cada renderização, dá o foco a ela quando ela está na página e esquece a chave. Uma referência, e não um
   estado, porque o `setState` num efeito é recusado pelo lint (renderizações em cascata).
@@ -1365,7 +1492,7 @@ aparece, seção 9), e deixa trocá-la.
   acha o pedaço no nome, no caminho e no `host`. "Conectada" é a das listas (`connectedConnectionIds`), pelo `useConnectedIds` (`_lib/use-connected-ids.ts`: as consultas das
   sessões da árvore com `enabled: false`, que nunca abrem sessão, as abas e as que a verificação achou sem sessão, `useNotConnectedIds`, numa chave de texto
   que só muda com elas): só a lista aberta e a faixa da aba sem conexão o usam. No fim, "Mostrar no navegador" pede ao navegador a
-  conexão da aba (`connectionReveal`, o mesmo do formulário de conexão): ele abre as pastas acima dela, a escolhe, lhe dá o foco e aparece se estava escondido.
+  conexão da aba (`connectionReveal`, o mesmo do formulário de conexão): ele abre as pastas acima dela (e elas ficam lembradas, RN-NAV-014), a escolhe, lhe dá o foco e aparece se estava escondido.
 - **A troca** (`switchConnection` no provedor, sobre `withConnection`, puro e testado; substitui o antigo `assignConnection`): passa pela pergunta das alterações
   não salvas da grade (o `guard` da edição, como a troca do banco), e então a aba ganha um executor novo na conexão escolhida, no banco padrão dela; o de antes
   sai de cena (`retire`) e a sessão dele fecha em segundo plano (`endInBackground`). Nada executa, o texto fica (o do editor deste instante) e o resultado sai.
@@ -1470,22 +1597,102 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   (`renameRefusalFields`); o 422 de outro campo vai ao aviso pelo título. "Duplicar conexão" chama `POST api/user/connections/{id}/duplicate`
   (`duplicateConnection`, sem corpo: a senha é copiada dentro do cofre), atualiza as listas e pede ao `connectionReveal` a cópia, que aparece
   escolhida e com o foco, desconectada; a recusa vai ao aviso central.
-- **Filtro por ambiente** (RN-NAV-010). Ao lado do campo de busca, na mesma linha (que quebra no navegador estreito: o campo é
-  `flex-[1_1_8rem]`, o seletor `flex-[1_1_9rem]`, e a 200 px o seletor desce), o `NavigatorEnvironmentFilter` (`navigator-environment-filter.tsx`,
+- **A barra de filtros** (RN-BUSCA-001, RN-NAV-010 e 013, `NavigatorFilters`, `navigator-filters.tsx`, sem estado, é o único lugar que diz a disposição).
+  Abaixo da barra de ações, uma coluna de duas linhas de 6 px de intervalo (`gap-1.5`, que cabe o anel de foco de 2 px com 2 de afastamento) e 8 px até a árvore
+  (`mb-2`, o do canvas). **Linha 1**: só o campo "Filtrar objetos", na largura toda, como o canvas o desenha (mesmo no navegador largo, em que os três caberiam numa
+  linha só: o dono pediu a busca na largura toda). A raiz do `NavigatorSearchField` é `w-full h-8 flex-none`: **dentro do `flex-col` o campo não pode ter base
+  flexível** (`flex-[1_1_8rem]` era a dele quando dividia a linha), senão a base vale para a ALTURA e o campo cresce na vertical (128 px de base vencem o `h-8`); o
+  teste confere que a raiz não tem `flex-[`, `flex-1` nem `min-w-`. **Linha 2**, `flex-wrap`: "N conectadas" à esquerda (`flex-none` e `whitespace-nowrap`: a conta
+  nunca é cortada) e o seletor de ambiente à direita, com o resto da largura (`flex-[1_1_8rem] min-w-28` no invólucro dele, com o `x` "Limpar o filtro de
+  ambiente" dentro: escolher ou limpar o ambiente não muda a largura de nada). Quando o seletor não cabe ao lado do botão com 128 px pelo menos, ele desce para uma
+  linha só dele, na largura toda. **A base é de 8 rem, e não de 9**: com 9 rem, "Nenhuma conectada" (o estado ao abrir o app, sem nada conectado) só cabe a partir de
+  318 px de navegador e sobra 1,6 px nos 320 do padrão, e qualquer fonte da interface mais larga (RN-CONFIG-008) jogaria o seletor para a terceira linha; com 8 rem
+  cabem a partir de 303 px, com ≈18 px de folga no padrão (o seletor mede 145,6 px nos 320, e o mínimo é 128). Os limiares, **medidos** de 1 em 1 px (o `NavigatorFilters` de
+  verdade e o CSS construído, num Electron sob Xvfb, na IBM Plex Sans do pacote; o desenho tinha calculado os mesmos valores, a menos de 1 px): o seletor passa a ficar ao
+  lado do botão a partir de 263 px de navegador com "3 conectadas", 271 com "12", 288 com "1.200" e 303 com "Nenhuma conectada", e abaixo disso desce; a 200 px (o
+  mínimo) ele sempre desce. "Todos os ambientes" cabe inteiro a partir de 271, 278, 296 e 310 px; entre o limiar e essa largura, o nome fechado termina em reticências (`[&>span:first-child]:truncate`; a etiqueta de ambiente já tem o nome inteiro na dica). Com a DejaVu Sans no lugar da fonte da interface (bem mais larga), os limiares
+  medidos são 272, 279, 298 e 316 px: a 320 px "Nenhuma conectada" ainda fica ao lado do seletor, que fecha "Todos os ambientes" em reticências. O zoom do programa
+  (`setZoomFactor`) não muda o layout em pixels CSS: a 125% e a 150% as mesmas larguras dão a mesma disposição. A ordem do DOM é a da tela, e por
+  isso a do Tab: barra de ações, campo, "Limpar a busca", "Só as conectadas", seletor, "Limpar o filtro de ambiente", árvore (o teste confere pelo markup, e que
+  nada tem `tabindex` positivo). O Ctrl+F, o Ctrl+Shift+E (`aside input[type="search"]`), o Esc, a seta para baixo e o Enter do campo não mudaram. A linha de estado
+  da busca (RN-BUSCA-002) fica logo abaixo desta barra, nunca ao lado do campo, e o que a busca precisar de controle novo vai dentro do campo ou nesta segunda
+  linha. No navegador largo (acima de ≈413 a 452 px) os filtros ocupam uma linha a mais que antes (+38 px): é consequência do pedido. **Conferido sob Xvfb**, na barra sozinha e no app
+  inteiro: de 200 a 640 px o campo tem 32 px de altura e a largura toda do navegador, com a conta 0, 3, 12 e 1.200, o ambiente "Todos", um e um de nome longo (cortado
+  dentro do seletor), o "Limpar o filtro de ambiente" sempre dentro do lugar do seletor e nada além da barra; no app inteiro, a divisória pelas setas em 200, 320 e 640 px,
+  o Tab na ordem da tela (campo, "Limpar a busca", "Só as conectadas", seletor, "Limpar o filtro de ambiente", linha da árvore), o Ctrl+F, o Esc (com e sem texto), a seta
+  para baixo e o Enter no campo e o Ctrl+Shift+E.
+- **Filtro por ambiente** (RN-NAV-010). Na linha de baixo da barra, ao lado de "Só as conectadas" (acima), o `NavigatorEnvironmentFilter` (`navigator-environment-filter.tsx`,
   sem estado) é o `Select` do app com "Todos os ambientes" (valor vazio, o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente". Cada
   ambiente vai como a `EnvironmentPill` dele, na lista e no controle fechado (o `content` da opção do `Select`); o controle fechado fica numa linha
-  só, cortado com reticências (`[&>span:first-child]:truncate`), e na lista o texto quebra. Com um filtro escolhido aparece o `x` "Limpar o filtro
-  de ambiente", que volta a "Todos". Quem filtra é `filterByEnvironment(folders, connections, escolha, environmentLookup)`
+  só, cortado com reticências (`[&>span:first-child]:truncate`), e a lista aberta é larga (`wideList` do `Select`): as opções não quebram ("Todos os ambientes" cabe numa linha num
+  seletor de 130 px), a lista mede no mínimo o seletor e cresce até o maior texto, sem passar da janela (`panelWidthOf`, pura e testada: `min-width` do seletor, `max-width` da janela à direita
+  dele menos 6 px, `width: max-content`; o que a janela não deixa caber termina em reticências). Com um filtro escolhido aparece o `x` "Limpar o filtro
+  de ambiente", que volta a "Todos" e **leva o foco ao seletor** (`clearChoice`: o clique e o Enter no `x` são o mesmo clique; o foco vai ANTES de a escolha mudar, porque o `x` sai da tela com ela e o
+  foco que estava nele cairia no `body`). O `ref` do botão do seletor é do `Navigator` (`environmentSelect`, como o `searchInput`), passado pela barra ao `Select` por `triggerRef`. Quem filtra é `filterByEnvironment(folders, connections, escolha, environmentLookup)`
   (`_lib/navigator-environment.ts`, pura e testada): as conexões cujo ambiente mostrado (o próprio ou o herdado) tem a chave escolhida, ou que não
   têm nenhum ("Sem ambiente"), e as pastas no caminho até elas, na ordem da lista; "Todos" devolve as MESMAS listas. O navegador monta a árvore
-  (`buildConnectionTree`) sobre o que sai daí, e a busca roda depois, sobre essa árvore: os dois se combinam sem tocar em `searchTree`. A pasta do
+  (`buildConnectionTree`) sobre o que sai daí, e a busca roda depois, sobre essa árvore: os dois se combinam sem tocar em `searchTree`, e limitam também os bancos de que
+  a busca pede o índice de nomes (o escopo, `searchScope`: só as conexões que a árvore mostra, e, delas, as conectadas). A pasta do
   ambiente sem conexão dele dentro não aparece (a regra fala das pastas no caminho). A escolha é estado do `Navigator`, que fica montado enquanto o
   cofre está aberto (`WorkbenchSlot`): vale enquanto a janela está aberta, ir às Configurações e voltar a mantém, e sair do cofre a apaga (uma
   janela nova começa em "Todos"). O ambiente que ninguém mais usa volta a escolha a "Todos" (`choiceAvailable`, um ajuste durante a renderização,
   só com as duas listas já na tela), e a conexão que o formulário salvou ou a duplicada que o filtro esconderia também (no mesmo ajuste do
   `connectionReveal`, como a busca). A árvore vazia pelo filtro diz "Nenhuma conexão em X." (ou "sem ambiente") numa região viva, e não é o
-  primeiro uso. **Conferido sob Xvfb**: Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
+  primeiro uso. As pastas no caminho até as conexões à vista abrem só nessa vista, sem gravar (RN-NAV-014, ver "As pastas abertas lembradas"). **Conferido sob Xvfb**
+  (antes da 0.6.0): Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
   "MES" no campo fica só a da raiz; "Sem ambiente" deu a frase; a inicial "p" escolhe Produção com a lista fechada; o `x` volta a todas.
+- **As pastas abertas lembradas** (RN-NAV-014 e RN-SCRIPT-008). As pastas de conexões e as de scripts começam FECHADAS e voltam como a pessoa as deixou, ao abrir o app e
+  ao entrar de novo, por usuário. Guarda-se o que está ABERTO, e não o recolhido: "nada lembrado, tudo fechado" sai de graça (a primeira entrada, quem vem da 0.5.0, as
+  preferências apagadas), e a pasta nova, a importada e a criada noutra janela já nascem fechadas sem regra nenhuma. `_lib/folder-memory.ts` (a regra pura e a loja):
+  `localStorage` na chave `prism:navigator-folders:<usuário>` (o nome sem espaços nas pontas e em minúsculas, como as vizinhas), `{ "connections": [...], "scripts": [...] }`,
+  só os GUID das pastas abertas, sem repetidos, até 1.000 por lista (`maxRememberedFolders`: ficam os mais recentes, os do fim). **É uma chave própria, e não um campo
+  de `prism:navigator:`**: a 0.5.0 regrava essa chave só com `hidden` e `scriptsCollapsed` (`mergeLayout`), então um campo novo ali se perderia na primeira gravação de quem
+  voltasse a ela, e os testes que fixam o JSON exato da outra continuam como estão. Nada de nome, de servidor nem de dado de conexão: os GUID são opacos (RN-CONFIG-001).
+  `parseFolderMemory` nunca lança, e o que não é GUID, o que não é lista e o texto quebrado são ignorados (**a leitura filtra GUID; `change` não**: a API só dá GUID, e os
+  testes usam `f1` em memória). `applyFolderChange` (pura) aplica `{ open }`, `{ close }`, `{ closeAll }` e `{ retain }` e devolve o MESMO conjunto quando nada muda.
+  `createFolderMemoryStore(getStorage)` tem `get(usuário, árvore)`, `change(usuário, árvore, mudança)` (devolve se a janela viu mudar; a mesma escolha de novo não grava nem avisa) e
+  `subscribe`; cada conjunto é o MESMO objeto até aquela árvore mudar (`useSyncExternalStore`), e mexer nos scripts não troca o das conexões. **Cada janela tem o seu armazém e
+  não ouve as outras**, e a mudança vai para o armazenamento SOBRE O QUE ESTÁ GRAVADO AGORA, e não sobre o que a janela leu (a disciplina da RN-NAV-012): A abre X, B (que
+  leu antes) abre Y, e o gravado tem os dois; a janela que abre depois começa como a última escolha. Por isso também se grava quando a janela não vê diferença e o gravado vê:
+  "Recolher tudo" numa janela que mostra tudo fechado, com uma pasta que outra janela abriu depois, esvazia o gravado (era o curto-circuito pelo cache da janela que o
+  deixava como estava). O cache é de módulo e não relê o armazenamento quando o cofre fecha e abre
+  na MESMA janela (como o da seção Scripts recolhida): a janela vê o que ela mesma fez, e o que grava continua sendo a mudança sobre o gravado. Sem armazenamento (ausente,
+  recusando ou lançando) a escolha fica na memória da sessão, sem erro. `useOpenFolders(árvore)`, em `use-navigator-layout.ts`, devolve `[conjunto, change]` com o usuário de
+  `sessionQuery` (sem usuário: vazio, e `change` não grava); `change` devolve se a janela viu mudar, que é o que a seção Scripts usa para saber se há renderização a esperar.
+  **O navegador** (`navigator.tsx`): `openTreeKeys` (`_lib/navigator-folders.ts`, pura) cruza `tree.folderKeys` com os GUID lembrados (`folderKeyOf`) e junta os nós abertos
+  de `expanded` (menos a conexão a que faltam usuário ou senha); o identificador que não está na árvore à vista (excluída, ou escondida por um filtro) não tem efeito. **As
+  conexões não se lembram** (abrir é conectar, RN-SESSAO-001; nada conecta sozinho, RN-ABAS-006): uma pasta lembrada aberta mostra as conexões fechadas e desconectadas, e os
+  bancos, os esquemas, os grupos e as tabelas abertos não passam de uma entrada para a outra (lembrá-los exigiria guardar nome de banco e de tabela: ficou para depois, no
+  cofre). "Recolher tudo" fecha o `expanded` e as pastas (`{ closeAll }`), e é isso que volta. **A poda** (`{ retain: ids da lista }`) roda uma vez por montagem, quando a
+  lista de pastas chega DEPOIS da montagem (`isFetchedAfterMount`: a do cache pode estar velha), no navegador e na seção Scripts; a lista de uma janela que não conhece a pasta
+  recém-criada noutra a poderia podar, e foi aceito (só na janela que monta na mesma hora).
+  **Nada de escrever na loja durante a renderização.** As revelações (a conexão salva, a duplicada, o "Mostrar no navegador", a importação) são ajustes durante a renderização
+  (uma vez por pedido) que só põem estado: o `reveal` e o `handledImport` levam os IDs das pastas (`folderIdsOfKeys` sobre `plan.folderKeys`), e quem abre é o efeito que já leva o
+  pedido embora (`connectionReveal.take`, `importedReveal.take`), por `openForRequest`. Esse é um `useEffectEvent(openFolders)`, de propósito: com `openFolders` nas
+  dependências o efeito rodaria a cada troca de filtro (o número do pedido já o protege), e o `useCallback` dele o React Compiler recusa
+  (`react-hooks/preserve-manual-memoization`, sobre o `filterView`). A linha da `NavigatorList` não consome o pedido de foco enquanto não está em `rows` e tenta de novo quando
+  as pastas abrem. Os eventos (abrir e fechar, `expandFolder` de "Nova conexão" e "Nova pasta" dentro de uma pasta, "Mover para…") escrevem direto. **"Mover para…" revela o que
+  moveu**: o `MoveConnectionDialog` e o `FolderDialog` (modo `move`, por `FolderActionDialogs`) têm `onMoved`, chamado depois de as listas serem lidas de novo; a conexão pede ao
+  `connectionReveal` (o mesmo do salvar: pastas abertas e lembradas, escolhida, com o foco), e a pasta abre as do destino e fica escolhida e com o foco (`revealMovedFolder`; com
+  uma busca no campo só abre, porque a pasta pode não estar na lista filtrada, e o pedido de foco ficaria armado).
+  **A vista filtrada** (RN-NAV-010 e 013): com o seletor de ambiente ou "Só as conectadas" ligado, a árvore tem só as pastas no caminho até as conexões à vista, e elas aparecem
+  abertas só nessa vista, SEM gravar nem ler o lembrado, como a busca. Recolher uma vale enquanto o filtro está ligado (`FilterFolders`: as chaves recolhidas e a vista a que valem,
+  `filterViewOf` = o ambiente e as conectadas; trocar o ambiente, ligar ou desligar "Só as conectadas" começa outra vista e esquece o recolhido na hora, e voltar à primeira não o
+  traz de volta: `filterFoldersFor`, no ajuste durante a renderização); desligar o filtro devolve as pastas lembradas, e
+  ligar de novo abre tudo outra vez. "Recolher tudo" na vista recolhe só a vista, e a pasta que um evento ou uma revelação abre sai das recolhidas (`openedInFilter`). A busca
+  (RN-BUSCA-001) segue com o `searchCollapsed` e `search.open`, e não toca no lembrado.
+  **Testes**: `folder-memory.test.ts` (a regra e a loja, inclusive duas janelas), `navigator-folders.test.ts` (`openTreeKeys` e a vista filtrada),
+  `use-navigator-layout.folders.test.ts` (o gancho), `navigator.folders.test.ts` (o `Navigator` com os ganchos simulados: nada gravado durante a renderização, as revelações no
+  efeito, o "Mover para…", o filtro, a poda; **a loja é de módulo, então cada teste usa outro usuário**) e as da seção Scripts em `scripts-section.folders.test.ts`. **Conferido
+  sob Xvfb, no app inteiro** (Electron de verdade e a API de verdade, com os dados criados pela API e a pasta de dados isolada; sem erro de página nem de console): a primeira entrada
+  com as pastas das duas árvores fechadas e nada gravado; duas pastas abertas em cada árvore, o app fechado e aberto de novo (outro processo), tudo como estava, com as
+  conexões fechadas e desconectadas ("Nenhuma conectada") e o gravado só com os GUID; "Recolher tudo" (que volta, e não toca nas pastas de scripts); o seletor de ambiente
+  (abre as pastas do caminho só na vista, recolher vale só nela e nada grava; Produção, Teste e Produção recomeça aberta; limpar devolve as lembradas); a busca (abre a pasta só
+  na tela filtrada, não grava, limpar devolve); "Nova subpasta" numa pasta fechada, a conexão salva pelo formulário numa pasta fechada, "Duplicar conexão", "Mover para…" de
+  uma conexão, de uma pasta de conexões e de um script, "Mostrar no navegador" pelo seletor de conexão da aba (com tudo recolhido) e "Nova subpasta" em Scripts: a pasta abre, a linha fica à vista e com o foco, e volta aberta na entrada seguinte; o
+  Ctrl+B; a pasta excluída (a poda a tira na entrada seguinte, e o identificador inexistente injetado no gravado também); outro usuário do cofre (chave só dele); e duas
+  janelas (a de uma pasta e a de outra ficam gravadas, fechar numa não desfaz a outra, e "Recolher tudo" numa janela que não vê pasta aberta esvazia o gravado). **Não
+  conferido**: a importação (do DBeaver e de arquivo do Prism), o app empacotado e o macOS.
 - **Densidade** (RN-NAV-011; `_lib/navigator-density.ts`, com teste). `navigatorMetrics` tem as medidas de cada uma, com as classes escritas por inteiro
   para o Tailwind as achar: a confortável é a de sempre (linha de 30 px, recuo de 10 px e 16 por nível, botões de ação de 24 px); a compacta tem linha de
   22 px, recuo de 6 px e 12 por nível e botões de 20 px. A árvore da seção Scripts (RN-SCRIPT-008) usa a mesma linha (`rowClass`) e o mesmo recuo
@@ -1525,14 +1732,66 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   (`findMatch`, nas posições do rótulo que a pessoa vê: caminho rápido para ASCII e para acento composto, mapa ponto a ponto para
   acento solto e hangul; o teste de invariante confere os dois). **Olha o que a árvore já carregou, aberto ou não**: `loadedLevels`
   junta os níveis do navegador com o que o cache guarda (`cachedTree`, em `navigator-search.ts`, lê os níveis
-  `["tree", …]`, a começar pela lista dos bancos de cada conexão, e devolve o MESMO objeto enquanto nenhuma dessas consultas mudou), e `levelPathOf` é o inverso de `treeKey` (**mudou `treeKey`, mude `levelPathOf`**: há teste de ida e volta).
-  **Nunca chama a API, nunca abre nó e nunca toca em `expanded`**: limpar o campo devolve a árvore como estava.
+  `["tree", …]`, a começar pela lista dos bancos de cada conexão, e devolve `{ cached, indexes }`: cada lista é o MESMO objeto enquanto nada dela mudou), e `levelPathOf` é o inverso de `treeKey` (**mudou `treeKey`, mude `levelPathOf`**: há teste de ida e volta).
+  **Nunca abre nó, nunca conecta sozinha e nunca toca em `expanded` nem nas pastas lembradas** (RN-NAV-014): limpar o campo devolve a árvore como estava. A única
+  chamada à API que ela faz é o índice de nomes, um por banco do escopo (o item seguinte); nenhum nível é buscado (RN-ARVORE-002).
+- **A busca em todas as conexões** (RN-BUSCA-002; pedido do dono em 2026-10-27: três ambientes de tabelas iguais, e a busca só achava a tabela no ambiente em que o esquema
+  tinha sido aberto). Além do que a árvore carregou, acha as tabelas e as visões de TODOS os esquemas de cada banco do escopo, pelo índice de nomes que a rota
+  `object-names` devolve numa consulta só ao catálogo. A busca no servidor a cada tecla ficou de fora (uma ida a cada ambiente por pausa da digitação, e ignorar o acento não se escreve igual nos três
+  bancos), e carregar os níveis de cada esquema também (duas consultas por esquema, e a árvore cheia do que a pessoa não abriu). Peças: `_lib/navigator-search-scope.ts` (o escopo, o
+  filtro dos índices e a linha de estado, tudo puro), `_lib/navigator-index.ts` (`indexLevels`) e `_components/navigator-search-status.tsx` (a vista).
+  - **O índice mora na família da árvore e NÃO é nível.** A chave é `["tree", conexão, …banco, "names"]` (`objectNamesKey`; `objectNamesOf` é o inverso), de propósito: o
+    "Desconectar" (`removeQueries(["tree", c])`), a conexão que some, o bloqueio, a sessão reaberta (`ofDatabase`) e o "Atualizar" de qualquer nó do banco (`treePrefixes`) já cuidam dele, e uma
+    família à parte exigiria lembrar de cada um desses lugares (esquecer um deixa o índice de uma sessão morta). O preço: **quem lê a família `["tree"]` e supõe `NavNode[]` tem de pular o índice**.
+    `levelPathOf` devolve `null` para ele (há teste), o `cachedTree` o entrega à parte (`indexes`) e o `cachedLevels` do autocompletar só recebe nível. Leitor novo da família: filtre por `levelPathOf`.
+  - **O escopo** (`searchScope`). As conexões que a árvore mostra (depois do seletor de ambiente e de "Só as conectadas"), e, delas, só as conectadas, na definição única
+    (`connectedConnectionIds`: a sessão da árvore aberta ou uma aba conectada; menos as que a verificação achou sem sessão). De cada uma, o banco da conexão e cada outro banco do servidor que
+    já tem sessão da árvore em cache (`cachedTreeSessions`). **Nunca abre a sessão de um banco que ninguém abriu**: num servidor com dezenas de bancos seriam dezenas de sessões. A conexão
+    conectada só por uma aba ainda não tem sessão da árvore, e o índice a abre sem abrir o nó (`searchSessionQuery`: ela já está conectada, e isso não é conectar); se não tem usuário ou senha
+    gravados, fica sem índice (abrir chamaria o "Editar conexão", RN-TRANSF-016). As de fora são `openable` ou `withoutCredentials`, e as que estão conectando (o ponto "Conectando…") não são de fora:
+    contam como "buscando" e entram quando a sessão abrir.
+  - **Quando o índice é pedido.** Um `useQueries` no `Navigator`, com um `objectNamesQuery` por banco do escopo, `enabled` só com o texto adiado não vazio. Com o campo vazio os observadores ficam
+    montados e desabilitados, e é isso que faz o índice que falhou, ou que o "Atualizar" deixou velho, ser buscado na busca seguinte (a biblioteca refaz uma consulta com erro quando `enabled`
+    vira `true`; com `enabled` fixo ela não repete, então a falha não vira laço a cada tecla; o teste confere os dois). `keepUntilRefreshed` e `retry: false`: uma vez por banco, a falha aparece na hora, e
+    depois a busca não volta à API até o "Atualizar", o "Desconectar" ou o bloqueio; cada tecla filtra no app, sem pausa e sem mínimo de letras. A consulta é calada (`meta.silent`): a falha vai à linha de estado.
+  - **Armadilha: o escopo se lê do cache na renderização, não por `useSyncExternalStore`.** O "Desconectar" recolhe os nós, solta as abas e SÓ ENTÃO esquece as consultas, tudo no mesmo lote. Uma
+    renderização a mais entre as duas coisas (o que uma assinatura do cache provoca: a atualização dela é urgente e pode sair antes das outras) veria o cache já limpo com os nós e as abas ainda no
+    ar, e os observadores refariam a sessão que a pessoa acabou de fechar. As renderizações que importam já vêm das consultas observadas (a sessão de cada conexão, os níveis abertos, os índices).
+    As listas de ids entram como texto no `useMemo` (como `connectedKey`), para o escopo e o filtro só se refazerem quando uma delas muda.
+  - **O que aparece.** `indexLevels` (pura; depois do `loadedLevels` e antes do `searchTree`, no mesmo `useMemo`, com a identidade estável de sempre) acrescenta SÓ os níveis que faltam: o que a árvore
+    carregou de verdade vale mais, e o grupo "Tabelas" ou "Visões" já carregado não recebe nada do índice nem gasta o corte. As linhas têm as chaves da árvore (a visão leva a posição dela na lista inteira do
+    esquema em `byName`), então o duplo clique, o Enter, o menu e o "Gerar SELECT" valem sem código novo (`tableTargetOf` e `runMenuAction` leem a chave), e a escolha continua na linha quando o nível carregar.
+    Sem a lista dos bancos, a conexão mostra só o banco dela, com o selo "padrão". O grupo diz "3 de 120" (`LevelState.total`); com o índice cortado na API (`truncated`), só o achado.
+    **O corte é de 200 tabelas e visões por banco** (`searchIndexCap`), e não do total: o primeiro ambiente da árvore engoliria os outros, que é o caso do pedido. `indexesInScope` tira do resultado o
+    índice de quem saiu do escopo (o filtro de ambiente, a conexão cuja verificação diz "Sem sessão aberta" e que deixou o índice no cache). "Nada encontrado" só aparece com a busca terminada em todo o
+    escopo (`nothingFoundShown`, pura e testada): sem índice a caminho e sem banco que falhou. Com um a caminho a linha de estado diz "Buscando…" sozinha, e com uma falha diz só "Não foi possível buscar em …":
+    o banco que falhou pode ter o nome, e as duas frases juntas se contradiziam. A falha que conta é qualquer uma da linha de estado, também a da conexão de fora que não abriu.
+  - **A linha de estado** (`NavigatorSearchStatus`, vista sem estado; o que ela diz é `searchStatusOf`, pura, com tabela de casos) fica logo abaixo do `NavigatorFilters`, nunca ao lado do campo, e só existe
+    na busca. Cada texto é um `role="status"` e os botões ficam fora das regiões vivas. A falha de um índice vem do estado da consulta (`isError && !isFetching`, mesmo com resposta velha); se foi a sessão que
+    caiu (`DATABASE_SESSION_NOT_FOUND`), o "Tentar de novo" a reabre por `reopenDatabaseSession`, como a árvore (e avisa), e senão refaz só aquele índice (`refetchQueries` exato). A conexão de fora cuja sessão da
+    árvore está em erro mostra ali a mensagem do banco, com o "Tentar de novo" que abre de novo; a recusa por faltar usuário ou senha não entra (é do "Editar conexão"). **Os botões saem da tela assim que o pedido
+    começa, e o foco que estava neles cairia no `body`: o foco vai ao campo da busca.** A chegada de um índice não move o foco nem a rolagem (`scrollResetKey` continua sendo o texto; nada chama `focus` nem
+    `scrollTo`), e o leitor de tela ouve "1.234 resultados, 600 à vista" quando o corte deixa achados de fora.
+  - **"Buscar nelas também"** (`openSessionForSearch`, em `database-sessions.service.ts`) abre a sessão da árvore de cada conexão de fora que tem usuário e senha gravados, sem abrir o nó (é conectar, a pedido;
+    `expanded` e as pastas lembradas não mudam), e não lança: a falha fica na consulta da sessão, de onde a linha a lê. A conexão de fora que ainda guarda uma sessão em cache é a que a verificação achou "Sem sessão
+    aberta" (RN-VERIF-003): a consulta nunca fica velha sozinha, então a abertura é forçada (`staleTime: 0`) e a sessão nova substitui a morta. **O `meta` calado da sessão não é garantido**: o navegador observa a
+    sessão de cada conexão (o ponto de estado), e cada renderização troca o `meta` da consulta pelo do observador, então a falha de abrir pode chegar também ao aviso central, como a de abrir o nó.
+  - **Medida** (vitest, na máquina de desenvolvimento; os testes exigem menos de 100 ms por tecla): 3 bancos de 50.000 nomes (150.000 nomes, 3.000 com acento e 12.000 visões) mais 20 mil nós carregados em outra
+    conexão. A primeira tecla, que dobra os nomes e ordena as visões (uma vez por resposta), leva 55 a 80 ms; as seguintes, 9 a 15 ms (uma letra, que passa do corte, 15 ms; acento ou visão, 10 ms). O escopo e a linha de
+    estado custam 0,02 ms por renderização. É a conta do cliente: a da rota (uma varredura do catálogo por banco) ainda está por fazer, e `src/api/AGENTS.md` diz onde.
+  - **Testes**: `navigator-search-scope.test.ts` (o escopo, o cache das sessões, o filtro dos índices e a linha de estado, por tabela de casos), `navigator-index.test.ts` e `navigator-search.test.ts` (o índice, o corte, o
+    desempenho), `database-sessions.service.index-observers.test.ts` (o comportamento da biblioteca que o desenho pressupõe, com o `QueriesObserver` de verdade: uma vez por banco, a falha que não repete, o "Atualizar",
+    a sessão reaberta, o "Desconectar"), `database-sessions.service.search-session.test.ts` (o "Buscar nelas também") e `navigator.search.test.ts` (o `Navigator` com os ganchos simulados e o cache de verdade: o escopo, o que
+    aparece, o menu e o "Gerar SELECT", a linha de estado e os botões). **Conferido contra a API de verdade, sem o app** (PostgreSQL de teste: cinco esquemas, um de 300 tabelas, três ambientes e um segundo banco do servidor de Prod): a resposta
+    da rota passa pelo `objectNamesSchema`; "cliente" acha a tabela nos quatro bancos, com o caminho aberto; "pedido_acao" acha `pedido_ação`; a chave da tabela e a da visão que o índice monta são as
+    de `objects?kind=…`; "t_" corta em 200 por banco; a sessão fechada responde 404 `DATABASE_SESSION_NOT_FOUND`. **Não conferido**: o app inteiro sob Xvfb (o "Buscar nelas também" e o
+    "Desconectar" no meio da busca, a rolagem e o foco com o índice chegando).
 - **Na tela filtrada** só tem chevron quem tem algo à vista embaixo; recolher um ancestral ali é estado local daquele texto
   (`searchCollapsed`), não `expanded`; o grupo diz "3 de 120"; o destaque é um `<mark>` de texto (o nome vem do banco). O filtro roda
   sobre `useDeferredValue` do texto, para a digitação não esperar uma lista de milhares de linhas: com 20 mil nós carregados ele leva
   dezenas de milissegundos (o teste exige menos de 100 ms medindo o melhor de cinco execuções depois de uma de aquecimento: uma
-  medida só falhou na suíte inteira, com a máquina disputada). O filtro está num `useMemo` (texto, o que se recolheu, a árvore e o
-  `cachedTree`, de identidade estável): um aviso ou uma tecla no editor, que redesenham o navegador, não o refazem.
+  medida só falhou na suíte inteira, com a máquina disputada). O filtro está num `useMemo` (texto, o que se recolheu, a árvore, o
+  `cachedTree`, de identidade estável, e os índices do escopo): um aviso ou uma tecla no editor, que redesenham o navegador, não o refazem.
 - **`NavigatorList` fica sempre montada**, inclusive no "nada encontrado": a seleção (`selectedKey`) e a rolagem da árvore moram
   nela, e desmontá-la as perdia ao limpar. A rolagem é acompanhada por `onScroll` enquanto a árvore está à mostra e volta ao sair da
   busca; ler `scrollTop` ao entrar na busca não serve, porque a lista já encolheu e o navegador já o ajustou. Ctrl+F com o foco no
@@ -2766,8 +3025,8 @@ quer fazer", "podia ter um filtro de conexões abertas"). A API já tinha a rota
 - **Os avisos de passagem**: de responder (ou de ainda não verificada) a não responder, um aviso de atenção ("MES Produção não respondeu à verificação"),
   uma vez, e não de novo enquanto ela continuar sem responder; de volta, um de sucesso ("MES Produção voltou a responder à verificação"). Cada janela que
   verifica a conexão avisa na dela, também com a resposta que veio de outra (a pessoa pode estar olhando qualquer uma). O nome é o de agora.
-- **"Só as conectadas"** (`navigator-connected-filter.tsx`, `_lib/navigator-connected.ts`, RN-NAV-013): um botão de alternar (`aria-pressed`) depois do
-  seletor de ambiente, na mesma linha do campo de busca (desce com eles no navegador estreito), com a conta das conectadas ("3 conectadas", "1
+- **"Só as conectadas"** (`navigator-connected-filter.tsx`, `_lib/navigator-connected.ts`, RN-NAV-013): um botão de alternar (`aria-pressed`) na linha
+  abaixo do campo de busca, antes do seletor de ambiente (`NavigatorFilters`, ver "A barra de filtros"), com a largura do texto, que nunca é cortado, e a conta das conectadas ("3 conectadas", "1
   conectada", "Nenhuma conectada"), ligado ou não. O nome acessível é o rótulo com a conta ("Só as conectadas: 3 conectadas", o rótulo num `sr-only`), e a
   dica diz o que o clique faz agora. Conectada é a definição única (`connectedConnectionIds`), então a que desconecta sai na hora e a que conecta por uma
   aba ou por um script entra. A que a verificação achou sem sessão na API (`notConnected`) também sai, e a conta não diz "conectada" ao lado do indicador
@@ -2775,7 +3034,7 @@ quer fazer", "podia ter um filtro de conexões abertas"). A API já tinha a rota
   aba abre uma nova, a chave das sessões muda e ela volta a contar). O ponto, o "Desconectar" e a barra de status seguem com o `isConnected`: com a
   verificação ligada o indicador já diz o estado, e "Desconectar" encerra o que ainda houver. O filtro (`filterConnected`, puro) roda sobre o que o seletor de ambiente deixou, pelo mesmo `withFolderPath` (as pastas no
   caminho até as conexões), e a busca filtra depois; os memos do `Navigator` dependem de uma chave em texto com as conectadas, só com o filtro ligado, e a
-  árvore não se refaz com ele desligado. Ligado e vazio, `NavigatorFilteredEmpty` diz "Nenhuma conexão conectada." (com o ambiente, quando há) com "Mostrar
+  árvore não se refaz com ele desligado. Ligado, as pastas no caminho até as conexões à vista abrem só nessa vista, sem gravar (RN-NAV-014). Ligado e vazio, `NavigatorFilteredEmpty` diz "Nenhuma conexão conectada." (com o ambiente, quando há) com "Mostrar
   todas", que o desliga. É estado do navegador, como o ambiente: vale enquanto a janela está aberta. A conexão que o formulário acabou de salvar, ou a
   duplicada, desliga os dois filtros quando eles a escondem.
 - **O que não foi feito**: a verificação de cada banco aberto da conexão (RN-ARVORE-006; uma sessão qualquer da conexão responde por ela, como a
@@ -3217,7 +3476,8 @@ não o `CREATE` das colunas do resultado, que a especificação deixou para depo
     aba (a aba nova é a do "Nova consulta", à frente, com o texto no editor).
 - **Não conferido numa janela**: nada disto foi visto na tela (não há Xvfb nem banco nesta etapa), só nos testes; o `SqlViewer` não tem teste (o vitest não
   tem DOM). Falta conferir sob Xvfb que a aba nova do "Abrir numa aba de consulta" nasce com o cursor no começo e o foco no editor (o diálogo, ao fechar,
-  devolve o foco à grade da aba de antes, que já está escondida, e o editor da nova o toma ao montar).
+  devolve o foco à grade da aba de antes, que já está escondida; o editor da nova deixou o `autoFocus`, e quem o foca é a regra do foco das abas (RN-ABAS-019): o
+  diálogo conta como quem pediu, e o foco perdido que ele deixa vai à entrada da aba nova).
 
 ## Configurações (`src/app/settings`)
 
@@ -3281,9 +3541,11 @@ fechar não apaga as abas.
   classe), porque a escolha troca a `--font-sans`. Ao sair do cofre o `FontSync` desmonta e a janela volta às fontes do app: **diferente do
   tema, nada das fontes é lembrado no dispositivo**, e o login sempre abre na IBM Plex Sans. Em todas as janelas pelo `storage`, como o resto
   das preferências (conferido com uma aba levada a outra janela: a fonte do editor dela mudou com a escolha feita na primeira). **Onde vale**: a
-  da interface, em todo o texto fora do código; a do editor, no CodeMirror e no SQL que a tela mostra fora dele (`font-editor`): o campo do
-  filtro dos Registros e o comando executado embaixo dele, o "Ver SQL" e o DDL aproximado. A grade, a árvore, as etiquetas e o resto do que é
-  `font-mono` não mudam. **A lista** é a da API de fontes locais do Chromium (`window.queryLocalFonts`, liberada em `permissions.ts`), lida na
+  da interface, em todo o texto fora do código **e também na árvore do navegador e nas grades** (consulta, abas do Executar script e Registros),
+  mesmo quando é a do app (seção 42, pedido do dono de 2026-10-27: antes eram `font-mono`; a grade mede as colunas nela, ver "A largura das colunas é
+  medida na fonte"); a do editor, no CodeMirror e no SQL que a tela mostra fora dele (`font-editor`): o campo do filtro dos Registros e o comando
+  executado embaixo dele, o "Ver SQL", o "SQL enviado", o DDL aproximado e o comando de cada linha das Estatísticas. A mensagem de erro do banco, as
+  etiquetas, a Estrutura, o Diagrama e o resto do que é `font-mono` não mudam. As dicas dos dois campos (`settings.copy.ts`) dizem isso. **A lista** é a da API de fontes locais do Chromium (`window.queryLocalFonts`, liberada em `permissions.ts`), lida na
   primeira vez que um dos campos recebe o foco (`systemFontsQuery`, a mesma para os dois, `gcTime: 0`: volta a ser lida a cada visita às
   Configurações): uma entrada por família, em ordem de nome (`Intl.Collator` pt-BR, sem caixa, numérica), sem o nome que não pode virar CSS.
   Sem a API, com a permissão negada, com erro ou com a lista vazia ela é `null`, e o campo aceita o nome digitado (Enter), se ele serve (senão,
@@ -3299,7 +3561,8 @@ fechar não apaga as abas.
 - **Autocompletar** (RN-CONFIG-004; `_lib/sql-completion.ts`; a única dependência nova foi o `@codemirror/autocomplete`, em 6.20.3 exato, a
   versão que a trava já resolvia): as palavras-chave do dialeto da aba e os **nomes que a árvore já carregou** daquela conexão (esquemas,
   tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: `sql-completion.ts` só
-  lê; o que a árvore não abriu não existe para ele, e as duas buscas que o autocompletar faz, as colunas de `tabela.` e as chaves estrangeiras da junção
+  lê; o que a árvore não abriu não existe para ele (o índice de nomes da busca, RN-BUSCA-002, mora na mesma família mas não é nível: `cachedLevels` o pula por `levelPathOf`, e o
+  autocompletar não o usa), e as duas buscas que o autocompletar faz, as colunas de `tabela.` e as chaves estrangeiras da junção
   (`sql-catalog-completion.ts`, logo abaixo), são de outro módulo. Depois de `esquema.` saem as tabelas; depois de
   `tabela.` ou de um apelido, as colunas com o tipo; as tabelas de qualquer esquema carregado aparecem também sem o esquema (o `public` do
   PostgreSQL sem ele, os outros com `esquema.`). A lista abre sem nada escolhido (`selectOnOpen: false`: Enter e Tab seguem como eram),
@@ -3862,7 +4125,52 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   `db2`, `informix`, `danger`, `success`, `scrim`, mais `selection`, as quatro de sintaxe, `syntax-keyword`, `-string`, `-number` e
   `-comment`, e `link`, o azul de link de cada tema: RN-LINK-001; o canvas não o desenha, e os quatro temas além dos do Prism trazem o da paleta deles). **Cada uma é `light-dark(claro, escuro)`** (seis temas: ver "Configurações"), então
   nenhuma cor fixa (`#rrggbb`, `text-white`, `fill` nomeado) entra em componente: só os tokens. As exceções são a ilustração da
-  marca, a lista de cores de ambiente da conexão e o texto que a etiqueta calcula sobre ela, as prévias do tema e os `.svg` do splash.
+  marca, a lista de cores de ambiente da conexão e o texto que a etiqueta calcula sobre ela, a cor do ambiente nos destaques da área de resultado
+  (a variável `--environment-color`, abaixo), as prévias do tema e os `.svg` do splash.
+- **A cor do ambiente nos destaques da área de resultado** (RN-AMB-002). Na área de resultado de uma aba (os Registros da tabela e o resultado da consulta,
+  no painel, numa aba ou na janela do resultado), estes destaques levam a cor do ambiente da conexão da aba, o próprio ou o herdado da pasta: o sublinhado do
+  título "Registros"/"Resultado" (`ResultPanel`) e o da aba escolhida do Executar script e de "Resultado | Variáveis" (`script-tabs.tsx`); o contorno da
+  célula ativa (`GridRow`) e a borda do campo de edição dela (`cell-editor.tsx`, para o contorno não trocar de cor no F2); o anel do foco da grade; e as
+  barras de rolagem da grade (a vertical, a horizontal e o canto). Sem ambiente, com ambiente sem cor (só o nome), com cor sem nome, com cor fora de
+  `#RRGGBB` ou na aba sem conexão, tudo fica como no tema: o acento nos contornos, e na rolagem o `border-strong` (**não** o acento: sem ambiente a barra não
+  ganha cor).
+  - **`--environment-color` NÃO é token.** Não está no `@theme` nem no `globals.css` (o `environment-accent.test.ts` confere que o `globals.css` nem a cita), não
+    é `--color-*`, não tem as duas colunas `light-dark` que as fichas têm (o teste dos temas as leria e cobraria o par) e não vira classe de cor. É uma variável de
+    estilo, posta por `environmentColorStyle(cor)` (`workbench/_lib/environment-accent.ts`), cujo valor já é o `light-dark(<clara>, <escura>)` do `iconColorStyle`:
+    3:1 sobre as superfícies de todos os temas (RN-CONFIG-003, ver "O ícone colorido"), e quem escolhe a coluna é o `color-scheme` do tema, a janela do resultado
+    inclusive (ela copia o `data-theme` e o `style` do `<html>`). O Âmbar vira `#A77E2F` nos temas claros; o azul-marinho `#1B2A80` vira `#848CBA` nos escuros.
+  - **Onde é posta, e por quê: no `style` da `<section>` do `ResultPanel` (a propriedade `environmentColor`), e só ali.** Variável de CSS herda pelo DOM, não pela
+    árvore do React, e a área de resultado da aba de consulta vai por portal para uma raiz que MUDA de lugar (o painel, a aba do resultado, a janela do
+    resultado: outro documento). Posta na raiz da aba de consulta, ela não chegaria à aba nem à janela do resultado, e nenhum teste sem DOM perceberia. O
+    `ResultPanel` é a passagem única: só ele desenha o `ResultGrid`, e só existem dois (`QueryTabPanel` e `RecordsView`). O `style` de quem chama (o `flex` do
+    painel) continua, e sem cor a `<section>` fica sem a variável.
+  - **A variável só existe com `#RRGGBB` válido**, e `environmentColorStyle` é a única barreira: a leitura de `connections.schema.ts` só confere que o campo é
+    texto, e uma cor que o CSS não entende (um cofre antigo, uma importação) deixaria a propriedade inválida no cálculo, e a borda cairia no `currentColor`, e
+    NÃO na reserva do `var()`. A cor chega pelas propriedades como texto (`string | null`), sem validar no caminho, para o painel memorizado comparar pelo valor.
+  - **Como se lê**: `environmentAccent` (`border`, `outline`, `focusOutline`, `scrollbar`) são classes de valor arbitrário com a reserva do tema DENTRO do
+    `var()`: `border-[color:var(--environment-color,var(--color-accent))]`, e a barra `[scrollbar-color:var(--environment-color,var(--color-border-strong))_var(--color-panel)]`,
+    que sem a variável é, letra por letra, o `scrollbar-color` do `:root`. Destaque novo que deva levar a cor usa uma delas (o Tailwind as acha porque as cadeias
+    são literais no `.ts`: não as monte por pedaços). O anel do foco só troca a COR do `:focus-visible` do `globals.css` (a espessura e o recuo `-outline-offset-2`
+    continuam os de lá). **A linha da grade (`GridRow`) é memorizada e NÃO tem propriedade de cor**: o contorno herda a variável, e trocar o ambiente da aba não
+    redesenha linha nenhuma (um `@ts-expect-error` no `result-grid.test.ts` falha se alguém criar a propriedade).
+  - **A ligação é só por propriedade, como a do `environment` do `TableTabPanel`**: `WorkbenchTabs` (`environmentOf(connectionId)?.color ?? null`, recalculado a
+    cada desenho, então trocar a conexão da aba, editar o ambiente da pasta ou mover a conexão muda a cor na hora) → `QueryTabPanel.environmentColor` →
+    `ResultPanel`; `TableTabPanel` (`environment?.color ?? null`) → `RecordsView.environmentColor` → `ResultPanel`. Contexto do React não serve de atalho
+    aqui: o portal o atravessaria, mas a janela do resultado não, e o resto do projeto passa o ambiente por propriedade. A aba de execução do "Executar com
+    valores…" (RN-VAR-029) ainda não existe; quando existir, usa o mesmo `ResultPanel` e passa a mesma propriedade.
+  - **Fica de fora, no acento ou no token de hoje**: a faixa de abas, o editor SQL (cursor, realce do comando enviado, rolagem), o campo de filtro, o foco das
+    linhas de Variáveis, a Estrutura e o Diagrama, o seletor Registros/Estrutura/Diagrama, as marcas de pendência (`bg-accent/20` e `/35`, a marca da coluna, o
+    "+" da linha nova), a divisa das colunas, as setas de ordenar, os botões e a dica, o ícone e o botão de confirmar do campo de edição (ali o acento é atenção e
+    ação, e não contorno); as outras barras de rolagem da área (Estatísticas, Variáveis, lista das abas do script) ficam na do tema. Pôr a cor trocando o
+    `--color-accent` num contêiner foi descartado: pintaria tudo o que é acento ali dentro (pendência, atenção, botões) e misturaria "ambiente" com "atenção".
+  - **Armadilhas**: (1) o vermelho do canvas (`#FF8A7A`) é o `danger` do Prism Escuro: num ambiente vermelho, o contorno da célula ativa e o da linha marcada para
+    exclusão têm o mesmo tom (a linha excluída segue riscada e com fundo vermelho); (2) o 3:1 vale sobre as quatro superfícies dos temas, e **não** sobre o fundo
+    tingido da célula pendente (`bg-accent/20` e `/35`) nem da linha excluída (`bg-danger/10`), onde ele cai (medido com as seis cores do canvas: de 1,9 a 2,8:1 nos
+    temas claros, e abaixo de 3:1 sobre a pendente mais forte também no Monokai, no Dracula e no Nord), como já caía com o acento; (3) a barra de rolagem na cor
+    do ambiente (3:1) pesa mais que a do tema (o `border-strong` sobre o painel dá de 1,7 a 2,4:1 na maioria dos temas): é o pedido. **Conferir sob
+    Xvfb** (o vitest não tem DOM, e nenhum teste vê o valor calculado): `getComputedStyle` da célula ativa (`outlineColor`), do `<h2>` (`borderBottomColor`) e da caixa
+    da grade (`scrollbarColor`), no Prism Escuro, no Prism Claro, no GitHub Claro e no Kanagawa, com o resultado no painel, numa aba e na janela do resultado, e a
+    conexão sem ambiente igual à 0.5.0.
 - A escala de texto reaproveita os nomes padrão com os tamanhos do canvas: `text-xs` 12/18,
   `text-sm` 13/20 (a área de trabalho inteira, pela raiz dela: RN-CONFIG-009), `text-base` 14/22 (o corpo: formulários, diálogos, login e
   Configurações), `text-lg` 18/24. `rounded-xl` é o raio do diálogo
@@ -3872,8 +4180,8 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 - Primitivos (`@/components/ui`): `Button`, `Field`, `FieldLabel`, `Input`, `TextField`, `FieldError`,
   `FormMessage`, `Dialog`, `ConfirmDialog`, `Select`, `Segmented`, `navItem` (a classe da entrada de uma lista de navegação vertical: a lista de Configurações e a de seções da Estrutura), `StatusBadge`, `EngineTag`,
   `EnvironmentPill`, os ícones (`icons.tsx`), `ToastProvider`, `useToast`. Vieram do etio com o que esta fatia usa (o `ContextMenu` é do
-  Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca nem lista mais larga
-  que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, `aria-describedby`, e o `content` da opção, que
+  Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca, e a lista mais larga que o controle é opcional
+  (`wideList`, só o seletor de ambiente a usa; sem ela a lista tem a largura do controle e o texto quebra) (e tem `triggerRef`, o `ref` do botão para quem leva o foco a ele, e `onOpen`, para quem busca as opções só quando a pessoa abre a lista, `aria-describedby`, e o `content` da opção, que
   a desenha no lugar do rótulo, na lista e no controle fechado: a etiqueta de ambiente do navegador; o rótulo segue sendo o da busca pela inicial), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
   ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título e uma faixa no topo do painel (`banner`, a do
   ambiente no aviso de confirmação, RN-PROT-001; com ela o painel recorta o que passa da borda arredondada), e o `describedBy`, os ids do que, no
@@ -3881,7 +4189,8 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que
-  não muda (grade, árvore, etiquetas). Texto novo que é SQL usa `font-editor`; dado do banco, `font-mono`.
+  nenhuma escolha muda (a mensagem do banco, as etiquetas, a Estrutura e o Diagrama). Texto novo que é SQL usa `font-editor`; **o dado do banco
+  na grade e na árvore usa a da interface (`font-sans`, herdada)**; a mensagem do banco, o código e as etiquetas, `font-mono`.
 
 ## Dependências
 
@@ -3911,9 +4220,33 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 - **Fontes do sistema (RN-CONFIG-008)**: a lista e a medida foram vistas só no Linux, sob Xvfb, em desenvolvimento (`http://localhost`); no app
   empacotado (`app://prism`), no Windows e no macOS ainda não. O caminho "não deu para ler a lista" (o campo que aceita o nome digitado) só foi
   visto nos testes: no Electron a permissão é dada.
+- **A largura das colunas medida na fonte da interface (RN-CONFIG-008, seção 42)**: a soma dos caracteres do canvas mais 1 px por texto foi conferida contra o
+  texto na tela, no Chromium do Electron no Linux, sob Xvfb: o nome e a célula medidos no DOM contra o que a coluna deixa ao texto (`Math.round((largura + 25)
+  × fator) − 24 × fator − 1`), e o `GridHeaderCell` e a `ResultGrid` de verdade, montados com o CSS do app. Com a IBM Plex Sans e com a DejaVu Sans, na grade
+  de 100% a 200% (e, com a escala do dispositivo em 1, 1,25, 1,5 e 2 e o zoom do programa em 125% e 150%, a 100% e 150%), nenhum dos mais de 1.100 textos
+  (nomes em MAIÚSCULAS e em minúsculas, com acento, números, aleatórios; 500 UUIDs, 300 datas com hora, 300 números, 400 nomes em maiúsculas com `_`) passou
+  da coluna: a menor sobra foi 0,39 px no nome e 0,63 px na célula, e 27 nomes de coluna, com o tipo ligado e desligado, a marca "somente leitura" e a seta de
+  ordenar, não vieram cortados em nenhum zoom de 100% a 200% (a conta de antes, da mono, cortava 17 dessas combinações a 100% ou mais). **O que a soma não
+  vê**: o ajuste entre pares de letras. Quase sempre sobra (a soma é maior), mas há pares com ajuste positivo (`TT`, `WW`, `g_`, `_j`, `fT`: até 0,7 px por
+  par), e um texto de um par só repetido passa da soma e da folga: `TTTTTTTT` por 0,6 px, 32 `W` por 0,7 px (a célula ganha as reticências sem a dica). Dados
+  de verdade não chegam lá. **Abaixo de 100% da grade (50% a 80%)** alguns textos passam da coluna, por até 0,45 px (um nome aleatório de 16 caracteres; entre
+  67 nomes de coluna comuns, só 3, por até 0,16 px), e o cabeçalho que ordena e não mostra o tipo corta o nome em até 2 px: é a aritmética do zoom, que já era
+  assim com a mono (140 de 1.512 combinações cortadas, 17 delas a 100% ou mais, contra 48 com a IBM Plex Sans e 61 com a DejaVu Sans, nenhuma a 100% ou mais):
+  a largura vira pixels inteiros (`gridMetrics.width` usa `Math.round`), e a margem de 4 px do botão de ordenar e a borda de 1 px não escalam (o tipo, quando
+  está à vista, absorve a diferença). Com uma fonte de alternativas contextuais (a Inter troca o `x` entre algarismos) um texto de letras e algarismos pode
+  passar da soma por alguns décimos. **No Windows (e no macOS) não foi conferida**: se o Chromium arredondar o avanço de cada glifo ali (sem posição de
+  subpixel), a soma do canvas e a tela podem divergir, e a folga de 1 px por texto cobre pouco disso. Conferir os cabeçalhos em MAIÚSCULAS (`WAREHOUSE_ID`,
+  `NOME_MUNICIPIO`), com o tipo ligado e desligado, ordenados, em 50, 100, 150 e 200%, e, se divergir, calibrar a folga por uma régua única (um texto fora do
+  fluxo, medido uma vez por fonte). Com a fonte do app ainda carregando no primeiro desenho da grade, o canvas já pede a fonte e a primeira medida é a da
+  reserva (o `WAREHOUSE_ID` de 105 px passa a 104 px, e uma célula de 104 a 101 px, quando ela chega): a grade se refaz uma vez, como previsto. A conferência
+  e o carregamento olham a faixa latina do `@fontsource` (a que cobre o português): um caractere de outra faixa (cirílico, latino estendido) é medido na
+  reserva até a faixa chegar, e a medida não é refeita por ele (um `loadingdone` de `document.fonts` refaria).
 - Pacote de macOS: não provado por inteiro: o `dmg` só se gera no macOS, e nenhum pacote foi aberto no macOS. Num contêiner Linux o electron-builder aceita a
   configuração e gera o `zip`, e recusa o `dmg` (`sips process failed ENOENT`: o `dmg` só se gera no macOS). O `.icns` existe e
   traz a ilustração inteira, mas o app nunca foi aberto no macOS.
+- **As pastas abertas lembradas e a barra de filtros do navegador (0.6.0, RN-NAV-014, RN-NAV-010 e 013)**: provadas nos testes (a regra, a loja e o navegador com os
+  ganchos simulados) e vistas sob Xvfb no app inteiro, também em duas janelas de verdade (ver "As pastas abertas lembradas"); faltam a importação (do DBeaver e de arquivo do
+  Prism), o app empacotado e o macOS. Os limiares em que o seletor de ambiente desce foram medidos (ver "A barra de filtros").
 
 - A `TopBar` tem a marca (com a versão e "Verificar atualizações"), "Área de trabalho", "Conexões", "Drivers" (com um ponto quando há
   reinício pendente), "Configurações" (ícone e texto, como os outros itens), o usuário e "Sair". O link da marca para a área de

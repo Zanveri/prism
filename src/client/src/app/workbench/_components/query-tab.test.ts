@@ -31,6 +31,8 @@ const rt = await vi.hoisted(async () => {
      * RN-PROT-001: as proteções da conexão da aba, que o aviso de mentira (`useCommandConfirmation`) usa para decidir, e as perguntas que ele abriu, com as
      * respostas. Sem proteção, nada pergunta e tudo segue na mesma chamada, como antes.
      */
+    /** RN-ABAS-019: o foco no resultado que a entrada da aba pede (a grade, ou o botão do lugar); a prova diz se ele chegou. */
+    focusResult: vi.fn<(root: unknown) => boolean>(() => true),
     protections: { readOnly: null, confirm: null } as { readOnly: { from: null } | null; confirm: { level: "irreversible" | "all"; from: null } | null },
     asked: [] as { question: { kind: string } & Record<string, unknown>; proceed: () => void; cancelled?: () => void }[],
   };
@@ -67,6 +69,8 @@ vi.mock("../_lib/use-command-confirmation", () => ({
     open: null,
   }),
 }));
+// RN-ABAS-019: o foco no resultado é de `result-host.tsx`, que precisa da página; aqui basta saber que a entrada da aba o pediu e onde.
+vi.mock("./result-host", async (importOriginal) => ({ ...(await importOriginal<typeof import("./result-host")>()), focusResultIn: rt.focusResult }));
 // O editor de SQL é CodeMirror, que precisa da página; aqui basta o que a aba entrega a ele.
 vi.mock("./sql-editor", () => ({ SqlEditor: function SqlEditor() {
   return null;
@@ -80,6 +84,9 @@ import { editCell, editWholeColumn, noEdits } from "../_lib/record-edits";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { recordsCopy } from "../_lib/records.copy";
 import { filterHandoff } from "../_lib/filter-handoff";
+import { initialLayout } from "../_lib/result-layout";
+import { resultSlots } from "../_lib/result-slots";
+import { tabEntries } from "../_lib/tab-focus";
 import { forgetExcept, recall, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
 import { isPersonBusy } from "../_lib/use-query-runner";
@@ -88,6 +95,7 @@ import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
 import { QueryTabPanel } from "./query-tab";
+import { ResultHost } from "./result-host";
 import { ResultActions } from "./result-actions";
 import { ResultPlaceButton } from "./result-place-button";
 import { ResultSplitter } from "./result-splitter";
@@ -206,7 +214,7 @@ const tab: QueryTab = { id: "q1", title: "Consulta 1", connectionId: "c1", sessi
 /** A aba `q1` na conexão `c1`, à vista. O painel é memorizado: a função dele é a de dentro do `memo`. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = {}) {
   const panel = (QueryTabPanel as unknown as { type: (props: ComponentProps<typeof QueryTabPanel>) => ReactNode }).type;
-  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onSwitchConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn(), onOpenQuery: vi.fn() };
+  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, environmentColor: null as string | null, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onSwitchConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn(), onOpenQuery: vi.fn() };
 
   /** O que a aba entrega agora à área de resultado, ao editor e às janelas por cima. Duas voltas, como no teste dos Registros: os efeitos da primeira mexem nos registros de módulo. */
   function show() {
@@ -2293,3 +2301,151 @@ describe("o painel Variáveis e o resultado de um comando novo (RN-VAR-024)", ()
   });
 });
 
+describe("QueryTabPanel: a entrada da aba (RN-ABAS-019)", () => {
+  /** Liga o que o React ligaria: o editor de verdade tem um `focus()`, e a prova o espia. */
+  function open(over: Record<string, unknown> = {}) {
+    const view = mount(fakeRunner(rowsState()));
+    Object.assign(view.props, over);
+    const found = view.show().found;
+    const focus = vi.fn();
+    (found.find((element) => element.type === SqlEditor)!.props.ref as { current: unknown }).current = { focus };
+    return { view, focus };
+  }
+  /** O lugar da área de resultado no painel: o `ref` do `div` que o React chamaria com o elemento. */
+  const giveSlot = (view: ReturnType<typeof mount>, slot: object) => {
+    const target = view.show().found.find((element) => typeof element.props.ref === "function" && element.type === "div" && element.props.style !== undefined && !("onKeyDown" in element.props));
+    (target!.props.ref as (element: object) => void)(slot);
+  };
+
+  it("o editor SQL não toma o foco sozinho ao nascer: quem o leva é a regra da aba aberta, com a guarda contra roubar o foco de quem já foi para outro lugar", () => {
+    const { view } = open();
+
+    expect("autoFocus" in view.show().editor).toBe(false);
+  });
+
+  it("com o editor à vista, a entrada é o editor (o cursor fica onde estava), e o resultado não toma o foco", () => {
+    const { focus } = open();
+
+    expect(tabEntries.focus("q1")).toBe(true);
+
+    expect(focus).toHaveBeenCalledOnce();
+    expect(rt.focusResult).not.toHaveBeenCalled();
+  });
+
+  it("com o resultado maximizado, o editor está escondido (inerte): a entrada é o resultado, no lugar do painel", () => {
+    remember("q1", "layout", { ...initialLayout, mode: "maximized" });
+    const { view, focus } = open();
+    const slot = { slot: "painel" };
+    giveSlot(view, slot);
+    view.show();
+
+    expect(tabEntries.focus("q1")).toBe(true);
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(rt.focusResult).toHaveBeenCalledExactlyOnceWith(slot);
+  });
+
+  it("com a aba do resultado ativa (a da consulta escondida), a entrada é o resultado, no lugar da aba do resultado", () => {
+    const slot = { slot: "aba do resultado" };
+    resultSlots.set("q1", "tab", slot as unknown as HTMLElement);
+    try {
+      const { focus } = open({ place: "tab", editorShown: false, resultShown: true });
+
+      expect(tabEntries.focus("q1")).toBe(true);
+
+      expect(focus).not.toHaveBeenCalled();
+      expect(rt.focusResult).toHaveBeenCalledExactlyOnceWith(slot);
+    } finally {
+      resultSlots.set("q1", "tab", null);
+    }
+  });
+
+  it("sem lugar para o resultado (a aba do resultado por montar), ou se o foco não chegou, devolve falso: a área das abas escolhe outro lugar", () => {
+    open({ place: "tab", editorShown: false, resultShown: true });
+    expect(tabEntries.focus("q1")).toBe(false);
+    expect(rt.focusResult).not.toHaveBeenCalled();
+
+    resultSlots.set("q1", "tab", {} as HTMLElement);
+    try {
+      rt.focusResult.mockReturnValueOnce(false);
+      open({ place: "tab", editorShown: false, resultShown: true });
+      expect(tabEntries.focus("q1")).toBe(false);
+    } finally {
+      resultSlots.set("q1", "tab", null);
+    }
+  });
+
+  it("a vista de agora é a que vale: o editor que volta à frente (a aba da consulta) é a entrada, sem registrar de novo", () => {
+    const { view, focus } = open({ place: "tab", editorShown: false, resultShown: true });
+    rt.focusResult.mockClear();
+
+    Object.assign(view.props, { editorShown: true });
+    view.show();
+    expect(tabEntries.focus("q1")).toBe(true);
+
+    expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it("a entrada sai do registro quando a aba desmonta", () => {
+    open();
+    rt.unmount();
+
+    expect(tabEntries.focus("q1")).toBe(false);
+  });
+});
+
+describe("QueryTabPanel: a cor do ambiente da aba vai para a área de resultado (RN-AMB-002)", () => {
+  const colorOf = (view: ReturnType<typeof mount>) => view.show().area.environmentColor;
+
+  it("a cor chega à área de resultado como veio, também a herdada da pasta (a aba só recebe o texto)", () => {
+    const view = mount(fakeRunner(rowsState()));
+    expect(colorOf(view)).toBeNull();
+
+    Object.assign(view.props, { environmentColor: "#FF8A7A" });
+    expect(colorOf(view)).toBe("#FF8A7A");
+  });
+
+  it.each(["panel", "tab", "window"] as const)("com o resultado %s: a mesma cor, e a área de resultado está DENTRO do portal (é ela que põe a variável)", (place) => {
+    const view = mount(fakeRunner(rowsState()));
+    Object.assign(view.props, { environmentColor: "#7DB2FF", place, editorShown: place === "panel", resultShown: true });
+    const { found, area } = view.show();
+
+    expect(area.environmentColor).toBe("#7DB2FF");
+    // A variável de CSS herda pelo DOM, e o portal leva a área para outra raiz (o painel, a aba do resultado, a janela): a cor tem de ser posta na área, que
+    // está dentro do `ResultHost`, e não na raiz da aba de consulta, de onde ela não chegaria.
+    const host = found.find((element) => element.type === ResultHost)!;
+    expect(elementsOf(host.props.children as ReactNode).some((element) => element.type === ResultPanel)).toBe(true);
+  });
+
+  it("nenhum outro elemento da aba recebe a cor: nem o editor, nem a barra, nem o filtro (ficam de fora, no acento)", () => {
+    const view = mount(fakeRunner(rowsState()));
+    Object.assign(view.props, { environmentColor: "#7DB2FF" });
+    const { found } = view.show();
+
+    expect(found.filter((element) => "environmentColor" in element.props).map((element) => element.type)).toEqual([ResultPanel]);
+    expect(JSON.stringify(found.map((element) => element.props.style ?? null))).not.toContain("environment");
+  });
+
+  it("trocar a conexão da aba (RN-ARVORE-008) troca a cor que a área recebe, e sem ambiente ela volta a nula", () => {
+    const view = mount(fakeRunner(rowsState()));
+
+    Object.assign(view.props, { environmentColor: "#FF8A7A" });
+    expect(colorOf(view)).toBe("#FF8A7A");
+    Object.assign(view.props, { environmentColor: "#F2B644", tab: { ...view.props.tab, connectionId: "c2" } });
+    expect(colorOf(view)).toBe("#F2B644");
+    Object.assign(view.props, { environmentColor: null });
+    expect(colorOf(view)).toBeNull();
+  });
+
+  it("vale também com o resultado de um script (as abas do script): é a mesma área de resultado", () => {
+    const runner = fakeRunner(rowsState());
+    const targets: RunTarget[] = [command, { sql: "select 3", offset: 20, engine: pg }];
+    runner.scriptState = startEntry(withEntry(createScriptRun(1, targets), 0, { status: "ok" }), 1);
+    const view = mount(runner);
+    Object.assign(view.props, { environmentColor: "#B79CFF" });
+
+    const { area } = view.show();
+    expect(area.environmentColor).toBe("#B79CFF");
+    expect((area.tabs?.list as { type: unknown }).type).toBe(ScriptTabs);
+  });
+});

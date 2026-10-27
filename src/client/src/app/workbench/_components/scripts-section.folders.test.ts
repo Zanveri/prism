@@ -12,6 +12,8 @@ const rt = await vi.hoisted(async () => {
 
   return {
     ...createHookRuntime(),
+    userName: "ana",
+    fetchedAfterMount: true,
     scripts: [] as ScriptSummary[],
     folders: [] as ScriptFolder[],
     workbench: { tabs: [], openScriptTab: vi.fn(), renameScript: vi.fn(), forgetScript: vi.fn(), setScriptPlace: vi.fn() },
@@ -25,7 +27,12 @@ const rt = await vi.hoisted(async () => {
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
-  useQuery: (options: { queryKey: readonly unknown[] }) => ({ data: options.queryKey[0] === "scripts" ? rt.scripts : options.queryKey[0] === "script-folders" ? rt.folders : undefined, isError: false, refetch: vi.fn() }),
+  useQuery: (options: { queryKey: readonly unknown[] }) => ({
+    data: options.queryKey[0] === "scripts" ? rt.scripts : options.queryKey[0] === "script-folders" ? rt.folders : options.queryKey[0] === "session" ? { unlocked: true, userName: rt.userName } : undefined,
+    isError: false,
+    isFetchedAfterMount: rt.fetchedAfterMount,
+    refetch: vi.fn(),
+  }),
   useQueryClient: () => ({
     getQueryData: (key: readonly unknown[]) => (key[0] === "script-folders" ? rt.folders : key[0] === "scripts" ? rt.scripts : undefined),
     invalidateQueries: ({ queryKey }: { queryKey: readonly unknown[] }) => {
@@ -44,6 +51,7 @@ import { ConfirmDialog, ContextMenu } from "@/components/ui";
 import { ApiRequestError } from "@/lib/api/prism-api";
 import { elementsOf } from "@/lib/testing/react-tree";
 
+import { folderMemoryStore } from "../_lib/folder-memory";
 import { buildScriptTree, folderKey, scriptKey, visibleScriptRows, type ScriptTreeRow } from "../_lib/script-tree";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { MoveToFolderDialog, ScriptFolderNameDialog } from "./script-folder-dialogs";
@@ -60,8 +68,8 @@ const nameDialog = () => find<ComponentProps<typeof ScriptFolderNameDialog>>(Scr
 const moveDialog = () => find<ComponentProps<typeof MoveToFolderDialog>>(MoveToFolderDialog);
 const confirm = () => find<ComponentProps<typeof ConfirmDialog>>(ConfirmDialog);
 
-/** A linha da árvore com essa chave, como a seção a desenha agora. */
-const row = (key: string): ScriptTreeRow => visibleScriptRows(buildScriptTree(rt.folders, rt.scripts), new Set()).find((candidate) => candidate.node.key === key)!;
+/** A linha da árvore com essa chave, com todas as pastas abertas para a achar onde estiver (a seção, no começo, mostra só o primeiro nível). */
+const row = (key: string): ScriptTreeRow => visibleScriptRows(buildScriptTree(rt.folders, rt.scripts), new Set(rt.folders.map((candidate) => folderKey(candidate.id)))).find((candidate) => candidate.node.key === key)!;
 
 /** Abre o menu da linha (ou do título, com `null`) e devolve os itens dele, por id. */
 function menuOf(target: ScriptTreeRow | null) {
@@ -77,8 +85,12 @@ function menuOf(target: ScriptTreeRow | null) {
 const settle = () => new Promise((done) => setTimeout(done, 0));
 const refused = (code: string, detail: string) => new ApiRequestError({ status: 404, code, title: "Pasta não localizada.", detail, errors: null, extensions: {} });
 
+let users = 0;
 beforeEach(() => {
   vi.clearAllMocks();
+  // Cada teste é de um usuário: as pastas abertas ficam na loja da janela (RN-NAV-014), e uma não passa ao teste seguinte.
+  rt.userName = `ana.${++users}`;
+  rt.fetchedAfterMount = true;
   rt.invalidated = [];
   rt.folders = [folder("f1", "Fechamento"), folder("f2", "Mensal", "f1"), folder("f3", "Vazia")];
   rt.scripts = [script("s1", "Abril", "f2"), script("s2", "Solto")];
@@ -331,12 +343,200 @@ describe("Excluir a pasta (RN-SCRIPT-009)", () => {
 });
 
 describe("a árvore abre e fecha as pastas (RN-SCRIPT-008)", () => {
-  it("o Enter abre e fecha a pasta com alguma coisa dentro, nesta janela; na vazia, nada", () => {
-    view().onRequest(row(folderKey("f1")), "enter");
-    expect(view().rows!.map((candidate) => candidate.node.key)).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
+  const keys = () => view().rows!.map((candidate) => candidate.node.key);
+
+  it("sem nada lembrado, todas as pastas começam fechadas; o Enter abre e fecha a que tem alguma coisa dentro; na vazia, nada", () => {
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
 
     view().onRequest(row(folderKey("f1")), "enter");
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), folderKey("f3"), scriptKey("s2")]);
+    view().onRequest(row(folderKey("f2")), "enter");
+    expect(keys()).toHaveLength(5);
+
     view().onRequest(row(folderKey("f3")), "enter");
-    expect(view().rows).toHaveLength(5);
+    expect(keys()).toHaveLength(5);
+    view().onRequest(row(folderKey("f1")), "enter");
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
+  });
+});
+
+describe("as pastas abertas ficam lembradas (RN-NAV-014, RN-SCRIPT-008)", () => {
+  const keys = () => view().rows!.map((candidate) => candidate.node.key);
+  const remembered = () => [...folderMemoryStore.get(rt.userName, "scripts")];
+
+  it("abrir e fechar grava na lista das pastas de scripts do usuário, e a seção montada de novo (outra entrada, outra janela) volta como ficou", () => {
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
+
+    view().onToggle(folderKey("f1"));
+    expect(remembered()).toEqual(["f1"]);
+
+    rt.unmount();
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), folderKey("f3"), scriptKey("s2")]);
+
+    view().onToggle(folderKey("f1"));
+    expect(remembered()).toEqual([]);
+    rt.unmount();
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
+  });
+
+  it("não mexe nas pastas de conexões, que têm a lista delas", () => {
+    view().onToggle(folderKey("f1"));
+
+    expect([...folderMemoryStore.get(rt.userName, "connections")]).toEqual([]);
+  });
+
+  it("a seta para a direita abre a pasta fechada e a para a esquerda fecha a aberta, e as duas ficam lembradas", () => {
+    view().onToggle(folderKey("f2"));
+    expect(remembered()).toEqual(["f2"]);
+    // f2 está dentro de f1, que continua fechada: lembrada, mas a linha dela só aparece quando f1 abrir.
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
+
+    view().onToggle(folderKey("f1"));
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), scriptKey("s1"), folderKey("f3"), scriptKey("s2")]);
+  });
+
+  it("a linha de um script não é pasta: abrir ou fechar nela não grava nada", () => {
+    view().onToggle(scriptKey("s2"));
+    view().onToggle(scriptKey("s1"));
+
+    expect(remembered()).toEqual([]);
+    expect([...folderMemoryStore.get(rt.userName, "connections")]).toEqual([]);
+  });
+
+  it("outro usuário do cofre na mesma janela começa com tudo fechado, e quem volta encontra o que deixou", () => {
+    view().onToggle(folderKey("f1"));
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), folderKey("f3"), scriptKey("s2")]);
+    const first = rt.userName;
+
+    rt.unmount();
+    rt.userName = `${first}.outro`;
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
+
+    rt.unmount();
+    rt.userName = first;
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), folderKey("f3"), scriptKey("s2")]);
+  });
+
+  it("a poda dos scripts não toca na lista das pastas de conexões, que tem os identificadores dela", () => {
+    folderMemoryStore.change(rt.userName, "connections", { open: ["pasta-de-conexoes"] });
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["f1", "excluida"] });
+
+    view();
+    expect(remembered()).toEqual(["f1"]);
+    expect([...folderMemoryStore.get(rt.userName, "connections")]).toEqual(["pasta-de-conexoes"]);
+  });
+
+  it("a pasta excluída em outra janela some da árvore na hora e sai da lembrança na entrada seguinte", () => {
+    view().onToggle(folderKey("f1"));
+    view().onToggle(folderKey("f3"));
+    rt.folders = rt.folders.filter((candidate) => candidate.id !== "f3");
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f2"), scriptKey("s2")]);
+    expect(remembered()).toEqual(["f1", "f3"]);
+
+    rt.unmount();
+    view();
+    expect(remembered()).toEqual(["f1"]);
+  });
+
+  it("o identificador lembrado de uma pasta que não existe não tem efeito na árvore", () => {
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["sumiu", "f3"] });
+
+    expect(keys()).toEqual([folderKey("f1"), folderKey("f3"), scriptKey("s2")]);
+  });
+
+  it("a poda tira da lembrança a pasta que não veio na lista, uma vez por montagem, e deixa as que existem", () => {
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["f1", "excluida", "f2"] });
+
+    view();
+    expect(remembered()).toEqual(["f1", "f2"]);
+
+    // A pasta que aparece depois (criada em outra janela) não é podada: a poda é só da primeira lista.
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["nova"] });
+    rt.folders = [...rt.folders, folder("outra", "Outra")];
+    view();
+    expect(remembered()).toEqual(["f1", "f2", "nova"]);
+  });
+
+  it("sem a lista lida depois da montagem, nada é podado (a do cache pode estar velha)", () => {
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["f1", "excluida"] });
+    rt.fetchedAfterMount = false;
+
+    view();
+    expect(remembered()).toEqual(["f1", "excluida"]);
+
+    rt.fetchedAfterMount = true;
+    view();
+    expect(remembered()).toEqual(["f1"]);
+  });
+
+  it("criar uma subpasta numa pasta fechada a abre e a lembra, e a nova fica escolhida; o foco espera a renderização em que ela aparece, uma vez", async () => {
+    const focused = { focus: vi.fn() };
+    vi.stubGlobal("document", { getElementById: (id: string) => (id === scriptRowDomId(folderKey("novo")) ? focused : null) });
+    try {
+      menuOf(row(folderKey("f2"))).get("newSubfolder")!.onSelect!();
+      nameDialog()!.onSubmit("Nova");
+      await settle();
+
+      expect(remembered()).toEqual(["f2", "f1"]);
+      // A pasta ainda não está na página quando o pedido é feito: o foco não vai na hora, e vem da renderização que as pastas abertas pedem.
+      expect(focused.focus).not.toHaveBeenCalled();
+      expect(view().selectedKey).toBe(folderKey("novo"));
+      expect(focused.focus).toHaveBeenCalledOnce();
+      tree();
+      expect(focused.focus).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("renomear ou mover para uma pasta que já está aberta não espera renderização nenhuma: o foco vai na hora, e a lembrança não muda", async () => {
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["f1"] });
+    const focused = { focus: vi.fn() };
+    vi.stubGlobal("document", { getElementById: (id: string) => (id === scriptRowDomId(folderKey("f2")) ? focused : null) });
+    try {
+      view().onRequest(row(folderKey("f2")), "rename");
+      nameDialog()!.onSubmit("Mensal 2");
+      await settle();
+
+      expect(focused.focus).toHaveBeenCalledOnce();
+      expect(remembered()).toEqual(["f1"]);
+      tree();
+      expect(focused.focus).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("mover um script para dentro de uma pasta fechada abre as pastas acima do destino e as lembra", async () => {
+    menuOf(row(scriptKey("s2"))).get("move")!.onSelect!();
+    moveDialog()!.onChange("f2");
+    moveDialog()!.onSubmit();
+    await settle();
+
+    expect(rt.scriptService.moveScript).toHaveBeenCalledWith("s2", "f2");
+    expect(remembered()).toEqual(["f2", "f1"]);
+    expect(view().selectedKey).toBe(scriptKey("s2"));
+  });
+
+  it("recolhida a seção, revelar a abre e a linha espera a renderização; a lembrança das pastas é a mesma", async () => {
+    folderMemoryStore.change(rt.userName, "scripts", { open: ["f1"] });
+    const focused = { focus: vi.fn() };
+    vi.stubGlobal("document", { getElementById: () => focused });
+    try {
+      const { navigatorLayoutStore } = await import("../_lib/navigator-layout");
+      navigatorLayoutStore.set(rt.userName, { scriptsCollapsed: true });
+
+      view().onRequest(row(folderKey("f3")), "rename");
+      nameDialog()!.onSubmit("Vazia 2");
+      await settle();
+
+      expect(navigatorLayoutStore.get(rt.userName).scriptsCollapsed).toBe(false);
+      expect(focused.focus).not.toHaveBeenCalled();
+      tree();
+      expect(focused.focus).toHaveBeenCalledOnce();
+      expect(remembered()).toEqual(["f1"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -21,7 +21,7 @@ const rt = await vi.hoisted(async () => {
     detachTab: vi.fn(),
   };
   const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
-  const focus = { request: vi.fn(), forgetExcept: vi.fn() };
+  const focus = { request: vi.fn(), forgetExcept: vi.fn(), pending: vi.fn(() => false) };
   const host = { releaseFocusIn: vi.fn(), focusResultIn: vi.fn(), resultHostOf: vi.fn(() => ({ id: "raiz" })) };
   let release: () => void = () => {};
   const sendTabAway = vi.fn(() => new Promise<{ ok: boolean }>((resolve) => (release = () => resolve({ ok: true }))));
@@ -35,10 +35,9 @@ vi.mock("@/components/ui", () => ({ ConfirmDialog: () => null, useToast: () => r
 vi.mock("@/lib/api/bridge", () => ({ currentWindowId: () => 1, onTabWanted: () => () => {}, onWindowCloseRequested: () => () => {}, sendTabAway: rt.sendTabAway, tellWindows: () => {}, resultWindowsAvailable: () => false, onResultWindowClosed: () => () => {}, onResultWindowState: () => () => {} }));
 vi.mock("../_lib/data-export/data-exports", () => ({ exportTracker: { count: () => 0, cancelAll: async () => {} } }));
 vi.mock("../_lib/data-import/data-imports", () => ({ loadTracker: { cancelAll: async () => {} }, windowTransfers: () => ({ exports: 0, imports: 0, copies: 0 }) }));
-vi.mock("../_lib/connection-intent", () => ({ createDisconnectLog: () => ({ subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }) }));
 vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => true }));
 vi.mock("../_lib/result-slots", async (importOriginal) => ({ ...(await importOriginal<typeof import("../_lib/result-slots")>()), resultFocus: rt.focus }));
-vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ ...noop, restoredTableConnections: new Set(), ...rt.workbench }) }));
+vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ ...noop, disconnectLog: { subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }, ...rt.workbench }) }));
 vi.mock("./result-host", () => rt.host);
 vi.mock("./use-script-saving", () => ({ useScriptSaving: () => ({ save: async () => true, dialog: null }) }));
 vi.mock("./query-tab", () => ({ QueryTabPanel: () => null }));
@@ -47,6 +46,7 @@ vi.mock("./script-dialogs", () => ({ UnsavedScriptsDialog: () => null }));
 vi.mock("./unsaved-edits-dialog", () => ({ UnsavedEditsDialog: () => null }));
 vi.mock("./tab-strip", () => ({ TabStrip: () => null, panelElementId: (id: string) => `painel-${id}`, tabElementId: (id: string) => `aba-${id}` }));
 
+import { createFakePage } from "@/lib/testing/fake-page";
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
 import { QueryTabPanel } from "./query-tab";
@@ -70,9 +70,16 @@ const status = (found: Found[]) => found.find((element) => element.props.role ==
 beforeEach(() => {
   vi.clearAllMocks();
   rt.workbench.resultActive = false;
+  // RN-ABAS-019: a área das abas ouve o foco da página e as teclas da janela; o vitest não tem página, e a de mentira basta.
+  const page = createFakePage();
+  vi.stubGlobal("document", page.document);
+  vi.stubGlobal("window", page.window);
 });
 
-afterEach(() => rt.unmount());
+afterEach(() => {
+  rt.unmount();
+  vi.unstubAllGlobals();
+});
 
 describe("os painéis (RN-ABAS-012)", () => {
   it("a aba com o resultado numa aba tem o painel do resultado logo depois do dela, com o nome 'Resultado de …', escondido com a da consulta à frente", () => {

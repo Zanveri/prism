@@ -45,9 +45,8 @@ vi.mock("@/lib/api/bridge", () => ({ currentWindowId: () => 1, endTabDrag: rt.en
 // RN-EXPORT-023: a janela sem exportação em andamento (a pergunta delas não entra nesta prova).
 vi.mock("../_lib/data-export/data-exports", () => ({ exportTracker: { count: () => 0, cancelAll: async () => {} } }));
 vi.mock("../_lib/data-import/data-imports", () => ({ loadTracker: { cancelAll: async () => {} }, windowTransfers: () => ({ exports: 0, imports: 0, copies: 0 }) }));
-vi.mock("../_lib/connection-intent", () => ({ createDisconnectLog: () => ({ subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }) }));
 vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => true }));
-vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ ...noop, restoredTableConnections: new Set(), ...rt.workbench }) }));
+vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ ...noop, disconnectLog: { subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }, ...rt.workbench }) }));
 vi.mock("./use-script-saving", () => ({ useScriptSaving: () => ({ save: async () => true, dialog: null }) }));
 vi.mock("./query-tab", () => ({ QueryTabPanel: () => null }));
 vi.mock("./table-tab/table-tab", () => ({ TableTabPanel: () => null }));
@@ -56,6 +55,7 @@ vi.mock("./unsaved-edits-dialog", () => ({ UnsavedEditsDialog: () => null }));
 vi.mock("./tab-strip", () => ({ TabStrip: () => null, panelElementId: (id: string) => `painel-${id}`, tabElementId: (id: string) => `aba-${id}` }));
 
 import { elementsOf } from "@/lib/testing/react-tree";
+import { createFakePage } from "@/lib/testing/fake-page";
 
 import { TabStrip } from "./tab-strip";
 import { WorkbenchTabs } from "./workbench-tabs";
@@ -95,9 +95,16 @@ const settle = () => new Promise((done) => setTimeout(done, 0));
 beforeEach(() => {
   rt.runners.clear();
   vi.clearAllMocks();
+  // RN-ABAS-019: a área das abas ouve o foco da página e as teclas da janela; o vitest não tem página, e a de mentira basta.
+  const page = createFakePage();
+  vi.stubGlobal("document", page.document);
+  vi.stubGlobal("window", page.window);
 });
 
-afterEach(() => rt.unmount());
+afterEach(() => {
+  rt.unmount();
+  vi.unstubAllGlobals();
+});
 
 describe("WorkbenchTabs: a aba que vai para outra janela enquanto a execução automática termina (RN-ABAS-002 e 003, RN-GRADE-014)", () => {
   it("abrir uma aba e fechar outra durante a espera: vai a aba como está agora, e quem a solta é a área de trabalho", async () => {

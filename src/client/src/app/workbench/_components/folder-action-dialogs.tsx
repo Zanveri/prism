@@ -11,12 +11,13 @@ export type FolderAction = { type: "create"; parentID: string | null } | { type:
 
 /**
  * Os diálogos das ações de pasta: o `FolderDialog` (nova pasta, nova subpasta, editar, mover), o `RenameFolderDialog` (renomear) e o
- * `DeleteFolderDialog` (excluir), que cuidam da própria chamada e dos próprios avisos. Montado ao abrir e desmontado ao fechar.
+ * `DeleteFolderDialog` (excluir), que cuidam da própria chamada e dos próprios avisos. Montado ao abrir e desmontado ao fechar. `onMoved` avisa que a pasta
+ * foi movida, para o navegador deixá-la à vista (RN-NAV-014).
  */
-export function FolderActionDialogs({ action, folders, onClose }: { action: FolderAction; folders: Folder[]; onClose: () => void }) {
+export function FolderActionDialogs({ action, folders, onClose, onMoved }: { action: FolderAction; folders: Folder[]; onClose: () => void; onMoved?: (folder: Folder) => void }) {
   if (action.type === "delete") return <DeleteFolderDialog folder={action.folder} onClose={onClose} />;
   if (action.type === "rename") return <RenameFolderDialog folder={action.folder} onClose={onClose} />;
 
   const state = action.type === "create" ? ({ mode: "create", parentID: action.parentID } as const) : ({ mode: action.type, folder: action.folder } as const);
-  return <FolderDialog state={state} folders={folders} onClose={onClose} />;
+  return <FolderDialog state={state} folders={folders} onClose={onClose} onMoved={onMoved} />;
 }

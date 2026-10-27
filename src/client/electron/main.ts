@@ -700,8 +700,9 @@ app.on("web-contents-created", (_event, contents) => {
  * RN-ZOOM-001: Ctrl +, Ctrl − e Ctrl 0 (Cmd no macOS) em qualquer tela e com o foco em qualquer lugar (`zoomShortcut`, com teste). A tecla é tratada aqui,
  * antes da página e do menu: o editor e a grade não a veem, o menu padrão de desenvolvimento não muda o zoom por fora, e o app empacotado do Windows e
  * do Linux, que não tem menu, tem o atalho do mesmo jeito. Vale nas janelas do app e nas do resultado (RN-ABAS-017).
- * RN-GRADE-012 e RN-ABAS-014: F5, F6, F11 e Ctrl+R nunca chegam ao menu (`menuShortcutIgnored`, com teste): o F5 e o F6 chegam à tela (atualizar e alternar entre o
- * editor e o resultado), e o F11 ao "Filtrar" da grade, e Ctrl+R nunca recarrega a janela (o texto das abas de SQL se perderia).
+ * RN-GRADE-012, RN-ABAS-014 e RN-ABAS-019: F5, F6, F11, Ctrl+R e Ctrl+W nunca chegam ao menu (`menuShortcutIgnored`, com teste): o F5 e o F6 chegam à tela (atualizar e alternar entre o
+ * editor e o resultado), e o F11 ao "Filtrar" da grade, e Ctrl+R nunca recarrega a janela (o texto das abas de SQL se perderia). O Ctrl+W chega à tela, que fecha a aba;
+ * onde ela não o trata (um diálogo aberto, a tela de entrada) ele não faz nada, e o Janela › Fechar do menu padrão de desenvolvimento não fecha a janela.
  */
 function installShortcuts(contents: WebContents): void {
   contents.on("before-input-event", (event, input) => {

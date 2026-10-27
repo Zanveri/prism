@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { databaseSessionSchema, referencingForeignKeysSchema } from "./database-sessions.schema";
+import { databaseSessionSchema, objectNamesSchema, referencingForeignKeysSchema } from "./database-sessions.schema";
 
 describe("databaseSessionSchema", () => {
   it("a resposta completa passa", () => {
@@ -47,5 +47,38 @@ describe("referencingForeignKeysSchema (RN-CAT-004: GET …/referenced-by)", () 
     expect(referencingForeignKeysSchema.safeParse([{ ...key, name: undefined }]).success).toBe(false);
     expect(referencingForeignKeysSchema.safeParse([{ ...key, referencingTable: undefined }]).success).toBe(false);
     expect(referencingForeignKeysSchema.safeParse([{ ...key, columns: "pedido_id" }]).success).toBe(false);
+  });
+});
+
+describe("objectNamesSchema (RN-BUSCA-002: GET …/object-names)", () => {
+  const answer = {
+    schemas: [
+      { name: "vendas", isSystem: false, tables: ["cliente", "pedido", "pedido_ação"], views: ["v_pedido"] },
+      { name: "pg_catalog", isSystem: true, tables: ["pg_class"], views: [] },
+    ],
+    truncated: false,
+  };
+
+  it("a resposta da API passa como veio: os esquemas na ordem dela e os nomes exatos, com espaço, aspas, barra e acento", () => {
+    expect(objectNamesSchema.parse(answer)).toEqual(answer);
+
+    const exact = { schemas: [{ name: "a b/c", isSystem: false, tables: ['t "x"', "t y", "Tabela\\z"], views: [] }], truncated: true };
+    expect(objectNamesSchema.parse(exact)).toEqual(exact);
+  });
+
+  it("sem esquema nenhum a resposta passa (o banco sem tabela nem visão)", () => {
+    expect(objectNamesSchema.parse({ schemas: [], truncated: false })).toEqual({ schemas: [], truncated: false });
+  });
+
+  it("a forma errada é recusada: sem o corte, sem as listas, nome que não é texto, esquema sem o selo de sistema", () => {
+    expect(objectNamesSchema.safeParse({ schemas: answer.schemas }).success).toBe(false);
+    expect(objectNamesSchema.safeParse({ truncated: false }).success).toBe(false);
+    expect(objectNamesSchema.safeParse({ schemas: [{ ...answer.schemas[0], tables: undefined }], truncated: false }).success).toBe(false);
+    expect(objectNamesSchema.safeParse({ schemas: [{ ...answer.schemas[0], views: undefined }], truncated: false }).success).toBe(false);
+    expect(objectNamesSchema.safeParse({ schemas: [{ ...answer.schemas[0], tables: [1, 2] }], truncated: false }).success).toBe(false);
+    expect(objectNamesSchema.safeParse({ schemas: [{ ...answer.schemas[0], isSystem: undefined }], truncated: false }).success).toBe(false);
+    expect(objectNamesSchema.safeParse({ schemas: [{ ...answer.schemas[0], name: 7 }], truncated: false }).success).toBe(false);
+    expect(objectNamesSchema.safeParse({ schemas: answer.schemas, truncated: "yes" }).success).toBe(false);
+    expect(objectNamesSchema.safeParse([]).success).toBe(false);
   });
 });

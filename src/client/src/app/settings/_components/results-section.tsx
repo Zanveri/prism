@@ -39,7 +39,6 @@ export function ResultsSection({ anchor }: { anchor: string }) {
           autoComplete="off"
           spellCheck={false}
           maxLength={preferenceLimits.nullText.max}
-          className="font-mono"
           value={nullText.text}
           error={nullText.invalid ? copy.nullTextError : undefined}
           onChange={(event) => nullText.change(event.target.value)}

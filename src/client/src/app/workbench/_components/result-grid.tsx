@@ -1,18 +1,21 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type UIEvent } from "react";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 
+import { appFonts } from "@/app/settings/_lib/fonts";
 import type { GridZoom } from "@/app/settings/_lib/preferences";
 import { ArrowDownIcon, ArrowsUpDownIcon, ArrowUpIcon, useHost } from "@/components/ui";
 import { isElement } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 import { isMacPlatform } from "@/lib/utils/platform";
 
-import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
+import { environmentAccent } from "../_lib/environment-accent";
+import { baseWidths, cellPadding, fitWidth } from "../_lib/grid-columns";
 import { movementOf, moveCell, type GridCell } from "../_lib/grid-cursor";
 import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowMarkClasses, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { cellAtPoint, columnStarts, edgeScroll, pageRows, type GridBox } from "../_lib/grid-pointer";
 import { choseWholeColumns, collapse, deleteKeyRows, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
+import { monoGridText, type GridText } from "../_lib/grid-text";
 import { multiEditCopy } from "../_lib/multi-edit.copy";
 import type { EditValue } from "../_lib/record-edits";
 import { recordsCopy } from "../_lib/records.copy";
@@ -20,6 +23,7 @@ import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type Scro
 import type { QueryColumn, QueryRow } from "../_lib/query.schema";
 import { nearEnd } from "../_lib/result-paging";
 import { observeRenderedOffset } from "../_lib/row-measure";
+import { useGridText } from "../_lib/use-grid-text";
 import type { ColumnLink } from "../_lib/foreign-key-links";
 import { fitsFilter, type SortDirection } from "../_lib/table-sql";
 import { workbenchCopy } from "../_lib/workbench.copy";
@@ -39,6 +43,13 @@ const noWidths: Readonly<Record<number, number>> = Object.freeze({});
 
 /** A divisória fica à direita de cada célula, e do número da linha: preso à esquerda, ele não se confunde com a coluna que rola por baixo. */
 const cellClass = "absolute top-0 h-full truncate border-r border-selected px-3";
+
+/**
+ * A caixa que rola (RN-AMB-002): o anel do foco (o recuo é o de dentro, `-outline-offset-2`; o resto é o `:focus-visible` do `globals.css`) e as barras de
+ * rolagem levam a cor do ambiente da aba, que vem da variável da área de resultado e herda pelo DOM; sem ela, o acento e a cor de rolagem do tema. A cor
+ * da célula ativa e a do campo de edição vêm da mesma variável, sem passar pela grade nem pelas linhas, que são memorizadas.
+ */
+const boxClass = `min-h-0 flex-1 overflow-auto font-sans text-sm -outline-offset-2 ${environmentAccent.focusOutline} ${environmentAccent.scrollbar}`;
 
 type GridRowProps = {
   index: number;
@@ -60,6 +71,8 @@ type GridRowProps = {
   linkable?: (value: string) => boolean;
   /** O zoom como fator (RN-GRADE-010): só para saber se o valor cabe na coluna. A altura e os espaços vêm das variáveis da caixa da grade. */
   scale?: number;
+  /** A largura do texto na fonte da grade, a mesma que mediu as colunas (RN-CONFIG-008): só para saber se o valor cabe. Sem ela, a conta da mono. Identidade estável. */
+  text?: GridText;
   /** RN-EDIT-004: as pendências desta linha (células alteradas, exclusão, linha nova, a que falhou). Só a edição dos Registros passa. */
   mark?: RowMark;
   /** A coluna da célula ativa, quando ela é desta linha. */
@@ -90,7 +103,7 @@ type GridRowProps = {
  * valores entram como texto dos filhos do React, nunca como HTML (RN-SHELL-002). A altura da linha
  * e a largura do número dela são as variáveis do zoom (`--grid-row` e `--grid-gutter`, na caixa da grade).
  */
-export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, generated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, mark, activeColumn = null, editor = null, cellIdOf, selectedFrom = -1, selectedTo = -1, wholeColumns = null, columnPending = null }: GridRowProps) {
+export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, generated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, text = monoGridText, mark, activeColumn = null, editor = null, cellIdOf, selectedFrom = -1, selectedTo = -1, wholeColumns = null, columnPending = null }: GridRowProps) {
   const role = cellIdOf === undefined ? "cell" : "gridcell";
   const deleted = mark?.deleted === true;
   const rowChosen = selectedFrom >= 0;
@@ -105,7 +118,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
         // Só na grade editável: a posição que o clique, o arraste e o botão direito no número da linha leem (RN-GRADE-001).
         {...(cellIdOf === undefined ? {} : { "data-rowheader": index })}
         title={mark?.kind === "new" ? editCopy.newRowMark : deleted ? editCopy.deletedMark : undefined}
-        className={cn("sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-selected bg-panel px-2 text-right text-subtle group-hover:bg-raised", markClasses.number)}
+        className={cn("sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-selected bg-panel px-2 text-right text-subtle tabular-nums group-hover:bg-raised", markClasses.number)}
       >
         {mark?.kind === "new" ? (
           <>
@@ -126,7 +139,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
         // pendência, da exclusão e da célula ativa. A escolhida tem o fundo de escolha do tema, o do item escolhido do navegador.
         const chosen = (rowChosen && item.index >= selectedFrom && item.index <= selectedTo) || wholeColumns?.has(item.index) === true;
         const cell = cellIdOf === undefined ? {} : { id: cellIdOf(index, item.index), "data-row": index, "data-col": item.index, "aria-selected": chosen };
-        const marked = cn(chosen && "bg-selected", activeColumn === item.index && "outline-2 -outline-offset-2 outline-accent", markClasses.cell);
+        const marked = cn(chosen && "bg-selected", activeColumn === item.index && `outline-2 -outline-offset-2 ${environmentAccent.outline}`, markClasses.cell);
 
         if (editor?.column === item.index) {
           return (
@@ -211,8 +224,10 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
           );
         }
 
-        // O valor que não cabe na coluna aparece inteiro na dica. A coluna e o texto estão no zoom, e a conta também.
-        const fits = value.length * charWidth * scale <= item.size - cellPadding * scale;
+        // O valor que não cabe na coluna aparece inteiro na dica. A coluna e o texto estão no zoom: a conta é a de 100%, a mesma da largura de saída, medida na
+        // fonte da grade, e para no que cabe.
+        const room = item.size / scale - cellPadding;
+        const fits = text.cell(value, room + 1) <= room;
         return (
           <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} title={fits ? undefined : value} className={cn(`${cellClass}${align}`, marked)} style={style}>
             {value}
@@ -289,7 +304,7 @@ function SortArrow({ direction }: { direction: SortDirection | null }) {
  */
 export function GridHeaderCell({ column, item, sort, choosable = false, onChoose, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null, readOnlyMark = false, selected = false, whole = false, mac = false, pendingHint = null }: GridHeaderCellProps) {
   const describedBy = useId();
-  // A largura de saída da coluna é contada sem o botão de ordenar (`baseWidths`, em `grid-columns.ts`). O espaço dele é sempre reservado, e quem cede os px
+  // A largura de saída da coluna é medida sem o botão de ordenar (`baseWidths`, em `grid-columns.ts`). O espaço dele é sempre reservado, e quem cede os px
   // dele é o TIPO, e só ele: o nome não encolhe (`shrink-0`), e o tipo absorve o que falta inteiro, até sumir. Não há peso de encolhimento entre os dois: com
   // um peso, por maior que fosse o do tipo, o nome ainda perdia centésimos de pixel, e com 1/64 de pixel a menos o Chromium já desenha a reticência
   // (`cliente_id` virava `cliente_…`: E1). A caixa do rótulo encolhe com a célula e fica ao lado do botão, que é irmão dela: `max-w-full` no nome é "o que
@@ -409,12 +424,14 @@ type ResultGridProps = {
   /** Mudar a largura de uma coluna (a divisa do cabeçalho). Sem ele não há divisa. Identidade estável: a grade é memorizada. */
   onResize?: (index: number, width: number) => void;
   /**
-   * O tipo de dado no cabeçalho (`results.showColumnTypes`, RN-CONFIG-006). Trocar a preferência vale na hora: as larguras de saída são contadas de novo
+   * O tipo de dado no cabeçalho (`results.showColumnTypes`, RN-CONFIG-006). Trocar a preferência vale na hora: as larguras de saída são medidas de novo
    * (sem o tipo a coluna não reserva lugar para ele), e as escolhidas ficam.
    */
   showTypes?: boolean;
   /** O zoom da grade (`results.gridZoom`, RN-GRADE-010); sem ele, 100%. */
   zoom?: GridZoom;
+  /** A fonte da interface (`ui.fontFamily`, RN-CONFIG-008): é nela que a largura das colunas é medida. Sem ela, a do app. */
+  font?: string;
   /** Ctrl+roda do mouse sobre a grade pede outro zoom. Identidade estável: a grade é memorizada. */
   onZoom?: (zoom: GridZoom) => void;
   /** RN-EDIT-001 a 004: a edição das células (Registros e aba de consulta). Com ela a grade é editável (`grid`), com as linhas novas depois das lidas. */
@@ -428,7 +445,7 @@ const hasBox = (element: HTMLElement) => element.clientHeight > 0 || element.cli
  * A grade do resultado (RN-SQL-011 e 012), virtualizada nas duas direções: só as linhas e as
  * colunas à vista existem na página, com 200 linhas ou com 10.000. O cabeçalho fica preso no topo
  * e o número da linha à esquerda. Quem a usa dá uma `key` por execução: as larguras de saída são
- * contadas uma vez, da primeira página, e "carregar mais" só aumenta a altura rolável. As escolhidas
+ * medidas uma vez, da primeira página, e "carregar mais" só aumenta a altura rolável. As escolhidas
  * pela pessoa (`widths`) passam por cima delas.
  */
 /**
@@ -439,7 +456,7 @@ export function followsActiveRow(row: number, heldRow: number | null, editorOpen
   return editorOpen || row !== heldRow;
 }
 
-export const ResultGrid = memo(function ResultGrid({ columns, rows: read, truncated, generated, nullText = copy.null, onReachEnd, links, onFollow, linkable, widths: chosen = noWidths, onResize, showTypes = true, zoom = 100, onZoom, editing }: ResultGridProps) {
+export const ResultGrid = memo(function ResultGrid({ columns, rows: read, truncated, generated, nullText = copy.null, onReachEnd, links, onFollow, linkable, widths: chosen = noWidths, onResize, showTypes = true, zoom = 100, font = appFonts.ui, onZoom, editing }: ResultGridProps) {
   const scroll = useRef<HTMLDivElement>(null);
   // As linhas que a grade desenha: com a edição, as lidas e, depois delas, as novas.
   const rows = editing?.rows ?? read;
@@ -450,7 +467,10 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   // RN-EDIT-002: a marca "somente leitura" do cabeçalho cabe na largura de saída quando o catálogo responde (na aba de consulta).
   const readOnly = editing?.columnReadOnly ?? null;
   const marks = useMemo(() => readOnly?.map((marked) => (marked ? editCopy.readOnlyMark : null)) ?? null, [readOnly]);
-  const base = useMemo(() => baseWidths(columns, firstPage, nullText, showTypes, marks), [columns, firstPage, nullText, showTypes, marks]);
+  // A fonte da interface é proporcional (RN-CONFIG-008): as larguras de saída são medidas nela, e a medida só muda de objeto quando a fonte muda ou termina de
+  // carregar. Trocar a fonte da interface com a grade à vista refaz só estas larguras; as que a pessoa escolheu (`chosen`) continuam as dela.
+  const text = useGridText(font);
+  const base = useMemo(() => baseWidths(columns, firstPage, nullText, showTypes, marks, text), [columns, firstPage, nullText, showTypes, marks, text]);
   const widths = useMemo(() => base.map((width, index) => chosen[index] ?? width), [base, chosen]);
   // O zoom (RN-GRADE-010) muda juntos o texto, a altura das linhas, o número da linha, as larguras (as escolhidas também, na mesma proporção) e os espaços.
   // As larguras guardadas são as de 100%; o que se desenha é a conta delas no zoom, em pixels inteiros.
@@ -459,7 +479,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
 
   // A grade fica escondida por `display: none` com a aba inativa e com a área de trabalho por baixo de outra tela: a rolagem lida sem caixa não é posição
   // (`observeRenderedOffset`, nas duas direções), senão quem rola e troca de aba logo em seguida volta para uma grade em branco. As linhas e as colunas não são
-  // medidas (altura fixa e largura contada): não há `measureElement` aqui.
+  // medidas (altura fixa e largura medida no canvas, e não na página): não há `measureElement` aqui.
   // A altura estimada da linha é a do zoom (a de verdade, porque nada é medido), e o cabeçalho preso no topo é o `paddingStart`, da mesma altura.
   // O cabeçalho e o número da linha, presos, cobrem o começo da caixa: o `scrollPaddingStart` do mesmo tamanho faz o `scrollToIndex` deixar a célula ativa
   // logo depois deles, e não por baixo (RN-GRADE-001: a grade rola para manter a célula ativa à vista, também no Ctrl+Home, no PageUp e no Home).
@@ -479,7 +499,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
 
   // Uma largura mudou (a divisa, o zoom, o tipo no cabeçalho), ou a altura da linha (o zoom): o virtualizador só relê `estimateSize` quando lhe pedem, e
   // `measure` refaz as posições antes de a tela ser pintada (o efeito de layout redesenha na mesma hora). Sem isto as colunas da direita ficariam na posição
-  // de antes, encavaladas ou com uma faixa vazia. Nada é medido no DOM: a largura é a contada ou a escolhida, e a altura é a do zoom.
+  // de antes, encavaladas ou com uma faixa vazia. Nada é medido no DOM: a largura é a medida no canvas ou a escolhida, e a altura é a do zoom.
   const measured = useRef({ drawn, rowHeight: metrics.rowHeight });
   useLayoutEffect(() => {
     const before = measured.current;
@@ -883,12 +903,12 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
       onKeyUp={editing === undefined ? undefined : () => editing.onSelecting(false)}
-      className="min-h-0 flex-1 overflow-auto font-mono text-sm -outline-offset-2"
+      className={boxClass}
       style={zoomStyle}
     >
       <div className="relative min-w-full" style={{ height: rowVirtualizer.getTotalSize(), width: columnVirtualizer.getTotalSize() }}>
         <div role="row" aria-rowindex={1} className="sticky top-0 z-20 h-(--grid-row) w-full border-b border-border bg-raised leading-(--grid-row) font-semibold">
-          <div role="columnheader" className="sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-border bg-raised text-right font-medium text-subtle">
+          <div role="columnheader" className="sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-border bg-raised text-right font-medium text-subtle tabular-nums">
             {editing === undefined ? (
               <span className="block px-2">{copy.rowNumber}</span>
             ) : (
@@ -918,7 +938,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               pendingHint={editing?.columnPending?.get(item.index)?.hint ?? null}
               onResize={onResize === undefined ? undefined : (width) => onResize(item.index, width)}
               // O ajuste olha TODAS as linhas carregadas, e não só a primeira página (RN-GRADE-009), e reserva o espaço do botão de ordenar.
-              onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: sorting !== undefined, showType: showTypes, mark: marks?.[item.index] ?? null }))}
+              onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: sorting !== undefined, showType: showTypes, mark: marks?.[item.index] ?? null, text }))}
             />
           ))}
         </div>
@@ -940,6 +960,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               onFollow={onFollow}
               linkable={linkable}
               scale={metrics.factor}
+              text={text}
               mark={editing?.marks.get(item.index)}
               activeColumn={editing?.active?.row === item.index ? editing.active.column : null}
               editor={editor?.row === item.index ? { column: editor.column, element: editorElement } : null}

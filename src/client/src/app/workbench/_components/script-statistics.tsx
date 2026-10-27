@@ -41,8 +41,8 @@ const StatisticsRow = memo(function StatisticsRow({ entry, number, current, onVi
   return (
     <Fragment>
       <tr aria-current={current ? "step" : undefined} className={cn(current && "bg-selected")}>
-        <td className={cn(cell, "text-right font-mono text-muted tabular-nums")}>{number.toLocaleString("pt-BR")}</td>
-        <td className={cn(cell, "max-w-0 font-mono text-ink")} title={commandHint(entry.target.sql)}>
+        <td className={cn(cell, "text-right text-muted tabular-nums")}>{number.toLocaleString("pt-BR")}</td>
+        <td className={cn(cell, "max-w-0 font-editor text-ink")} title={commandHint(entry.target.sql)}>
           <span className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">{commandHead(entry.target, 96)}</span>
             {/* RN-VAR-018: o "SQL enviado" também no comando sem resultado e no que falhou. */}

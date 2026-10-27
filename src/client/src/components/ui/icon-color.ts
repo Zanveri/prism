@@ -4,6 +4,10 @@
  * Prism Claro dá 1,7:1. Quando a escolhida não chega, o ícone leva a variante mais próxima dela que chega: escurecida (misturada ao preto) nos temas
  * claros, clareada (misturada ao branco) nos escuros. A gravada continua a escolhida, e as bolinhas do seletor a mostram como é.
  *
+ * A mesma conta pinta também os destaques da área de resultado com a cor do ambiente da aba (RN-AMB-002: sublinhados, contorno da célula ativa, foco e rolagem
+ * da grade): contorno é elemento gráfico, com o mesmo 3:1 do ícone (`workbench/_lib/environment-accent.ts`). A etiqueta do ambiente, essa, leva a cor
+ * escolhida, como as bolinhas.
+ *
  * As duas variantes vão juntas, como `light-dark(clara, escura)` (o mesmo jeito da marca, `prism-mark.tsx`): quem escolhe é o `color-scheme` do tema, o
  * mesmo que escolhe a coluna das fichas de cor no `globals.css`, então trocar de tema (ou o sistema trocar, no "seguir o sistema") não pede JavaScript.
  */
@@ -60,7 +64,8 @@ const cache = new Map<string, string>();
 
 /**
  * O valor de `color` do ícone pintado com a cor escolhida (`#RRGGBB`): `light-dark(<variante dos temas claros>, <variante dos escuros>)`. Guardado por
- * cor, porque a mesma cor se repete em cada linha da árvore e a cada desenho.
+ * cor, porque a mesma cor se repete em cada linha da árvore e a cada desenho. É também o valor da variável `--environment-color` da área de resultado
+ * (RN-AMB-002), que um destaque lê com `border-color` ou `outline-color`: o `light-dark()` resolve pelo `color-scheme` do elemento que o usa.
  */
 export function iconColorStyle(color: string): string {
   const key = color.toUpperCase();

@@ -24,8 +24,11 @@ const formID = "move-connection-form";
  *
  * Mover para fora de uma pasta somente leitura tira o somente leitura herdado, e a API pede a senha do usuário (422 `USER_PASSWORD_REQUIRED`, RN-PROT-003):
  * o diálogo da senha abre, e o mesmo pedido vai de novo com ela. As proteções próprias da conexão vão como estão (`movedConnectionInput`).
+ *
+ * Depois de mover, com as listas já lidas de novo, `onMoved` recebe a conexão como ficou: o navegador a revela, como o salvar, com as pastas do destino abertas
+ * (RN-NAV-014).
  */
-export function MoveConnectionDialog({ connection, folders, onClose }: { connection: Connection; folders: Folder[]; onClose: () => void }) {
+export function MoveConnectionDialog({ connection, folders, onClose, onMoved }: { connection: Connection; folders: Folder[]; onClose: () => void; onMoved?: (connection: Connection) => void }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [folderID, setFolderID] = useState(connection.folderID ?? "");
@@ -42,6 +45,7 @@ export function MoveConnectionDialog({ connection, folders, onClose }: { connect
 
     toast.success(connectionsCopy.toasts.connectionMoved);
     await invalidateLists(queryClient);
+    onMoved?.(result.data);
     onClose();
   }
 

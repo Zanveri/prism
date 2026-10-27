@@ -50,6 +50,10 @@ export const resultFocus = {
     pending.delete(tabId);
     return target;
   },
+  /** A aba tem um pedido esperando? Só olha, sem levar: a regra do foco das abas (RN-ABAS-019) cede a ele, que quem o pediu leva quando puder. */
+  pending(tabId: string): boolean {
+    return pending.has(tabId);
+  },
   forgetExcept(open: ReadonlySet<string>): void {
     for (const tabId of [...pending.keys()]) if (!open.has(tabId)) pending.delete(tabId);
   },

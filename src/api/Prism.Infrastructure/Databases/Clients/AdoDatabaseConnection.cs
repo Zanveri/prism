@@ -57,6 +57,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private const string CanceledWhileReturningRowsMessage = "O cancelamento chegou enquanto o comando devolvia as linhas. O que ele gravou até ali está confirmado, e pode ser só uma parte do comando: o Prism não sabe se ele foi concluído. Confira no banco antes de executá-lo de novo.";
     private const string ConnectionClosedMessage = "A conexão com o banco foi encerrada, e o comando não foi enviado. Abra a sessão de novo.";
     private const string NoOpenCursorMessage = "Não há cursor aberto: execute o comando de novo.";
+    /// <summary>RN-BUSCA-002: o tipo que a quarta coluna de <see cref="ObjectNamesSql"/> traz para a visão; o que não é ele é tabela.</summary>
+    private const string ViewObjectKind = "view";
+
     private const string UnknownObjectKindMessage = "O tipo de objeto pedido não existe: use tables, views ou routines.";
     private const string TransactionControlMessage = "Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos: toda sessão é auto-commit, e cada comando é confirmado quando termina.";
     private const string UndoneTransactionMessage = $"O comando deixou uma transação aberta, e o Prism a desfez: nada do que ele gravou dentro dela ficou. {TransactionControlMessage}";
@@ -439,6 +442,15 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// <param name="kind">`tables`, `views` ou `routines`.</param>
     protected abstract string? ObjectsSql(string kind);
 
+    /// <summary>
+    /// RN-BUSCA-002. Sem parâmetro: as tabelas e as visões de todos os esquemas, com os mesmos tipos de objeto que <see cref="ObjectsSql"/>
+    /// lista. Colunas: esquema (sem os espaços do fim), se é de sistema (booleano ou 0/1, o critério de <see cref="SchemasSql"/>), nome e
+    /// tipo (`table` ou `view`, sem os espaços do fim), em ordem de esquema, os de sistema por último, e de nome. Só as primeiras
+    /// `rows` linhas: o número entra no texto como constante (`LIMIT`, `FETCH FIRST … ROWS ONLY`, `SELECT FIRST`), e nunca como dado de fora.
+    /// </summary>
+    /// <param name="rows">Quantas linhas, no máximo, a consulta devolve. Quem chama (<see cref="GetObjectNamesAsync"/>) pede uma a mais que o limite.</param>
+    protected abstract string ObjectNamesSql(int rows);
+
     /// <summary>RN-SQL-006: o `SELECT COUNT(*)` com o comando como subconsulta, na forma que o banco aceita.</summary>
     protected abstract string CountSql(string sql);
 
@@ -775,6 +787,23 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             return new DatabaseFailure(EDatabaseFailure.ExecutionFailed, UnknownObjectKindMessage);
 
         return await QueryAsync(nameof(GetObjectsAsync), EDatabaseFailure.ExecutionFailed, sql, [schema], reader => new DatabaseObjectInfo(Text(reader, 0), Text(reader, 1), reader.IsDBNull(2) ? null : Convert.ToInt64(reader.GetValue(2), CultureInfo.InvariantCulture), NullableText(reader, 3)), cancellationToken);
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: lê uma linha a mais que o limite, só para saber se o banco tem mais; essa linha liga `Truncated` e não entra na resposta.
+    /// O `GroupBy` mantém a ordem em que as linhas chegaram: os esquemas na ordem da consulta (os de sistema por último), e as tabelas e as
+    /// visões de cada um na ordem do banco, a mesma das listas `objects?kind=tables|views`.
+    /// </summary>
+    public async Task<Result<ObjectNamesInfo, DatabaseFailure>> GetObjectNamesAsync(int limit, CancellationToken cancellationToken)
+    {
+        var rows = await QueryAsync(nameof(GetObjectNamesAsync), EDatabaseFailure.ExecutionFailed, ObjectNamesSql(limit + 1), [], reader => (Schema: Text(reader, 0), IsSystem: Flag(reader, 1), Name: Text(reader, 2), IsView: Text(reader, 3) == ViewObjectKind), cancellationToken);
+        if (rows.IsFailure)
+            return rows.Error;
+
+        var truncated = rows.Value.Count > limit;
+        var kept = truncated ? rows.Value.Take(limit) : rows.Value;
+
+        return new ObjectNamesInfo([.. kept.GroupBy(row => row.Schema).Select(schema => new SchemaObjectNamesInfo(schema.Key, schema.First().IsSystem, [.. schema.Where(row => !row.IsView).Select(row => row.Name)], [.. schema.Where(row => row.IsView).Select(row => row.Name)]))], truncated);
     }
 
     public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken)

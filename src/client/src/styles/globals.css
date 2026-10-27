@@ -84,7 +84,9 @@
   /*
    * As fontes (RN-CONFIG-008). A da interface (`--font-sans`) e a do editor SQL (`--font-editor`) são as que o usuário escolhe em Configurações ›
    * Aparência: o `FontSync` põe a escolhida no <html>, entre aspas, com a do app atrás (`fonts.ts`). A reserva da interface é uma variável à
-   * parte, porque a escolha troca a `--font-sans`; a do editor é a mono do app, que a grade e o resto do código usam e que não muda.
+   * parte, porque a escolha troca a `--font-sans`; a do editor é a mono do app, que a mensagem de erro do banco, as etiquetas e o resto do código
+   * usam e que nenhuma escolha muda. A árvore do navegador e as grades do resultado seguem a da interface. As pilhas também estão escritas sem
+   * `var()` em `fonts.ts` (`appFontFamilies`), para o `canvas` que mede as colunas da grade; um teste confere que são as mesmas.
    */
   --font-sans: var(--font-app-sans);
   --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
@@ -307,7 +309,7 @@
     line-height: var(--text-base--line-height);
   }
 
-  /* Foco visível por teclado, igual em tudo o que recebe foco. */
+  /* Foco visível por teclado, igual em tudo o que recebe foco. A grade de resultado só troca a cor dele, pela do ambiente da aba (RN-AMB-002, result-grid.tsx). */
   :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;

@@ -107,6 +107,8 @@ public abstract class IbmDatabaseSessionsTests
         var definition = await StepAsync("GET views/definition", await client.GetAsync($"{session}/schemas/{schema}/views/{Uri.EscapeDataString(Name("pedido_resumo"))}/definition"), HttpStatusCode.OK);
         var diagram = await StepAsync("GET diagram", await client.GetAsync($"{session}/schemas/{schema}/diagram"), HttpStatusCode.OK);
         var properties = await StepAsync("GET properties", await client.GetAsync($"{session}/properties"), HttpStatusCode.OK);
+        // RN-BUSCA-002: o índice de nomes da busca, com o corpo na saída (é o exemplo do contrato).
+        var objectNames = await StepAsync("GET object-names", await client.GetAsync($"{session}/object-names"), HttpStatusCode.OK);
         var quoted = await StepAsync("GET columns (nome com aspas)", await client.GetAsync($"{session}/schemas/{schema}/tables/{Uri.EscapeDataString("O'Brien \"x\"")}/columns"), HttpStatusCode.OK);
 
         // RN-SQL-004 a 006: 200 linhas, as 200 seguintes do mesmo cursor, e o total por contagem.
@@ -172,6 +174,15 @@ public abstract class IbmDatabaseSessionsTests
         Assert.That(Names(diagram.GetProperty("tables")), Is.SupersetOf(new[] { Name("cliente"), Name("pedido"), "O'Brien \"x\"" }));
         Assert.That(Names(diagram.GetProperty("foreignKeys")), Is.EqualTo(new[] { Name("fk_pedido_cliente") }));
         Assert.That(properties.GetArrayLength(), Is.GreaterThan(1));
+        Assert.That(objectNames.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "schemas", "truncated" }));
+        Assert.That(objectNames.GetProperty("truncated").GetBoolean(), Is.False);
+        Assert.That(objectNames.GetProperty("schemas").EnumerateArray().Select(item => item.EnumerateObject().Select(property => property.Name)), Is.All.EqualTo(new[] { "name", "isSystem", "tables", "views" }));
+        Assert.That(objectNames.GetProperty("schemas").EnumerateArray().Select(item => item.GetProperty("isSystem").GetBoolean()), Is.Ordered);
+        var indexedLoja = objectNames.GetProperty("schemas").EnumerateArray().Single(item => item.GetProperty("name").GetString() == Name("loja"));
+        Assert.That(indexedLoja.GetProperty("tables").EnumerateArray().Select(item => item.GetString()), Is.EqualTo(Names(tables)));
+        Assert.That(indexedLoja.GetProperty("views").EnumerateArray().Select(item => item.GetString()), Is.EqualTo(Names(views)));
+        Assert.That(indexedLoja.GetProperty("tables").EnumerateArray().Select(item => item.GetString()), Does.Contain("O'Brien \"x\""));
+        Assert.That(objectNames.GetProperty("schemas").EnumerateArray().SelectMany(item => item.GetProperty("tables").EnumerateArray().Concat(item.GetProperty("views").EnumerateArray())).Select(name => name.GetString()), Does.Not.Contain(Name("dobro")));
         Assert.That(first.GetProperty("rows").GetArrayLength(), Is.EqualTo(200));
         Assert.That(first.GetProperty("hasMore").GetBoolean(), Is.True);
         Assert.That(first.GetProperty("rows")[0].EnumerateArray().Select(cell => cell.GetString()), Is.EqualTo(new[] { "1001", "1.50", "2026-01-01 00:01:00.000000", "Pedido 1" }));
@@ -342,6 +353,9 @@ public sealed class InformixDatabaseSessionsTests : IbmDatabaseSessionsTests
         var other = opened.GetProperty("id").GetGuid();
         var fromOther = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{other}/databases")).Content.ReadFromJsonAsync<JsonElement>();
         var properties = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{other}/properties")).Content.ReadFromJsonAsync<JsonElement>();
+        // RN-BUSCA-002: o índice de nomes da sessão do outro banco é o dele: os donos que têm tabela ou visão, na ordem da lista dos donos dele.
+        var otherNames = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{other}/object-names")).Content.ReadFromJsonAsync<JsonElement>();
+        var otherSchemas = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{other}/schemas")).Content.ReadFromJsonAsync<JsonElement>();
 
         var names = listed.EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToList();
         Assert.That(names[0], Is.EqualTo(settings.Database));
@@ -352,5 +366,6 @@ public sealed class InformixDatabaseSessionsTests : IbmDatabaseSessionsTests
         Assert.That((fromOther[0].GetProperty("name").GetString(), fromOther[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo((InformixSingleton.UnloggedDatabase, true)));
         Assert.That(fromOther.EnumerateArray().Count(item => item.GetProperty("isCurrent").GetBoolean()), Is.EqualTo(1));
         Assert.That(properties[0].GetProperty("value").GetString(), Is.EqualTo("noLogging"));
+        Assert.That(otherNames.GetProperty("schemas").EnumerateArray().Select(item => item.GetProperty("name").GetString()), Is.EqualTo(otherSchemas.EnumerateArray().Where(item => item.GetProperty("tables").GetInt32() + item.GetProperty("views").GetInt32() > 0).Select(item => item.GetProperty("name").GetString())));
     }
 }

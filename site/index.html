@@ -271,7 +271,7 @@
           </div>
         </div>
         <h3>Search</h3>
-        <p>The “Filtrar objetos” (Filter objects) field filters what is already loaded in the tree. Open a connection or a schema to search inside it. The result shows the path to each match, with the matching part highlighted and the count.</p>
+        <p>The “Filtrar objetos” (Filter objects) field ignores case and accents. It filters what is already loaded in the tree and, in every connected connection, the tables and views of all schemas, even those you never opened: the first time you type, Prism asks each database for the names of its tables and views, once, and from then on every keystroke filters in the app, without going back to the database (the list is kept until you use “Atualizar” (Refresh) or “Desconectar” (Disconnect)). The search covers the connection's database and every other database of that server you have already opened. Connections that are not connected are left out: the line under the filters says how many, and offers “Buscar nelas também” (Search them too), which connects them (it skips the ones without a saved user or password). Routines, columns, indexes and keys are searched only where they are already loaded. The result shows the path to each match, with the matching part highlighted and the count; each database shows its first 200 matches.</p>
         <h3>Shortcuts</h3>
         <div class="tabela">
           <table>

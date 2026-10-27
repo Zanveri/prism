@@ -10,6 +10,7 @@ using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Features.FetchNextPage;
 using Prism.Application.DatabaseSessions.Features.GetDatabases;
 using Prism.Application.DatabaseSessions.Features.GetEditTarget;
+using Prism.Application.DatabaseSessions.Features.GetObjectNames;
 using Prism.Application.DatabaseSessions.Features.GetResultCells;
 using Prism.Application.DatabaseSessions.Features.GetDatabaseProperties;
 using Prism.Application.DatabaseSessions.Features.GetSchemaDiagram;
@@ -81,6 +82,20 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
     public async Task<IActionResult> GetSchemas(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new GetSchemasCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: os nomes das tabelas e das visões de todos os esquemas do banco da sessão, para a busca do navegador. Sem corpo nem
+    /// parâmetro, então sem validator: vale o `{id:guid}` da rota.
+    /// </summary>
+    [HttpGet("{id:guid}/object-names")]
+    public async Task<IActionResult> GetObjectNames(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetObjectNamesCommand(id), cancellationToken);
         if (result.IsFailure)
             return result.ToIActionResult();
 

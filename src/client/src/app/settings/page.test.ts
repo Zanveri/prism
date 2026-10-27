@@ -172,14 +172,14 @@ describe("Resultados (RN-CONFIG-005)", () => {
   const valueOf = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0].match(/value="([^"]*)"/)?.[1];
   const autoLoad = (html: string) => /<input type="checkbox"([^>]*)\/?>(?:(?!<\/label>)[\s\S])*Buscar mais linhas ao rolar até o fim da grade/.exec(html)?.[1] ?? "";
 
-  it("tem o texto do nulo (NULL, até 12 caracteres, em fonte mono) e 'buscar mais linhas ao rolar', desligado", () => {
+  it("tem o texto do nulo (NULL, até 12 caracteres, na fonte da interface, como a grade o desenha) e 'buscar mais linhas ao rolar', desligado", () => {
     const html = results(render().markup);
 
     expect(html).toContain("Mostrar valores nulos como");
     expect(valueOf(html, "cfg-nulo")).toBe("NULL");
     const field = /<input[^>]*id="cfg-nulo"[^>]*>/.exec(html)?.[0] ?? "";
     expect(field).toMatch(/maxLength="12"/i);
-    expect(field).toContain("font-mono");
+    expect(field).not.toContain("font-mono");
     expect(autoLoad(html)).not.toContain("checked");
   });
 
@@ -551,11 +551,12 @@ describe("Aparência: fontes (RN-CONFIG-008)", () => {
     expect(html).toContain("font-family:&quot;JetBrains Mono&quot;, var(--font-mono)");
   });
 
-  it("diz onde cada uma vale: a da interface fora do código, a do editor nos campos de SQL, e a grade não muda", () => {
+  it("diz onde cada uma vale: a da interface fora do código, também no navegador e nas grades; a do editor nos campos de SQL (RN-CONFIG-008)", () => {
     const html = appearance(render().markup);
 
-    expect(html).toContain("Vale para todo o texto do Prism fora do código.");
-    expect(html).toContain("Vale para o editor SQL, o filtro dos Registros e o “Ver SQL”. A grade continua na fonte mono do Prism.");
+    expect(html).toContain("Vale para todo o texto do Prism fora do código, também para o navegador e para as grades do resultado e dos Registros.");
+    expect(html).toContain("Vale para o editor SQL, o filtro dos Registros e o “Ver SQL”.");
+    expect(html).not.toContain("fonte mono");
   });
 
   it("o título da seção já não é só o tema", () => {

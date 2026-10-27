@@ -231,7 +231,6 @@ type SqlEditorProps = {
   connectionId: string | null;
   /** RN-ARVORE-006: o outro banco do servidor da aba; o completar usa os nomes dele. */
   database?: string;
-  autoFocus: boolean;
   /** A posição, no texto, do erro que o banco apontou. */
   errorAt: number | null;
   /**
@@ -275,7 +274,7 @@ const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.l
  * guarda com atraso, para uma tecla não redesenhar a área de trabalho. Ctrl+Enter executa
  * (RN-SQL-001). Tab recua; Esc e depois Tab saem do editor pelo teclado.
  */
-export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onRunScript, runningAt = null, onChange, onRunnableChange, onEdited, onOpenTable, variables }: SqlEditorProps) {
+export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, errorAt, onRun, onRunScript, runningAt = null, onChange, onRunnableChange, onEdited, onOpenTable, variables }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const { preferences } = usePreferences();
@@ -288,7 +287,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const queryClient = useQueryClient();
   // O que só vale ao criar o editor: a mesma referência em todas as renderizações. As preferências do editor entram aqui para a
   // criação; depois, os efeitos de baixo as reconfiguram ao vivo quando mudam (Configurações abre por cima, com o editor montado).
-  const [initial] = useState(() => ({ sql: initialSql, tabId, selection: initialSelection, engine, autoFocus, editor: { fontFamily, fontSize, tabSize }, dark, autocomplete, uppercaseKeywords }));
+  const [initial] = useState(() => ({ sql: initialSql, tabId, selection: initialSelection, engine, editor: { fontFamily, fontSize, tabSize }, dark, autocomplete, uppercaseKeywords }));
   const applied = useRef(`${fontFamily}|${fontSize}|${tabSize}|${dark}`);
   // O banco de agora, lido pelas funções do editor na hora em que rodam (executar, separar o comando, sugerir).
   const engineNow = useRef(engine);
@@ -394,7 +393,6 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     view.current = editor;
     emitRunnable((runnable = isRunnable(editor.state, engineNow.current)));
     if (initial.selection !== null) editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: "center" }) });
-    if (initial.autoFocus) editor.focus();
     const unregister = initial.tabId === undefined ? () => {} : liveEditors.register(initial.tabId, () => ({ sql: editor.state.doc.toString(), anchor: editor.state.selection.main.anchor, head: editor.state.selection.main.head }));
 
     return () => {

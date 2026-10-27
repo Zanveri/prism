@@ -116,6 +116,155 @@ public abstract class CatalogContractTests
         Assert.That(schemas.Single(item => item.Name == Schema).Tables, Is.GreaterThan(0));
     }
 
+    /// <summary>
+    /// RN-BUSCA-002: o índice de nomes é o que as listas de objetos mostram. Em cada esquema (o do teste e um de sistema, que tem centenas de
+    /// objetos), as tabelas do índice são as de `objects?kind=tables` e as visões as de `objects?kind=views`, os mesmos nomes na mesma ordem,
+    /// e as rotinas ficam de fora. É o que garante que a linha que a tela monta do índice é a que a árvore carregaria. Os esquemas vêm com
+    /// os comuns antes dos de sistema, e só os que têm tabela ou visão.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_AreWhatTheObjectListsShow()
+    {
+        await using var connection = await OpenAsync();
+
+        var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+        var schemas = Value(await connection.GetSchemasAsync(CancellationToken.None));
+
+        Assert.That(names.Truncated, Is.False);
+        Assert.That(names.Schemas.Select(schema => schema.IsSystem), Is.Ordered);
+        Assert.That(names.Schemas.Select(schema => schema.Tables.Count + schema.Views.Count), Is.All.GreaterThan(0));
+
+        foreach (var schema in new[] { schemas.Single(item => item.Name == Schema), schemas.First(item => item.IsSystem && item.Tables + item.Views > 0) })
+        {
+            var tables = Value(await connection.GetObjectsAsync(schema.Name, "tables", CancellationToken.None));
+            var views = Value(await connection.GetObjectsAsync(schema.Name, "views", CancellationToken.None));
+            var indexed = names.Schemas.Single(item => item.Name == schema.Name);
+
+            Assert.That(indexed.IsSystem, Is.EqualTo(schema.IsSystem), schema.Name);
+            Assert.That(indexed.Tables, Is.EqualTo(tables.Select(table => table.Name)), schema.Name);
+            Assert.That(indexed.Views, Is.EqualTo(views.Select(view => view.Name)), schema.Name);
+        }
+
+        Assert.That(names.Schemas.Single(item => item.Name == Schema).Tables, Is.Not.Empty);
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: com um limite pequeno o banco é cortado (`Truncated`), e a resposta traz exatamente `limit` nomes, os dos primeiros
+    /// esquemas; sem corte, o limite folgado não liga nada. A consulta lê um nome a mais que o limite só para saber que há mais.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_WithASmallLimit_AreTruncated()
+    {
+        await using var connection = await OpenAsync();
+
+        var cut = Value(await connection.GetObjectNamesAsync(3, CancellationToken.None));
+        var whole = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+
+        Assert.That(cut.Truncated, Is.True);
+        Assert.That(cut.Schemas.Sum(schema => schema.Tables.Count + schema.Views.Count), Is.EqualTo(3));
+        Assert.That(whole.Truncated, Is.False);
+        Assert.That(whole.Schemas.Sum(schema => schema.Tables.Count + schema.Views.Count), Is.GreaterThan(3));
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: em TODOS os esquemas do banco, e não só nos dois do outro teste, o índice é o que as listas mostram: o esquema que tem
+    /// tabela ou visão está nele, com as mesmas tabelas e visões na mesma ordem e o mesmo "de sistema"; o que não tem, não está; e os esquemas
+    /// vêm na ordem da lista dos esquemas (`GET .../schemas`) sem os vazios, que é a ordem que a árvore mostra (RN-ARVORE-004).
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_AreWhatTheObjectListsShow_InEverySchemaOfTheDatabase()
+    {
+        await using var connection = await OpenAsync();
+
+        var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+        var schemas = Value(await connection.GetSchemasAsync(CancellationToken.None));
+
+        var expected = new List<(string Name, bool IsSystem, List<string> Tables, List<string> Views)>();
+        foreach (var schema in schemas)
+        {
+            var tables = Value(await connection.GetObjectsAsync(schema.Name, "tables", CancellationToken.None)).Select(item => item.Name).ToList();
+            var views = Value(await connection.GetObjectsAsync(schema.Name, "views", CancellationToken.None)).Select(item => item.Name).ToList();
+            if (tables.Count + views.Count > 0)
+                expected.Add((schema.Name, schema.IsSystem, tables, views));
+        }
+
+        Assert.That(names.Truncated, Is.False);
+        Assert.That(names.Schemas.Select(schema => schema.Name), Is.EqualTo(expected.Select(item => item.Name)));
+        foreach (var (indexed, wanted) in names.Schemas.Zip(expected))
+        {
+            Assert.That(indexed.IsSystem, Is.EqualTo(wanted.IsSystem), wanted.Name);
+            Assert.That(indexed.Tables, Is.EqualTo(wanted.Tables), wanted.Name);
+            Assert.That(indexed.Views, Is.EqualTo(wanted.Views), wanted.Name);
+        }
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: o corte cai onde cair a linha `limit + 1`. Para limites de 1 até além do total, a resposta traz exatamente `limit` nomes (ou
+    /// todos, quando o limite passa do total) e só liga `Truncated` quando ficou nome de fora: o limite exato não corta. Os esquemas que sobram
+    /// são os primeiros do índice inteiro, na mesma ordem (os de sistema por último), todos completos menos o último, que traz só os primeiros
+    /// nomes dele. É a prova, no banco, de que `LIMIT`, `FETCH FIRST` e `SELECT FIRST` entram na mesma ordem do `ORDER BY`.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_WithAnyLimit_AreThePrefixOfTheWholeIndex()
+    {
+        await using var connection = await OpenAsync();
+        var whole = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+        var total = whole.Schemas.Sum(schema => schema.Tables.Count + schema.Views.Count);
+        Assert.That(total, Is.GreaterThan(20));
+
+        foreach (var limit in new[] { 1, 2, 5, 17, total / 2, total - 1, total, total + 1 }.Distinct())
+        {
+            var cut = Value(await connection.GetObjectNamesAsync(limit, CancellationToken.None));
+
+            var message = $"limite {limit} de {total}";
+            Assert.That(cut.Truncated, Is.EqualTo(limit < total), message);
+            Assert.That(cut.Schemas.Sum(schema => schema.Tables.Count + schema.Views.Count), Is.EqualTo(Math.Min(limit, total)), message);
+            Assert.That(cut.Schemas.Select(schema => schema.Name), Is.EqualTo(whole.Schemas.Take(cut.Schemas.Count).Select(schema => schema.Name)), message);
+            foreach (var (indexed, original, position) in cut.Schemas.Zip(whole.Schemas).Select((pair, position) => (pair.First, pair.Second, position)))
+            {
+                Assert.That(indexed.IsSystem, Is.EqualTo(original.IsSystem), $"{message}, {indexed.Name}");
+                Assert.That(original.Tables.Take(indexed.Tables.Count), Is.EqualTo(indexed.Tables), $"{message}, {indexed.Name}");
+                Assert.That(original.Views.Take(indexed.Views.Count), Is.EqualTo(indexed.Views), $"{message}, {indexed.Name}");
+                if (position < cut.Schemas.Count - 1)
+                    Assert.That((indexed.Tables.Count, indexed.Views.Count), Is.EqualTo((original.Tables.Count, original.Views.Count)), $"{message}, {indexed.Name}: só o último esquema pode vir incompleto");
+            }
+        }
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: o índice de um esquema de 300 tabelas, que a classe do banco monta e apaga (o mesmo do diagrama). A prova do custo é o
+    /// tempo da chamada e o tamanho do JSON, escritos na saída do teste (o relatório os leva): uma varredura do catálogo.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_OfASchemaWith300Tables_ComeInOneCall()
+    {
+        var schema = await CreateLargeSchemaAsync();
+        try
+        {
+            await using var connection = await OpenAsync();
+            var watch = Stopwatch.StartNew();
+            var names = Value(await connection.GetObjectNamesAsync(50_000, CancellationToken.None));
+            watch.Stop();
+            var json = JsonSerializer.Serialize(names, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var total = names.Schemas.Sum(item => item.Tables.Count + item.Views.Count);
+            await TestContext.Out.WriteLineAsync($"{Engine}: índice de nomes de {total} tabelas e visões em {names.Schemas.Count} esquemas em {watch.ElapsedMilliseconds} ms, {json.Length} caracteres de JSON ({Encoding.UTF8.GetByteCount(json)} bytes).");
+
+            var large = names.Schemas.Single(item => item.Name == schema);
+            Assert.That(large.Tables, Has.Count.EqualTo(300));
+            Assert.That(large.Views, Is.Empty);
+            Assert.That(large.Tables, Is.EquivalentTo(Enumerable.Range(1, 300).Select(number => TableNameOf(number))));
+            Assert.That(names.Truncated, Is.False);
+        }
+        finally
+        {
+            await DropLargeSchemaAsync(schema);
+        }
+    }
+
+    /// <summary>O nome da tabela de número dado do esquema grande (`t1` a `t300`), como o banco o guarda: maiúsculas no Db2.</summary>
+    protected virtual string TableNameOf(int number)
+        => $"t{number}";
+
     /// <summary>A tabela que não existe responde lista vazia, como as consultas de colunas, índices e chaves sempre responderam.</summary>
     [Test]
     public async Task Catalog_OfUnknownTable_ReturnsEmpty()

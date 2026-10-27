@@ -439,6 +439,18 @@ describe("ler a árvore do cache sem consultar o banco", () => {
     client.clear();
   });
 
+  it("o índice de nomes da busca mora na família da árvore e não é nível: o autocompletar não o recebe, no banco da conexão nem em outro (RN-BUSCA-002)", () => {
+    const client = new QueryClient();
+    client.setQueryData(["tree", "c1", "schemas"], [node("schema", "public")]);
+    client.setQueryData(["tree", "c1", "names"], { schemas: [{ name: "oculto", isSystem: false, tables: ["so_no_indice"], views: [] }], truncated: false });
+    client.setQueryData(["tree", "c1", { database: "arquivo" }, "schemas"], [node("schema", "historico")]);
+    client.setQueryData(["tree", "c1", { database: "arquivo" }, "names"], { schemas: [], truncated: false });
+
+    expect(cachedLevels(client, "c1").map((entry) => entry.key)).toEqual([["tree", "c1", "schemas"]]);
+    expect(cachedLevels(client, "c1", "arquivo").map((entry) => entry.key)).toEqual([["tree", "c1", { database: "arquivo" }, "schemas"]]);
+    client.clear();
+  });
+
   it("não busca nada: ler não inicia consulta nenhuma", () => {
     const client = new QueryClient();
     const fetched: unknown[] = [];

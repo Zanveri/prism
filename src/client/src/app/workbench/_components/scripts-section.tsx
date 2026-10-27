@@ -17,12 +17,13 @@ import { navigatorMetrics, rowIndent } from "../_lib/navigator-density";
 import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { appearanceChanged, normalizeScriptName, refusalProblem, savedPlaceOfTab, scriptFolderMenu, scriptIconOf, scriptMenu, scriptNameProblem, scriptPlace, type ScriptAction, type ScriptAppearance, type ScriptFolderAction } from "../_lib/saved-scripts";
 import { scriptFoldersQuery } from "../_lib/script-folders.service";
-import { ancestorKeys, buildScriptTree, scriptKey, scriptTreeLabels, scriptTreeMove, scriptTreeRowKey, visibleScriptRows, type ScriptTreeRow } from "../_lib/script-tree";
+import { ancestorIds, buildScriptTree, folderIdOf, folderKey, scriptKey, scriptTreeLabels, scriptTreeMove, scriptTreeRowKey, visibleScriptRows, type ScriptTreeRow } from "../_lib/script-tree";
+import { focusedElement } from "../_lib/tab-focus";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import type { Script, ScriptFolder, ScriptSummary } from "../_lib/scripts.schema";
 import { changeScriptPlace, deleteScript, editScriptOrRefuse, getScript, renameScriptOrRefuse, scriptsQuery } from "../_lib/scripts.service";
 import { connectionChecks } from "../_lib/use-connection-checks";
-import { useScriptsCollapsed } from "../_lib/use-navigator-layout";
+import { useOpenFolders, useScriptsCollapsed } from "../_lib/use-navigator-layout";
 import { useTypeAhead, type TypeAhead } from "../_lib/use-type-ahead";
 import { connectedConnectionIds } from "../_lib/workbench-model";
 import { useWorkbench } from "../_lib/workbench-state";
@@ -189,9 +190,9 @@ type Menu = { target: ScriptTreeRow | null; point: { x: number; y: number }; ini
  * conexão não existe mais, a aba abre sem conexão e pede uma. O genérico abre na única conexão conectada, ou sem conexão, e a faixa pergunta. O SQL só é lido
  * para abrir e para copiar, pela rota do item, e não fica no cache da tela.
  *
- * As pastas começam abertas, e abrir e fechar vale enquanto a janela está aberta, sem gravar (RN-SCRIPT-008). Recolhida, a seção fica só com o título, e a
- * escolha é lembrada por usuário (RN-NAV-012, `useScriptsCollapsed`). Depois de criar, renomear ou mover uma pasta ou um script, a linha fica à vista (as
- * pastas acima abrem), escolhida e com o foco.
+ * As pastas começam fechadas e voltam abertas ou fechadas como a pessoa as deixou, por usuário (RN-SCRIPT-008 e RN-NAV-014, `useOpenFolders`). Recolhida, a seção
+ * fica só com o título, e a escolha é lembrada por usuário (RN-NAV-012, `useScriptsCollapsed`). Depois de criar, renomear ou mover uma pasta ou um script, a
+ * linha fica à vista (as pastas acima abrem, e se lembram), escolhida e com o foco.
  */
 export function ScriptsSection() {
   const queryClient = useQueryClient();
@@ -204,8 +205,9 @@ export function ScriptsSection() {
   const [collapsed, setCollapsed] = useScriptsCollapsed();
   const expanded = !collapsed;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // RN-SCRIPT-008: as pastas fechadas nesta janela; as que não estão aqui estão abertas.
-  const [closedFolders, setClosedFolders] = useState<ReadonlySet<string>>(() => new Set());
+  // RN-SCRIPT-008 e RN-NAV-014: as pastas abertas são as lembradas; as que não estão aí estão fechadas. Quem escreve é um evento ou um efeito.
+  const [openFolderIds, changeFolders] = useOpenFolders("scripts");
+  const openFolderKeys = useMemo(() => new Set([...openFolderIds].map(folderKey)), [openFolderIds]);
   // A linha que acabou de ser criada, renomeada ou movida, à espera de estar na página para ganhar o foco.
   const pendingFocus = useRef<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
@@ -218,8 +220,16 @@ export function ScriptsSection() {
   const scriptList = useMemo(() => scripts.data ?? [], [scripts.data]);
   const tree = useMemo(() => buildScriptTree(folderList, scriptList), [folderList, scriptList]);
   const loaded = scripts.data !== undefined && folders.data !== undefined;
-  const rows = useMemo(() => (loaded ? visibleScriptRows(tree, closedFolders) : undefined), [loaded, tree, closedFolders]);
+  const rows = useMemo(() => (loaded ? visibleScriptRows(tree, openFolderKeys) : undefined), [loaded, tree, openFolderKeys]);
   const typeAhead = useTypeAhead();
+
+  // RN-NAV-014: a pasta excluída sai do que se lembra, na primeira lista de pastas desta montagem (a lida depois dela, e não a que o cache já tinha).
+  const pruned = useRef(false);
+  useEffect(() => {
+    if (pruned.current || folders.data === undefined || !folders.isFetchedAfterMount) return;
+    pruned.current = true;
+    changeFolders({ retain: folders.data.map((folder) => folder.id) });
+  }, [folders.data, folders.isFetchedAfterMount, changeFolders]);
 
   // Depois de cada renderização: a linha esperada que já está na página ganha o foco, uma vez.
   useEffect(() => {
@@ -232,18 +242,18 @@ export function ScriptsSection() {
   });
 
   /**
-   * RN-SCRIPT-008: depois de criar, renomear ou mover, a linha fica à vista (a seção aberta, as pastas acima dela abertas), escolhida e com o foco. As pastas
-   * acima são as da lista que acabou de ser lida.
+   * RN-SCRIPT-008 e RN-NAV-014: depois de criar, renomear ou mover, a linha fica à vista (a seção aberta, as pastas acima dela abertas e lembradas), escolhida e
+   * com o foco. As pastas acima são as da lista que acabou de ser lida. Vem de um evento (o fim de uma chamada à API), então pode escrever na loja.
    */
   function reveal(key: string, parentID: string | null) {
-    const above = ancestorKeys(queryClient.getQueryData<ScriptFolder[]>(scriptFoldersQuery.queryKey) ?? folderList, parentID);
-    if (above.length > 0) setClosedFolders((current) => new Set([...current].filter((closed) => !above.includes(closed))));
+    const above = ancestorIds(queryClient.getQueryData<ScriptFolder[]>(scriptFoldersQuery.queryKey) ?? folderList, parentID);
+    const opening = above.length > 0 && changeFolders({ open: above });
     if (collapsed) setCollapsed(false);
     setSelectedKey(key);
-    // A linha que já está na página (nada acima dela a abrir, a seção aberta) ganha o foco já. Esperar o efeito seria esperar uma renderização que pode não
-    // vir (nenhum estado mudou: a linha já era a escolhida), e o pedido ficaria armado até uma renderização qualquer depois, que tiraria o foco de onde a
-    // pessoa estivesse (o editor, ao digitar). A que ainda vai aparecer espera a renderização que as pastas abertas pedem.
-    const row = above.length > 0 || collapsed || typeof document === "undefined" ? null : document.getElementById(scriptRowDomId(key));
+    // A linha que já está na página (nenhuma pasta acima dela a abrir, a seção aberta) ganha o foco já. Esperar o efeito seria esperar uma renderização que pode
+    // não vir (nenhum estado mudou: a linha já era a escolhida), e o pedido ficaria armado até uma renderização qualquer depois, que tiraria o foco de onde a
+    // pessoa estivesse (o editor, ao digitar). A que ainda vai aparecer espera a renderização que as pastas abertas pedem: `changeFolders` diz se alguma abriu.
+    const row = opening || collapsed || typeof document === "undefined" ? null : document.getElementById(scriptRowDomId(key));
     if (row !== null) {
       pendingFocus.current = null;
       row.focus();
@@ -256,15 +266,16 @@ export function ScriptsSection() {
   // O texto do script, pela rota do item: o que lança (o script sumiu, a API caiu) vai ao aviso central.
   const read = (script: ScriptSummary) => throughMutationCache(queryClient, async (): Promise<Script> => unwrap(await getScript(script.id))).catch(() => null);
 
+  /** Abre ou fecha a pasta, e a escolha fica lembrada (RN-NAV-014). */
   function toggle(key: string) {
-    setClosedFolders((current) => {
-      const next = new Set(current);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
+    const id = folderIdOf(key);
+    if (id !== null) changeFolders(openFolderKeys.has(key) ? { close: [id] } : { open: [id] });
   }
 
   async function open(summary: ScriptSummary) {
+    // RN-ABAS-019: quem tinha o foco quando a pessoa pediu o script, lido antes da espera da API: se ele andou para outro lugar (o type-ahead da árvore, um campo) enquanto o
+    // texto vinha, a aba não toma o foco de lá.
+    const askedFrom = focusedElement();
     const script = await read(summary);
     if (script === null) return void refresh();
 
@@ -278,7 +289,7 @@ export function ScriptsSection() {
       new Set(notConnectedIds(connectionChecks.snapshot())),
     );
     const place = scriptPlace(script, known === undefined ? null : new Set(known.map((connection) => connection.id)), connected);
-    openScriptTab(script, { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), saved: place.saved });
+    openScriptTab(script, { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), saved: place.saved }, askedFrom);
     if (place.missing) toast.warning(copy.toasts.connectionMissing(script.name));
   }
 

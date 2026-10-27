@@ -40,6 +40,22 @@ export type DatabaseObject = z.infer<typeof databaseObjectSchema>;
 export const databaseObjectsSchema = z.array(databaseObjectSchema);
 
 /**
+ * RN-BUSCA-002: os nomes das tabelas e das visões de um esquema, no índice que a busca do navegador lê (`GET …/object-names`). Os nomes vêm exatamente como o
+ * catálogo os guarda, na ordem do banco: a chave da linha na árvore e o `SELECT` que a tela monta dependem disso.
+ */
+export const schemaObjectNamesSchema = z.object({ name: z.string(), isSystem: z.boolean(), tables: z.array(z.string()), views: z.array(z.string()) });
+
+export type SchemaObjectNames = z.infer<typeof schemaObjectNamesSchema>;
+
+/**
+ * RN-BUSCA-002: o índice de nomes de um banco: os esquemas que têm ao menos uma tabela ou visão (os comuns primeiro, depois os de sistema) e `truncated`, ligado
+ * quando o banco tem mais nomes do que o limite da API (50.000) e o índice traz só os primeiros.
+ */
+export const objectNamesSchema = z.object({ schemas: z.array(schemaObjectNamesSchema), truncated: z.boolean() });
+
+export type ObjectNames = z.infer<typeof objectNamesSchema>;
+
+/**
  * `generated` (RN-CAT-001): a coluna que o banco calcula, `always` (a identidade "sempre", a calculada) ou `byDefault` (a identidade "por padrão", o
  * `serial`); nula nas outras. O SQL da exportação de dados deixa de fora a `always` (RN-EXPORT-011). Fora do formato vale nula: a lista não cai por ela.
  */

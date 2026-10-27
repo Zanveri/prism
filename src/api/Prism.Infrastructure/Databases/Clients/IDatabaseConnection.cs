@@ -77,6 +77,14 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// <param name="kind">`tables`, `views` ou `routines`.</param>
     Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(string schema, string kind, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// RN-BUSCA-002: os nomes das tabelas e das visões de todos os esquemas, por uma consulta só, com os mesmos tipos de objeto que
+    /// <see cref="GetObjectsAsync"/> lista em cada esquema. Lê até `limit` nomes, os esquemas de sistema por último; o banco que tem mais
+    /// liga `Truncated`, e o nome a mais não vem.
+    /// </summary>
+    /// <param name="limit">Quantos nomes, no máximo, a resposta traz. A consulta lê um a mais, só para saber se há mais.</param>
+    Task<Result<ObjectNamesInfo, DatabaseFailure>> GetObjectNamesAsync(int limit, CancellationToken cancellationToken);
+
     Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken);
 
     Task<Result<IReadOnlyList<IndexInfo>, DatabaseFailure>> GetIndexesAsync(string schema, string table, CancellationToken cancellationToken);

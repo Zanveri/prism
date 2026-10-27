@@ -7,10 +7,8 @@ import { isMacPlatform } from "@/lib/utils/platform";
 
 import { tabElementId } from "../_components/tab-strip";
 import { createTabHistory, type HistoryScreen } from "./tab-history-controller";
+import { popupOpen } from "./tab-focus";
 import { useWorkbench } from "./workbench-state";
-
-/** Um diálogo modal, um menu ou uma lista aberta (o teste dos atalhos do navegador da página, com os menus e listas, que têm as setas só deles). */
-const popupOpen = () => document.querySelector('[aria-modal="true"], dialog[open], [role="menu"], [role="listbox"]') !== null;
 
 const screenOf = (pathname: string): HistoryScreen => (pathname === pathsConfig.workbench ? "workbench" : pathname === pathsConfig.settings ? "settings" : "other");
 
@@ -44,6 +42,7 @@ export function useTabHistory(): void {
         latest.setActiveTab(tabId);
       },
       leaveSettings: () => void latest.navigate(pathsConfig.workbench),
+      // Um diálogo modal, um menu ou uma lista aberta têm as setas só deles (`popupOpen`, de `tab-focus.ts`, que também segura o Ctrl+W da janela).
       blocked: () => vaultLock.isLocked() || popupOpen(),
       mac: typeof navigator !== "undefined" && isMacPlatform(navigator.platform),
     }),

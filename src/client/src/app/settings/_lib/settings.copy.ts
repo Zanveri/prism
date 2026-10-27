@@ -45,8 +45,8 @@ export const settingsCopy = {
     fonts: {
       ui: "Fonte da interface",
       editor: "Fonte do editor SQL",
-      uiHint: "Vale para todo o texto do Prism fora do código.",
-      editorHint: "Vale para o editor SQL, o filtro dos Registros e o “Ver SQL”. A grade continua na fonte mono do Prism.",
+      uiHint: "Vale para todo o texto do Prism fora do código, também para o navegador e para as grades do resultado e dos Registros.",
+      editorHint: "Vale para o editor SQL, o filtro dos Registros e o “Ver SQL”.",
       appFont: "do Prism",
       groups: { monospace: "Monoespaçadas", other: "Outras fontes" },
       loading: "Lendo as fontes deste computador…",

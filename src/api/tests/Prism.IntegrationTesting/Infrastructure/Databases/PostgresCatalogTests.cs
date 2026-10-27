@@ -359,6 +359,123 @@ public sealed class PostgresCatalogTests : CatalogContractTests
     }
 
     /// <summary>
+    /// RN-BUSCA-002: dois esquemas, cada um com tabela, visão e função: a função fica de fora, os esquemas comuns vêm antes dos de sistema
+    /// (`pg_catalog` e `information_schema`) e, entre os comuns, na ordem de nome do banco (byte a byte). Os nomes, com espaço, aspas,
+    /// barra, barra invertida e acento, voltam exatos: com eles a tela monta a chave da linha e o `SELECT * FROM "esquema"."nome"`.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_ListTheTablesAndViewsOfEverySchema_WithoutTheRoutines_AndTheNamesExactly()
+    {
+        var prefix = $"nomes_{Guid.NewGuid():N}"[..18];
+        var plain = $"{prefix}_a";
+        var odd = $"{prefix}_b \"M\" / \\ ação";
+        const string oddTable = "Tab \"Q\" 'y' / \\ ção";
+        const string oddView = "Vis \"V\" 'u' / \\ ão";
+        await using var connection = await OpenAsync();
+        await RunAsync(connection,
+            $"CREATE SCHEMA {plain}",
+            $"CREATE TABLE {plain}.pedido (id integer)",
+            $"CREATE VIEW {plain}.resumo AS SELECT id FROM {plain}.pedido",
+            $"CREATE FUNCTION {plain}.dobro(valor integer) RETURNS integer LANGUAGE sql AS 'SELECT valor * 2'",
+            $"CREATE SCHEMA {Quote(odd)}",
+            $"CREATE TABLE {Quote(odd)}.{Quote(oddTable)} (id integer)",
+            $"CREATE TABLE {Quote(odd)}.alfa (id integer)",
+            $"CREATE VIEW {Quote(odd)}.{Quote(oddView)} AS SELECT id FROM {Quote(odd)}.{Quote(oddTable)}",
+            $"CREATE FUNCTION {Quote(odd)}.dobro(valor integer) RETURNS integer LANGUAGE sql AS 'SELECT valor * 2'");
+        try
+        {
+            var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+
+            var schemas = names.Schemas.Select(schema => schema.Name).ToList();
+            Assert.That(names.Truncated, Is.False);
+            Assert.That(names.Schemas.Single(schema => schema.Name == plain), Is.EqualTo(new SchemaObjectNamesInfo(plain, false, ["pedido"], ["resumo"])).Using<SchemaObjectNamesInfo>(SameNames));
+            Assert.That(names.Schemas.Single(schema => schema.Name == odd), Is.EqualTo(new SchemaObjectNamesInfo(odd, false, [oddTable, "alfa"], [oddView])).Using<SchemaObjectNamesInfo>(SameNames));
+            Assert.That(names.Schemas.SelectMany(schema => schema.Tables.Concat(schema.Views)), Has.None.EqualTo("dobro"));
+            Assert.That(schemas.IndexOf(plain), Is.LessThan(schemas.IndexOf(odd)));
+            Assert.That(schemas.IndexOf(odd), Is.LessThan(schemas.IndexOf("pg_catalog")));
+            Assert.That(names.Schemas.Where(schema => schema.IsSystem).Select(schema => schema.Name), Is.SupersetOf(new[] { "pg_catalog", "information_schema" }));
+            Assert.That(names.Schemas.Single(schema => schema.Name == "pg_catalog").Tables, Has.Member("pg_class"));
+        }
+        finally
+        {
+            foreach (var schema in new[] { Quote(odd), plain })
+                await connection.ExecuteAsync($"DROP SCHEMA {schema} CASCADE", CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: o que o `pg_class` guarda além de tabela e visão não entra no índice (sequência, índice, tipo composto, tabela de `TOAST`,
+    /// função), a tabela particionada e a partição entram como tabela e a visão materializada como visão, o esquema que só tem sequência, tipo ou
+    /// função, ou que está vazio, fica de fora, o que só tem uma visão entra com a lista de tabelas vazia, e a tabela temporária da sessão aparece
+    /// no `pg_temp_N` (de sistema, por último). Os nomes vêm na ordem da lista de objetos, que é a byte a byte da colação `C` do tipo `name`:
+    /// maiúsculas antes do sublinhado, dele antes das minúsculas, o espaço do fim depois do nome sem ele e o acento depois de tudo.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_LeaveOutWhatIsNeitherATableNorAView_AndKeepTheOrderOfTheLists()
+    {
+        var prefix = $"exotico_{Guid.NewGuid():N}"[..20];
+        var everything = $"{prefix}_a";
+        var onlySequence = $"{prefix}_b";
+        var onlyView = $"{prefix}_c";
+        var empty = $"{prefix}_d";
+        string[] plainTables = ["B", "a", "Z", "ação", "t10", "t2", "_x", "a ", "A b"];
+        await using var connection = await OpenAsync();
+        string[] setup =
+        [
+            $"CREATE SCHEMA {everything}",
+            .. plainTables.Select(name => $"CREATE TABLE {everything}.{Quote(name)} (id integer)"),
+            $"CREATE TABLE {everything}.com_toast (id integer, texto text)",
+            $"CREATE TABLE {everything}.particionada (id integer) PARTITION BY RANGE (id)",
+            $"CREATE TABLE {everything}.particao_1 PARTITION OF {everything}.particionada FOR VALUES FROM (0) TO (10)",
+            $"CREATE VIEW {everything}.visao AS SELECT id FROM {everything}.a",
+            $"CREATE MATERIALIZED VIEW {everything}.materializada AS SELECT id FROM {everything}.a",
+            $"CREATE SEQUENCE {everything}.sequencia",
+            $"CREATE INDEX indice ON {everything}.a (id)",
+            $"CREATE TYPE {everything}.composto AS (x integer)",
+            $"CREATE FUNCTION {everything}.funcao() RETURNS integer LANGUAGE sql AS 'SELECT 1'",
+            $"CREATE SCHEMA {onlySequence}",
+            $"CREATE SEQUENCE {onlySequence}.sequencia",
+            $"CREATE TYPE {onlySequence}.composto AS (x integer)",
+            $"CREATE FUNCTION {onlySequence}.funcao() RETURNS integer LANGUAGE sql AS 'SELECT 1'",
+            $"CREATE SCHEMA {onlyView}",
+            $"CREATE VIEW {onlyView}.unica AS SELECT id FROM {everything}.a",
+            $"CREATE SCHEMA {empty}",
+            "CREATE TEMPORARY TABLE temporaria (id integer)"
+        ];
+        await RunAsync(connection, setup);
+        try
+        {
+            var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+            var tables = Value(await connection.GetObjectsAsync(everything, "tables", CancellationToken.None)).Select(item => item.Name).ToList();
+            var views = Value(await connection.GetObjectsAsync(everything, "views", CancellationToken.None)).Select(item => item.Name).ToList();
+
+            var indexed = names.Schemas.Single(schema => schema.Name == everything);
+            Assert.That(indexed.Tables, Is.EqualTo(tables));
+            Assert.That(indexed.Views, Is.EqualTo(views));
+            string[] expectedTables = [.. plainTables, "com_toast", "particionada", "particao_1"];
+            Assert.That(indexed.Tables, Is.EqualTo(expectedTables.Order(StringComparer.Ordinal)));
+            Assert.That(indexed.Views, Is.EqualTo(new[] { "materializada", "visao" }));
+            var everyName = names.Schemas.SelectMany(schema => schema.Tables.Concat(schema.Views)).ToList();
+            Assert.That(everyName.Intersect(["sequencia", "indice", "composto", "funcao"]), Is.Empty);
+            Assert.That(everyName.Where(name => name.StartsWith("pg_toast", StringComparison.Ordinal)), Is.Empty);
+            Assert.That(names.Schemas.Select(schema => schema.Name).Intersect([onlySequence, empty]), Is.Empty);
+            Assert.That(names.Schemas.Select(schema => schema.Name), Has.No.Member("pg_toast"));
+            Assert.That(names.Schemas.Single(schema => schema.Name == onlyView), Is.EqualTo(new SchemaObjectNamesInfo(onlyView, false, [], ["unica"])).Using<SchemaObjectNamesInfo>(SameNames));
+            var temporary = names.Schemas.Single(schema => schema.Tables.Contains("temporaria"));
+            Assert.That(temporary, Is.EqualTo(new SchemaObjectNamesInfo(temporary.Name, true, ["temporaria"], [])).Using<SchemaObjectNamesInfo>(SameNames));
+            Assert.That(temporary.Name, Does.StartWith("pg_temp_"));
+            var order = names.Schemas.Select(schema => schema.Name).ToList();
+            Assert.That(new[] { order.IndexOf(everything), order.IndexOf(onlyView), order.IndexOf(temporary.Name) }, Is.Ordered.And.All.GreaterThanOrEqualTo(0));
+        }
+        finally
+        {
+            await connection.ExecuteAsync("DROP TABLE pg_temp.temporaria", CancellationToken.None);
+            foreach (var schema in new[] { onlySequence, onlyView, empty, everything })
+                await connection.ExecuteAsync($"DROP SCHEMA {schema} CASCADE", CancellationToken.None);
+        }
+    }
+
+    /// <summary>
     /// Uma conta que não pode ler o catálogo: num banco só do teste, `pg_constraint` deixa de ser legível por todos. A resposta das
     /// consultas que a leem é a recusa do banco, com o SQLSTATE dele, e não uma exceção; as que não a leem seguem respondendo.
     /// </summary>
@@ -425,6 +542,9 @@ public sealed class PostgresCatalogTests : CatalogContractTests
 
     private static string Quote(string identifier)
         => $"\"{identifier.Replace("\"", "\"\"")}\"";
+
+    private static bool SameNames(SchemaObjectNamesInfo left, SchemaObjectNamesInfo right)
+        => (left.Name, left.IsSystem) == (right.Name, right.IsSystem) && left.Tables.SequenceEqual(right.Tables) && left.Views.SequenceEqual(right.Views);
 
     private static bool SameForeignKey(ForeignKeyInfo left, ForeignKeyInfo right)
         => (left.Name, left.ReferencedSchema, left.ReferencedTable, left.OnDelete, left.OnUpdate) == (right.Name, right.ReferencedSchema, right.ReferencedTable, right.OnDelete, right.OnUpdate) && left.Columns.SequenceEqual(right.Columns) && left.ReferencedColumns.SequenceEqual(right.ReferencedColumns);

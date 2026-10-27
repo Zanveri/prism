@@ -117,6 +117,53 @@ public sealed partial class DatabaseSessionServiceTests
         Assert.Equal(EDatabaseFailure.ExecutionFailed, afterGivingUp.Error.Kind);
     }
 
+    /// <summary>
+    /// RN-BUSCA-002 e RN-SESSAO-002: o índice de nomes é consulta de catálogo e espera a vez, sem `SessionBusy`, e a conexão o lê até o limite do
+    /// serviço (50.000 nomes), um número que não vem de fora.
+    /// </summary>
+    [Trait("DatabaseSessionService", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "OK o índice de nomes espera a vez da sessão e pede à conexão até 50.000 nomes")]
+    public async Task GetObjectNamesAsync_ShouldWaitForTheTurn_AndAskForTheLimit()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        var idle = await service.GetObjectNamesAsync(session.ID, CancellationToken.None);
+        using var gaveUp = new CancellationTokenSource();
+        _ = service.ExecuteAsync(session.ID, "SELECT 1", CancellationToken.None);
+
+        //Act
+        var waiting = service.GetObjectNamesAsync(session.ID, gaveUp.Token);
+        var completedWhileBusy = waiting.IsCompleted;
+        await gaveUp.CancelAsync();
+        var afterGivingUp = await waiting;
+
+        //Assert
+        Assert.True(idle.IsSuccess);
+        Assert.Equal([("loja", false, "pedido", "resumo")], idle.Value.Schemas.Select(schema => (schema.Name, schema.IsSystem, string.Join(",", schema.Tables), string.Join(",", schema.Views))));
+        Assert.False(completedWhileBusy);
+        Assert.Equal(EDatabaseFailure.ExecutionFailed, afterGivingUp.Error.Kind);
+        Assert.Equal([50_000], _connection.ObjectNamesLimits);
+        Assert.Equal(50_000, DatabaseSessionService.ObjectNamesLimit);
+    }
+
+    /// <summary>RN-BUSCA-002: a sessão que não existe responde `SessionNotFound`, sem ir a conexão nenhuma.</summary>
+    [Trait("DatabaseSessionService", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "Erro o índice de nomes de uma sessão que não existe")]
+    public async Task GetObjectNamesAsync_ShouldFail_WhenTheSessionDoesNotExist()
+    {
+        //Arrange
+        var service = CreateService();
+
+        //Act
+        var names = await service.GetObjectNamesAsync(Guid.CreateVersion7(), CancellationToken.None);
+
+        //Assert
+        Assert.True(names.IsFailure);
+        Assert.Equal(EDatabaseFailure.SessionNotFound, names.Error.Kind);
+        Assert.Empty(_connection.ObjectNamesLimits);
+    }
+
     /// <summary>RN-SQL-010: sem comando em andamento na sessão não há o que interromper, e o cancelamento nem chega à conexão.</summary>
     [Trait("DatabaseSessionService", "Cancel")]
     [Fact(DisplayName = "OK cancelar só chega à conexão quando há comando em andamento")]
@@ -806,6 +853,17 @@ public sealed partial class DatabaseSessionServiceTests
 
         public Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(string schema, string kind, CancellationToken cancellationToken)
             => throw new NotSupportedException();
+
+        /// <summary>RN-BUSCA-002: o limite que cada pedido do índice de nomes trouxe, na ordem.</summary>
+        public List<int> ObjectNamesLimits { get; } = [];
+
+        public Task<Result<ObjectNamesInfo, DatabaseFailure>> GetObjectNamesAsync(int limit, CancellationToken cancellationToken)
+        {
+            ObjectNamesLimits.Add(limit);
+            HasOpenCursor = false;
+
+            return Task.FromResult(Result.Success<ObjectNamesInfo, DatabaseFailure>(new ObjectNamesInfo([new SchemaObjectNamesInfo("loja", false, ["pedido"], ["resumo"])], false)));
+        }
 
         public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken)
             => throw new NotSupportedException();

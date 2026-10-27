@@ -83,6 +83,14 @@ const stripButton = "flex h-7 w-6 flex-none cursor-pointer items-center justify-
 const stripIcon = "size-3.5";
 
 /**
+ * O X da aba não toma o foco no clique do mouse (RN-ABAS-019), como o botão do meio já não toma: o foco fica onde estava, e se estava na aba que fecha, quem o leva
+ * à aba que ficou ativa é a regra do foco perdido. Só o botão principal; o teclado (Enter e Espaço no X, que a ordem do Tab não alcança) não passa por aqui.
+ */
+const keepFocus = (event: MouseEvent) => {
+  if (event.button === 0) event.preventDefault();
+};
+
+/**
  * A faixa de abas: uma linha só, que rola na horizontal. A roda comum rola as abas; com excedente, aparecem os botões de rolar nas
  * pontas; a aba ativa é sempre trazida à vista; e um botão no fim abre a lista de todas as abas. Botão direito (ou Shift+F10, ou a
  * tecla de menu) numa aba abre o menu com Fechar, Fechar as outras, Fechar as da direita e Fechar todas, e o botão do meio fecha a aba.
@@ -326,7 +334,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
           {resultMarkOf?.(tab.id, selected) ?? null}
           <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} className="h-4 px-1.5 leading-4" />
         </button>
-        <button type="button" aria-label={resultPlaceCopy.tab.close(name)} title={resultPlaceCopy.tab.closeHint(shortcut)} onClick={back} className="group/close mr-0.5 flex size-6 flex-none cursor-pointer items-center justify-center self-center rounded-sm text-subtle">
+        <button type="button" aria-label={resultPlaceCopy.tab.close(name)} title={resultPlaceCopy.tab.closeHint(shortcut)} onMouseDown={keepFocus} onClick={back} className="group/close mr-0.5 flex size-6 flex-none cursor-pointer items-center justify-center self-center rounded-sm text-subtle">
           <span className="flex size-5 items-center justify-center rounded-sm transition-colors group-hover/close:bg-selected group-hover/close:text-ink">
             <CloseIcon className="size-3" />
           </span>
@@ -465,7 +473,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
                 <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} className="h-4 px-1.5 leading-4" />
               </button>
               {/* A área de clique (24 px) é o botão; o desenho (20 px, o fundo no hover) é o miolo, centrado nela. */}
-              <button type="button" aria-label={copy.close(tab.title)} title={copy.close(tab.title)} onClick={() => onClose("one", tab.id)} className="group/close mr-0.5 flex size-6 flex-none cursor-pointer items-center justify-center self-center rounded-sm text-subtle">
+              <button type="button" aria-label={copy.close(tab.title)} title={copy.close(tab.title)} onMouseDown={keepFocus} onClick={() => onClose("one", tab.id)} className="group/close mr-0.5 flex size-6 flex-none cursor-pointer items-center justify-center self-center rounded-sm text-subtle">
                 <span className="flex size-5 items-center justify-center rounded-sm transition-colors group-hover/close:bg-selected group-hover/close:text-ink">
                   <CloseIcon className="size-3" />
                 </span>

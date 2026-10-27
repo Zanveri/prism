@@ -28,6 +28,8 @@ export const prismEndpoints = {
   userDatabaseSession: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}`,
   userDatabaseSessionDatabases: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/databases`,
   userDatabaseSessionSchemas: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/schemas`,
+  // RN-BUSCA-002: o índice de nomes das tabelas e visões de todos os esquemas do banco da sessão, para a busca do navegador.
+  userDatabaseSessionObjectNames: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/object-names`,
   // Nome de esquema e de tabela vêm do banco e podem ter espaço, aspas, barra e maiúsculas: sempre codificados.
   userDatabaseSessionObjects: (id: string, schema: string, kind: "tables" | "views" | "routines") => `api/user/database-sessions/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/objects?kind=${kind}`,
   userDatabaseSessionColumns: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/columns`,
