@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { environmentLookup } from "@/app/connections/_lib/environment";
@@ -9,7 +9,6 @@ import { vaultLock } from "@/lib/api/vault-lock";
 
 import type { TabMoveTarget } from "../../../../electron/window-messages";
 
-import { createDisconnectLog } from "../_lib/connection-intent";
 import { exportTracker } from "../_lib/data-export/data-exports";
 import { loadTracker, windowTransfers } from "../_lib/data-import/data-imports";
 import { exitQuestion, totalOf, type ExitQuestion } from "../_lib/data-import/transfer-exits";
@@ -79,7 +78,7 @@ function ResultTabPanel({ tabId, label, hidden }: { tabId: string; label: string
  * janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, resultActive, showEntry, setResultPlace, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, resultActive, showEntry, setResultPlace, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, disconnectLog, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   // RN-ABAS-008: o nome curto das abas (o do painel da aba do resultado também).
   const shortTitles = useMemo(() => stripTitles(tabs), [tabs]);
@@ -90,7 +89,6 @@ export function WorkbenchTabs() {
   const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
   // RN-SCRIPT-006: o ícone e a cor da aba de um script vêm da lista dos scripts, que se atualiza depois do "Editar script…".
   const scripts = useQuery(scriptsQuery);
-  const queryClient = useQueryClient();
 
   // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S da aba de consulta, e o diálogo do nome. A função é estável: o painel memorizado de cada aba a recebe.
   const { save: saveScript, dialog: saveDialog } = useScriptSaving();
@@ -103,18 +101,13 @@ export function WorkbenchTabs() {
   const [drag] = useState(() => createTabDragSession());
   const area = useRef<HTMLElement>(null);
 
-  // Quem a pessoa desconectou: as vistas das tabelas dessas conexões esperam o clique, em vez de reabrir a sessão (`connection-intent.ts`).
-  const [disconnectLog] = useState(() => createDisconnectLog(queryClient));
+  // Quem a pessoa desconectou, e as conexões das abas de tabela que voltaram na entrada (RN-ABAS-006, marcadas pelo provedor antes de as abas existirem): as
+  // vistas das tabelas dessas conexões esperam o clique, em vez de reabrir a sessão (`connection-intent.ts`).
   const disconnected = useSyncExternalStore(disconnectLog.subscribe, disconnectLog.getSnapshot);
   // Uma aba com sessão é uma conexão conectada de novo: o "Atualizar" dos registros abre a sessão da aba, sem passar pela da árvore.
   useEffect(() => {
     for (const tab of tabs) if (tab.sessionId !== null && tab.connectionId !== null) disconnectLog.forget(tab.connectionId);
   }, [tabs, disconnectLog]);
-  // RN-ABAS-006: as abas de tabela que voltaram na entrada voltam desconectadas, e nada conecta sozinho: as vistas delas esperam o clique, como as de uma
-  // conexão que a pessoa desconectou.
-  useEffect(() => {
-    for (const connectionId of restoredTableConnections) disconnectLog.mark(connectionId);
-  }, [restoredTableConnections, disconnectLog]);
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.

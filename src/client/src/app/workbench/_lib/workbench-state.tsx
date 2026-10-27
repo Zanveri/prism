@@ -14,6 +14,7 @@ import { workspaceSync } from "@/lib/api/workspace-sync";
 import type { DatabaseSession } from "./database-sessions.schema";
 import { closeDatabaseSession, databaseSessionKey, treeSessionIds } from "./database-sessions.service";
 import { filterHandoff } from "./filter-handoff";
+import { createDisconnectLog, type DisconnectLog } from "./connection-intent";
 import { liveEditors } from "./live-editors";
 import { inDatabase, parseNavKey } from "./navigator-model";
 import { isScriptDirty, withEditedSql, withSavedPlace, type SavedPlace, type ScriptRef } from "./saved-scripts";
@@ -125,10 +126,10 @@ type WorkbenchState = {
   disconnecting: string | null;
 
   /**
-   * RN-ABAS-006: as conexões das abas de tabela que voltaram na entrada. Elas voltam desconectadas, e as vistas delas esperam o clique para conectar
-   * (`DisconnectLog.mark`), como as de uma conexão que a pessoa desconectou.
+   * Quem a pessoa desconectou (RN-SESSAO-004), e as conexões das abas de tabela que voltaram na entrada (RN-ABAS-006), que voltam desconectadas: as vistas delas
+   * esperam o clique para conectar. É do provedor, e não da área das abas, porque a restauração marca as conexões ANTES de as abas existirem (`restoreSaved`).
    */
-  restoredTableConnections: ReadonlySet<string>;
+  disconnectLog: DisconnectLog;
   /**
    * RN-ABAS-004 com a RN-ABAS-006: a janela começou a fechar. As abas que fecham por causa dela continuam no que volta (a última janela fechada é o app
    * saindo, e as abas voltam na próxima entrada); a janela que fica aberta (a pessoa cancelou uma pergunta) solta, e o que fechou até ali sai do que volta.
@@ -207,7 +208,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }),
   );
   const urgentReport = useRef(false);
-  const [restoredTableConnections, setRestoredTableConnections] = useState<ReadonlySet<string>>(() => new Set());
+  const [disconnectLog] = useState(() => createDisconnectLog(queryClient));
   const [reporting, setReporting] = useState(false);
 
   // A mesma consulta de Conexões e do navegador (mesma chave, mesmo cache): aqui só se olha o que sumiu dela.
@@ -634,10 +635,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       });
 
       for (const tab of restored.tabs) runners.set(tab.id, createRunner(tab));
+      // As conexões das abas de tabela são marcadas ANTES de as abas existirem: a primeira carga dos Registros da aba ativa é um efeito da renderização que a
+      // mostra, e lê o `disconnected` dessa renderização. Marcadas depois (num efeito da área das abas, que roda depois dos efeitos dos painéis), a aba ativa
+      // abria a sessão sozinha, e só as escondidas esperavam o clique.
+      for (const connectionId of restored.tableConnections) disconnectLog.mark(connectionId);
       setTabs((current) => [...restored.tabs, ...current]);
       setActiveTabId((current) => restored.activeTabId ?? current);
       if (restored.activeTabId !== null) askFocus(restored.activeTabId);
-      setRestoredTableConnections(restored.tableConnections);
       for (const title of restored.emptied) toast.warning(workbenchCopy.toasts.restoredEmpty(title));
       if (restored.withoutConnection > 0) toast.warning(workbenchCopy.toasts.restoredWithoutConnection(restored.withoutConnection));
       if (restored.droppedTables > 0) toast.warning(workbenchCopy.toasts.restoredTablesDropped(restored.droppedTables));
@@ -712,8 +716,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const { mutate: disconnect } = disconnectMutation;
 
   const value = useMemo<WorkbenchState>(
-    () => ({ tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose }),
-    [tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose],
+    () => ({ tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose }),
+    [tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose],
   );
 
   return (

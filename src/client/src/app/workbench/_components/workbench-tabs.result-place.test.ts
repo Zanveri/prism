@@ -35,10 +35,9 @@ vi.mock("@/components/ui", () => ({ ConfirmDialog: () => null, useToast: () => r
 vi.mock("@/lib/api/bridge", () => ({ currentWindowId: () => 1, onTabWanted: () => () => {}, onWindowCloseRequested: () => () => {}, sendTabAway: rt.sendTabAway, tellWindows: () => {}, resultWindowsAvailable: () => false, onResultWindowClosed: () => () => {}, onResultWindowState: () => () => {} }));
 vi.mock("../_lib/data-export/data-exports", () => ({ exportTracker: { count: () => 0, cancelAll: async () => {} } }));
 vi.mock("../_lib/data-import/data-imports", () => ({ loadTracker: { cancelAll: async () => {} }, windowTransfers: () => ({ exports: 0, imports: 0, copies: 0 }) }));
-vi.mock("../_lib/connection-intent", () => ({ createDisconnectLog: () => ({ subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }) }));
 vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => true }));
 vi.mock("../_lib/result-slots", async (importOriginal) => ({ ...(await importOriginal<typeof import("../_lib/result-slots")>()), resultFocus: rt.focus }));
-vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ ...noop, restoredTableConnections: new Set(), ...rt.workbench }) }));
+vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ ...noop, disconnectLog: { subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }, ...rt.workbench }) }));
 vi.mock("./result-host", () => rt.host);
 vi.mock("./use-script-saving", () => ({ useScriptSaving: () => ({ save: async () => true, dialog: null }) }));
 vi.mock("./query-tab", () => ({ QueryTabPanel: () => null }));

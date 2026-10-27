@@ -106,7 +106,7 @@ describe("WorkbenchProvider: as abas que voltam na próxima entrada (RN-ABAS-006
     // O script da lista não tem conexão: é genérico (RN-SCRIPT-005), e a aba volta lembrando isso.
     expect(value.tabs[0].script).toEqual({ id: s1, name: "Relatório", savedSql: "SELECT 'salvo'", generic: true, dirty: true });
     expect(value.activeTabId).toBe(value.tabs[1].id);
-    expect(value.restoredTableConnections).toEqual(new Set([c1]));
+    expect(value.disconnectLog.getSnapshot()).toEqual(new Set([c1]));
     // Cada aba tem o executor dela, e nenhum executou nada (os executores de mentira nem sabem executar).
     expect(rt.created.map((options) => options.connectionId)).toEqual([c1, c1, null, c1]);
     expect(rt.toast.warning).toHaveBeenCalledWith(workbenchCopy.toasts.restoredEmpty("consulta-2.sql"));
