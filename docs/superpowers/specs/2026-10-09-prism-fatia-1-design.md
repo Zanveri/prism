@@ -331,7 +331,9 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   (seção 35): entraram as exportações de dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as
   importações e as cópias.*
 - **RN-CONN-015.** O ambiente aparece como etiqueta colorida ao lado do nome da conexão, na
-  lista, na árvore, na aba e na barra de status.
+  lista, na árvore, na aba e na barra de status, e a cor dele pinta os destaques da área de
+  resultado da aba (RN-AMB-002). *Alterada a pedido do dono em 2026-10-27 (seção 42): entraram os
+  destaques da área de resultado.*
 
 ### 5.3 Sessões com o banco
 
@@ -877,7 +879,9 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   é a IBM Plex Sans, e a largura das colunas da grade é medida nela (RN-CONFIG-008, seção 42). A barra do navegador
   tem o campo "Filtrar objetos" sozinho, na largura toda, como no canvas, e, numa linha abaixo dele, "Só as
   conectadas" e o seletor de ambiente (RN-NAV-010 e 013), que o canvas não tem, nem a linha de estado da busca, que
-  vem abaixo deles (RN-BUSCA-002).
+  vem abaixo deles (RN-BUSCA-002). O sublinhado do título "Registros" e o das abas da área de resultado, o contorno da
+  célula ativa e as barras de rolagem da grade, que o canvas pinta no acento e na cor de rolagem do tema, levam a cor
+  do ambiente da conexão da aba, quando ela tem uma (RN-AMB-002).
 
 ## 10. Riscos e sondas
 
@@ -1755,7 +1759,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
 
 - **RN-GRADE-001.** Seleção, como no DBeaver, nas grades dos Registros, do resultado da aba de consulta e de cada
   aba de resultado do script.
-  - A grade tem uma célula ativa (a do foco, com o contorno de hoje) e uma seleção, que tem uma de três formas: um
+  - A grade tem uma célula ativa (a do foco, com o contorno, RN-AMB-002) e uma seleção, que tem uma de três formas: um
     retângulo de células, da âncora até a célula ativa; linhas inteiras, uma ou várias, seguidas ou não; ou colunas
     inteiras, uma ou várias, seguidas ou não, com todas as linhas do resultado, também as que ainda não foram
     carregadas (RN-GRADE-022). Sem nada
@@ -1810,13 +1814,15 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
 
     A grade rola para manter a célula ativa à vista.
   - O desenho: as células escolhidas têm o fundo de escolha do tema, o mesmo do item escolhido do navegador, e a
-    célula ativa continua com o contorno; o número das linhas escolhidas e o cabeçalho das colunas da seleção ficam
+    célula ativa continua com o contorno, na cor do ambiente da conexão da aba ou, sem ela, no acento do tema
+    (RN-AMB-002); o número das linhas escolhidas e o cabeçalho das colunas da seleção ficam
     destacados. Com mais de uma célula escolhida, a barra do resultado diz quantas, ao lado do resumo (no resultado,
     de "Primeiras 200 linhas"; nos Registros, da contagem das linhas carregadas): "3 linhas escolhidas", com linhas
     inteiras, e "12 células escolhidas", com um retângulo ("1 linha escolhida", "2 células escolhidas"); com
     colunas inteiras, "Coluna preco: todas as linhas" (RN-GRADE-022). Esse texto
     tem o papel de status (`role="status"`) e muda quando a seleção para de mudar (ao soltar o botão ou a tecla), e
-    não a cada célula do arraste.
+    não a cada célula do arraste. *Alterada a pedido do dono em 2026-10-27 (seção 42): o contorno da célula ativa
+    leva a cor do ambiente.*
   - Para o leitor de tela, a grade tem `aria-multiselectable="true"`, cada célula desenhada diz se está escolhida
     (`aria-selected`), e a célula ativa continua anunciada pelo `aria-activedescendant`. A grade continua com uma
     parada só do Tab.
@@ -3163,8 +3169,10 @@ lá, e entraram pela seção 32 (pedido do dono em 2026-10-15).
     renomear, pelo F2, que agora muda só o nome (RN-NAV-009).*
   - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
   - A conexão sem ambiente próprio herda o da pasta mais próxima acima dela que tenha um. Ela mostra
-    o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba e barra de
-    status). O ambiente próprio da conexão sempre ganha.
+    o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba, barra de
+    status e os destaques da área de resultado, RN-AMB-002). O ambiente próprio da conexão sempre
+    ganha. *Alterada a pedido do dono em 2026-10-27 (seção 42): entraram os destaques da área de
+    resultado.*
   - Mover a conexão ou a pasta muda o que ela herda. O formulário da conexão sem ambiente próprio
     diz qual ela herda e de qual pasta.
   - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem
@@ -12738,6 +12746,44 @@ RN-SCRIPT-003 e a RN-ABAS-001, alteradas no lugar, a citam.
     o fechar saber de onde ele saiu. O que devolve o foco antigo quando a área de trabalho volta à tela só o faz quando
     o foco está perdido, para não desfazer o foco da entrada.
 
+### A cor do ambiente na área de resultado
+
+O ambiente era só a etiqueta (RN-CONN-015). A RN-AMB-002 leva a cor dele aos destaques que o dono marcou nas capturas, e
+aos que andam com eles, para a área de resultado não misturar a cor do ambiente com a do tema: o contorno do campo de
+edição da célula, que toma o lugar do contorno da célula ativa ao editar, e o anel do foco da grade, que fica em volta
+dela.
+
+- **RN-AMB-002.** A cor do ambiente nos destaques da área de resultado.
+  - Na área de resultado de uma aba (os Registros da aba de tabela; o resultado da aba de consulta, no painel, numa aba
+    ou na janela do resultado, RN-ABAS-011; e o da aba de execução, RN-VAR-029, que usa a mesma área), os destaques
+    levam a cor do ambiente da conexão da aba, o próprio ou o herdado da pasta (RN-PASTA-005):
+    - o sublinhado do título "Registros" ou "Resultado", o da aba escolhida do Executar script (RN-SQL-020) e o da
+      escolhida entre "Resultado" e "Variáveis" (RN-VAR-024);
+    - o contorno da célula ativa da grade (RN-GRADE-001) e o do campo de edição dela (RN-EDIT-001), para o contorno não
+      trocar de cor ao editar;
+    - o anel do foco da grade, para ele não ficar na cor do tema em volta da célula na cor do ambiente;
+    - as barras de rolagem da grade: a vertical, a horizontal e o canto entre elas.
+  - Sem ambiente, com o ambiente sem cor (só o nome), com a cor fora do formato `#RRGGBB` ou na aba sem conexão, tudo
+    fica como no tema: os sublinhados e os contornos no acento, e as barras de rolagem na cor de rolagem dele
+    (`border-strong`). A cor sem nome não faz ambiente (RN-PASTA-005), e não conta.
+  - A cor passa em 3:1 (RN-CONFIG-003) sobre as superfícies de todos os temas, pelo mesmo ajuste do ícone colorido
+    (RN-PASTA-007): nos temas claros, a variante escurecida dela; nos escuros, a clareada, o mínimo que passa. A
+    etiqueta do ambiente continua com a cor escolhida. Trocar o tema, ou seguir o do sistema, troca a variante sem nada
+    a calcular de novo.
+  - Trocar a conexão da aba (RN-ARVORE-008), mudar o ambiente da conexão ou da pasta e mover a conexão de pasta mudam a
+    cor na hora, também na aba e na janela do resultado.
+  - Ficam de fora, no acento ou no token de hoje: a faixa de abas, o editor SQL, o campo de filtro, as marcas de
+    pendência (RN-EDIT-004), a divisa das colunas, as setas de ordenar, os botões, a Estrutura e o Diagrama. As outras
+    barras de rolagem da área de resultado (as das Estatísticas, do painel Variáveis e da lista das abas do script)
+    ficam com a cor do tema.
+  - A cor é só um reforço: o nome do ambiente continua na etiqueta da aba, do cabeçalho da aba de tabela e da barra de
+    status, e nenhum texto de tela muda.
+  - Como: a cor vai numa variável de estilo própria, `--environment-color`, que não é token do tema, posta na própria
+    área de resultado, que vai junto para a aba ou para a janela do resultado (RN-ABAS-017); posta mais acima, na aba
+    de consulta, ela não chegaria lá. A variável só existe com uma cor `#RRGGBB` válida, porque um valor inválido
+    nela não cai na reserva do `var()`, e cada destaque a lê com a cor do tema como reserva. A cor chega por
+    propriedade, da faixa de abas, que já sabe o ambiente de cada aba, até a área de resultado.
+
 ### Rotas e respostas
 
 | Rota | Sucesso | Recusas |
@@ -12843,6 +12889,17 @@ dito no relatório, e nunca dado como passando.
   foco. No desenvolvimento, o menu padrão do Electron fecha a janela com o Ctrl+W que a página não trata: ali a
   conferência registra que a tecla foi tratada (`defaultPrevented`), e a prova final é no app empacotado
   (`dist:dir`), que não tem menu no Windows e no Linux.
+- **A cor.** Testes de unidade: a variável (a cor nula, vazia, fora do formato ou inválida não a cria; a válida, em
+  maiúsculas ou minúsculas, a cria com a variante de cada tema; as seis cores do canvas e o preto, o branco e um
+  azul-marinho passam em 3:1 sobre todas as superfícies de todos os temas; cada destaque tem a reserva do tema); a área
+  de resultado (a variável na raiz dela, ao lado do estilo de quem a chama, e nenhuma sem cor; o sublinhado do
+  título); as abas do script e as de "Resultado" e "Variáveis"; a grade (o contorno da célula ativa, as barras de
+  rolagem e o anel do foco; as linhas, que não recebem a cor e não se desenham de novo quando ela muda); o campo de
+  edição; e a cor que chega da aba de tabela e da de consulta, a própria e a herdada da pasta, nos três lugares do
+  resultado, e que muda com a conexão da aba. Sob Xvfb: os valores calculados (`getComputedStyle`) do sublinhado, do
+  contorno da célula ativa e das barras de rolagem, com um ambiente verde, um âmbar, o vermelho herdado da pasta, um
+  só com o nome e uma cor clara de "Outra cor"; em todos os temas, com a variante escurecida nos claros; no painel,
+  numa aba e na janela do resultado; e a conexão sem ambiente, igual à 0.5.0.
 
 ### O que muda nas regras existentes
 
@@ -12866,9 +12923,13 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - **RN-ABAS-001**: o Ctrl+W vale em toda a janela da área de trabalho, nunca fecha a janela, e o seguinte fecha a
   próxima.
 - **RN-MENU-001**: a ação do menu que abre uma aba leva o foco a ela, em vez de devolvê-lo ao item.
+- **RN-CONN-015**: a cor do ambiente pinta os destaques da área de resultado da aba.
+- **RN-PASTA-005**: o ambiente herdado da pasta também pinta esses destaques.
+- **RN-GRADE-001**: o contorno da célula ativa leva a cor do ambiente, ou o acento do tema sem ela.
 - **Seção 6**: a rota `object-names`.
 - **Seção 9**: a árvore e as grades deixam a IBM Plex Mono do canvas; a barra do navegador tem o campo na largura toda,
-  como no canvas, e a linha de baixo e a linha de estado da busca, que ele não tem.
+  como no canvas, e a linha de baixo e a linha de estado da busca, que ele não tem; e os destaques da área de
+  resultado levam a cor do ambiente no lugar do acento do canvas.
 - **Seção 33**: o "lembrar as pastas abertas" do "Fica para depois" entrou por esta seção.
 
 ### Fica para depois
@@ -12884,3 +12945,5 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   PageDown movem a aba, RN-ABAS-001).
 - Levar o foco ao conteúdo da aba também no clique na faixa e no Voltar e Avançar, como no Eclipse (mudaria a
   RN-ABAS-018).
+- A cor do ambiente na faixa de abas (o sublinhado da aba ativa e o da aba do resultado) e no editor SQL (o cursor e as
+  barras de rolagem).
