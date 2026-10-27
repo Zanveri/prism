@@ -202,6 +202,22 @@ internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger)
             _ => null
         };
 
+    /// <summary>
+    /// RN-BUSCA-002. Os mesmos `TYPE` que a lista de objetos (<see cref="TableTypes"/> e <see cref="ViewTypes"/>; os apelidos ficam de
+    /// fora) e o mesmo critério de sistema do <see cref="SchemasSql"/> (`SYS%`, `NULLID` e `SQLJ`). O `RTRIM` tira os espaços com que o
+    /// catálogo completa o nome de esquema mais curto e o texto mais curto do `CASE`. O índice é sempre do banco da conexão, o único
+    /// que o Db2 lista (RN-ARVORE-006).
+    /// </summary>
+    protected override string ObjectNamesSql(int rows)
+        => $@"SELECT RTRIM(TABSCHEMA) AS schema_name,
+                     CASE WHEN TABSCHEMA LIKE 'SYS%' OR TABSCHEMA IN ('NULLID', 'SQLJ') THEN 1 ELSE 0 END AS is_system,
+                     TABNAME AS object_name,
+                     RTRIM(CASE WHEN TYPE IN ({ViewTypes}) THEN 'view' ELSE 'table' END) AS object_kind
+                FROM SYSCAT.TABLES
+               WHERE TYPE IN ({TableTypes}, {ViewTypes})
+               ORDER BY is_system, TABSCHEMA, TABNAME
+               FETCH FIRST {rows} ROWS ONLY";
+
     /// <summary>O tipo da coluna de `SYSCAT.COLUMNS`, com o tamanho.</summary>
     private static string ColumnType => @"CASE WHEN SYSCAT.COLUMNS.TYPENAME IN ('CHARACTER', 'VARCHAR', 'GRAPHIC', 'VARGRAPHIC', 'BINARY', 'VARBINARY', 'CLOB', 'BLOB', 'DBCLOB') THEN SYSCAT.COLUMNS.TYPENAME || '(' || SYSCAT.COLUMNS.LENGTH || ')'
                                                WHEN SYSCAT.COLUMNS.TYPENAME = 'DECIMAL' THEN SYSCAT.COLUMNS.TYPENAME || '(' || SYSCAT.COLUMNS.LENGTH || ',' || SYSCAT.COLUMNS.SCALE || ')'

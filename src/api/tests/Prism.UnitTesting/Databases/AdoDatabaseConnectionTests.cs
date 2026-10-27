@@ -2153,6 +2153,9 @@ public sealed partial class AdoDatabaseConnectionTests
         protected override string? ObjectsSql(string kind)
             => kind == "tables" ? "TABLES" : null;
 
+        protected override string ObjectNamesSql(int rows)
+            => $"OBJECT NAMES {rows}";
+
         protected override string CountSql(string sql)
             => sql;
 

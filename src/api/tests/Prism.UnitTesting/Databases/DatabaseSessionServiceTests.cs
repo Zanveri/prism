@@ -807,6 +807,9 @@ public sealed partial class DatabaseSessionServiceTests
         public Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(string schema, string kind, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
+        public Task<Result<ObjectNamesInfo, DatabaseFailure>> GetObjectNamesAsync(int limit, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
         public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 

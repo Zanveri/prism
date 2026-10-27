@@ -443,6 +443,24 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
             _ => null
         };
 
+    /// <summary>
+    /// RN-BUSCA-002. As mesmas letras de `tabtype` que a lista de objetos (<see cref="TableTypes"/> e <see cref="ViewTypes"/>), o dono como
+    /// esquema e o `informix` como o de sistema, como no <see cref="SchemasSql"/>; a ordem dos nomes é a da lista (as tabelas que alguém
+    /// criou, a partir de `tabid` 100, antes das do catálogo). O `TRIM` do dono tira o espaço com que o `CHAR` completa o nome, e o do
+    /// `CASE`, o do texto mais curto. A ordenação é por posição das colunas (a quinta é só a da ordem dos nomes), como no <see cref="SchemasSql"/>.
+    /// Outro banco do servidor é outra sessão (RN-ARVORE-006): a consulta lê só o banco da sessão.
+    /// </summary>
+    protected override string ObjectNamesSql(int rows)
+        => $@"SELECT FIRST {rows}
+                     TRIM(owner) AS schema_name,
+                     CASE WHEN owner = 'informix' THEN 1 ELSE 0 END AS is_system,
+                     tabname AS object_name,
+                     TRIM(CASE WHEN tabtype IN ({ViewTypes}) THEN 'view' ELSE 'table' END) AS object_kind,
+                     CASE WHEN tabid >= 100 THEN 0 ELSE 1 END AS catalog_order
+                FROM systables
+               WHERE tabtype IN ({TableTypes}, {ViewTypes})
+               ORDER BY 2, 1, 5, 3";
+
     /// <summary>As letras de `tabtype`, o tipo e a expressão da estimativa são constantes deste arquivo, e não dado de fora: o dono, que é, vai como parâmetro.</summary>
     private static string TablesSql(string tableTypes, string kind, string estimatedRows)
         => $@"SELECT tabname AS object_name,

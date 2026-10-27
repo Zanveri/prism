@@ -66,6 +66,12 @@ public interface IDatabaseSessionService
     /// <param name="kind">`tables`, `views` ou `routines`.</param>
     Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(Guid sessionID, string schema, string kind, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// RN-BUSCA-002: os nomes das tabelas e das visões de todos os esquemas do banco da sessão, numa consulta só, até o limite do serviço
+    /// (50.000 nomes). Espera a vez, como as outras consultas de catálogo (RN-SESSAO-002).
+    /// </summary>
+    Task<Result<ObjectNamesInfo, DatabaseFailure>> GetObjectNamesAsync(Guid sessionID, CancellationToken cancellationToken);
+
     Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(Guid sessionID, string schema, string table, CancellationToken cancellationToken);
 
     Task<Result<IReadOnlyList<IndexInfo>, DatabaseFailure>> GetIndexesAsync(Guid sessionID, string schema, string table, CancellationToken cancellationToken);

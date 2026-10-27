@@ -23,6 +23,13 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// <summary>RN-SQL-010: o comando que esperava o fim de uma verificação (RN-VERIF-002) e foi cancelado antes de ir ao banco.</summary>
     private const string CanceledBeforeItRanMessage = "O comando foi cancelado antes de ir ao banco: nada foi executado.";
 
+    /// <summary>
+    /// RN-BUSCA-002: quantos nomes de tabela e de visão o índice da busca traz de um banco, no máximo. A consulta lê um a mais, só para dizer
+    /// que há mais (`truncated`). Com os esquemas de sistema por último, o corte tira o catálogo primeiro; são uns 25 bytes de JSON por
+    /// nome, cerca de 1,2 MB no limite.
+    /// </summary>
+    internal const int ObjectNamesLimit = 50_000;
+
     private readonly ConcurrentDictionary<Guid, Session> _sessions = new();
 
     /// <summary>
@@ -176,6 +183,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
     public Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(Guid sessionID, string schema, string kind, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(GetObjectsAsync), waitsForTurn: true, session => session.Connection.GetObjectsAsync(schema, kind, cancellationToken), cancellationToken);
+
+    public Task<Result<ObjectNamesInfo, DatabaseFailure>> GetObjectNamesAsync(Guid sessionID, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(GetObjectNamesAsync), waitsForTurn: true, session => session.Connection.GetObjectNamesAsync(ObjectNamesLimit, cancellationToken), cancellationToken);
 
     public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(Guid sessionID, string schema, string table, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(GetColumnsAsync), waitsForTurn: true, session => session.Connection.GetColumnsAsync(schema, table, cancellationToken), cancellationToken);

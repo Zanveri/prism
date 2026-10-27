@@ -519,6 +519,23 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
         };
 
     /// <summary>
+    /// RN-BUSCA-002. As mesmas letras de `relkind` que a lista de objetos (<see cref="TableKinds"/> e <see cref="ViewKinds"/>) e o mesmo
+    /// critério de sistema do <see cref="SchemasSql"/> (o prefixo `pg_` e o `information_schema`); a ordem é a dele, e a dos nomes é a da
+    /// lista de objetos (`relname`, byte a byte, pela colação `C` do tipo). Só o banco da sessão: o PostgreSQL não lê outro banco na mesma
+    /// conexão. O `pg_class` não tem a tabela de `TOAST` nem o índice (outras letras de `relkind`), então o esquema `pg_toast` não aparece.
+    /// </summary>
+    protected override string ObjectNamesSql(int rows)
+        => $@"SELECT pg_namespace.nspname AS schema_name,
+                     (LEFT(pg_namespace.nspname, 3) = 'pg_' OR pg_namespace.nspname = 'information_schema') AS is_system,
+                     pg_class.relname AS object_name,
+                     CASE WHEN pg_class.relkind IN ({ViewKinds}) THEN 'view' ELSE 'table' END AS object_kind
+                FROM pg_catalog.pg_class
+                JOIN pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+               WHERE pg_class.relkind IN ({TableKinds}, {ViewKinds})
+               ORDER BY is_system, pg_namespace.nspname, pg_class.relname
+               LIMIT {rows}";
+
+    /// <summary>
     /// RN-SQL-006. O `;` do fim sai porque dentro do parêntese ele é erro de sintaxe; as quebras de linha fazem um comentário `--` no fim
     /// do comando acabar antes do fecho da subconsulta.
     /// </summary>
