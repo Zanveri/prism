@@ -1704,6 +1704,133 @@ public sealed partial class AdoDatabaseConnectionTests
         Assert.Equal([new SchemaInfo("loja", false, 2, 1, 3), new SchemaInfo("pg_catalog", true, 64, 72, 3000)], schemas.Value);
     }
 
+    /// <summary>O índice de nomes em tuplas, porque os registros guardam listas e a igualdade deles compara a referência.</summary>
+    private static IEnumerable<(string Name, bool IsSystem, string Tables, string Views)> Flatten(ObjectNamesInfo names)
+        => names.Schemas.Select(schema => (schema.Name, schema.IsSystem, string.Join(",", schema.Tables), string.Join(",", schema.Views)));
+
+    /// <summary>
+    /// RN-BUSCA-002: as linhas chegam na ordem da consulta (esquema, os de sistema por último, e nome), com as tabelas e as visões
+    /// misturadas; o agrupamento mantém a ordem de chegada, e cada esquema separa as suas tabelas das suas visões na ordem do banco.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "OK os nomes se agrupam por esquema na ordem em que as linhas chegaram, as tabelas separadas das visões")]
+    public async Task GetObjectNames_ShouldGroupBySchemaInArrivalOrder_TablesApartFromViews()
+    {
+        //Arrange
+        _catalog["OBJECT NAMES 11"] =
+        [
+            ["vendas", false, "item", "table"],
+            ["vendas", false, "pedido", "table"],
+            ["vendas", false, "resumo", "view"],
+            ["vendas", false, "zeta", "table"],
+            ["estoque", false, "produto", "table"],
+            ["pg_catalog", true, "pg_class", "table"],
+            ["pg_catalog", true, "pg_tables", "view"],
+            ["pg_catalog", true, "pg_views", "view"],
+        ];
+        var connection = await OpenAsync();
+
+        //Act
+        var names = await connection.GetObjectNamesAsync(10, CancellationToken.None);
+
+        //Assert
+        Assert.True(names.IsSuccess);
+        Assert.False(names.Value.Truncated);
+        Assert.Equal([("vendas", false, "item,pedido,zeta", "resumo"), ("estoque", false, "produto", ""), ("pg_catalog", true, "pg_class", "pg_tables,pg_views")], Flatten(names.Value));
+        Assert.Equal(["OBJECT NAMES 11"], _sent);
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: a consulta lê uma linha a mais que o limite, e só ela liga `Truncated`: a linha a mais fica de fora, e o esquema que
+    /// só tinha ela some (não há esquema sem nome nenhum).
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "OK a linha a mais que o limite liga o corte e fica de fora, e o esquema que só tinha ela some")]
+    public async Task GetObjectNames_ShouldTruncate_OnlyWhenTheExtraRowArrives_AndDropIt()
+    {
+        //Arrange
+        _catalog["OBJECT NAMES 4"] = [["loja", false, "a", "table"], ["loja", false, "b", "view"], ["loja", false, "c", "table"], ["sys", true, "extra", "table"]];
+        var connection = await OpenAsync();
+
+        //Act
+        var names = await connection.GetObjectNamesAsync(3, CancellationToken.None);
+
+        //Assert
+        Assert.True(names.Value.Truncated);
+        Assert.Equal([("loja", false, "a,c", "b")], Flatten(names.Value));
+        Assert.Equal(["OBJECT NAMES 4"], _sent);
+    }
+
+    /// <summary>RN-BUSCA-002: o banco que tem exatamente o limite não é cortado: a linha a mais não chegou.</summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "OK o banco com exatamente o limite de nomes não é cortado")]
+    public async Task GetObjectNames_ShouldNotTruncate_WhenTheDatabaseHasExactlyTheLimit()
+    {
+        //Arrange
+        _catalog["OBJECT NAMES 4"] = [["loja", false, "a", "table"], ["loja", false, "b", "view"], ["sys", true, "c", "table"]];
+        var connection = await OpenAsync();
+
+        //Act
+        var names = await connection.GetObjectNamesAsync(3, CancellationToken.None);
+
+        //Assert
+        Assert.False(names.Value.Truncated);
+        Assert.Equal([("loja", false, "a", "b"), ("sys", true, "c", "")], Flatten(names.Value));
+    }
+
+    /// <summary>RN-BUSCA-002: o banco sem tabela nem visão devolve a lista vazia, sem corte e sem falha.</summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "OK sem linha nenhuma devolve a lista vazia, sem corte")]
+    public async Task GetObjectNames_ShouldBeEmpty_WhenTheDatabaseHasNoTablesOrViews()
+    {
+        //Arrange
+        _catalog["OBJECT NAMES 51"] = [];
+        var connection = await OpenAsync();
+
+        //Act
+        var names = await connection.GetObjectNamesAsync(50, CancellationToken.None);
+
+        //Assert
+        Assert.True(names.IsSuccess);
+        Assert.Empty(names.Value.Schemas);
+        Assert.False(names.Value.Truncated);
+    }
+
+    /// <summary>RN-BUSCA-002: o nome vem exatamente como o catálogo o guarda (espaço, aspas, barra, acento): a identidade da linha e o `SELECT` da tela dependem disso.</summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "OK os nomes com espaço, aspas, barra e acento voltam exatos")]
+    public async Task GetObjectNames_ShouldKeepTheNamesExactly()
+    {
+        //Arrange
+        _catalog["OBJECT NAMES 11"] = [["Meu Esquema", false, "tab \"x\"/y", "table"], ["Meu Esquema", false, "pedido_ação", "view"]];
+        var connection = await OpenAsync();
+
+        //Act
+        var names = await connection.GetObjectNamesAsync(10, CancellationToken.None);
+
+        //Assert
+        Assert.Equal([("Meu Esquema", false, "tab \"x\"/y", "pedido_ação")], Flatten(names.Value));
+    }
+
+    /// <summary>RN-BUSCA-002 e RN-SQL-009: a recusa do banco é a resposta, com a mensagem dele como veio.</summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "Erro o banco recusou a consulta dos nomes, com a mensagem dele")]
+    public async Task GetObjectNames_ShouldFail_WithTheDatabaseMessage()
+    {
+        //Arrange
+        _commandFailure = sql => sql == "OBJECT NAMES 11" ? new FakeDatabaseException("permission denied for table pg_class", "42501") : null;
+        var connection = await OpenAsync();
+
+        //Act
+        var names = await connection.GetObjectNamesAsync(10, CancellationToken.None);
+
+        //Assert
+        Assert.True(names.IsFailure);
+        Assert.Equal(EDatabaseFailure.ExecutionFailed, names.Error.Kind);
+        Assert.Equal("permission denied for table pg_class", names.Error.Message);
+        Assert.Equal("42501", names.Error.SqlState);
+    }
+
     /// <summary>
     /// RN-CAT-004: duas tabelas podem ter chaves de mesmo nome apontando para esta. Cada chave é o nome dentro da tabela que a tem, e
     /// as colunas da chave composta se juntam na ordem.
@@ -2153,6 +2280,7 @@ public sealed partial class AdoDatabaseConnectionTests
         protected override string? ObjectsSql(string kind)
             => kind == "tables" ? "TABLES" : null;
 
+        /// <summary>O texto leva o número de linhas pedido, para o teste conferir que a base lê uma a mais que o limite.</summary>
         protected override string ObjectNamesSql(int rows)
             => $"OBJECT NAMES {rows}";
 

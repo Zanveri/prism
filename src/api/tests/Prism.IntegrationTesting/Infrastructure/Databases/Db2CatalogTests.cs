@@ -322,6 +322,55 @@ public sealed class Db2CatalogTests : CatalogContractTests
     }
 
     /// <summary>
+    /// RN-BUSCA-002: dois esquemas, cada um com tabela, visão e função: a função fica de fora, os esquemas comuns vêm antes dos de sistema
+    /// (`SYSCAT`, `SYSIBM`...) e os nomes, com maiúsculas e minúsculas, espaço, aspas e acento, voltam exatos, sem os espaços com que o
+    /// catálogo completa o nome. As tabelas do catálogo (`SYSCAT`) são visões do Db2, e entram como visões.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_ListTheTablesAndViewsOfEverySchema_WithoutTheRoutines_AndTheNamesExactly()
+    {
+        var plain = $"NOMES_{Guid.NewGuid():N}"[..18].ToUpperInvariant();
+        var odd = $"Esq {plain[6..]} \"M\" ação";
+        const string oddTable = "Tab \"Q\" 'y' ção";
+        const string oddView = "Vis \"V\" 'u' ão";
+        await using var connection = await OpenAsync();
+        await RunAsync(connection,
+            $"CREATE SCHEMA {plain}",
+            $"CREATE TABLE {plain}.PEDIDO (ID INTEGER)",
+            $"CREATE VIEW {plain}.RESUMO AS SELECT ID FROM {plain}.PEDIDO",
+            $"CREATE FUNCTION {plain}.DOBRO (VALOR INTEGER) RETURNS INTEGER RETURN VALOR * 2",
+            $"CREATE SCHEMA {Quote(odd)}",
+            $"CREATE TABLE {Quote(odd)}.{Quote(oddTable)} (ID INTEGER)",
+            $"CREATE TABLE {Quote(odd)}.ALFA (ID INTEGER)",
+            $"CREATE VIEW {Quote(odd)}.{Quote(oddView)} AS SELECT ID FROM {Quote(odd)}.{Quote(oddTable)}",
+            $"CREATE FUNCTION {Quote(odd)}.DOBRO (VALOR INTEGER) RETURNS INTEGER RETURN VALOR * 2");
+        try
+        {
+            var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+
+            var schemas = names.Schemas.Select(schema => schema.Name).ToList();
+            Assert.That(names.Truncated, Is.False);
+            Assert.That(names.Schemas.Single(schema => schema.Name == plain), Is.EqualTo(new SchemaObjectNamesInfo(plain, false, ["PEDIDO"], ["RESUMO"])).Using<SchemaObjectNamesInfo>(SameNames));
+            var oddNames = names.Schemas.Single(schema => schema.Name == odd);
+            Assert.That(oddNames.Tables, Is.EquivalentTo(new[] { oddTable, "ALFA" }));
+            Assert.That(oddNames.Views, Is.EqualTo(new[] { oddView }));
+            Assert.That(names.Schemas.SelectMany(schema => schema.Tables.Concat(schema.Views)), Has.None.EqualTo("DOBRO"));
+            Assert.That(names.Schemas.Where(schema => schema.IsSystem).Select(schema => schema.Name), Does.Contain("SYSCAT").And.Contain("SYSIBM"));
+            Assert.That(schemas.IndexOf(plain), Is.LessThan(schemas.IndexOf("SYSCAT")));
+            Assert.That(schemas.IndexOf(odd), Is.LessThan(schemas.IndexOf("SYSCAT")));
+            Assert.That(names.Schemas.Single(schema => schema.Name == "SYSCAT").Views, Has.Member("TABLES"));
+        }
+        finally
+        {
+            foreach (var sql in new[] { $"DROP FUNCTION {Quote(odd)}.DOBRO", $"DROP VIEW {Quote(odd)}.{Quote(oddView)}", $"DROP TABLE {Quote(odd)}.ALFA", $"DROP TABLE {Quote(odd)}.{Quote(oddTable)}", $"DROP SCHEMA {Quote(odd)} RESTRICT", $"DROP FUNCTION {plain}.DOBRO", $"DROP VIEW {plain}.RESUMO", $"DROP TABLE {plain}.PEDIDO", $"DROP SCHEMA {plain} RESTRICT" })
+                await connection.ExecuteAsync(sql, CancellationToken.None);
+        }
+    }
+
+    protected override string TableNameOf(int number)
+        => $"T{number}";
+
+    /// <summary>
     /// Uma conta que não pode ler o catálogo: a conta comum do contêiner, com `SYSCAT.CHECKS` tirado de `PUBLIC` durante o teste. A
     /// resposta das restrições de conferência é a recusa do Db2 (SQL0551N), e não uma exceção; as colunas seguem respondendo.
     /// </summary>
@@ -388,6 +437,9 @@ public sealed class Db2CatalogTests : CatalogContractTests
                                           END WHILE;
                                       END", $"DROP SCHEMA {schema} RESTRICT");
     }
+
+    private static bool SameNames(SchemaObjectNamesInfo left, SchemaObjectNamesInfo right)
+        => (left.Name, left.IsSystem) == (right.Name, right.IsSystem) && left.Tables.SequenceEqual(right.Tables) && left.Views.SequenceEqual(right.Views);
 
     private static string Quote(string identifier)
         => $"\"{identifier.Replace("\"", "\"\"")}\"";

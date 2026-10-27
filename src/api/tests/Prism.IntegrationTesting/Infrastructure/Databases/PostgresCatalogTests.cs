@@ -359,6 +359,51 @@ public sealed class PostgresCatalogTests : CatalogContractTests
     }
 
     /// <summary>
+    /// RN-BUSCA-002: dois esquemas, cada um com tabela, visão e função: a função fica de fora, os esquemas comuns vêm antes dos de sistema
+    /// (`pg_catalog` e `information_schema`) e, entre os comuns, na ordem de nome do banco (byte a byte). Os nomes, com espaço, aspas,
+    /// barra, barra invertida e acento, voltam exatos: com eles a tela monta a chave da linha e o `SELECT * FROM "esquema"."nome"`.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_ListTheTablesAndViewsOfEverySchema_WithoutTheRoutines_AndTheNamesExactly()
+    {
+        var prefix = $"nomes_{Guid.NewGuid():N}"[..18];
+        var plain = $"{prefix}_a";
+        var odd = $"{prefix}_b \"M\" / \\ ação";
+        const string oddTable = "Tab \"Q\" 'y' / \\ ção";
+        const string oddView = "Vis \"V\" 'u' / \\ ão";
+        await using var connection = await OpenAsync();
+        await RunAsync(connection,
+            $"CREATE SCHEMA {plain}",
+            $"CREATE TABLE {plain}.pedido (id integer)",
+            $"CREATE VIEW {plain}.resumo AS SELECT id FROM {plain}.pedido",
+            $"CREATE FUNCTION {plain}.dobro(valor integer) RETURNS integer LANGUAGE sql AS 'SELECT valor * 2'",
+            $"CREATE SCHEMA {Quote(odd)}",
+            $"CREATE TABLE {Quote(odd)}.{Quote(oddTable)} (id integer)",
+            $"CREATE TABLE {Quote(odd)}.alfa (id integer)",
+            $"CREATE VIEW {Quote(odd)}.{Quote(oddView)} AS SELECT id FROM {Quote(odd)}.{Quote(oddTable)}",
+            $"CREATE FUNCTION {Quote(odd)}.dobro(valor integer) RETURNS integer LANGUAGE sql AS 'SELECT valor * 2'");
+        try
+        {
+            var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+
+            var schemas = names.Schemas.Select(schema => schema.Name).ToList();
+            Assert.That(names.Truncated, Is.False);
+            Assert.That(names.Schemas.Single(schema => schema.Name == plain), Is.EqualTo(new SchemaObjectNamesInfo(plain, false, ["pedido"], ["resumo"])).Using<SchemaObjectNamesInfo>(SameNames));
+            Assert.That(names.Schemas.Single(schema => schema.Name == odd), Is.EqualTo(new SchemaObjectNamesInfo(odd, false, [oddTable, "alfa"], [oddView])).Using<SchemaObjectNamesInfo>(SameNames));
+            Assert.That(names.Schemas.SelectMany(schema => schema.Tables.Concat(schema.Views)), Has.None.EqualTo("dobro"));
+            Assert.That(schemas.IndexOf(plain), Is.LessThan(schemas.IndexOf(odd)));
+            Assert.That(schemas.IndexOf(odd), Is.LessThan(schemas.IndexOf("pg_catalog")));
+            Assert.That(names.Schemas.Where(schema => schema.IsSystem).Select(schema => schema.Name), Is.SupersetOf(new[] { "pg_catalog", "information_schema" }));
+            Assert.That(names.Schemas.Single(schema => schema.Name == "pg_catalog").Tables, Has.Member("pg_class"));
+        }
+        finally
+        {
+            foreach (var schema in new[] { Quote(odd), plain })
+                await connection.ExecuteAsync($"DROP SCHEMA {schema} CASCADE", CancellationToken.None);
+        }
+    }
+
+    /// <summary>
     /// Uma conta que não pode ler o catálogo: num banco só do teste, `pg_constraint` deixa de ser legível por todos. A resposta das
     /// consultas que a leem é a recusa do banco, com o SQLSTATE dele, e não uma exceção; as que não a leem seguem respondendo.
     /// </summary>
@@ -425,6 +470,9 @@ public sealed class PostgresCatalogTests : CatalogContractTests
 
     private static string Quote(string identifier)
         => $"\"{identifier.Replace("\"", "\"\"")}\"";
+
+    private static bool SameNames(SchemaObjectNamesInfo left, SchemaObjectNamesInfo right)
+        => (left.Name, left.IsSystem) == (right.Name, right.IsSystem) && left.Tables.SequenceEqual(right.Tables) && left.Views.SequenceEqual(right.Views);
 
     private static bool SameForeignKey(ForeignKeyInfo left, ForeignKeyInfo right)
         => (left.Name, left.ReferencedSchema, left.ReferencedTable, left.OnDelete, left.OnUpdate) == (right.Name, right.ReferencedSchema, right.ReferencedTable, right.OnDelete, right.OnUpdate) && left.Columns.SequenceEqual(right.Columns) && left.ReferencedColumns.SequenceEqual(right.ReferencedColumns);

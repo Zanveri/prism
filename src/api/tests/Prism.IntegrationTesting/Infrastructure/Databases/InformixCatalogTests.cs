@@ -371,6 +371,50 @@ public sealed class InformixCatalogTests : CatalogContractTests
         }
     }
 
+    /// <summary>
+    /// RN-BUSCA-002: dois donos, cada um com tabela, visão e função: a função fica de fora, os donos comuns vêm antes do `informix` (o dono
+    /// do catálogo, de sistema) e os nomes, com maiúsculas e minúsculas, espaço e aspas, voltam exatos, sem os espaços com que o `CHAR`
+    /// completa o nome. No `informix`, as tabelas do catálogo vêm depois das que alguém criou. O nome de tabela e de função é único no
+    /// banco inteiro, e não por dono: os nomes levam o sorteio.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_ListTheTablesAndViewsOfEveryOwner_WithoutTheRoutines_AndTheNamesExactly()
+    {
+        var plain = $"nm_{Guid.NewGuid():N}"[..16];
+        var odd = $"Dono {plain[3..]} \"M\" 'x'";
+        var oddTable = $"Tab {plain[3..]} \"Q\" 'y'";
+        var oddView = $"Vis {plain[3..]} \"V\" 'u'";
+        await using var connection = await OpenAsync();
+        await RunAsync(connection,
+            $"CREATE TABLE {plain}.{plain}_pedido (id INTEGER)",
+            $"CREATE VIEW {plain}.{plain}_resumo (id) AS SELECT id FROM {plain}.{plain}_pedido",
+            $"CREATE FUNCTION {plain}.{plain}_dobro (valor INTEGER) RETURNING INTEGER; RETURN valor * 2; END FUNCTION",
+            $"CREATE TABLE {Quote(odd)}.{Quote(oddTable)} (id INTEGER)",
+            $"CREATE TABLE {Quote(odd)}.{plain}_alfa (id INTEGER)",
+            $"CREATE VIEW {Quote(odd)}.{Quote(oddView)} (id) AS SELECT id FROM {Quote(odd)}.{Quote(oddTable)}");
+        try
+        {
+            var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+
+            var owners = names.Schemas.Select(schema => schema.Name).ToList();
+            Assert.That(names.Truncated, Is.False);
+            Assert.That(names.Schemas.Single(schema => schema.Name == plain), Is.EqualTo(new SchemaObjectNamesInfo(plain, false, [$"{plain}_pedido"], [$"{plain}_resumo"])).Using<SchemaObjectNamesInfo>(SameNames));
+            var oddNames = names.Schemas.Single(schema => schema.Name == odd);
+            Assert.That(oddNames.Tables, Is.EquivalentTo(new[] { oddTable, $"{plain}_alfa" }));
+            Assert.That(oddNames.Views, Is.EqualTo(new[] { oddView }));
+            Assert.That(names.Schemas.SelectMany(schema => schema.Tables.Concat(schema.Views)), Has.None.EqualTo($"{plain}_dobro"));
+            Assert.That(names.Schemas.Where(schema => schema.IsSystem).Select(schema => schema.Name), Is.EqualTo(new[] { "informix" }));
+            Assert.That(owners.IndexOf(plain), Is.LessThan(owners.IndexOf("informix")));
+            Assert.That(owners.IndexOf(odd), Is.LessThan(owners.IndexOf("informix")));
+            Assert.That(names.Schemas.Single(schema => schema.Name == "informix").Tables, Has.Member("systables"));
+        }
+        finally
+        {
+            foreach (var sql in new[] { $"DROP VIEW {Quote(odd)}.{Quote(oddView)}", $"DROP TABLE {Quote(odd)}.{plain}_alfa", $"DROP TABLE {Quote(odd)}.{Quote(oddTable)}", $"DROP FUNCTION {plain}.{plain}_dobro", $"DROP VIEW {plain}.{plain}_resumo", $"DROP TABLE {plain}.{plain}_pedido" })
+                await connection.ExecuteAsync(sql, CancellationToken.None);
+        }
+    }
+
     /// <summary>Com o dono e o nome sorteados para não esbarrar nos de outro teste: o nome de uma restrição é único no banco inteiro.</summary>
     protected override async Task<string> CreateLargeSchemaAsync()
     {
@@ -413,6 +457,9 @@ public sealed class InformixCatalogTests : CatalogContractTests
 
         return Value(await connection.GetPropertiesAsync(CancellationToken.None));
     }
+
+    private static bool SameNames(SchemaObjectNamesInfo left, SchemaObjectNamesInfo right)
+        => (left.Name, left.IsSystem) == (right.Name, right.IsSystem) && left.Tables.SequenceEqual(right.Tables) && left.Views.SequenceEqual(right.Views);
 
     private static string Quote(string identifier)
         => $"\"{identifier.Replace("\"", "\"\"")}\"";
