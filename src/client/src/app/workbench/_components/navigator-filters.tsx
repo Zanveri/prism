@@ -17,6 +17,8 @@ type NavigatorFiltersProps = {
   environments: readonly UserEnvironment[];
   environmentChoice: EnvironmentChoice;
   onEnvironmentChange: (choice: EnvironmentChoice) => void;
+  /** O `ref` do botão do seletor: o "Limpar o filtro de ambiente" leva o foco a ele. */
+  environmentRef: RefObject<HTMLButtonElement | null>;
   /** "Só as conectadas" (RN-NAV-013): quantas estão conectadas, se está ligado e o clique que o alterna. */
   connectedCount: number;
   onlyConnected: boolean;
@@ -39,13 +41,13 @@ type NavigatorFiltersProps = {
  * e as duas escolhas são do navegador, e o que cada controle faz não muda. A linha de estado da busca (RN-BUSCA-002) fica logo abaixo desta barra, nunca ao lado
  * do campo.
  */
-export function NavigatorFilters({ query, onQueryChange, onFocusList, inputRef, environments, environmentChoice, onEnvironmentChange, connectedCount, onlyConnected, onToggleConnected }: NavigatorFiltersProps) {
+export function NavigatorFilters({ query, onQueryChange, onFocusList, inputRef, environments, environmentChoice, onEnvironmentChange, environmentRef, connectedCount, onlyConnected, onToggleConnected }: NavigatorFiltersProps) {
   return (
     <div className="mx-2 mb-2 flex flex-none flex-col gap-1.5">
       <NavigatorSearchField value={query} onChange={onQueryChange} onFocusList={onFocusList} inputRef={inputRef} />
       <div className="flex flex-wrap items-center gap-1.5">
         <NavigatorConnectedFilter count={connectedCount} on={onlyConnected} onToggle={onToggleConnected} />
-        <NavigatorEnvironmentFilter environments={environments} value={environmentChoice} onChange={onEnvironmentChange} />
+        <NavigatorEnvironmentFilter environments={environments} value={environmentChoice} onChange={onEnvironmentChange} selectRef={environmentRef} />
       </div>
     </div>
   );

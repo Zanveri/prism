@@ -573,6 +573,13 @@ describe("a linha de estado da busca (RN-BUSCA-002)", () => {
     expect(tree().some((element) => element.props.children === workbenchCopy.navigator.search.onlyLoaded)).toBe(true);
   });
 
+  it("o navegador dá à barra o `ref` do botão do seletor de ambiente, à parte do do campo: o 'Limpar o filtro de ambiente' leva o foco a ele", () => {
+    threeConnected();
+
+    expect(filters().environmentRef).toEqual({ current: null });
+    expect(filters().environmentRef).not.toBe(filters().inputRef);
+  });
+
   it("sem nada achado e com um banco que falhou: só a falha, sem o 'Nada encontrado' (o banco que falhou pode ter o nome); o 'Nada encontrado' volta quando a busca termina sem falha", () => {
     threeConnected();
     rt.queryClient.removeQueries({ queryKey: objectNamesKey("c2") });

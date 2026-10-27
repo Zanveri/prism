@@ -7,7 +7,7 @@ import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
 import { allEnvironments, noEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { navigatorCopy } from "../_lib/navigator.copy";
-import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
+import { NavigatorEnvironmentFilter, clearChoice } from "./navigator-environment-filter";
 
 const copy = navigatorCopy.environmentFilter;
 const environments = [
@@ -15,8 +15,13 @@ const environments = [
   { key: "qas", name: "QAS", color: null },
 ];
 
-function drawn(value: EnvironmentChoice, onChange: (choice: EnvironmentChoice) => void = () => {}) {
-  const all = elementsOf(NavigatorEnvironmentFilter({ environments, value, onChange }));
+/** O botão do seletor de mentira: ganhar o foco é virar o elemento ativo da página, e o teste anota em que ordem as coisas aconteceram. */
+function selectButton(events: string[] = []) {
+  return { current: { focus: vi.fn(() => void events.push("foco")) } as unknown as HTMLButtonElement };
+}
+
+function drawn(value: EnvironmentChoice, onChange: (choice: EnvironmentChoice) => void = () => {}, selectRef = selectButton()) {
+  const all = elementsOf(NavigatorEnvironmentFilter({ environments, value, onChange, selectRef }));
   const select = all.find((element) => element.type === Select) as Found;
   const clear = all.find((element) => element.type === "button" && element.props["aria-label"] === copy.clear);
   return { select, clear, options: select.props.options as SelectOption[] };
@@ -72,12 +77,37 @@ describe("o seletor de ambiente do navegador (RN-NAV-010)", () => {
     expect(drawn(noEnvironment).clear).toBeDefined();
   });
 
-  it("a lista do seletor é larga (`wideList`): as opções não quebram, e a lista cresce até o maior texto (\"Todos os ambientes\")", () => {
-    expect(drawn(allEnvironments).select.props.wideList).toBe(true);
+  it("o 'Limpar' leva o foco ao seletor ANTES de a escolha voltar a 'Todos' (que tira o x da tela): o foco não cai no corpo da página (o clique e o Enter no x são o mesmo clique)", () => {
+    const events: string[] = [];
+    const selectRef = selectButton(events);
+    const onChange = vi.fn(() => void events.push("escolha"));
+    const { clear } = drawn({ type: "environment", key: "qas" }, onChange, selectRef);
+
+    (clear?.props.onClick as () => void)();
+
+    expect(events).toEqual(["foco", "escolha"]);
+    expect(selectRef.current.focus).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(allEnvironments);
+  });
+
+  it("clearChoice: sem o botão do seletor na tela (o `ref` ainda nulo), só limpa a escolha", () => {
+    const onChange = vi.fn();
+
+    clearChoice({ current: null }, onChange);
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(allEnvironments);
+  });
+
+  it("o seletor guarda o botão no `ref` de quem o pediu e abre a lista larga: as opções não quebram, e a lista cresce até o maior texto (\"Todos os ambientes\")", () => {
+    const selectRef = selectButton();
+    const { select } = drawn(allEnvironments, () => {}, selectRef);
+
+    expect(select.props.triggerRef).toBe(selectRef);
+    expect(select.props.wideList).toBe(true);
   });
 
   it("o seletor fechado desenha a etiqueta do escolhido", () => {
-    const markup = renderToStaticMarkup(createElement(NavigatorEnvironmentFilter, { environments, value: { type: "environment", key: "produção" }, onChange: () => {} }));
+    const markup = renderToStaticMarkup(createElement(NavigatorEnvironmentFilter, { environments, value: { type: "environment", key: "produção" }, onChange: () => {}, selectRef: selectButton() }));
 
     expect(markup).toMatch(/role="combobox"[^>]*aria-label="Filtrar por ambiente"/);
     expect(markup).toMatch(/<span style="background-color:#FF8A7A;color:#14181D"[^>]*>Produção<\/span>/);

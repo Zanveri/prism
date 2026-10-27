@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { controlClassName } from "@/components/ui/field";
@@ -49,6 +49,8 @@ type SelectProps = {
    * ambientes" num seletor de 130 px).
    */
   wideList?: boolean;
+  /** O botão do controle, para quem leva o foco a ele (limpar o filtro que mora ao lado do seletor, RN-NAV-010). Ausente, o `Select` guarda o dele. */
+  triggerRef?: RefObject<HTMLButtonElement | null>;
   className?: string;
 };
 
@@ -86,14 +88,15 @@ export function panelWidthOf(trigger: { left: number; width: number }, viewportW
  * `position: fixed` em `document.body`, para o `overflow-hidden` de um painel não a recortar.
  * Teclado como o de um `<select>`: setas, Home, End, Enter, espaço, Esc e a inicial da opção.
  */
-export function Select({ id, name, value, onChange, options, placeholder, disabled = false, "aria-disabled": ariaDisabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, onOpen, wideList = false, className }: SelectProps) {
+export function Select({ id, name, value, onChange, options, placeholder, disabled = false, "aria-disabled": ariaDisabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, onOpen, wideList = false, triggerRef, className }: SelectProps) {
   const generatedId = useId();
   const triggerId = id ?? `select-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
 
   // RN-ABAS-017: a lista abre na página do controle (a da janela da aba, ou a da janela do resultado) e mede a janela dela.
   const host = useHost();
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const ownButtonRef = useRef<HTMLButtonElement>(null);
+  const buttonRef = triggerRef ?? ownButtonRef;
   const panelRef = useRef<HTMLDivElement>(null);
   const typeahead = useRef({ search: "", at: 0 });
 
@@ -148,7 +151,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
       host.view.removeEventListener("scroll", place, true);
       host.view.removeEventListener("resize", place);
     };
-  }, [open, items.length, host, wideList]);
+  }, [open, items.length, host, wideList, buttonRef]);
 
   // A página da janela do resultado que sai leva a lista (RN-ABAS-011).
   useOnHostGone(host, open, () => setOpen(false));
@@ -165,7 +168,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
 
     host.document.addEventListener("pointerdown", onPointerDown);
     return () => host.document.removeEventListener("pointerdown", onPointerDown);
-  }, [open, host]);
+  }, [open, host, buttonRef]);
 
   // Mantém a opção ativa à vista enquanto as setas a movem.
   useEffect(() => {

@@ -14,6 +14,7 @@ import { NavigatorSearchField } from "./navigator-search-field";
 
 const environments = [{ key: "produção", name: "Produção", color: "#FF8A7A" }];
 const inputRef = { current: null };
+const environmentRef = { current: null };
 const production: EnvironmentChoice = { type: "environment", key: "produção" };
 
 function propsOf(over: Partial<ComponentProps<typeof NavigatorFilters>> = {}): ComponentProps<typeof NavigatorFilters> {
@@ -25,6 +26,7 @@ function propsOf(over: Partial<ComponentProps<typeof NavigatorFilters>> = {}): C
     environments,
     environmentChoice: allEnvironments,
     onEnvironmentChange: vi.fn(),
+    environmentRef,
     connectedCount: 3,
     onlyConnected: false,
     onToggleConnected: vi.fn(),
@@ -63,7 +65,7 @@ describe("a barra de filtros do navegador: a disposição (RN-NAV-010, RN-NAV-01
 
   it("a conta nunca é cortada: o botão tem a largura do texto e não quebra; o seletor tem o resto da linha, com a base de 8 rem e o mínimo de 112 px", () => {
     const button = elementsOf(NavigatorConnectedFilter({ count: 12, on: false, onToggle: () => {} })).find((element) => element.type === "button")!;
-    const selector = elementsOf(NavigatorEnvironmentFilter({ environments, value: allEnvironments, onChange: () => {} }))[0];
+    const selector = elementsOf(NavigatorEnvironmentFilter({ environments, value: allEnvironments, onChange: () => {}, selectRef: environmentRef }))[0];
 
     expect(classesOf(button)).toEqual(expect.arrayContaining(["flex-none", "whitespace-nowrap", "h-8"]));
     expect(classesOf(selector)).toEqual(expect.arrayContaining(["flex-[1_1_8rem]", "min-w-28"]));
@@ -72,7 +74,7 @@ describe("a barra de filtros do navegador: a disposição (RN-NAV-010, RN-NAV-01
 
   it("o \"Limpar o filtro de ambiente\" fica dentro do lugar do seletor: escolher ou limpar o ambiente não muda a largura de nada", () => {
     const drawnSelector = (value: EnvironmentChoice) => {
-      const all = elementsOf(NavigatorEnvironmentFilter({ environments, value, onChange: () => {} }));
+      const all = elementsOf(NavigatorEnvironmentFilter({ environments, value, onChange: () => {}, selectRef: environmentRef }));
       return { root: all[0], clear: all.find((element) => element.type === "button") };
     };
     const [all, chosen] = [drawnSelector(allEnvironments), drawnSelector(production)];
@@ -131,7 +133,7 @@ describe("a barra só distribui: cada controle recebe o estado e a ação que s�
     const props = propsOf({ environmentChoice: production });
     const selector = children(children(elementsOf(NavigatorFilters(props))[0])[1])[1].props;
 
-    expect(selector).toMatchObject({ environments, value: production, onChange: props.onEnvironmentChange });
+    expect(selector).toMatchObject({ environments, value: production, onChange: props.onEnvironmentChange, selectRef: environmentRef });
     (selector.onChange as (choice: EnvironmentChoice) => void)(allEnvironments);
     expect(props.onEnvironmentChange).toHaveBeenCalledExactlyOnceWith(allEnvironments);
   });

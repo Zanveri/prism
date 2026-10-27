@@ -209,6 +209,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   const [query, setQuery] = useState("");
   const [searchCollapsed, setSearchCollapsed] = useState<{ query: string; keys: ReadonlySet<string> }>({ query: "", keys: noKeys });
   const searchInput = useRef<HTMLInputElement>(null);
+  const environmentSelect = useRef<HTMLButtonElement>(null);
   const area = useRef<HTMLDivElement>(null);
   // RN-NAV-010: o seletor de ambiente. É estado daqui: a área de trabalho fica montada enquanto o cofre está aberto, então a escolha vale enquanto a
   // janela está aberta, e sair do cofre a apaga, como o resto.
@@ -848,6 +849,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
           environments={savedEnvironments}
           environmentChoice={environmentChoice}
           onEnvironmentChange={setEnvironmentChoice}
+          environmentRef={environmentSelect}
           connectedCount={connectedIds.length}
           onlyConnected={onlyConnected}
           onToggleConnected={() => setOnlyConnected((current) => !current)}

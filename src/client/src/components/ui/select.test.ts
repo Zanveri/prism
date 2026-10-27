@@ -154,3 +154,12 @@ describe("Select com `wideList`: as opções não quebram", () => {
     }
   });
 });
+
+describe("Select com `triggerRef`: o botão vai ao `ref` de quem o pediu", () => {
+  it("o `ref` do botão é o que veio de fora, e o foco que quem o tem lhe dá fica no controle", () => {
+    const triggerRef = { current: null as unknown };
+    const found = elementsOf(rt.render(() => Select({ value: "", options: [{ value: "", label: "Todos" }], onChange: vi.fn(), "aria-label": "Ambiente", triggerRef: triggerRef as never })));
+
+    expect(found.find((element) => element.props.role === "combobox")!.props.ref).toBe(triggerRef);
+  });
+});
