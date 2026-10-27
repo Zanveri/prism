@@ -153,12 +153,12 @@ function fakeRunner(initial: RunnerState) {
 }
 
 /** `runner` troca o executor da vista (o provedor que entrega outro à aba). */
-type Over = { filterRef?: ComponentProps<typeof RecordsView>["filterRef"]; tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot; runner?: QueryRunner; database?: string; onOpenQuery?: (connectionId: string, sql: string, database?: string) => void };
+type Over = { environmentColor?: string | null; filterRef?: ComponentProps<typeof RecordsView>["filterRef"]; tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot; runner?: QueryRunner; database?: string; onOpenQuery?: (connectionId: string, sql: string, database?: string) => void };
 
 /** A vista de `loja.pedidos` na conexão `c1`: à vista e conectada, salvo o que `over` disser. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
   const onOpenTable = vi.fn();
-  const props = { tabId: "t1", runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, connectionId: "c1", ...pedidos, connected: true, visible: true, disconnected: false, onOpenTable, ...over };
+  const props = { tabId: "t1", runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, connectionId: "c1", ...pedidos, connected: true, environmentColor: null as string | null, visible: true, disconnected: false, onOpenTable, ...over };
 
   /**
    * O que a vista entrega AGORA ao campo do filtro e à área de resultado, com as propriedades trocadas por `change`. São duas voltas: os efeitos da primeira

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, type KeyboardEvent } f
 import { Button, useHost } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { environmentAccent } from "../_lib/environment-accent";
 import { commandHead, commandHint, entryAt, scriptTabKeyTarget, scriptTabsOf, type ScriptRun, type ScriptTab } from "../_lib/script-run";
 import { scriptRunCopy } from "../_lib/script-run.copy";
 import { revealOffset } from "../_lib/tab-strip";
@@ -112,7 +113,7 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, variables = false, o
         tabIndex={selected ? 0 : -1}
         title={fixed ? undefined : commandHint(entryAt(run, item).target.sql)}
         onClick={() => choose(item)}
-        className={cn("flex h-7 max-w-64 flex-none cursor-pointer items-center border-b-2 px-2 whitespace-nowrap", selected ? "border-accent font-semibold text-ink" : "border-transparent text-muted hover:text-ink")}
+        className={cn("flex h-7 max-w-64 flex-none cursor-pointer items-center border-b-2 px-2 whitespace-nowrap", selected ? `${environmentAccent.border} font-semibold text-ink` : "border-transparent text-muted hover:text-ink")}
       >
         <span className="truncate">{label}</span>
       </button>
@@ -176,7 +177,7 @@ export function ResultTabs({ shown, idPrefix, panelId, onChoose }: ResultTabsPro
             aria-controls={panelId}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChoose(item)}
-            className={cn("flex h-7 flex-none cursor-pointer items-center border-b-2 px-2 whitespace-nowrap", selected ? "border-accent font-semibold text-ink" : "border-transparent text-muted hover:text-ink")}
+            className={cn("flex h-7 flex-none cursor-pointer items-center border-b-2 px-2 whitespace-nowrap", selected ? `${environmentAccent.border} font-semibold text-ink` : "border-transparent text-muted hover:text-ink")}
           >
             {item === "result" ? variablesPanelCopy.result : variablesPanelCopy.tab}
           </button>

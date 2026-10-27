@@ -213,7 +213,7 @@ const tab: QueryTab = { id: "q1", title: "Consulta 1", connectionId: "c1", sessi
 /** A aba `q1` na conexão `c1`, à vista. O painel é memorizado: a função dele é a de dentro do `memo`. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = {}) {
   const panel = (QueryTabPanel as unknown as { type: (props: ComponentProps<typeof QueryTabPanel>) => ReactNode }).type;
-  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onSwitchConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn(), onOpenQuery: vi.fn() };
+  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, environmentColor: null as string | null, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onSwitchConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn(), onOpenQuery: vi.fn() };
 
   /** O que a aba entrega agora à área de resultado, ao editor e às janelas por cima. Duas voltas, como no teste dos Registros: os efeitos da primeira mexem nos registros de módulo. */
   function show() {

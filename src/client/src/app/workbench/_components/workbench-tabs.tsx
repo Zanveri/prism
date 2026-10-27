@@ -689,6 +689,7 @@ export function WorkbenchTabs() {
                       tab={tab}
                       runner={runnerOf(tab.id)}
                       engine={connectionOf(tab.connectionId)?.engine}
+                      environmentColor={environmentOf(tab.connectionId)?.color ?? null}
                       active={selected}
                       place={place ?? "panel"}
                       editorShown={queryShown}

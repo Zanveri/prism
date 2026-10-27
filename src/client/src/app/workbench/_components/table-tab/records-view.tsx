@@ -57,6 +57,11 @@ type RecordsViewProps = {
   name: string;
   /** A aba tem sessão aberta: sem ela não há sobre o que contar. */
   connected: boolean;
+  /**
+   * RN-AMB-002: a cor (`#RRGGBB`) do ambiente da conexão da aba, o próprio ou o herdado da pasta (`ShownEnvironment.color`); nula sem ambiente e com ambiente sem
+   * cor. Vai à área de resultado, que leva os destaques dela (o sublinhado de "Registros", a célula ativa, o foco e a rolagem da grade) para essa cor.
+   */
+  environmentColor: string | null;
   /** A aba está À VISTA (a ativa, com a área de trabalho na tela): a escondida não executa nada, nem a primeira carga (RN-SEG-001). */
   visible: boolean;
   /** A pessoa desconectou a conexão e ainda não a reconectou: nada executa sozinho, e "Atualizar" conecta e carrega. */
@@ -98,7 +103,7 @@ type RecordsViewProps = {
  * O que esta vista DECIDE (a primeira carga, enviar ou não o comando pedido, a entrega do filtro, o aviso de "Carregando…" ou "desconectada") e o que faz com
  * cada decisão está em `table-view.ts`, em funções sem React, com as peças injetadas e com teste: aqui só se entregam o estado do executor e os `setState`.
  */
-export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot, onOpenQuery, filterRef }: RecordsViewProps) {
+export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, environmentColor, visible, disconnected, onOpenTable, refreshSlot, onOpenQuery, filterRef }: RecordsViewProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const toast = useToast();
@@ -391,6 +396,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
       <ResultPanel
         state={state}
         connected={connected}
+        environmentColor={environmentColor}
         // As larguras das colunas (RN-GRADE-009) ficam lembradas pela aba: esta vista desmonta ao trocar para a Estrutura ou o Diagrama.
         tabId={tabId}
         records={{

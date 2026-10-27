@@ -70,6 +70,12 @@ type QueryTabPanelProps = {
   /** O que a aba executa e mostra. Vive no `WorkbenchProvider`, acima das rotas, e não aqui. */
   runner: QueryRunner;
   engine: Engine | undefined;
+  /**
+   * RN-AMB-002: a cor (`#RRGGBB`) do ambiente da conexão da aba, o próprio ou o herdado da pasta; nula sem ambiente, com ambiente sem cor e na aba sem conexão. É um
+   * texto, para o painel memorizado só se refazer quando a cor muda, e vai à área de resultado, que a põe na própria `<section>`: ela vai por portal para o
+   * painel, a aba do resultado ou a janela do resultado, e só dentro dela a variável de CSS chega aos destaques.
+   */
+  environmentColor: string | null;
   /** A aba é a ativa da janela (a da consulta ou a aba do resultado dela à frente): a pergunta de erro do script aparece (RN-SQL-021). */
   active: boolean;
   /**
@@ -165,7 +171,7 @@ function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onA
  * resultado, no "Salvar" da grade (em "Todos os comandos") e ao ligar a atualização automática (em "Todos os comandos", uma vez). Cancelado, nada sai, e a
  * aba fica como estava, com o resultado de antes.
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, place = "panel", editorShown = active, resultShown = active, moving = false, onPlace, onToggleEntry, onBackToPanel, onFocusWindow, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase, onOpenQuery }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, environmentColor, active, place = "panel", editorShown = active, resultShown = active, moving = false, onPlace, onToggleEntry, onBackToPanel, onFocusWindow, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase, onOpenQuery }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const queryClient = useQueryClient();
   const script = useScriptRun(runner);
@@ -747,6 +753,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         <ResultHost tabId={tab.id} slot={slot} onBack={onBackToPanel === undefined ? undefined : () => onBackToPanel(tab.id)} onLink={onFocusWindow === undefined ? undefined : () => onFocusWindow(tab.id, "link")}>
           <ResultPanel
             id={resultId}
+            environmentColor={environmentColor}
             state={kept === null ? state : kept.rows}
             connected={kept === null && tab.sessionId !== null}
             collapsed={inPanel && layout.mode === "collapsed"}

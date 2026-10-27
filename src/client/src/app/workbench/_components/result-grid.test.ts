@@ -420,6 +420,9 @@ describe("a fonte da grade é a da interface (RN-CONFIG-008)", () => {
   });
 });
 
+/** RN-AMB-002: o contorno da célula ativa lê a cor do ambiente da variável da área de resultado, com o acento do tema como reserva. */
+const activeOutline = "outline-[color:var(--environment-color,var(--color-accent))]";
+
 describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
   const cellIdOf = (row: number, column: number) => `g-${row}-${column}`;
   const renderEditable = (extra: Partial<Parameters<typeof GridRow>[0]>, row: (string | null)[] = ["1", "aberta"]) =>
@@ -432,7 +435,7 @@ describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
     expect(markup.match(/role="gridcell"/g)).toHaveLength(2);
     expect(cell(markup, 1)).toMatch(/data-row="0"[^>]*data-col="1"[^>]*aria-selected="true"/);
     expect(cell(markup, 0)).toContain('aria-selected="false"');
-    expect(cell(markup, 1)).toContain("outline-accent");
+    expect(cell(markup, 1)).toContain(activeOutline);
   });
 
   it("RN-GRADE-001: as células escolhidas dizem que estão (`aria-selected`) e têm o fundo de escolha; o número da linha escolhida fica destacado", () => {
@@ -525,7 +528,7 @@ describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
     const markup = renderEditable({ mark: { kind: "read", deleted: true, pending: new Map(), failed: false }, activeColumn: 1, selectedFrom: 1, selectedTo: 1 });
 
     expect(cell(markup, 1)).toContain("bg-selected");
-    expect(cell(markup, 1)).toContain("outline-accent");
+    expect(cell(markup, 1)).toContain(activeOutline);
     expect(cell(markup, 1)).toContain("text-danger");
     expect(cell(markup, 1)).toContain("line-through");
   });

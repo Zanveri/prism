@@ -8,6 +8,7 @@ import { isElement } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 import { isMacPlatform } from "@/lib/utils/platform";
 
+import { environmentAccent } from "../_lib/environment-accent";
 import { baseWidths, cellPadding, fitWidth } from "../_lib/grid-columns";
 import { movementOf, moveCell, type GridCell } from "../_lib/grid-cursor";
 import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowMarkClasses, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
@@ -42,6 +43,13 @@ const noWidths: Readonly<Record<number, number>> = Object.freeze({});
 
 /** A divisória fica à direita de cada célula, e do número da linha: preso à esquerda, ele não se confunde com a coluna que rola por baixo. */
 const cellClass = "absolute top-0 h-full truncate border-r border-selected px-3";
+
+/**
+ * A caixa que rola (RN-AMB-002): o anel do foco (o recuo é o de dentro, `-outline-offset-2`; o resto é o `:focus-visible` do `globals.css`) e as barras de
+ * rolagem levam a cor do ambiente da aba, que vem da variável da área de resultado e herda pelo DOM; sem ela, o acento e a cor de rolagem do tema. A cor
+ * da célula ativa e a do campo de edição vêm da mesma variável, sem passar pela grade nem pelas linhas, que são memorizadas.
+ */
+const boxClass = `min-h-0 flex-1 overflow-auto font-sans text-sm -outline-offset-2 ${environmentAccent.focusOutline} ${environmentAccent.scrollbar}`;
 
 type GridRowProps = {
   index: number;
@@ -131,7 +139,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
         // pendência, da exclusão e da célula ativa. A escolhida tem o fundo de escolha do tema, o do item escolhido do navegador.
         const chosen = (rowChosen && item.index >= selectedFrom && item.index <= selectedTo) || wholeColumns?.has(item.index) === true;
         const cell = cellIdOf === undefined ? {} : { id: cellIdOf(index, item.index), "data-row": index, "data-col": item.index, "aria-selected": chosen };
-        const marked = cn(chosen && "bg-selected", activeColumn === item.index && "outline-2 -outline-offset-2 outline-accent", markClasses.cell);
+        const marked = cn(chosen && "bg-selected", activeColumn === item.index && `outline-2 -outline-offset-2 ${environmentAccent.outline}`, markClasses.cell);
 
         if (editor?.column === item.index) {
           return (
@@ -895,7 +903,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
       onKeyUp={editing === undefined ? undefined : () => editing.onSelecting(false)}
-      className="min-h-0 flex-1 overflow-auto font-sans text-sm -outline-offset-2"
+      className={boxClass}
       style={zoomStyle}
     >
       <div className="relative min-w-full" style={{ height: rowVirtualizer.getTotalSize(), width: columnVirtualizer.getTotalSize() }}>
