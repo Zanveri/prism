@@ -3251,10 +3251,13 @@ ambiente".
 - **RN-NAV-010.** O navegador ganha, ao lado do campo de filtro, um seletor de ambiente: "Todos os
   ambientes" (o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente".
   - Com um ambiente escolhido, a árvore mostra só as conexões cujo ambiente (próprio ou herdado da
-    pasta, RN-PASTA-005) é esse, e as pastas no caminho até elas.
+    pasta, RN-PASTA-005) é esse, e as pastas no caminho até elas, abertas só nessa vista, sem mudar o
+    que se lembra delas (RN-NAV-014).
   - Ele se combina com o campo de filtro de objetos.
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
+  - *Alterada a pedido do dono em 2026-10-27 (seção 42): as pastas no caminho abrem só na vista
+    filtrada, sem gravar.*
 
 ## 26. Complemento de 2026-10-15, versão 0.4.0: a linha em branco separa os comandos (issue #7)
 
@@ -4052,8 +4055,9 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
     conexão, até uma sessão nova abrir (a próxima ação na árvore ou na aba): o indicador e a conta
     dizem o mesmo. O "Desconectar" do menu continua valendo para ela, e na árvore e na barra de
     status quem diz o estado dela é o indicador.
-  - Ligado, a árvore mostra só as conexões conectadas e as pastas no caminho até elas. Combina com o
-    campo de filtro e com o seletor de ambiente, como os dois entre si.
+  - Ligado, a árvore mostra só as conexões conectadas e as pastas no caminho até elas, abertas só nessa
+    vista, sem mudar o que se lembra delas (RN-NAV-014). Combina com o campo de filtro e com o seletor de
+    ambiente, como os dois entre si.
   - A conexão que desconecta sai da árvore filtrada na hora, e a que conecta (pela árvore, por uma
     aba, por um script) entra.
   - Sem nenhuma conectada, o botão diz "Nenhuma conectada", e, ligado, a árvore diz "Nenhuma conexão
@@ -4061,6 +4065,8 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   - A escolha vale enquanto a janela está aberta, como a do ambiente.
   - A API não muda: a tela já sabe quais conexões estão conectadas, e a verificação diz quais
     perderam a sessão.
+  - *Alterada a pedido do dono em 2026-10-27 (seção 42): as pastas no caminho abrem só na vista
+    filtrada, sem gravar.*
 
 ### Rotas e respostas
 
@@ -4540,8 +4546,11 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     ou num script, vai à pasta pai (na raiz, não faz nada). Enter e o duplo clique abrem e fecham a
     pasta, e abrem o script, como hoje. F2 renomeia a pasta ou o script; Delete exclui (RN-SCRIPT-009);
     Shift+F10 e a tecla de menu abrem o menu.
-  - As pastas começam abertas, e abrir e fechar vale enquanto a janela está aberta, como as pastas de
-    conexões: não se grava. Recolher a seção inteira continua lembrado (RN-NAV-012).
+  - As pastas começam fechadas e voltam abertas ou fechadas como a pessoa as deixou, como as pastas de
+    conexões (RN-NAV-014). Recolher a seção inteira continua lembrado (RN-NAV-012). *Alterada a pedido do
+    dono em 2026-10-27 (seção 42): as pastas começavam abertas, e abrir e fechar valia enquanto a janela
+    estava aberta, sem gravar; o que se abre para mostrar o que foi criado, renomeado ou movido fica
+    lembrado.*
   - A densidade do navegador vale para ela (RN-NAV-011): as linhas de 30 ou de 22 px, e o recuo de 16
     ou de 12 px a cada nível.
   - Sem pasta e sem script, a seção diz o que diz hoje ("Nenhum script salvo. Ctrl+S numa aba de
@@ -4549,7 +4558,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
   - A pasta ou o script cuja pasta não está na lista (outra janela a excluiu entre duas leituras)
     aparece na raiz, até a leitura seguinte.
   - Depois de criar, renomear ou mover uma pasta ou um script pela seção, ele fica à vista (as pastas
-    acima dele abrem) e escolhido, com o foco.
+    acima dele abrem, e ficam lembradas abertas, RN-NAV-014) e escolhido, com o foco.
 - **RN-SCRIPT-009.** Os menus e os diálogos das pastas de scripts.
   - O botão direito no título da seção ou no espaço vazio dela, e Shift+F10 ou a tecla de menu com o
     foco no título, abrem um menu com "Nova pasta", que cria na raiz.
@@ -4715,8 +4724,8 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   nas abas guardadas.
 - Saber o esquema atual em que cada resultado do Db2 e do Informix foi lido, se o driver um dia o disser
   sem consulta, no lugar da guarda dos comandos que podem trocá-lo (RN-SQL-024).
-- Na seção Scripts: arrastar e soltar, busca e filtro, lembrar as pastas abertas, a cor e o ícone da
-  pasta, e as pastas por conexão que o DBeaver pode criar sozinho.
+- Na seção Scripts: arrastar e soltar, busca e filtro, a cor e o ícone da pasta, e as pastas por conexão
+  que o DBeaver pode criar sozinho. Lembrar as pastas abertas entrou pela seção 42 (RN-NAV-014).
 
 ## 34. Complemento de 2026-10-16, versão 0.4.0: exportar e importar conexões com as pastas
 
@@ -12510,6 +12519,45 @@ Informix e no Db2.
 - A altura das linhas da grade e do navegador, a densidade (RN-NAV-011), o zoom da grade e o do programa (RN-ZOOM-001)
   não mudam.
 
+### As pastas lembradas
+
+- **RN-NAV-014.** O navegador lembra as pastas abertas.
+  - As pastas de conexões e as pastas de scripts (RN-SCRIPT-008) voltam abertas ou fechadas como a pessoa as deixou, ao
+    abrir o app e ao entrar de novo, por usuário, nas preferências desta instalação (RN-CONFIG-001), como o navegador
+    escondido (RN-NAV-008) e a seção Scripts recolhida (RN-NAV-012).
+  - Sem nada lembrado (a primeira entrada, quem vem da 0.5.0, as preferências apagadas), todas começam fechadas. A pasta
+    que ainda não foi aberta (a nova, a importada, a criada noutra janela) também começa fechada, menos quando o que a
+    criou a revela (abaixo).
+  - As conexões sempre começam fechadas e desconectadas: abrir a conexão é conectar (RN-SESSAO-001), e nada conecta
+    sozinho (RN-ABAS-006). Os bancos, os esquemas, os grupos e as tabelas abertos não passam de uma entrada para a
+    outra. Na mesma entrada, continua como antes: fechar e abrir de novo a conexão conectada mostra o que estava aberto
+    abaixo dela, e desconectar fecha tudo dela.
+  - Abrir as pastas para mostrar o que foi criado, salvo, duplicado, importado, movido ou revelado conta como abri-las,
+    e fica lembrado: a conexão salva pelo formulário (RN-NAV-004), a duplicada (RN-CONN-016), o que a importação trouxe
+    (RN-TRANSF-014 e RN-DBEAVER-014), a pasta em que se cria uma conexão ou uma pasta nova (RN-NAV-002), o "Mostrar no
+    navegador" (RN-ARVORE-008) e o que a seção Scripts cria, renomeia ou move (RN-SCRIPT-008). Mover uma conexão ou
+    uma pasta de conexões ("Mover para…", RN-NAV-003) passa a revelá-la, como o salvar: as pastas do destino abrem, e
+    ela fica à vista. "Recolher tudo" (RN-NAV-002) fecha também todas as pastas de conexões, e é isso que volta.
+  - A busca (RN-BUSCA-001), o seletor de ambiente (RN-NAV-010) e "Só as conectadas" (RN-NAV-013) não mudam o que se
+    lembra. A busca já abre os ancestrais do que casa só na tela filtrada; o seletor de ambiente e "Só as conectadas",
+    ligados, fazem o mesmo com as pastas no caminho até as conexões que ficam à vista: abertas só nessa vista, sem
+    gravar. Fechar uma delas vale enquanto o filtro está ligado, e desligá-lo devolve as pastas como estavam.
+  - O que se lembra: o identificador de cada pasta aberta, numa lista para as pastas de conexões e noutra para as de
+    scripts, sem nome nem dado de conexão, sem repetidos e até 1.000 em cada lista (ficam os mais recentes). Fica no
+    armazenamento local da tela, na chave `prism:navigator-folders:<usuário>` (o nome do usuário sem os espaços das
+    pontas e em minúsculas, como nas chaves vizinhas), como `{ "connections": [...], "scripts": [...] }`. A pasta
+    renomeada ou movida guarda o identificador, e o estado vai com ela. A pasta excluída sai da lista na primeira
+    leitura das pastas de cada entrada. O que não se lê (o texto quebrado, o que não é identificador) é ignorado, sem
+    erro.
+  - Cada mudança (abrir, fechar, "Recolher tudo", tirar a pasta que não existe mais) é gravada sobre o que está gravado
+    agora, e não sobre o que a janela leu ao abrir, como a seção Scripts recolhida (RN-NAV-012): duas janelas não
+    desfazem a escolha uma da outra. A janela que abre depois começa como a última escolha de cada pasta; a que já está
+    aberta fica como está. Sem armazenamento (o navegador o recusa, ou falha), a escolha vale na memória da sessão, sem
+    erro.
+  - O bloqueio não muda nada: a árvore continua como estava. Outro usuário na mesma instalação tem a lembrança dele.
+  - Quem revela leva as pastas a abrir junto do pedido, e elas abrem (e se gravam) quando o pedido é atendido, e nunca
+    enquanto a tela desenha a árvore.
+
 ### Testes e sondas
 
 Os testes da tela rodam sem página: a medida, o foco e a rolagem se provam em funções puras e nos testes dos
@@ -12532,6 +12580,19 @@ dito no relatório, e nunca dado como passando.
   100%: o Chromium pode arredondar o avanço de cada letra, e a folga de 1 px por texto cobre pouco disso. Se a tela for
   mais larga que a medida, a folga é calibrada por fonte, e o guia da tela (`src/client/AGENTS.md`) registra o que a
   sonda achou.
+- **As pastas.** Testes de unidade: a lembrança (nada gravado, o texto quebrado, a lista inválida, o que não é
+  identificador e os repetidos dão a lista vazia, com tudo fechado; acima de 1.000, ficam os mais recentes; uma chave
+  por usuário, fora da do navegador escondido; abrir, fechar, "Recolher tudo" e tirar a pasta que não existe mais; duas
+  janelas que gravam pastas diferentes e não desfazem uma à outra; a janela aberta, que não muda com a outra; sem
+  armazenamento, a memória da sessão, sem erro; as duas listas separadas); as pastas abertas do navegador (nada
+  lembrado, a pasta que não existe, o seletor de ambiente e "Só as conectadas" ligados); a seção Scripts (as pastas
+  começam fechadas, abrir grava, montar de novo volta como ficou, revelar abre e grava, a pasta excluída sai); e o
+  revelar, que grava quando o pedido é atendido, e não enquanto a árvore se desenha. Sob Xvfb: a primeira entrada, com
+  tudo fechado; duas pastas abertas, o app fechado pelo X e aberto de novo, com as mesmas abertas e as conexões fechadas
+  e desconectadas; "Recolher tudo", fechar e abrir, com tudo fechado; a conexão salva numa pasta fechada, que abre e
+  continua aberta na entrada seguinte; duas janelas mexendo em pastas diferentes; outro usuário na mesma instalação; a
+  pasta excluída; a busca, o seletor de ambiente e "Só as conectadas", ligados e desligados, que não mudam o que se
+  lembra; e o Ctrl+B, que esconde e mostra a árvore como estava.
 
 ### O que muda nas regras existentes
 
@@ -12540,8 +12601,15 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - **RN-CONFIG-008**: a fonte da interface vale também na árvore do navegador e nas grades, também a do app, com a
   largura das colunas medida nela; o "N linhas afetadas", o número das Estatísticas e o campo do texto do nulo seguem a
   interface, e o comando das Estatísticas vai à fonte do editor; o que continua na mono; as dicas dos dois campos.
+- **RN-SCRIPT-008**: as pastas de scripts começam fechadas e lembram se ficaram abertas, e o que se abre para mostrar o
+  que foi criado fica lembrado.
+- **RN-NAV-010**: com um ambiente escolhido, as pastas no caminho até as conexões abrem só nessa vista, sem gravar.
+- **RN-NAV-013**: o mesmo com "Só as conectadas" ligado.
 - **Seção 9**: a árvore e as grades deixam a IBM Plex Mono do canvas.
+- **Seção 33**: o "lembrar as pastas abertas" do "Fica para depois" entrou por esta seção.
 
 ### Fica para depois
 
 - Uma fonte própria para a grade e o navegador, separada da interface, se o dono quiser.
+- Reabrir, ao conectar, os bancos, os esquemas e os grupos que estavam abertos na última vez. Os nomes deles são dados
+  do banco, que não vão às preferências: teriam de ir ao cofre.
