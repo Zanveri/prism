@@ -540,8 +540,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   enquanto o cofre está aberto e a esconde (`hidden`) e a torna inerte (`inert`: fora do teclado e do leitor de tela, sem atalho) fora
   da rota dela; a rota `/workbench` existe, sem elemento. Ir de uma tela à outra não apaga as abas, os nós abertos da árvore, o que o
   editor guarda (cursor, seleção, desfazer, rolagem), a largura do navegador, a divisão do resultado nem o zoom do diagrama; uma
-  consulta em andamento continua, e ao reaparecer o foco volta ao elemento que o tinha, se ele ainda existe (as linhas de uma lista virtual saem do
-  DOM enquanto ela está escondida, e voltam outras: o foco que estava numa linha da árvore não é devolvido; a seleção, que é estado, fica). Sair do
+  consulta em andamento continua, e ao reaparecer o foco volta ao elemento que o tinha, se ele ainda existe e se o foco está perdido (as linhas de uma lista virtual saem do
+  DOM enquanto ela está escondida, e voltam outras: o foco que estava numa linha da árvore não é devolvido; a seleção, que é estado, fica; o `WorkbenchSlot` é pai da área
+  das abas e o efeito dele roda DEPOIS do dela, então sem o "se o foco está perdido" (`isLost`) ele desfaria o foco que uma aba aberta na mesma volta acabou de levar à entrada). Sair do
   cofre (ou o cofre fechar por qualquer motivo) desmonta tudo, então nada passa ao usuário seguinte: o provedor aposenta os executores e apaga a
   memória das abas e os filtros pedidos que esperavam (`tab-memory.ts` e `filter-handoff.ts` são de módulo). **Escondida com `hidden`, toda caixa
   aqui dentro mede 0x0**: quem observa tamanho tem de tratar o zero como "sem medida" (ver "Lista virtual que MEDE as linhas", abaixo). **O provedor não pode subir para fora do guard**:
@@ -721,9 +722,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   escondida, não tem o que rolar), `revealOffset` traz a aba ativa à vista com folga, `wheelScroll` faz a roda vertical rolar, `stripKeyTarget`
   dá as setas (com a volta), Home e End, e um botão no fim abre a lista de todas as abas. O menu de botão direito (`tabMenu`: Fechar; Fechar
   as outras, as da direita e todas, com o que não se aplica apagado) é o `ContextMenu` do navegador, com a mesma guarda de
-  `ignoresContextMenu`; Shift+F10 e a tecla de menu o abrem, e o botão do meio fecha a aba. Ctrl+W (Cmd+W) fecha a ativa com o foco na área
-  das abas (`isCloseShortcut`, tratado em `WorkbenchTabs`): o app empacotado não tem menu no Windows e no Linux, então nada mais responde a
-  esse atalho. **Fechar várias abas usa uma fila** (`tabsToClose` e o `pendingClose` do `WorkbenchTabs`): `closeTab` parte da lista que viu
+  `ignoresContextMenu`; Shift+F10 e a tecla de menu o abrem, e o botão do meio fecha a aba. Ctrl+W (Cmd+W) fecha a ativa com o foco em qualquer
+  lugar da janela da área de trabalho (`isCloseShortcut`, tratado em `WorkbenchTabs`, ver "O foco ao abrir, fechar e trocar de aba"): o app empacotado não tem
+  menu no Windows e no Linux, então nada mais responde a esse atalho. O X não toma o foco no clique do mouse. **Fechar várias abas usa uma fila** (`tabsToClose` e o `pendingClose` do `WorkbenchTabs`): `closeTab` parte da lista que viu
   quando foi criado, então várias chamadas no mesmo instante valeriam só a última; a primeira fecha agora, e cada mudança de `tabs` fecha a
   seguinte, cada uma pelo caminho de sempre (cancela o que roda e fecha a sessão). Um `closeTabs(ids)` no provedor trocaria a fila.
 - **A árvore é plana e virtualizada** (`@tanstack/react-virtual`): `flattenVisible` (`_lib/navigator-model.ts`, testado)
@@ -996,6 +997,83 @@ entrada anterior era a delas. A janela de abas passou a ter o histórico das ABA
 - **Como conferir sob o Xvfb**: `xdotool click 8` é o "voltar" e `click 9` o "avançar", com o ponteiro sobre a janela (o `mousemove` do `xdotool` não andou neste Xvfb: `XWarpPointer`
   com `ctypes`); `xdotool key alt+Left` e `alt+Right` são as teclas. As abas das sondas foram trocadas pelo `click()` do protocolo de depuração (o clique esquerdo de verdade do `xdotool` não ativou a aba nas tentativas), e para ver o defeito de antes basta abrir Configurações, fechá-las pelo "Voltar" da página e apertar o "voltar" do mouse: a rota ia para `#/settings`, e agora
   nada muda na rota. Não conferido: o Windows (o `app-command` `browser-backward` que o Chromium pode receber do sistema; o processo principal não trata nada) e o macOS.
+
+## O foco ao abrir, fechar e trocar de aba (RN-ABAS-019)
+
+Pedidos 5 e 6 de 2026-10-27: depois do duplo clique numa tabela o foco ficava no botão da linha do navegador (o Ctrl+Espaço ativava o botão em vez de completar), e depois
+do Ctrl+W o segundo não fechava a segunda aba. A raiz é uma só: abrir, fechar e trocar de aba mudava a aba ativa SEM dizer para onde o foco ia. Fechar tirava da página o
+painel e a entrada da faixa; o elemento com o foco saía com eles, o Chromium o punha no `body` (sem `blur`), e o `body` está FORA do `section` das abas, o único que tratava o
+Ctrl+W, o F5, o Alt+X e o Ctrl+S. No `pnpm dev` o Ctrl+W que ninguém trata cai em Janela › Fechar do menu padrão do Electron e fecha a janela (visto numa reprodução mínima do
+Electron sob Xvfb, com teclas de verdade); no app empacotado, sem menu no Windows e no Linux, nada acontecia. Quem conferir no desenvolvimento vê "a janela fechou", e não "nada aconteceu".
+
+- **A regra** (`_lib/tab-focus.ts`, sem React, com teste de tabela): `focusAfterChange` decide, depois de uma mudança, entre `"entry"` (a entrada da aba ativa), `"strip"` (a aba
+  dela na faixa), `"navigator"` (a linha do navegador que o Tab alcança) e `null`. Com um **pedido** (alguém abriu a aba), vai à entrada se o foco ainda está em quem pediu ou se
+  perdeu (`stillWithRequester`, `isLost`); se saiu para outro lugar vivo (o type-ahead andou na árvore, a pessoa clicou num campo), fica: **abrir não rouba o foco**. Sem pedido,
+  só age se o foco se PERDEU, e então vai ao mesmo lugar em que estava (`regionOf`: a faixa, o conteúdo de uma aba, fora das abas): faixa -> a aba ativa na faixa; conteúdo ->
+  a entrada da aba ativa; sem aba nenhuma -> o navegador; fora das abas -> nada. Bloqueado (diálogo, menu ou lista que TOMOU o foco, cofre bloqueado, outra tela à mostra) ou prometido
+  por outra regra (`resultFocus.pending`: o F6 e a troca do lugar do resultado, RN-ABAS-014) -> nada. **A lista de sugestões do CodeMirror não bloqueia** (`popupTakesFocus`, que é o
+  `popupOpen` sem o `listbox` dentro de um `.cm-tooltip`): ela é do editor que perde o foco e só fecha quando ele o perde de verdade, mas ainda está no `body` quando o Ctrl+clique no nome de
+  uma tabela, logo depois de digitar, esconde o painel do editor; contada como popup, ela bloqueava o foco da aba nova (visto sob Xvfb: a aba abria e o foco caía no `body`). O `popupOpen`
+  dos atalhos da janela (o Ctrl+W, o Alt+←/→) continua contando todas as listas.
+- **A entrada de cada aba** (`tabEntries`, registro de módulo; cada painel registra a sua e diz COMO se foca, a área das abas decide QUANDO): a de consulta é o editor SQL
+  (`QueryTabPanel`; o cursor fica onde estava), ou o resultado (`focusResultIn(slot)`) com o editor escondido (o resultado maximizado, inerte) ou a aba do resultado ativa; a de
+  tabela é o campo "Filtro e ordem dos registros" na vista Registros (`FilterField` expõe `ref` com `focus()`, que leva o cursor ao fim: `focusAtEnd`; ali o Ctrl+Espaço
+  completa, RN-TABELA-011) e o painel da vista (`tableViewPanelId`, `tabIndex=-1`) na Estrutura e no Diagrama, conectada a conexão ou não. A entrada devolve `false` quando o foco não
+  chegou, e a área das abas cai na aba da faixa: o foco nunca fica perdido. O estado de agora (a vista, o editor à vista) é lido por ref na hora de focar. **No `pnpm dev` o
+  `StrictMode` desmonta e monta de novo, no fim da mesma tarefa, os efeitos do painel que acabou de nascer** (o `FilterField` e o `SqlEditor` criam o CodeMirror num efeito e o
+  destroem na limpeza), e o foco que a entrada acabou de levar cai no `body`: `tabEntries.focus` confere num microtask se ele se perdeu e, só então, chama a entrada de novo (no app
+  empacotado a segunda chamada não acontece; sem `document`, nos testes, não confere nada).
+- **O pedido** (`tabFocus`, loja de módulo como `resultFocus`; um pedido por vez, o seguinte troca o de antes): quem abre uma aba por um gesto pede com `request(tabId, from)`, onde
+  `from` é o elemento com o foco naquela hora. O `WorkbenchProvider` pede em `addTab` (consulta nova, tabela nova, script novo), nos ramos da aba que já estava aberta
+  (`openTableTab`, `openScriptTab`: abrir de novo leva o foco para a aba), em `adoptTab` (a aba que chega de outra janela) e no fim de `restoreSaved` (a ativa que volta na
+  entrada). **Nada escreve no DOM na hora do pedido**: é um pedido, e quem foca é o efeito. **O menu e o diálogo que abriram a aba contam como quem pediu**
+  (`fromPopup`): eles fecham logo depois, devolvem o foco ao item da árvore (RN-MENU-001 diz que a ação que abre uma aba leva o foco a ela), e esse foco devolvido não é "outro lugar vivo".
+  **O script espera a API** (`ScriptsSection.open`): o `from` tem de ser lido ANTES do `await`, quando a pessoa pediu (o duplo clique, o Enter), e `openScriptTab(script, place, askedFrom)`
+  o leva ao pedido; lido quando a aba aparece, ele seria sempre quem tem o foco agora, e a guarda nunca veria o type-ahead que andou na árvore enquanto o texto vinha (conferido
+  num Chromium de verdade: o foco fica na árvore). Limite: o "Abrir" do MENU de um script lento conta como pedido de popup (`fromPopup`), e a aba toma o foco mesmo que a pessoa o tenha
+  levado a outro lugar durante a espera: o item do menu que pediu já morreu, e nada diz se o foco que sobrou é o que o menu devolveu à árvore ou o que a pessoa levou.
+  `take(tabId)` só leva o pedido DA aba; o de uma aba que ainda não é a ativa espera (a loja avisa antes de a lista de abas chegar a quem pede depois de uma espera, como o script
+  que vem da API: o `useSyncExternalStore` da área das abas renderiza no ato, e o `setState` fora de um evento vem depois). `version` muda a cada pedido, para refazer o efeito quando
+  a aba pedida já é a ativa e nada mais mudou.
+- **O efeito** (`WorkbenchTabs`, passivo, declarado DEPOIS do efeito da fila de fechar): roda depois dos efeitos dos painéis (o `register` da entrada) e do `FilterField` (que cria o
+  CodeMirror num efeito), e antes do `WorkbenchSlot` (pai), por isso o `WorkbenchSlot` só devolve o foco antigo se ele está perdido. O `useTabHistory` (irmão que vem antes em `routes.tsx`)
+  roda antes: o Voltar e o Avançar já deixaram o foco na aba da faixa (RN-ABAS-018), e a regra não mexe. Só age com a fila de fechar vazia (`pendingClose` e `closingStep`):
+  "Fechar as outras" decide no fim, depois da última. **Sem pedido, só olha o foco quando as abas, a ativa ou a entrada ativa mudaram** (`seen`): a lista de abas muda a cada
+  texto, título e sessão, e o foco que a pessoa soltou clicando no vazio da janela não é puxado de volta ao editor quando uma consulta termina. A volta da tela (as Configurações por
+  baixo) não conta: o foco perdido por ela é do `WorkbenchSlot`.
+- **A última região** (`lastRegion`): um `focusin` no `document`, na CAPTURA, guarda a região do que recebeu o foco (`regionOf`; `data-tab-strip` na faixa, `data-tab-content` no
+  painel de cada aba e no da aba do resultado). Diálogos, menus e listas (`aria-modal`, `role=menu`, `role=listbox`) NÃO contam: o diálogo que fecha devolve o foco a quem o tinha, e a
+  região de antes tem de continuar valendo. `isLost` é nulo, `body`, desligado da página, ou `checkVisibility() === false` (o painel que acabou de ficar `hidden`: o Chromium só
+  limpa o foco numa tarefa seguinte, e a decisão é tomada antes; nos testes o elemento de mentira precisa dessa função).
+- **O Ctrl+W** (`closeActive()` extraído; o `section` e um ouvinte `keydown` da `window`, na bolha): vale em TODA a janela da área de trabalho, como no DBeaver: com o foco na faixa,
+  numa aba, no navegador (também na busca) ou perdido no `body`. O `section` trata o que nasce dentro dele e marca a tecla (`preventDefault`), então a janela a vê tratada e não fecha duas;
+  o campo de edição de uma célula e os diálogos param a propagação, e o Ctrl+W deles não fecha a aba. Nunca com diálogo, menu ou lista aberta, com o cofre bloqueado ou com outra tela à
+  mostra (o ouvinte só existe com a área de trabalho na tela). Trata a tecla até SEM aba (`preventDefault`, para o menu do Electron não fechar a janela), mas as recusas (diálogo, cofre,
+  tecla já tratada) deixam a tecla como está. **A tecla segurada (`repeat`) não fecha outra aba**: é tratada, uma aba por toque (segurar passaria por todas as abas, com o foco
+  agora indo de uma para a outra). Na janela do resultado, ela continua sendo o "Voltar para o painel" (RN-ABAS-013): a `window` daquela página é outra.
+- **O X da faixa** (`keepFocus`, `onMouseDown` com `preventDefault` só no botão principal): o clique não leva o foco ao X, como o do botão do meio já não leva; se o foco estava na
+  aba que fecha, a regra do foco perdido o leva à que ficou ativa. O X pelo teclado (Enter no X, que está na ordem do Tab) deixa o foco na faixa. **Preço conferido num
+  Chromium sob Xvfb: com o `mousedown` cancelado o arrasto da aba NÃO começa pelo X** (o `dragstart` não dispara; sem o `preventDefault` ele dispara, e pelo título dispara sempre).
+  A área de clique do X é de 24 px na ponta da aba. O `pointerdown` cancelado não serve no lugar: ele suprime também o `mousedown` e o arrasto continua morto. Para devolver o arrasto
+  seria preciso deixar o foco ir ao X e devolvê-lo a quem o tinha no `focus` do X (`relatedTarget`), sem cancelar nada.
+- **O editor SQL deixou o `autoFocus`** (a prop saiu de `SqlEditor`): a aba nova é focada pela regra, com a guarda contra roubar o foco no script lento (o `getScript` da API vem
+  depois de a pessoa ter ido digitar na árvore) e na aba que chega de outra janela. A entrada do editor já faz o "cursor onde estava".
+- **Testes sem DOM**: `lib/testing/fake-page.ts` é uma página de mentira (o `activeElement` que o `focus()` do elemento de mentira move e que avisa o `focusin`, o `body`, o
+  `getElementById`, o `querySelector`, os ouvintes de `document` e `window`, `keyEvent`/`press` para a bolha da tecla): os testes da área das abas (`workbench-tabs.*.test.ts`, que
+  precisam dela por causa do `focusin` e do `keydown`) a instalam com `vi.stubGlobal`. `workbench-tabs.focus.test.ts` prova a causa do pedido 6 (dois Ctrl+W com o foco caindo
+  no `body` fecham as duas abas) e a fila de fechar; `tab-focus.test.ts` é a tabela da decisão.
+- **O que ficou fora** (spec, "Fica para depois"): trocar de aba por Ctrl+Tab e Ctrl+PageUp/PageDown (não existem; o Ctrl+Shift+PageUp/PageDown MOVEM a aba) e levar o foco ao
+  conteúdo no clique na faixa e no Voltar/Avançar (mudaria a RN-ABAS-018). Segurar o Enter na linha da tabela fazia a repetição do teclado cair no filtro, que aplicava e
+  executava de novo (34 consultas em 2 s, vistas sob Xvfb): o campo ignora o Enter que o teclado repete (`isHeldEnter`, `ignoreHeldEnter`). Segurar o Enter na linha de um script
+  ainda deixa a repetição cair no editor, que insere linhas em branco. Logo depois de abrir, o Ctrl+Espaço do filtro só sugere as palavras: as colunas vêm do resultado carregado (`columns` de `RecordsView`),
+  que chega com a primeira página (e, na aba restaurada desconectada, só depois do "Atualizar").
+- **Como conferir sob Xvfb** (o app de verdade, `pnpm dev` e o empacotado; `webContents.sendInputEvent` ou `xdotool`): duplo clique e Enter numa tabela levam o foco ao filtro, e o
+  Ctrl+Espaço abre a lista das colunas; a tabela que já estava aberta; três Ctrl+W seguidos fecham três abas, a partir do editor, da grade e da faixa; o X com o mouse e depois o
+  Ctrl+W; "Descartar" numa pergunta e depois o Ctrl+W; a última aba leva o foco ao navegador; seguir uma chave estrangeira e o duplo clique no diagrama; Alt+← deixa o foco na
+  aba; o F6 com o resultado numa aba; o type-ahead enquanto um script lento abre não perde o foco; o clique no cabeçalho de uma aba de tabela e o Ctrl+W; "Abrir numa aba de consulta" dá o
+  foco ao editor. No `pnpm dev` a conferência registra que a tecla foi tratada (`defaultPrevented`): sem isso o menu padrão fecha a janela (também com um diálogo aberto ou o campo de edição de
+  uma célula, onde a tecla não é tratada de propósito), e a prova final é no `dist:dir`. Ao conferir o app construído com `electron-vite preview`, matar o `electron` e não só o
+  `electron-vite` (o filho sobrevive ao pai, segura a porta de depuração e serve o pacote velho), e conferir qual `assets/index-*.js` a página carregou.
 
 ## Abas que voltam na próxima entrada (RN-ABAS-006)
 
@@ -3297,7 +3375,8 @@ não o `CREATE` das colunas do resultado, que a especificação deixou para depo
     aba (a aba nova é a do "Nova consulta", à frente, com o texto no editor).
 - **Não conferido numa janela**: nada disto foi visto na tela (não há Xvfb nem banco nesta etapa), só nos testes; o `SqlViewer` não tem teste (o vitest não
   tem DOM). Falta conferir sob Xvfb que a aba nova do "Abrir numa aba de consulta" nasce com o cursor no começo e o foco no editor (o diálogo, ao fechar,
-  devolve o foco à grade da aba de antes, que já está escondida, e o editor da nova o toma ao montar).
+  devolve o foco à grade da aba de antes, que já está escondida; o editor da nova deixou o `autoFocus`, e quem o foca é a regra do foco das abas (RN-ABAS-019): o
+  diálogo conta como quem pediu, e o foco perdido que ele deixa vai à entrada da aba nova).
 
 ## Configurações (`src/app/settings`)
 
