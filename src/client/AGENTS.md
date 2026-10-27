@@ -550,7 +550,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `connectionId` (nulo só na aba de consulta: a de um script cuja conexão sumiu, a do script genérico sem uma só conexão conectada e a que voltou na entrada
   sem a conexão dela, ver "Scripts salvos"), `sessionId`, `sql`, na aba de uma tabela `table` (esquema, nome e a
   vista; `isTableTab` estreita o tipo para `TableTab`, que sempre tem a conexão) e, na aba de um script, `script`), `activeTabId`, os nós abertos
-  (`expanded`, sem as pastas, que são só do navegador e começam abertas) e "Desconectar". `openQueryTab(connectionId, sql?)` abre
+  (`expanded`, sem as pastas, que são só do navegador e se lembram à parte: ver "As pastas abertas lembradas") e "Desconectar". `openQueryTab(connectionId, sql?)` abre
   uma consulta (com `sql`, o editor já nasce com esse texto e nada é executado); `openTableTab(connectionId, { schema, name, view? })`
   abre a aba de uma tabela, uma por tabela (de novo, volta à que existe), e `setTableView` troca a vista (ver "Aba de uma tabela e
   área de resultado recolhível"). `closeTab` cancela o que a aba estiver rodando e fecha a sessão dela (404
@@ -1019,7 +1019,8 @@ suas abas ao processo principal, que junta as de todas e grava.
   relato de cada janela) e na tela (a resposta do `GET`, `workspace.service.ts`: a aba que não confere fica de fora, sem derrubar as outras).
 - **Nada conecta nem executa sozinho.** As abas voltam sem sessão; as conexões das abas de tabela que voltaram são marcadas como desconectadas
   (`DisconnectLog.mark`, pelo `restoredTableConnections` do provedor), e as vistas delas esperam o clique, como as de uma conexão que a pessoa desconectou. A
-  árvore não abre nada (os nós abertos não são gravados).
+  árvore não abre nada: os nós abertos da conexão para baixo (a conexão, os bancos, os esquemas, os grupos e as tabelas) não são gravados, e só as pastas
+  voltam abertas (RN-NAV-014, ver "As pastas abertas lembradas"), o que não conecta nada.
 - **Quem reabre** (`WorkbenchProvider`): ao montar, a área de trabalho pergunta ao processo principal se reabre (`claimWorkspaceRestore`, canal
   `prism:workspace-claim`: só a janela principal, a primeira das vivas, e uma vez por entrada; a que recarrega com outra janela aberta não reabre, porque as abas
   estão nas janelas). A principal lê (`getWorkspace`), as conexões e os scripts, e só DEPOIS começa a contar as suas; uma falha em qualquer leitura não reabre
@@ -1245,7 +1246,8 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   (**lembra se ficou recolhida**, RN-NAV-012: `useScriptsCollapsed`, na chave `prism:navigator:<usuário>` ao lado do navegador escondido, `NavigatorLayout`
   com `hidden` e `scriptsCollapsed`; a loja muda só o campo pedido, e o gravado antes, só com `hidden`, vale com a seção aberta. Cada janela tem o seu
   armazém, que não ouve as outras (a janela aberta fica como está, a que abre depois começa como a última escolha): por isso o `set` grava o pedido sobre o
-  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário): uma árvore, com as
+  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário; as pastas abertas dela
+  têm a loja delas, `folder-memory.ts`, na chave `prism:navigator-folders:<usuário>`, e estão em "As pastas abertas lembradas"): uma árvore, com as
   pastas de scripts e os scripts, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem o script, F2 renomeia, Delete exclui (com a confirmação),
   Shift+F10 e a tecla de menu abrem o menu (Abrir; Renomear, Editar script…, Mover para…, Copiar SQL e o lugar; Excluir). Renomear muda o título das abas do
   script; excluir deixa as abas com o texto, como consultas sem script.
@@ -1293,8 +1295,9 @@ da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de
 - **A árvore** (`buildScriptTree`): em cada nível as subpastas e depois os scripts, por nome, com o `byName` da árvore das conexões (o português, sem caixa
   nem acento); a pasta ou o script cuja pasta não está na lista vai à raiz até a leitura seguinte, e as pastas em ciclo não aparecem. As chaves levam o tipo
   (`folder:<id>`, `script:<id>`), porque uma pasta e um script podem ter o mesmo nome no mesmo lugar, e cada pasta sabe o que tem direto dentro
-  (`contents`, a conta da API). `visibleScriptRows` dá as linhas à vista: as pastas começam abertas, e as fechadas são estado da `ScriptsSection`
-  (`closedFolders`), desta janela, sem gravar; a pasta vazia não tem a seta nem o `aria-expanded`. O `ScriptsTreeView` desenha `role="tree"` ("Scripts
+  (`contents`, a conta da API). `visibleScriptRows` dá as linhas à vista a partir das pastas ABERTAS (`open`, as chaves `folder:<id>`): a pasta que não está nele está fechada, e
+  sem nada lembrado a seção mostra só o primeiro nível. Quem sabe quais estão abertas é a loja das pastas lembradas (RN-NAV-014, `useOpenFolders("scripts")`,
+  que guarda GUID, e a seção converte com `folderKey`); a pasta vazia não tem a seta nem o `aria-expanded`. O `ScriptsTreeView` desenha `role="tree"` ("Scripts
   salvos") com `treeitem`s planos, cada um com o `aria-level`, a altura e o recuo da densidade (RN-NAV-011), o ícone de pasta neutro ou o do script
   (RN-SCRIPT-006) e a marca do genérico.
 - **O teclado** (`scriptTreeMove` e `scriptTreeRowKey`): as setas para cima e para baixo sem dar a volta, Home e End; a direita abre a pasta fechada e, na
@@ -1322,8 +1325,9 @@ da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de
   nela) fecha a pergunta, vai ao aviso central e as listas são lidas de novo. Os avisos de sucesso: "Pasta criada.", "Pasta renomeada.", "Pasta movida.",
   "Script movido." e "Pasta excluída.".
 - **A linha à vista** (RN-SCRIPT-008): depois de criar, renomear ou mover uma pasta ou um script (o renomear do script também), a `ScriptsSection` lê as
-  listas de novo, abre as pastas acima dele (`ancestorKeys`, sobre a lista que acabou de chegar), abre a seção recolhida e escolhe a linha. A linha que já
-  está na página (nada acima dela a abrir, a seção aberta) ganha o foco na hora (pelo id, `scriptRowDomId`): sem estado novo não haveria renderização, e um
+  listas de novo, abre as pastas acima dele e as lembra abertas (`ancestorIds`, sobre a lista que acabou de chegar, e `changeFolders({ open })`: é num evento, o fim da chamada à
+  API, e por isso pode escrever na loja), abre a seção recolhida e escolhe a linha. A linha que já está na página (nenhuma pasta acima dela a abrir, que é o que
+  o `changeFolders` devolve, e a seção aberta) ganha o foco na hora (pelo id, `scriptRowDomId`): sem estado novo não haveria renderização, e um
   pedido armado esperaria uma renderização qualquer depois (a primeira tecla no editor) para tirar o foco de lá. A que ainda vai aparecer fica numa
   referência; um efeito sem dependências, depois de cada renderização, dá o foco a ela quando ela está na página e esquece a chave. Uma referência, e não um
   estado, porque o `setState` num efeito é recusado pelo lint (renderizações em cascata).
@@ -1365,7 +1369,7 @@ aparece, seção 9), e deixa trocá-la.
   acha o pedaço no nome, no caminho e no `host`. "Conectada" é a das listas (`connectedConnectionIds`), pelo `useConnectedIds` (`_lib/use-connected-ids.ts`: as consultas das
   sessões da árvore com `enabled: false`, que nunca abrem sessão, as abas e as que a verificação achou sem sessão, `useNotConnectedIds`, numa chave de texto
   que só muda com elas): só a lista aberta e a faixa da aba sem conexão o usam. No fim, "Mostrar no navegador" pede ao navegador a
-  conexão da aba (`connectionReveal`, o mesmo do formulário de conexão): ele abre as pastas acima dela, a escolhe, lhe dá o foco e aparece se estava escondido.
+  conexão da aba (`connectionReveal`, o mesmo do formulário de conexão): ele abre as pastas acima dela (e elas ficam lembradas, RN-NAV-014), a escolhe, lhe dá o foco e aparece se estava escondido.
 - **A troca** (`switchConnection` no provedor, sobre `withConnection`, puro e testado; substitui o antigo `assignConnection`): passa pela pergunta das alterações
   não salvas da grade (o `guard` da edição, como a troca do banco), e então a aba ganha um executor novo na conexão escolhida, no banco padrão dela; o de antes
   sai de cena (`retire`) e a sessão dele fecha em segundo plano (`endInBackground`). Nada executa, o texto fica (o do editor deste instante) e o resultado sai.
@@ -1470,8 +1474,31 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   (`renameRefusalFields`); o 422 de outro campo vai ao aviso pelo título. "Duplicar conexão" chama `POST api/user/connections/{id}/duplicate`
   (`duplicateConnection`, sem corpo: a senha é copiada dentro do cofre), atualiza as listas e pede ao `connectionReveal` a cópia, que aparece
   escolhida e com o foco, desconectada; a recusa vai ao aviso central.
-- **Filtro por ambiente** (RN-NAV-010). Ao lado do campo de busca, na mesma linha (que quebra no navegador estreito: o campo é
-  `flex-[1_1_8rem]`, o seletor `flex-[1_1_9rem]`, e a 200 px o seletor desce), o `NavigatorEnvironmentFilter` (`navigator-environment-filter.tsx`,
+- **A barra de filtros** (RN-BUSCA-001, RN-NAV-010 e 013, `NavigatorFilters`, `navigator-filters.tsx`, sem estado, é o único lugar que diz a disposição).
+  Abaixo da barra de ações, uma coluna de duas linhas de 6 px de intervalo (`gap-1.5`, que cabe o anel de foco de 2 px com 2 de afastamento) e 8 px até a árvore
+  (`mb-2`, o do canvas). **Linha 1**: só o campo "Filtrar objetos", na largura toda, como o canvas o desenha (mesmo no navegador largo, em que os três caberiam numa
+  linha só: o dono pediu a busca na largura toda). A raiz do `NavigatorSearchField` é `w-full h-8 flex-none`: **dentro do `flex-col` o campo não pode ter base
+  flexível** (`flex-[1_1_8rem]` era a dele quando dividia a linha), senão a base vale para a ALTURA e o campo cresce na vertical (128 px de base vencem o `h-8`); o
+  teste confere que a raiz não tem `flex-[`, `flex-1` nem `min-w-`. **Linha 2**, `flex-wrap`: "N conectadas" à esquerda (`flex-none` e `whitespace-nowrap`: a conta
+  nunca é cortada) e o seletor de ambiente à direita, com o resto da largura (`flex-[1_1_8rem] min-w-28` no invólucro dele, com o `x` "Limpar o filtro de
+  ambiente" dentro: escolher ou limpar o ambiente não muda a largura de nada). Quando o seletor não cabe ao lado do botão com 128 px pelo menos, ele desce para uma
+  linha só dele, na largura toda. **A base é de 8 rem, e não de 9**: com 9 rem, "Nenhuma conectada" (o estado ao abrir o app, sem nada conectado) só cabe a partir de
+  318 px de navegador e sobra 1,6 px nos 320 do padrão, e qualquer fonte da interface mais larga (RN-CONFIG-008) jogaria o seletor para a terceira linha; com 8 rem
+  cabem a partir de 303 px, com ≈18 px de folga no padrão (o seletor mede 145,6 px nos 320, e o mínimo é 128). Os limiares, **medidos** de 1 em 1 px (o `NavigatorFilters` de
+  verdade e o CSS construído, num Electron sob Xvfb, na IBM Plex Sans do pacote; o desenho tinha calculado os mesmos valores, a menos de 1 px): o seletor passa a ficar ao
+  lado do botão a partir de 263 px de navegador com "3 conectadas", 271 com "12", 288 com "1.200" e 303 com "Nenhuma conectada", e abaixo disso desce; a 200 px (o
+  mínimo) ele sempre desce. "Todos os ambientes" cabe inteiro a partir de 271, 278, 296 e 310 px; entre o limiar e essa largura, o nome fechado termina em reticências (`[&>span:first-child]:truncate`; a etiqueta de ambiente já tem o nome inteiro na dica). Com a DejaVu Sans no lugar da fonte da interface (bem mais larga), os limiares
+  medidos são 272, 279, 298 e 316 px: a 320 px "Nenhuma conectada" ainda fica ao lado do seletor, que fecha "Todos os ambientes" em reticências. O zoom do programa
+  (`setZoomFactor`) não muda o layout em pixels CSS: a 125% e a 150% as mesmas larguras dão a mesma disposição. A ordem do DOM é a da tela, e por
+  isso a do Tab: barra de ações, campo, "Limpar a busca", "Só as conectadas", seletor, "Limpar o filtro de ambiente", árvore (o teste confere pelo markup, e que
+  nada tem `tabindex` positivo). O Ctrl+F, o Ctrl+Shift+E (`aside input[type="search"]`), o Esc, a seta para baixo e o Enter do campo não mudaram. A linha de estado
+  da busca (RN-BUSCA-002) fica logo abaixo desta barra, nunca ao lado do campo, e o que a busca precisar de controle novo vai dentro do campo ou nesta segunda
+  linha. No navegador largo (acima de ≈413 a 452 px) os filtros ocupam uma linha a mais que antes (+38 px): é consequência do pedido. **Conferido sob Xvfb**, na barra sozinha e no app
+  inteiro: de 200 a 640 px o campo tem 32 px de altura e a largura toda do navegador, com a conta 0, 3, 12 e 1.200, o ambiente "Todos", um e um de nome longo (cortado
+  dentro do seletor), o "Limpar o filtro de ambiente" sempre dentro do lugar do seletor e nada além da barra; no app inteiro, a divisória pelas setas em 200, 320 e 640 px,
+  o Tab na ordem da tela (campo, "Limpar a busca", "Só as conectadas", seletor, "Limpar o filtro de ambiente", linha da árvore), o Ctrl+F, o Esc (com e sem texto), a seta
+  para baixo e o Enter no campo e o Ctrl+Shift+E.
+- **Filtro por ambiente** (RN-NAV-010). Na linha de baixo da barra, ao lado de "Só as conectadas" (acima), o `NavigatorEnvironmentFilter` (`navigator-environment-filter.tsx`,
   sem estado) é o `Select` do app com "Todos os ambientes" (valor vazio, o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente". Cada
   ambiente vai como a `EnvironmentPill` dele, na lista e no controle fechado (o `content` da opção do `Select`); o controle fechado fica numa linha
   só, cortado com reticências (`[&>span:first-child]:truncate`), e na lista o texto quebra. Com um filtro escolhido aparece o `x` "Limpar o filtro
@@ -1484,8 +1511,61 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   janela nova começa em "Todos"). O ambiente que ninguém mais usa volta a escolha a "Todos" (`choiceAvailable`, um ajuste durante a renderização,
   só com as duas listas já na tela), e a conexão que o formulário salvou ou a duplicada que o filtro esconderia também (no mesmo ajuste do
   `connectionReveal`, como a busca). A árvore vazia pelo filtro diz "Nenhuma conexão em X." (ou "sem ambiente") numa região viva, e não é o
-  primeiro uso. **Conferido sob Xvfb**: Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
+  primeiro uso. As pastas no caminho até as conexões à vista abrem só nessa vista, sem gravar (RN-NAV-014, ver "As pastas abertas lembradas"). **Conferido sob Xvfb**
+  (antes da 0.6.0): Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
   "MES" no campo fica só a da raiz; "Sem ambiente" deu a frase; a inicial "p" escolhe Produção com a lista fechada; o `x` volta a todas.
+- **As pastas abertas lembradas** (RN-NAV-014 e RN-SCRIPT-008). As pastas de conexões e as de scripts começam FECHADAS e voltam como a pessoa as deixou, ao abrir o app e
+  ao entrar de novo, por usuário. Guarda-se o que está ABERTO, e não o recolhido: "nada lembrado, tudo fechado" sai de graça (a primeira entrada, quem vem da 0.5.0, as
+  preferências apagadas), e a pasta nova, a importada e a criada noutra janela já nascem fechadas sem regra nenhuma. `_lib/folder-memory.ts` (a regra pura e a loja):
+  `localStorage` na chave `prism:navigator-folders:<usuário>` (o nome sem espaços nas pontas e em minúsculas, como as vizinhas), `{ "connections": [...], "scripts": [...] }`,
+  só os GUID das pastas abertas, sem repetidos, até 1.000 por lista (`maxRememberedFolders`: ficam os mais recentes, os do fim). **É uma chave própria, e não um campo
+  de `prism:navigator:`**: a 0.5.0 regrava essa chave só com `hidden` e `scriptsCollapsed` (`mergeLayout`), então um campo novo ali se perderia na primeira gravação de quem
+  voltasse a ela, e os testes que fixam o JSON exato da outra continuam como estão. Nada de nome, de servidor nem de dado de conexão: os GUID são opacos (RN-CONFIG-001).
+  `parseFolderMemory` nunca lança, e o que não é GUID, o que não é lista e o texto quebrado são ignorados (**a leitura filtra GUID; `change` não**: a API só dá GUID, e os
+  testes usam `f1` em memória). `applyFolderChange` (pura) aplica `{ open }`, `{ close }`, `{ closeAll }` e `{ retain }` e devolve o MESMO conjunto quando nada muda.
+  `createFolderMemoryStore(getStorage)` tem `get(usuário, árvore)`, `change(usuário, árvore, mudança)` (devolve se a janela viu mudar; a mesma escolha de novo não grava nem avisa) e
+  `subscribe`; cada conjunto é o MESMO objeto até aquela árvore mudar (`useSyncExternalStore`), e mexer nos scripts não troca o das conexões. **Cada janela tem o seu armazém e
+  não ouve as outras**, e a mudança vai para o armazenamento SOBRE O QUE ESTÁ GRAVADO AGORA, e não sobre o que a janela leu (a disciplina da RN-NAV-012): A abre X, B (que
+  leu antes) abre Y, e o gravado tem os dois; a janela que abre depois começa como a última escolha. Por isso também se grava quando a janela não vê diferença e o gravado vê:
+  "Recolher tudo" numa janela que mostra tudo fechado, com uma pasta que outra janela abriu depois, esvazia o gravado (era o curto-circuito pelo cache da janela que o
+  deixava como estava). O cache é de módulo e não relê o armazenamento quando o cofre fecha e abre
+  na MESMA janela (como o da seção Scripts recolhida): a janela vê o que ela mesma fez, e o que grava continua sendo a mudança sobre o gravado. Sem armazenamento (ausente,
+  recusando ou lançando) a escolha fica na memória da sessão, sem erro. `useOpenFolders(árvore)`, em `use-navigator-layout.ts`, devolve `[conjunto, change]` com o usuário de
+  `sessionQuery` (sem usuário: vazio, e `change` não grava); `change` devolve se a janela viu mudar, que é o que a seção Scripts usa para saber se há renderização a esperar.
+  **O navegador** (`navigator.tsx`): `openTreeKeys` (`_lib/navigator-folders.ts`, pura) cruza `tree.folderKeys` com os GUID lembrados (`folderKeyOf`) e junta os nós abertos
+  de `expanded` (menos a conexão a que faltam usuário ou senha); o identificador que não está na árvore à vista (excluída, ou escondida por um filtro) não tem efeito. **As
+  conexões não se lembram** (abrir é conectar, RN-SESSAO-001; nada conecta sozinho, RN-ABAS-006): uma pasta lembrada aberta mostra as conexões fechadas e desconectadas, e os
+  bancos, os esquemas, os grupos e as tabelas abertos não passam de uma entrada para a outra (lembrá-los exigiria guardar nome de banco e de tabela: ficou para depois, no
+  cofre). "Recolher tudo" fecha o `expanded` e as pastas (`{ closeAll }`), e é isso que volta. **A poda** (`{ retain: ids da lista }`) roda uma vez por montagem, quando a
+  lista de pastas chega DEPOIS da montagem (`isFetchedAfterMount`: a do cache pode estar velha), no navegador e na seção Scripts; a lista de uma janela que não conhece a pasta
+  recém-criada noutra a poderia podar, e foi aceito (só na janela que monta na mesma hora).
+  **Nada de escrever na loja durante a renderização.** As revelações (a conexão salva, a duplicada, o "Mostrar no navegador", a importação) são ajustes durante a renderização
+  (uma vez por pedido) que só põem estado: o `reveal` e o `handledImport` levam os IDs das pastas (`folderIdsOfKeys` sobre `plan.folderKeys`), e quem abre é o efeito que já leva o
+  pedido embora (`connectionReveal.take`, `importedReveal.take`), por `openForRequest`. Esse é um `useEffectEvent(openFolders)`, de propósito: com `openFolders` nas
+  dependências o efeito rodaria a cada troca de filtro (o número do pedido já o protege), e o `useCallback` dele o React Compiler recusa
+  (`react-hooks/preserve-manual-memoization`, sobre o `filterView`). A linha da `NavigatorList` não consome o pedido de foco enquanto não está em `rows` e tenta de novo quando
+  as pastas abrem. Os eventos (abrir e fechar, `expandFolder` de "Nova conexão" e "Nova pasta" dentro de uma pasta, "Mover para…") escrevem direto. **"Mover para…" revela o que
+  moveu**: o `MoveConnectionDialog` e o `FolderDialog` (modo `move`, por `FolderActionDialogs`) têm `onMoved`, chamado depois de as listas serem lidas de novo; a conexão pede ao
+  `connectionReveal` (o mesmo do salvar: pastas abertas e lembradas, escolhida, com o foco), e a pasta abre as do destino e fica escolhida e com o foco (`revealMovedFolder`; com
+  uma busca no campo só abre, porque a pasta pode não estar na lista filtrada, e o pedido de foco ficaria armado).
+  **A vista filtrada** (RN-NAV-010 e 013): com o seletor de ambiente ou "Só as conectadas" ligado, a árvore tem só as pastas no caminho até as conexões à vista, e elas aparecem
+  abertas só nessa vista, SEM gravar nem ler o lembrado, como a busca. Recolher uma vale enquanto o filtro está ligado (`FilterFolders`: as chaves recolhidas e a vista a que valem,
+  `filterViewOf` = o ambiente e as conectadas; trocar o ambiente, ligar ou desligar "Só as conectadas" começa outra vista e esquece o recolhido na hora, e voltar à primeira não o
+  traz de volta: `filterFoldersFor`, no ajuste durante a renderização); desligar o filtro devolve as pastas lembradas, e
+  ligar de novo abre tudo outra vez. "Recolher tudo" na vista recolhe só a vista, e a pasta que um evento ou uma revelação abre sai das recolhidas (`openedInFilter`). A busca
+  (RN-BUSCA-001) segue com o `searchCollapsed` e `search.open`, e não toca no lembrado.
+  **Testes**: `folder-memory.test.ts` (a regra e a loja, inclusive duas janelas), `navigator-folders.test.ts` (`openTreeKeys` e a vista filtrada),
+  `use-navigator-layout.folders.test.ts` (o gancho), `navigator.folders.test.ts` (o `Navigator` com os ganchos simulados: nada gravado durante a renderização, as revelações no
+  efeito, o "Mover para…", o filtro, a poda; **a loja é de módulo, então cada teste usa outro usuário**) e as da seção Scripts em `scripts-section.folders.test.ts`. **Conferido
+  sob Xvfb, no app inteiro** (Electron de verdade e a API de verdade, com os dados criados pela API e a pasta de dados isolada; sem erro de página nem de console): a primeira entrada
+  com as pastas das duas árvores fechadas e nada gravado; duas pastas abertas em cada árvore, o app fechado e aberto de novo (outro processo), tudo como estava, com as
+  conexões fechadas e desconectadas ("Nenhuma conectada") e o gravado só com os GUID; "Recolher tudo" (que volta, e não toca nas pastas de scripts); o seletor de ambiente
+  (abre as pastas do caminho só na vista, recolher vale só nela e nada grava; Produção, Teste e Produção recomeça aberta; limpar devolve as lembradas); a busca (abre a pasta só
+  na tela filtrada, não grava, limpar devolve); "Nova subpasta" numa pasta fechada, a conexão salva pelo formulário numa pasta fechada, "Duplicar conexão", "Mover para…" de
+  uma conexão, de uma pasta de conexões e de um script, "Mostrar no navegador" pelo seletor de conexão da aba (com tudo recolhido) e "Nova subpasta" em Scripts: a pasta abre, a linha fica à vista e com o foco, e volta aberta na entrada seguinte; o
+  Ctrl+B; a pasta excluída (a poda a tira na entrada seguinte, e o identificador inexistente injetado no gravado também); outro usuário do cofre (chave só dele); e duas
+  janelas (a de uma pasta e a de outra ficam gravadas, fechar numa não desfaz a outra, e "Recolher tudo" numa janela que não vê pasta aberta esvazia o gravado). **Não
+  conferido**: a importação (do DBeaver e de arquivo do Prism), o app empacotado e o macOS.
 - **Densidade** (RN-NAV-011; `_lib/navigator-density.ts`, com teste). `navigatorMetrics` tem as medidas de cada uma, com as classes escritas por inteiro
   para o Tailwind as achar: a confortável é a de sempre (linha de 30 px, recuo de 10 px e 16 por nível, botões de ação de 24 px); a compacta tem linha de
   22 px, recuo de 6 px e 12 por nível e botões de 20 px. A árvore da seção Scripts (RN-SCRIPT-008) usa a mesma linha (`rowClass`) e o mesmo recuo
@@ -1526,7 +1606,7 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   acento solto e hangul; o teste de invariante confere os dois). **Olha o que a árvore já carregou, aberto ou não**: `loadedLevels`
   junta os níveis do navegador com o que o cache guarda (`cachedTree`, em `navigator-search.ts`, lê os níveis
   `["tree", …]`, a começar pela lista dos bancos de cada conexão, e devolve o MESMO objeto enquanto nenhuma dessas consultas mudou), e `levelPathOf` é o inverso de `treeKey` (**mudou `treeKey`, mude `levelPathOf`**: há teste de ida e volta).
-  **Nunca chama a API, nunca abre nó e nunca toca em `expanded`**: limpar o campo devolve a árvore como estava.
+  **Nunca chama a API, nunca abre nó e nunca toca em `expanded` nem nas pastas lembradas** (RN-NAV-014): limpar o campo devolve a árvore como estava.
 - **Na tela filtrada** só tem chevron quem tem algo à vista embaixo; recolher um ancestral ali é estado local daquele texto
   (`searchCollapsed`), não `expanded`; o grupo diz "3 de 120"; o destaque é um `<mark>` de texto (o nome vem do banco). O filtro roda
   sobre `useDeferredValue` do texto, para a digitação não esperar uma lista de milhares de linhas: com 20 mil nós carregados ele leva
@@ -2766,8 +2846,8 @@ quer fazer", "podia ter um filtro de conexões abertas"). A API já tinha a rota
 - **Os avisos de passagem**: de responder (ou de ainda não verificada) a não responder, um aviso de atenção ("MES Produção não respondeu à verificação"),
   uma vez, e não de novo enquanto ela continuar sem responder; de volta, um de sucesso ("MES Produção voltou a responder à verificação"). Cada janela que
   verifica a conexão avisa na dela, também com a resposta que veio de outra (a pessoa pode estar olhando qualquer uma). O nome é o de agora.
-- **"Só as conectadas"** (`navigator-connected-filter.tsx`, `_lib/navigator-connected.ts`, RN-NAV-013): um botão de alternar (`aria-pressed`) depois do
-  seletor de ambiente, na mesma linha do campo de busca (desce com eles no navegador estreito), com a conta das conectadas ("3 conectadas", "1
+- **"Só as conectadas"** (`navigator-connected-filter.tsx`, `_lib/navigator-connected.ts`, RN-NAV-013): um botão de alternar (`aria-pressed`) na linha
+  abaixo do campo de busca, antes do seletor de ambiente (`NavigatorFilters`, ver "A barra de filtros"), com a largura do texto, que nunca é cortado, e a conta das conectadas ("3 conectadas", "1
   conectada", "Nenhuma conectada"), ligado ou não. O nome acessível é o rótulo com a conta ("Só as conectadas: 3 conectadas", o rótulo num `sr-only`), e a
   dica diz o que o clique faz agora. Conectada é a definição única (`connectedConnectionIds`), então a que desconecta sai na hora e a que conecta por uma
   aba ou por um script entra. A que a verificação achou sem sessão na API (`notConnected`) também sai, e a conta não diz "conectada" ao lado do indicador
@@ -2775,7 +2855,7 @@ quer fazer", "podia ter um filtro de conexões abertas"). A API já tinha a rota
   aba abre uma nova, a chave das sessões muda e ela volta a contar). O ponto, o "Desconectar" e a barra de status seguem com o `isConnected`: com a
   verificação ligada o indicador já diz o estado, e "Desconectar" encerra o que ainda houver. O filtro (`filterConnected`, puro) roda sobre o que o seletor de ambiente deixou, pelo mesmo `withFolderPath` (as pastas no
   caminho até as conexões), e a busca filtra depois; os memos do `Navigator` dependem de uma chave em texto com as conectadas, só com o filtro ligado, e a
-  árvore não se refaz com ele desligado. Ligado e vazio, `NavigatorFilteredEmpty` diz "Nenhuma conexão conectada." (com o ambiente, quando há) com "Mostrar
+  árvore não se refaz com ele desligado. Ligado, as pastas no caminho até as conexões à vista abrem só nessa vista, sem gravar (RN-NAV-014). Ligado e vazio, `NavigatorFilteredEmpty` diz "Nenhuma conexão conectada." (com o ambiente, quando há) com "Mostrar
   todas", que o desliga. É estado do navegador, como o ambiente: vale enquanto a janela está aberta. A conexão que o formulário acabou de salvar, ou a
   duplicada, desliga os dois filtros quando eles a escondem.
 - **O que não foi feito**: a verificação de cada banco aberto da conexão (RN-ARVORE-006; uma sessão qualquer da conexão responde por ela, como a
@@ -3914,6 +3994,9 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 - Pacote de macOS: não provado por inteiro: o `dmg` só se gera no macOS, e nenhum pacote foi aberto no macOS. Num contêiner Linux o electron-builder aceita a
   configuração e gera o `zip`, e recusa o `dmg` (`sips process failed ENOENT`: o `dmg` só se gera no macOS). O `.icns` existe e
   traz a ilustração inteira, mas o app nunca foi aberto no macOS.
+- **As pastas abertas lembradas e a barra de filtros do navegador (0.6.0, RN-NAV-014, RN-NAV-010 e 013)**: provadas nos testes (a regra, a loja e o navegador com os
+  ganchos simulados) e vistas sob Xvfb no app inteiro, também em duas janelas de verdade (ver "As pastas abertas lembradas"); faltam a importação (do DBeaver e de arquivo do
+  Prism), o app empacotado e o macOS. Os limiares em que o seletor de ambiente desce foram medidos (ver "A barra de filtros").
 
 - A `TopBar` tem a marca (com a versão e "Verificar atualizações"), "Área de trabalho", "Conexões", "Drivers" (com um ponto quando há
   reinício pendente), "Configurações" (ícone e texto, como os outros itens), o usuário e "Sair". O link da marca para a área de
