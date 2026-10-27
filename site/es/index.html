@@ -271,7 +271,7 @@
           </div>
         </div>
         <h3>Búsqueda</h3>
-        <p>El campo “Filtrar objetos” filtra lo que ya está cargado en el árbol. Abre una conexión o un esquema para buscar dentro de él. El resultado muestra la ruta hasta cada hallazgo, con el fragmento resaltado y el conteo.</p>
+        <p>El campo “Filtrar objetos” no distingue mayúsculas ni acentos. Filtra lo que ya está cargado en el árbol y, en cada conexión conectada, las tablas y las vistas de todos los esquemas, también de los que nunca abriste: la primera vez que escribes, Prism pide a cada base de datos los nombres de sus tablas y vistas, una sola vez, y desde entonces cada tecla filtra en la propia aplicación, sin volver a la base (la lista se guarda hasta que uses “Atualizar” (Actualizar) o “Desconectar”). La búsqueda vale para la base de datos de la conexión y para cada otra base de ese servidor que ya hayas abierto. Las conexiones que no están conectadas quedan fuera: la línea bajo los filtros dice cuántas son y ofrece “Buscar nelas também” (Buscarlas también), que las conecta (omite las que no tienen usuario o contraseña guardados). Las rutinas, las columnas, los índices y las claves solo se buscan donde ya están cargados. El resultado muestra la ruta hasta cada hallazgo, con el fragmento resaltado y el conteo; cada base muestra sus primeros 200 hallazgos.</p>
         <h3>Atajos</h3>
         <div class="tabela">
           <table>
