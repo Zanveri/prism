@@ -34,7 +34,7 @@ export type GridMetrics = {
   rowHeight: number;
   /** A largura do número da linha. */
   gutterWidth: number;
-  /** A largura de uma coluna (a de 100%, contada ou escolhida) neste zoom, em pixels inteiros. */
+  /** A largura de uma coluna (a de 100%, medida na fonte ou escolhida) neste zoom, em pixels inteiros. */
   width: (base: number) => number;
 };
 

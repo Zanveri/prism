@@ -52,9 +52,6 @@ function Highlighted({ text, range: [start, end] }: { text: string; range: Match
   );
 }
 
-/** O que cada nome aparenta ser no canvas: nome de objeto do banco em mono, os rótulos fixos e a conexão na fonte do app. */
-const monoKinds: ReadonlySet<NavKind> = new Set(["database", "schema", "table", "view", "routine", "column", "index", "foreignKey"]);
-
 function StatusDot({ status }: { status: ConnectionStatus }) {
   const label = status === "connected" ? copy.status.connected : status === "connecting" ? copy.status.connecting : status === "failed" ? copy.status.failed : copy.status.disconnected;
   const className = status === "connected" ? "bg-success" : status === "failed" ? "bg-danger" : status === "connecting" ? "animate-pulse bg-accent" : "border-[1.5px] border-subtle";
@@ -221,11 +218,11 @@ export function NavigatorRow({ node, density = "comfortable", index, open, tabba
         )}
         {/* O nome tem a prioridade: o detalhe ocupa só o que sobra, encolhe primeiro e some antes de o nome ser cortado. */}
         <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-          <span className={cn("truncate", monoKinds.has(node.kind) && "font-mono", hasDetail ? ["shrink-0", node.badge ? "max-w-[calc(100%-2.5rem)]" : "max-w-full"] : "min-w-0")}>{match === undefined ? name : <Highlighted text={name} range={match} />}</span>
+          <span className={cn("truncate", hasDetail ? ["shrink-0", node.badge ? "max-w-[calc(100%-2.5rem)]" : "max-w-full"] : "min-w-0")}>{match === undefined ? name : <Highlighted text={name} range={match} />}</span>
           <ShownEnvironmentPill environment={environment} />
           {isConnection ? <ReadOnlyMark hint={readOnly} /> : null}
           {node.badge ? <span className="flex-none text-[11px] font-semibold text-accent">{node.badge}</span> : null}
-          {hasDetail ? <span className={cn("min-w-0 flex-1 truncate text-right text-xs text-subtle", node.kind !== "group" && "font-mono")}>{node.detail}</span> : null}
+          {hasDetail ? <span className="min-w-0 flex-1 truncate text-right text-xs text-subtle">{node.detail}</span> : null}
         </span>
         {isConnection && status ? view === null ? <StatusDot status={status} /> : <CheckDot view={view} className="ml-auto" /> : null}
       </button>

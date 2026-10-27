@@ -456,6 +456,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 onResize={resize}
                 showTypes={preferences.results.showColumnTypes}
                 zoom={zoom}
+                font={preferences.ui.fontFamily}
                 onZoom={zoomTo}
                 editing={editing}
               />
@@ -514,7 +515,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 </div>
               )
             ) : shown.status === "affected" ? (
-              <p className="font-mono text-ink">{copy.affected(shown.rowsAffected, shown.elapsedMs)}</p>
+              <p className="text-ink">{copy.affected(shown.rowsAffected, shown.elapsedMs)}</p>
             ) : shown.status === "notice" ? (
               // RN-SQL-001: o comando não foi enviado, e a frase diz o que fazer.
               <p className="flex items-baseline gap-2 text-ink">

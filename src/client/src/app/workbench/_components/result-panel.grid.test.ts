@@ -18,7 +18,7 @@ vi.mock("./result-grid", () => ({
 }));
 
 // As preferências do usuário (RN-CONFIG-006): o que a área de resultado lê e entrega à grade.
-const prefs = vi.hoisted(() => ({ results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 }, update: vi.fn() }));
+const prefs = vi.hoisted(() => ({ ui: { fontFamily: "IBM Plex Sans" }, results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 }, update: vi.fn() }));
 vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: prefs, update: prefs.update }) }));
 
 import { ResultPanel } from "./result-panel";
@@ -45,6 +45,18 @@ beforeEach(() => {
   vi.clearAllMocks();
   prefs.results.showColumnTypes = true;
   prefs.results.gridZoom = 100;
+  prefs.ui.fontFamily = "IBM Plex Sans";
+});
+
+describe("a área de resultado entrega à grade a fonte da interface, na qual as colunas são medidas (RN-CONFIG-008)", () => {
+  it("a fonte do app, ou a que a pessoa escolheu: a grade a recebe como está nas preferências, na aba de consulta e nos Registros", () => {
+    expect(gridProps(rows).font).toBe("IBM Plex Sans");
+    expect(gridProps(rows, { records }).font).toBe("IBM Plex Sans");
+
+    prefs.ui.fontFamily = "Inter";
+    expect(gridProps(rows).font).toBe("Inter");
+    expect(gridProps(rows, { records }).font).toBe("Inter");
+  });
 });
 
 describe("a área de resultado entrega à grade o que a vista Registros lhe deu (RN-TABELA-005 e 007)", () => {

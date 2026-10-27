@@ -361,3 +361,26 @@ describe("o indicador da verificação periódica na árvore (RN-VERIF-003)", ()
     expect(dot(render(node, { connection, status: "connected", check: { kind: "waiting", busy: false } }))).toEqual(["Conectada, ainda não verificada", "waiting"]);
   });
 });
+
+describe("a fonte da linha é a da interface, em todo nó (RN-CONFIG-008, seção 42)", () => {
+  const nodes: NavNode[] = [
+    { key: navKey({ type: "database", connectionId: "c1", database: "erp" }), kind: "database", label: "erp", depth: 1, hasChildren: true },
+    { key: navKey({ type: "schema", connectionId: "c1", schema: "vendas" }), kind: "schema", label: "vendas", depth: 2, hasChildren: true },
+    { key: navKey({ type: "objects", connectionId: "c1", schema: "vendas", objects: "tables" }), kind: "group", label: "Tabelas", depth: 3, hasChildren: true, detail: "12" },
+    ...objectNodes("c1", "vendas", "tables", [{ name: "pedido", kind: "table" }]),
+    ...objectNodes("c1", "vendas", "views", [{ name: "pedido_resumo", kind: "view" }]),
+    ...objectNodes("c1", "vendas", "routines", [{ name: "calcula_frete", kind: "function" }]),
+    { key: "c", kind: "column", label: "valor_total", depth: 5, hasChildren: false, detail: "numeric(12,2)", badge: "PK" },
+    { key: "i", kind: "index", label: "pedido_pk", depth: 5, hasChildren: false, detail: "(id)" },
+    { key: "f", kind: "foreignKey", label: "pedido_cliente_fk", depth: 5, hasChildren: false, detail: "cliente_id → cliente(id)" },
+  ];
+
+  it.each(nodes.map((node) => [node.kind, node] as const))("%s: nem o nome nem o detalhe escolhem a mono do app (a árvore e a interface têm a mesma fonte)", (_kind, node) => {
+    const markup = render(node);
+
+    expect(markup).toContain(node.label);
+    expect(markup).not.toContain("font-mono");
+    expect(markup).not.toContain("font-editor");
+    if (node.detail !== undefined) expect(markup).toMatch(new RegExp(`<span class="[^"]*text-subtle[^"]*">${node.detail.replace(/[()]/g, "\\$&")}</span>`));
+  });
+});

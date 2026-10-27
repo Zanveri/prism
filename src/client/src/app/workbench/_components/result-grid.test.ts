@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { QueryColumn } from "../_lib/query.schema";
 import { recordsCopy } from "../_lib/records.copy";
+import { measuredGridText } from "../_lib/grid-text";
 import { followsActiveRow, GridHeaderCell, GridRow, ResultGrid } from "./result-grid";
 
 const columns: QueryColumn[] = [
@@ -353,6 +354,69 @@ describe("o zoom da grade (RN-GRADE-010)", () => {
 
     expect(at(0.5)).not.toContain('title="0123456789"');
     expect(at(1)).toContain('title="0123456789"');
+  });
+});
+
+describe("a fonte da grade é a da interface (RN-CONFIG-008)", () => {
+  const grid = (extra: Partial<Parameters<typeof ResultGrid>[0]> = {}) => renderToStaticMarkup(createElement(ResultGrid, { columns, rows: [["1", "a"]], truncated: new Map(), ...extra }));
+  const boxClass = (markup: string) => /<div[^>]*role="table"[^>]*class="([^"]*)"/.exec(markup)?.[1] ?? /<div[^>]*class="([^"]*)"[^>]*role="table"/.exec(markup)?.[1] ?? "";
+  const rowOf = (extra: Partial<Parameters<typeof GridRow>[0]> = {}) => renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "a"], columns, virtualColumns, truncated: undefined, nullText: "NULL", ...extra }));
+
+  it("a caixa que rola tem font-sans (a variável da interface, lida do <html>), e não a mono do app: cabeçalho, células e campo de edição herdam", () => {
+    const classes = boxClass(grid());
+
+    expect(classes).toContain("font-sans");
+    expect(classes).not.toContain("font-mono");
+    // Noutro zoom é a mesma caixa.
+    expect(boxClass(grid({ zoom: 150 }))).toContain("font-sans");
+  });
+
+  it("nem o cabeçalho, nem as células, nem o número da linha escolhem outra fonte: todos herdam a da caixa", () => {
+    const markup = grid() + rowOf() + renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[0], item: virtualColumns[0], choosable: true }));
+
+    expect(markup).not.toContain("font-mono");
+    expect(markup).not.toContain("font-editor");
+  });
+
+  it("o número da linha e o canto têm algarismos de largura igual; as células não (o canvas não aplica tnum, e a medida divergiria)", () => {
+    const row = rowOf();
+    const rowNumber = /<div[^>]*role="rowheader"[^>]*>/.exec(row)?.[0] ?? "";
+    const cell = /<div[^>]*role="cell"[^>]*aria-colindex="2"[^>]*>/.exec(row)?.[0] ?? "";
+    const corner = /<div[^>]*role="columnheader"[^>]*>/.exec(grid())?.[0] ?? "";
+
+    expect(rowNumber).toContain("tabular-nums");
+    expect(corner).toContain("tabular-nums");
+    expect(cell).not.toContain("tabular-nums");
+    // O número da linha editável (a grade dos Registros) é o mesmo.
+    expect(rowOf({ cellIdOf: (row, column) => `g-${row}-${column}` })).toMatch(/role="rowheader"[^>]*tabular-nums/);
+  });
+
+  it("a dica do valor cortado usa a medida dada: o 'WWWW' que pela conta da mono cabe na coluna ganha a dica quando a fonte é larga", () => {
+    const narrow = [{ ...virtualColumns[1], size: 80 }];
+    // 4 × 7,8 = 31,2 px cabem nos 55 px de espaço (80 - 25); a maiúscula de 14 px, não: 4 × 14 + 1 = 57.
+    const wide = measuredGridText("larga", (_font, text) => (text === text.toUpperCase() ? 14 : 6));
+    const at = (extra: Partial<Parameters<typeof GridRow>[0]>) => renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "WWWW"], columns, virtualColumns: narrow, truncated: undefined, nullText: "NULL", ...extra }));
+
+    expect(at({})).not.toContain('title="WWWW"');
+    expect(at({ text: wide })).toContain('title="WWWW"');
+  });
+
+  it("a dica com a medida acompanha o zoom (a conta é a de 100%): em 50% a coluna estreita ainda cabe o valor", () => {
+    const narrow = [{ ...virtualColumns[1], size: 55 }];
+    const proportional = measuredGridText("p", () => 6);
+    const at = (scale: number) => renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "0123456789"], columns, virtualColumns: narrow, truncated: undefined, nullText: "NULL", scale, text: proportional }));
+
+    // 10 × 6 + 1 = 61 px de texto. Em 50%, a coluna de 55 px é de 110 px de 100% (85 de espaço): cabe. Em 100%, 30 de espaço: não cabe.
+    expect(at(0.5)).not.toContain('title="0123456789"');
+    expect(at(1)).toContain('title="0123456789"');
+  });
+
+  it("o valor que cabe, ou o nulo, não ganha dica, com a medida larga também", () => {
+    const wide = measuredGridText("larga", () => 14);
+    const roomy = [{ ...virtualColumns[1], size: 200 }];
+    const markup = renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "ab"], columns, virtualColumns: roomy, truncated: undefined, nullText: "NULL", text: wide }));
+
+    expect(markup).not.toContain('title="ab"');
   });
 });
 

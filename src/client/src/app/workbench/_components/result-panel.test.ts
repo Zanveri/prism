@@ -43,6 +43,23 @@ describe("a área de resultado com o driver do banco não instalado (item G, RN-
   });
 });
 
+describe("as fontes dos resultados que não são grade (RN-CONFIG-008)", () => {
+  it("o 'N linhas afetadas' segue a fonte da interface, e não a mono do app", () => {
+    const markup = render({ status: "affected", rowsAffected: 3, elapsedMs: 5 });
+    const paragraph = /<p class="([^"]*)">3 linhas afetadas/.exec(markup)?.[1] ?? "";
+
+    expect(paragraph).toContain("text-ink");
+    expect(paragraph).not.toContain("font-mono");
+  });
+
+  it("a mensagem do banco e o SQLSTATE continuam na mono: o `^` do PostgreSQL só se alinha numa fonte de largura fixa", () => {
+    const markup = render({ status: "error", source: "database", title: "Erro do banco", message: 'ERROR: syntax error\nLINE 1: selec 1\n        ^', sqlState: "42601", errorAt: null });
+
+    expect(/<pre class="([^"]*)">ERROR: syntax error/.exec(markup)?.[1]).toContain("font-mono");
+    expect(/<span class="([^"]*)">42601<\/span>/.exec(markup)?.[1]).toContain("font-mono");
+  });
+});
+
 const rowsState: RowsState = {
   status: "rows",
   id: 1,
