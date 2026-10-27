@@ -24,15 +24,17 @@ export function applicationMenuTemplate(platform: NodeJS.Platform): MenuItemCons
 }
 
 /**
- * A tecla que o menu do app não recebe (RN-GRADE-012, RN-GRADE-013 e RN-ABAS-014): F5, F6 e F11, com qualquer modificador, e Ctrl+R (Cmd+R), com ou sem Shift.
- * O app empacotado do Windows e do Linux não tem menu, e o do macOS não tem Recarregar; o menu padrão de desenvolvimento tem Recarregar (Ctrl+R), Forçar
- * recarga (Ctrl+Shift+R) e Tela cheia (F11), e o Chromium do Electron não recarrega nada sem menu. Ignorado pelo menu (`setIgnoreMenuShortcuts`, a cada
- * tecla, no `before-input-event`), o atalho chega à tela como qualquer tecla: F5 atualiza a aba, F6 alterna entre o editor e o resultado, F11 abre o
- * "Filtrar" da grade, e Ctrl+R não faz nada.
+ * A tecla que o menu do app não recebe (RN-GRADE-012, RN-GRADE-013, RN-ABAS-014 e RN-ABAS-019): F5, F6 e F11, com qualquer modificador, Ctrl+R (Cmd+R), com ou
+ * sem Shift, e Ctrl+W (Cmd+W). O app empacotado do Windows e do Linux não tem menu, e o do macOS não tem Recarregar nem Fechar; o menu padrão de
+ * desenvolvimento tem Recarregar (Ctrl+R), Forçar recarga (Ctrl+Shift+R), Tela cheia (F11) e Janela › Fechar (CmdOrCtrl+W), e o Chromium do Electron não
+ * recarrega nem fecha nada sem menu. Ignorado pelo menu (`setIgnoreMenuShortcuts`, a cada tecla, no `before-input-event`), o atalho chega à tela como qualquer
+ * tecla: F5 atualiza a aba, F6 alterna entre o editor e o resultado, F11 abre o "Filtrar" da grade, Ctrl+R não faz nada, e o Ctrl+W fecha a aba ativa quando a
+ * área de trabalho o trata e, quando não o trata (um diálogo, um menu ou uma lista aberta, o cofre bloqueado, a tela de entrada), também não faz nada: no
+ * desenvolvimento ele nunca fecha a janela, como no app empacotado.
  */
 export function menuShortcutIgnored(input: { key: string; control: boolean; meta: boolean }): boolean {
   if (input.key === "F5" || input.key === "F6" || input.key === "F11") return true;
-  return (input.control || input.meta) && input.key.toLowerCase() === "r";
+  return (input.control || input.meta) && (input.key.toLowerCase() === "r" || input.key.toLowerCase() === "w");
 }
 
 /**

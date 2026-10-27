@@ -553,8 +553,8 @@ export function WorkbenchTabs() {
   // corpo da página (fechar uma aba tira o elemento que tinha o foco da página, e o `section` abaixo, que só ouve o que nasce dentro dele, não via mais a tecla).
   // O ouvinte é da janela, na bolha: quem trata a tecla antes (o campo de edição de uma célula, um diálogo, que param a propagação, ou o `section`, que a marca
   // como tratada) fica com ela. Não age com um diálogo, um menu ou uma lista aberta, com o cofre bloqueado ou com outra tela à mostra (não há ouvinte), e
-  // trata a tecla até sem aba nenhuma: ela nunca fecha a janela (no desenvolvimento o menu padrão do Electron tem o Ctrl+W de fechar a janela). A tecla
-  // segurada (`repeat`) é tratada mas não fecha outra: uma aba por toque.
+  // trata a tecla até sem aba nenhuma, e ela nunca fecha a janela: o menu padrão do Electron, que só existe no desenvolvimento e tem o Ctrl+W de fechar a janela, não
+  // a recebe (`menuShortcutIgnored`, no processo principal), com a tecla tratada aqui ou não. A tecla segurada (`repeat`) é tratada mas não fecha outra: uma aba por toque.
   useEffect(() => {
     if (!onScreen) return;
 

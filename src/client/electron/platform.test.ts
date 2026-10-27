@@ -38,7 +38,7 @@ describe("applicationMenuTemplate", () => {
   });
 });
 
-describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11 chegam à tela (RN-GRADE-012 e RN-GRADE-013)", () => {
+describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, F5 e F11 chegam à tela (RN-GRADE-012 e RN-GRADE-013) e Ctrl+W nunca a fecha (RN-ABAS-019)", () => {
   const input = (key: string, over: Partial<{ type: string; control: boolean; meta: boolean; shift: boolean; alt: boolean }> = {}) => ({ type: "keyDown", key, control: false, meta: false, shift: false, alt: false, ...over });
 
   it("F5, F6 e F11, com ou sem modificador, não vão ao menu (o Recarregar e o Tela cheia do menu de desenvolvimento): a tela os recebe (o F6 alterna entre o editor e o resultado, RN-ABAS-014)", () => {
@@ -56,8 +56,16 @@ describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11
     expect(menuShortcutIgnored(input("r", { meta: true }))).toBe(true);
   });
 
-  it("o resto segue para o menu (no macOS, Cmd+C, Cmd+V e Cmd+Q são do menu; o R sem Ctrl é digitação)", () => {
-    for (const [key, over] of [["c", { meta: true }], ["v", { control: true }], ["q", { meta: true }], ["r", {}], ["F2", {}], ["Enter", { control: true }]] as const) expect(menuShortcutIgnored(input(key, over)), key).toBe(false);
+  it("Ctrl+W e Cmd+W (com ou sem Shift) não vão ao menu: o Janela › Fechar do menu padrão de desenvolvimento fecharia a janela com um diálogo aberto ou na tela de entrada, onde a tela não trata a tecla (RN-ABAS-019)", () => {
+    expect(menuShortcutIgnored(input("w", { control: true }))).toBe(true);
+    expect(menuShortcutIgnored(input("W", { control: true, shift: true }))).toBe(true);
+    expect(menuShortcutIgnored(input("w", { meta: true }))).toBe(true);
+    expect(menuShortcutIgnored(input("W", { meta: true }))).toBe(true);
+    expect(menuShortcutIgnored(input("w", { control: true, type: "keyUp" }))).toBe(true);
+  });
+
+  it("o resto segue para o menu (no macOS, Cmd+C, Cmd+V e Cmd+Q são do menu; o R e o W sem Ctrl são digitação)", () => {
+    for (const [key, over] of [["c", { meta: true }], ["v", { control: true }], ["q", { meta: true }], ["r", {}], ["w", {}], ["w", { shift: true }], ["w", { alt: true }], ["F2", {}], ["Enter", { control: true }]] as const) expect(menuShortcutIgnored(input(key, over)), key).toBe(false);
   });
 });
 
