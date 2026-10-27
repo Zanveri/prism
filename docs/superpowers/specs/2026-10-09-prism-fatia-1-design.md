@@ -12685,7 +12685,9 @@ cheia do que a pessoa não abriu (RN-ARVORE-002).
       usuário ou senha gravada ficaram de fora."). A conexão que falha ao conectar mostra a mensagem do banco na linha
       de estado, e não no nó, como faria a árvore (RN-ARVORE-005), porque o nó não foi aberto: ele continua fechado.
     - Sem nada achado, continua o "Nada encontrado para “x”.", e a explicação embaixo dele passa a ser "A busca olha
-      as tabelas e visões dos bancos conectados e o que já está aberto na árvore.".
+      as tabelas e visões dos bancos conectados e o que já está aberto na árvore.". Ele só aparece com a busca
+      terminada em todo o escopo: com um índice a caminho ("Buscando…") ou um banco que falhou, a linha de estado fala
+      sozinha, porque o banco que falhou pode ter o nome.
 
 ### O foco das abas
 
@@ -12737,7 +12739,8 @@ RN-SCRIPT-003 e a RN-ABAS-001, alteradas no lugar, a citam.
     bloqueado ou outra tela à mostra (Configurações), e nunca fecha a janela; sem aba, não faz nada. Depois de fechar, o
     foco vai à aba que ficou ativa (acima), e o Ctrl+W seguinte fecha a próxima. Na janela do resultado, ele continua
     sendo o "Voltar para o painel" (RN-ABAS-013). No desenvolvimento, em que o menu padrão do Electron tem o Ctrl+W de
-    fechar a janela, a tecla que a área de trabalho trata não chega a ele.
+    fechar a janela (Janela › Fechar), a tecla nunca chega a ele: com um diálogo, um menu ou uma lista aberta, ou na tela
+    de entrada, o Ctrl+W não faz nada e não fecha a janela, como no app empacotado.
   - Nenhum texto de tela muda: o leitor de tela anuncia o campo que recebe o foco ("Filtro e ordem dos registros",
     "Editor SQL"). Levar o foco não rola a página.
   - Como: cada aba diz como a entrada dela se foca, e um lugar só, a área das abas, decide quando, depois de a aba
@@ -12886,9 +12889,8 @@ dito no relatório, e nunca dado como passando.
   fecham três abas, a partir do editor, da grade e da faixa; o X com o mouse e depois o Ctrl+W; o "Descartar" de uma
   pergunta e depois o Ctrl+W; a última aba, que leva o foco ao navegador; seguir uma chave estrangeira; o Alt+←, que
   deixa o foco na aba; o F6 com o resultado numa aba; e o type-ahead enquanto um script lento abre, que não perde o
-  foco. No desenvolvimento, o menu padrão do Electron fecha a janela com o Ctrl+W que a página não trata: ali a
-  conferência registra que a tecla foi tratada (`defaultPrevented`), e a prova final é no app empacotado
-  (`dist:dir`), que não tem menu no Windows e no Linux.
+  foco. No desenvolvimento, o menu padrão do Electron não recebe o Ctrl+W (`menuShortcutIgnored`, com teste): a tecla que a
+  página não trata não faz nada, como no app empacotado (`dist:dir`), que não tem menu no Windows e no Linux.
 - **A cor.** Testes de unidade: a variável (a cor nula, vazia, fora do formato ou inválida não a cria; a válida, em
   maiúsculas ou minúsculas, a cria com a variante de cada tema; as seis cores do canvas e o preto, o branco e um
   azul-marinho passam em 3:1 sobre todas as superfícies de todos os temas; cada destaque tem a reserva do tema); a área
