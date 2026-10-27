@@ -31,6 +31,8 @@ const rt = await vi.hoisted(async () => {
      * RN-PROT-001: as proteções da conexão da aba, que o aviso de mentira (`useCommandConfirmation`) usa para decidir, e as perguntas que ele abriu, com as
      * respostas. Sem proteção, nada pergunta e tudo segue na mesma chamada, como antes.
      */
+    /** RN-ABAS-019: o foco no resultado que a entrada da aba pede (a grade, ou o botão do lugar); a prova diz se ele chegou. */
+    focusResult: vi.fn<(root: unknown) => boolean>(() => true),
     protections: { readOnly: null, confirm: null } as { readOnly: { from: null } | null; confirm: { level: "irreversible" | "all"; from: null } | null },
     asked: [] as { question: { kind: string } & Record<string, unknown>; proceed: () => void; cancelled?: () => void }[],
   };
@@ -67,6 +69,8 @@ vi.mock("../_lib/use-command-confirmation", () => ({
     open: null,
   }),
 }));
+// RN-ABAS-019: o foco no resultado é de `result-host.tsx`, que precisa da página; aqui basta saber que a entrada da aba o pediu e onde.
+vi.mock("./result-host", async (importOriginal) => ({ ...(await importOriginal<typeof import("./result-host")>()), focusResultIn: rt.focusResult }));
 // O editor de SQL é CodeMirror, que precisa da página; aqui basta o que a aba entrega a ele.
 vi.mock("./sql-editor", () => ({ SqlEditor: function SqlEditor() {
   return null;
@@ -80,6 +84,9 @@ import { editCell, editWholeColumn, noEdits } from "../_lib/record-edits";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { recordsCopy } from "../_lib/records.copy";
 import { filterHandoff } from "../_lib/filter-handoff";
+import { initialLayout } from "../_lib/result-layout";
+import { resultSlots } from "../_lib/result-slots";
+import { tabEntries } from "../_lib/tab-focus";
 import { forgetExcept, recall, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
 import { isPersonBusy } from "../_lib/use-query-runner";
@@ -2293,3 +2300,95 @@ describe("o painel Variáveis e o resultado de um comando novo (RN-VAR-024)", ()
   });
 });
 
+describe("QueryTabPanel: a entrada da aba (RN-ABAS-019)", () => {
+  /** Liga o que o React ligaria: o editor de verdade tem um `focus()`, e a prova o espia. */
+  function open(over: Record<string, unknown> = {}) {
+    const view = mount(fakeRunner(rowsState()));
+    Object.assign(view.props, over);
+    const found = view.show().found;
+    const focus = vi.fn();
+    (found.find((element) => element.type === SqlEditor)!.props.ref as { current: unknown }).current = { focus };
+    return { view, focus };
+  }
+  /** O lugar da área de resultado no painel: o `ref` do `div` que o React chamaria com o elemento. */
+  const giveSlot = (view: ReturnType<typeof mount>, slot: object) => {
+    const target = view.show().found.find((element) => typeof element.props.ref === "function" && element.type === "div" && element.props.style !== undefined && !("onKeyDown" in element.props));
+    (target!.props.ref as (element: object) => void)(slot);
+  };
+
+  it("o editor SQL não toma o foco sozinho ao nascer: quem o leva é a regra da aba aberta, com a guarda contra roubar o foco de quem já foi para outro lugar", () => {
+    const { view } = open();
+
+    expect("autoFocus" in view.show().editor).toBe(false);
+  });
+
+  it("com o editor à vista, a entrada é o editor (o cursor fica onde estava), e o resultado não toma o foco", () => {
+    const { focus } = open();
+
+    expect(tabEntries.focus("q1")).toBe(true);
+
+    expect(focus).toHaveBeenCalledOnce();
+    expect(rt.focusResult).not.toHaveBeenCalled();
+  });
+
+  it("com o resultado maximizado, o editor está escondido (inerte): a entrada é o resultado, no lugar do painel", () => {
+    remember("q1", "layout", { ...initialLayout, mode: "maximized" });
+    const { view, focus } = open();
+    const slot = { slot: "painel" };
+    giveSlot(view, slot);
+    view.show();
+
+    expect(tabEntries.focus("q1")).toBe(true);
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(rt.focusResult).toHaveBeenCalledExactlyOnceWith(slot);
+  });
+
+  it("com a aba do resultado ativa (a da consulta escondida), a entrada é o resultado, no lugar da aba do resultado", () => {
+    const slot = { slot: "aba do resultado" };
+    resultSlots.set("q1", "tab", slot as unknown as HTMLElement);
+    try {
+      const { focus } = open({ place: "tab", editorShown: false, resultShown: true });
+
+      expect(tabEntries.focus("q1")).toBe(true);
+
+      expect(focus).not.toHaveBeenCalled();
+      expect(rt.focusResult).toHaveBeenCalledExactlyOnceWith(slot);
+    } finally {
+      resultSlots.set("q1", "tab", null);
+    }
+  });
+
+  it("sem lugar para o resultado (a aba do resultado por montar), ou se o foco não chegou, devolve falso: a área das abas escolhe outro lugar", () => {
+    open({ place: "tab", editorShown: false, resultShown: true });
+    expect(tabEntries.focus("q1")).toBe(false);
+    expect(rt.focusResult).not.toHaveBeenCalled();
+
+    resultSlots.set("q1", "tab", {} as HTMLElement);
+    try {
+      rt.focusResult.mockReturnValueOnce(false);
+      open({ place: "tab", editorShown: false, resultShown: true });
+      expect(tabEntries.focus("q1")).toBe(false);
+    } finally {
+      resultSlots.set("q1", "tab", null);
+    }
+  });
+
+  it("a vista de agora é a que vale: o editor que volta à frente (a aba da consulta) é a entrada, sem registrar de novo", () => {
+    const { view, focus } = open({ place: "tab", editorShown: false, resultShown: true });
+    rt.focusResult.mockClear();
+
+    Object.assign(view.props, { editorShown: true });
+    view.show();
+    expect(tabEntries.focus("q1")).toBe(true);
+
+    expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it("a entrada sai do registro quando a aba desmonta", () => {
+    open();
+    rt.unmount();
+
+    expect(tabEntries.focus("q1")).toBe(false);
+  });
+});

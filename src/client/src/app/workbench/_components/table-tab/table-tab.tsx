@@ -6,12 +6,14 @@ import type { ShownEnvironment } from "@/app/connections/_lib/environment";
 import { EngineTag } from "@/components/ui";
 
 import { inDatabase } from "../../_lib/navigator-model";
+import { tabEntries } from "../../_lib/tab-focus";
 import { createRefreshSlot, refreshFromKey } from "../../_lib/tab-refresh";
 import type { TableRef } from "../../_lib/table-diagram";
 import { tableViews, viewOf } from "../../_lib/table-view";
 import type { QueryRunner } from "../../_lib/use-query-runner";
 import type { TableTab, TableTarget, TableView } from "../../_lib/workbench-model";
 import { workbenchCopy } from "../../_lib/workbench.copy";
+import type { FilterFieldHandle } from "../filter-field";
 import { DiagramView } from "./diagram-view";
 import { DisconnectedView } from "./disconnected-view";
 import { RecordsView } from "./records-view";
@@ -65,6 +67,28 @@ export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, c
     wasDisconnected.current = disconnected;
   }, [disconnected]);
 
+  // RN-ABAS-019: a entrada da aba, onde o foco cai quando abrir a tabela (o duplo clique, o Enter, o menu do navegador) o leva "para a aba": nos Registros, o campo
+  // de filtro, com o cursor no fim, onde o Ctrl+Espaço completa as colunas e as palavras do filtro (RN-TABELA-011); na Estrutura e no Diagrama, o painel da vista,
+  // onde o F5 vale (RN-GRADE-012), conectada a conexão ou não. Quem decide QUANDO é a área das abas; a vista de agora é lida na hora, por ref.
+  const filter = useRef<FilterFieldHandle>(null);
+  const viewNow = useRef(view);
+  useEffect(() => {
+    viewNow.current = view;
+  });
+  useEffect(
+    () =>
+      tabEntries.register(tab.id, () => {
+        if (viewNow.current === "data" && filter.current !== null) {
+          filter.current.focus();
+          return true;
+        }
+        if (panel.current === null) return false;
+        panel.current.focus({ preventScroll: true });
+        return true;
+      }),
+    [tab.id],
+  );
+
   // RN-GRADE-012: F5 com o foco em qualquer ponto da aba chama o "Atualizar" da vista à vista, que o deixa aqui (`useRefreshSlot`).
   const [refreshSlot] = useState(createRefreshSlot);
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -82,7 +106,7 @@ export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, c
       </header>
 
       <div ref={panel} tabIndex={-1} role={hasViews ? "tabpanel" : undefined} id={tableViewPanelId(tab.id)} aria-labelledby={hasViews ? tableViewTabId(tab.id, view) : undefined} className="flex min-h-0 flex-1 flex-col">
-        {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} connected={tab.sessionId !== null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} onOpenQuery={onOpenQuery} refreshSlot={refreshSlot} /> : null}
+        {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} connected={tab.sessionId !== null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} onOpenQuery={onOpenQuery} refreshSlot={refreshSlot} filterRef={filter} /> : null}
         {view !== "data" && disconnected ? <DisconnectedView connectionId={tab.connectionId} database={tab.database} /> : null}
         {view === "structure" && !disconnected ? <StructureView tabId={tab.id} connectionId={tab.connectionId} database={tab.database} engine={connection?.engine} schema={schema} name={name} visible={visible} onOpenDiagram={() => onView(tab.id, "diagram")} refreshSlot={refreshSlot} /> : null}
         {view === "diagram" && !disconnected ? <DiagramView connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} visible={visible} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} memoryKey={tab.id} refreshSlot={refreshSlot} /> : null}

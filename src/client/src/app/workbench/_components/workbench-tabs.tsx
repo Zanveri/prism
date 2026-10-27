@@ -21,6 +21,7 @@ import { resultPlaceCopy } from "../_lib/result-place.copy";
 import { resultWindows } from "../_lib/result-windows";
 import { resultFocus, resultSlots } from "../_lib/result-slots";
 import { createTabDragSession, dragEndRequest, isOnlyTab, type DragEndEvent } from "../_lib/tab-drag";
+import { focusAfterChange, isLost, popupTakesFocus, stillWithRequester, tabEntries, tabFocus } from "../_lib/tab-focus";
 import { tabMoveShortcut } from "../_lib/tab-order";
 import { stripTitles } from "../_lib/tab-titles";
 import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
@@ -140,6 +141,7 @@ export function WorkbenchTabs() {
   const [moving, setMoving] = useState<ReadonlySet<string>>(() => new Set());
   const [announcement, setAnnouncement] = useState({ text: "", seq: 0 });
   useEffect(() => resultFocus.forgetExcept(new Set(tabs.map((tab) => tab.id))), [tabs]);
+  useEffect(() => tabFocus.forgetExcept(new Set(tabs.map((tab) => tab.id))), [tabs]);
   // RN-ABAS-015: as abas cuja janela do resultado está aberta e não minimizada: o resultado delas está à vista, qualquer que seja a aba ativa.
   const shownWindows = useSyncExternalStore(resultWindows.subscribe, resultWindows.shownTabs, resultWindows.shownTabs);
   const locked = useSyncExternalStore(vaultLock.subscribe, vaultLock.isLocked, vaultLock.isLocked);
@@ -250,11 +252,42 @@ export function WorkbenchTabs() {
    * no meio do primeiro se junta à fila (`mergeCloseQueue`), e o id que já saiu é pulado (`nextToClose`): a fila nunca fica parada.
    */
   const pendingClose = useRef<string[]>([]);
+  // Esta rodada fechou uma da fila: ainda falta ver a lista mudar, e o foco só se decide no fim (RN-ABAS-019).
+  const closingStep = useRef(false);
   useEffect(() => {
     const { next, rest } = nextToClose(pendingClose.current, new Set(tabs.map((tab) => tab.id)));
     pendingClose.current = rest;
+    closingStep.current = next !== null;
     if (next !== null) closeTab(next);
   }, [tabs, closeTab]);
+
+  /**
+   * RN-ABAS-019: o foco depois de a aba aparecer. Um lugar só decide QUANDO (cada aba diz COMO, em `tabEntries`), num efeito passivo: ele roda depois dos efeitos dos
+   * painéis e do campo de filtro, que cria o CodeMirror num efeito. Só age com a fila de fechar vazia. Atende o pedido de quem abriu a aba (`tabFocus`), e o
+   * consome em qualquer caso; a `version` refaz o efeito quando a aba pedida já é a ativa e nada mais mudou. O pedido de uma aba que ainda não é a ativa espera:
+   * a lista de abas e a aba ativa chegam num desenho só, mas quem pede depois de uma espera (o script que vem da API) pode ter a loja avisada antes.
+   */
+  const requestVersion = useSyncExternalStore(tabFocus.subscribe, tabFocus.version, tabFocus.version);
+  useEffect(() => {
+    if (activeTabId === null || closingStep.current || pendingClose.current.length > 0) return;
+    const request = tabFocus.take(activeTabId);
+    if (request === null) return;
+
+    const active = document.activeElement;
+    const decision = focusAfterChange({
+      request: true,
+      lastRegion: null,
+      lost: isLost(active, document),
+      atRequester: stillWithRequester(request, active),
+      hasTabs: true,
+      // Um diálogo, um menu ou uma lista que tomou o foco, o cofre bloqueado ou outra tela à mostra: o foco não é de ninguém aqui. A lista de sugestões do editor, que fica
+      // aberta quando o Ctrl+clique no nome de uma tabela esconde o painel dele, não toma o foco (`popupTakesFocus`).
+      blocked: !onScreen || vaultLock.isLocked() || popupTakesFocus(document),
+      // O F6 e a troca do lugar do resultado já prometeram o foco (RN-ABAS-014): quem os pediu o leva quando puder.
+      promised: resultFocus.pending(activeTabId),
+    });
+    if (decision === "entry") tabEntries.focus(activeTabId);
+  }, [requestVersion, activeTabId, resultActive, tabs, onScreen]);
 
   const closeNow = useCallback(
     (scope: CloseScope, tabId: string) => {

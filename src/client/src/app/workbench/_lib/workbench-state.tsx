@@ -21,6 +21,7 @@ import { createWorkspaceSource, restoreWorkspace, type LiveSql } from "./saved-w
 import type { Script } from "./scripts.schema";
 import { getScript, scriptsQuery } from "./scripts.service";
 import { cancelQuery } from "./query.service";
+import { focusedElement, tabFocus } from "./tab-focus";
 import { forgetExcept, rememberTransferred } from "./tab-memory";
 import { moveTab, shiftTab } from "./tab-order";
 import { withConnection } from "./tab-connection";
@@ -83,9 +84,10 @@ type WorkbenchState = {
   /**
    * RN-SCRIPT-003: abre o script numa aba de consulta, na conexão e no banco dados (`connectionId` nulo: a conexão dele não existe mais, ou o script é genérico
    * e não há uma só conectada, e a aba pede uma), com o lugar salvo que a aba guarda (`saved`, `scriptPlace`). O script que já tem aba volta para ela: uma aba
-   * por script.
+   * por script. `askedFrom`: quem tinha o foco quando a pessoa pediu o script (RN-ABAS-019), lido ANTES de a API devolver o texto: se o foco saiu dele durante a
+   * espera, a aba não o rouba. Sem ele, vale quem tem o foco quando a aba aparece.
    */
-  openScriptTab: (script: Script, place: { connectionId: string | null; database?: string; saved: SavedPlace }) => void;
+  openScriptTab: (script: Script, place: { connectionId: string | null; database?: string; saved: SavedPlace }, askedFrom?: Element | null) => void;
   /**
    * RN-SCRIPT-001: a aba foi salva como o script dado, com este texto e neste lugar (a conexão e o banco da aba, ou o genérico, RN-SCRIPT-005). O ponto é
    * refeito pelo texto do editor deste instante e pelo lugar da aba: o que mudou enquanto a gravação ia continua marcado.
@@ -373,13 +375,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [queryClient, toast, updateTab, titles],
   );
 
+  // RN-ABAS-019: a aba aberta por um gesto leva o foco, quando aparece, à entrada dela (o editor, o filtro dos Registros). O pedido leva quem tinha o foco agora:
+  // a área das abas só o atende se ele ainda estiver lá, ou perdido, quando a aba aparecer. Nada escreve no DOM aqui: é um pedido, e quem foca é um efeito.
+  const askFocus = useCallback((tabId: string, from?: Element | null) => tabFocus.request(tabId, from === undefined ? focusedElement() : from), []);
+
   const addTab = useCallback(
-    (tab: QueryTab) => {
+    (tab: QueryTab, askedFrom?: Element | null) => {
       runners.set(tab.id, createRunner(tab));
       setTabs((current) => [...current, tab]);
       setActiveTabId(tab.id);
+      askFocus(tab.id, askedFrom);
     },
-    [createRunner, runners],
+    [createRunner, runners, askFocus],
   );
 
   // O que o bloqueio por inatividade (RN-SEG-001, `VaultLock`) pede à área de trabalho: "há comando em andamento?" (o tempo não conta enquanto
@@ -405,15 +412,20 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const openScriptTab = useCallback(
-    (script: Script, place: { connectionId: string | null; database?: string; saved: SavedPlace }) => {
+    (script: Script, place: { connectionId: string | null; database?: string; saved: SavedPlace }, askedFrom?: Element | null) => {
       const open = tabs.find((tab) => tab.script?.id === script.id);
-      if (open !== undefined) return setActiveTabId(open.id);
+      if (open !== undefined) {
+        setActiveTabId(open.id);
+        // RN-ABAS-019 e RN-SCRIPT-003: o script que já estava aberto também leva o foco ao editor dele.
+        askFocus(open.id, askedFrom);
+        return;
+      }
 
       // RN-SCRIPT-010: a aba lembra a pasta em que o script estava quando ela o abriu.
       const ref: ScriptRef = { id: script.id, name: script.name, savedSql: script.sql, ...place.saved, ...(script.folderID === null ? {} : { folderId: script.folderID }), dirty: false };
-      addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: ref, resultPlace: newTabPlace(resultPlacePreference(queryClient)) });
+      addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: ref, resultPlace: newTabPlace(resultPlacePreference(queryClient)) }, askedFrom);
     },
-    [tabs, addTab, queryClient],
+    [tabs, addTab, askFocus, queryClient],
   );
 
   // O que uma aba soltou fecha na API em segundo plano (cancela o que rodava e fecha a sessão, RN-SESSAO-004), pelo cache de mutações sem ficar nele; a falha
@@ -477,8 +489,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
       if (view !== undefined) setTableView(open.id, view);
       setActiveTabId(open.id);
+      // RN-ABAS-019 e RN-TABELA-001: a aba que já estava aberta também leva o foco à entrada dela.
+      askFocus(open.id);
     },
-    [tabs, addTab, setTableView],
+    [tabs, addTab, setTableView, askFocus],
   );
 
   // "Abrir registros" do aviso da importação e da cópia (RN-IMPORT-020): a aba dos Registros da tabela nesta janela.
@@ -518,11 +532,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         return [...current.slice(0, at), tab, ...current.slice(at)];
       });
       setActiveTabId(tab.id);
+      askFocus(tab.id);
       // O nome da próxima consulta desta janela não repete o da aba que chegou.
       const numbered = /^consulta-(\d+)\.sql$/.exec(tab.title);
       if (numbered !== null) nextNumber.current = Math.max(nextNumber.current, Number(numbered[1]) + 1);
     },
-    [createRunner, runners, toast],
+    [createRunner, runners, toast, askFocus],
   );
 
   // RN-ABAS-005: esta área de trabalho está montada (o cofre aberto) e pronta para receber abas; ao desmontar (sair do cofre), deixa de estar, e o
@@ -621,6 +636,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       for (const tab of restored.tabs) runners.set(tab.id, createRunner(tab));
       setTabs((current) => [...restored.tabs, ...current]);
       setActiveTabId((current) => restored.activeTabId ?? current);
+      if (restored.activeTabId !== null) askFocus(restored.activeTabId);
       setRestoredTableConnections(restored.tableConnections);
       for (const title of restored.emptied) toast.warning(workbenchCopy.toasts.restoredEmpty(title));
       if (restored.withoutConnection > 0) toast.warning(workbenchCopy.toasts.restoredWithoutConnection(restored.withoutConnection));

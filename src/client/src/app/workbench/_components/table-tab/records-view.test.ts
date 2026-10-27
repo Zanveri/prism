@@ -153,7 +153,7 @@ function fakeRunner(initial: RunnerState) {
 }
 
 /** `runner` troca o executor da vista (o provedor que entrega outro à aba). */
-type Over = { tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot; runner?: QueryRunner; database?: string; onOpenQuery?: (connectionId: string, sql: string, database?: string) => void };
+type Over = { filterRef?: ComponentProps<typeof RecordsView>["filterRef"]; tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot; runner?: QueryRunner; database?: string; onOpenQuery?: (connectionId: string, sql: string, database?: string) => void };
 
 /** A vista de `loja.pedidos` na conexão `c1`: à vista e conectada, salvo o que `over` disser. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
@@ -2000,5 +2000,21 @@ describe("RecordsView: o Copiar avançado e o Gerar SQL do menu da grade, com a 
 
     dialog.dialog.onOpenInTab();
     expect(onOpenQuery).toHaveBeenCalledWith("c1", 'DELETE FROM "loja"."pedidos"\nWHERE "id" = 10;', "vendas");
+  });
+});
+
+describe("RecordsView: o campo de filtro é a entrada da aba da tabela (RN-ABAS-019)", () => {
+  it("a ref que a aba entrega chega ao campo de filtro, para o foco entrar nele ao abrir a tabela, onde o Ctrl+Espaço completa", () => {
+    const filterRef = { current: null };
+
+    const { filter } = mount(fakeRunner({ status: "idle" }), { filterRef }).show();
+
+    expect((filter as unknown as { ref?: unknown }).ref).toBe(filterRef);
+  });
+
+  it("sem ref (a vista que ninguém foca) o campo nasce igual", () => {
+    const { filter } = mount(fakeRunner({ status: "idle" })).show();
+
+    expect((filter as unknown as { ref?: unknown }).ref).toBeUndefined();
   });
 });

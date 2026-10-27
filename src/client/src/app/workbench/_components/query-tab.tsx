@@ -30,6 +30,7 @@ import { saveShortcut } from "../_lib/saved-scripts";
 import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScriptTab, statisticsSummary, type ScriptTab } from "../_lib/script-run";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
+import { tabEntries } from "../_lib/tab-focus";
 import { recall, remember } from "../_lib/tab-memory";
 import { isPersonBusy, useQueryRunner, useScriptRun, type DocRange, type QueryRunner, type RunHooks, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
 import { conditionOf, sortOf, withOrder } from "../_lib/table-sql";
@@ -411,6 +412,26 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     if (editorShown && resultFocus.take(tab.id, ["editor"]) !== null) editor.current?.focus();
   });
 
+  // RN-ABAS-019: a entrada da aba, onde o foco cai quando ela é aberta por um gesto, ou quando a aba em que ele estava fecha: o editor, com o cursor onde estava;
+  // com o editor escondido (o resultado maximizado) ou a aba do resultado ativa, o resultado (a grade, ou o botão "Onde mostrar o resultado"). O editor não toma o
+  // foco sozinho ao nascer: quem o leva é a área das abas, com a guarda de não roubá-lo de quem já foi para outro lugar. O estado de agora é lido na hora, por ref.
+  const entryNow = useRef({ editorShown, maximized, slot });
+  useEffect(() => {
+    entryNow.current = { editorShown, maximized, slot };
+  });
+  useEffect(
+    () =>
+      tabEntries.register(tab.id, () => {
+        const now = entryNow.current;
+        if (now.editorShown && !now.maximized && editor.current !== null) {
+          editor.current.focus();
+          return true;
+        }
+        return now.slot !== null && focusResultIn(now.slot);
+      }),
+    [tab.id],
+  );
+
   // O botão e o Ctrl+Enter passam pelo editor: um lugar só para a área recolhida voltar ao executar. Só volta quando o executor vai
   // enviar o comando: sem nada a executar, com mais de um comando ou com a aba ocupada ele só avisa, e não há resultado a caminho.
   // RN-EDIT-007: o comando que vai ser enviado, com alterações não salvas, espera a resposta da pergunta; o que o executor recusaria não pergunta nada.
@@ -706,7 +727,6 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
               engine={engine}
               connectionId={tab.connectionId}
               database={tab.database}
-              autoFocus={editorShown}
               errorAt={shown?.status === "error" ? shown.errorAt : null}
               onRun={handleRun}
               onRunScript={handleRunScript}

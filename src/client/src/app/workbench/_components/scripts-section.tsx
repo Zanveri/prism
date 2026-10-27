@@ -18,6 +18,7 @@ import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { appearanceChanged, normalizeScriptName, refusalProblem, savedPlaceOfTab, scriptFolderMenu, scriptIconOf, scriptMenu, scriptNameProblem, scriptPlace, type ScriptAction, type ScriptAppearance, type ScriptFolderAction } from "../_lib/saved-scripts";
 import { scriptFoldersQuery } from "../_lib/script-folders.service";
 import { ancestorIds, buildScriptTree, folderIdOf, folderKey, scriptKey, scriptTreeLabels, scriptTreeMove, scriptTreeRowKey, visibleScriptRows, type ScriptTreeRow } from "../_lib/script-tree";
+import { focusedElement } from "../_lib/tab-focus";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import type { Script, ScriptFolder, ScriptSummary } from "../_lib/scripts.schema";
 import { changeScriptPlace, deleteScript, editScriptOrRefuse, getScript, renameScriptOrRefuse, scriptsQuery } from "../_lib/scripts.service";
@@ -272,6 +273,9 @@ export function ScriptsSection() {
   }
 
   async function open(summary: ScriptSummary) {
+    // RN-ABAS-019: quem tinha o foco quando a pessoa pediu o script, lido antes da espera da API: se ele andou para outro lugar (o type-ahead da árvore, um campo) enquanto o
+    // texto vinha, a aba não toma o foco de lá.
+    const askedFrom = focusedElement();
     const script = await read(summary);
     if (script === null) return void refresh();
 
@@ -285,7 +289,7 @@ export function ScriptsSection() {
       new Set(notConnectedIds(connectionChecks.snapshot())),
     );
     const place = scriptPlace(script, known === undefined ? null : new Set(known.map((connection) => connection.id)), connected);
-    openScriptTab(script, { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), saved: place.saved });
+    openScriptTab(script, { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), saved: place.saved }, askedFrom);
     if (place.missing) toast.warning(copy.toasts.connectionMissing(script.name));
   }
 

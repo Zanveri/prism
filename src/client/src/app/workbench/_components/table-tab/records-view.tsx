@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
@@ -39,6 +39,7 @@ import { EditsBanner } from "../edits-banner";
 import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
 import { UnsavedEditsDialog } from "../unsaved-edits-dialog";
+import type { FilterFieldHandle } from "../filter-field";
 import { RecordsFilter } from "./records-filter";
 
 type RecordsViewProps = {
@@ -66,6 +67,8 @@ type RecordsViewProps = {
   refreshSlot?: RefreshSlot;
   /** RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL": a aba nova da conexão e do banco desta, com o texto no editor. */
   onOpenQuery?: (connectionId: string, sql: string, database?: string) => void;
+  /** RN-ABAS-019: o campo de filtro, a entrada da aba da tabela na vista Registros: a aba leva o foco a ele ao ser aberta, e ali o Ctrl+Espaço completa. */
+  filterRef?: Ref<FilterFieldHandle>;
 };
 
 /**
@@ -95,7 +98,7 @@ type RecordsViewProps = {
  * O que esta vista DECIDE (a primeira carga, enviar ou não o comando pedido, a entrega do filtro, o aviso de "Carregando…" ou "desconectada") e o que faz com
  * cada decisão está em `table-view.ts`, em funções sem React, com as peças injetadas e com teste: aqui só se entregam o estado do executor e os `setState`.
  */
-export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot, onOpenQuery }: RecordsViewProps) {
+export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot, onOpenQuery, filterRef }: RecordsViewProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const toast = useToast();
@@ -369,6 +372,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <RecordsFilter
+        ref={filterRef}
         draft={draft}
         onDraft={(text) => {
           setDraft(text);

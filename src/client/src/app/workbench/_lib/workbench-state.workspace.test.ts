@@ -48,6 +48,7 @@ vi.mock("./use-query-runner", async (importOriginal) => ({ ...(await importOrigi
 
 import { workspaceSync } from "@/lib/api/workspace-sync";
 
+import { tabFocus } from "./tab-focus";
 import { WorkbenchProvider, type useWorkbench } from "./workbench-state";
 import { workbenchCopy } from "./workbench.copy";
 
@@ -196,5 +197,34 @@ describe("WorkbenchProvider: as abas que voltam na próxima entrada (RN-ABAS-006
     rt.unmount();
 
     expect(rt.bridge.withdraw).toHaveBeenCalledOnce();
+  });
+});
+
+describe("WorkbenchProvider: a aba ativa que voltou pede o foco (RN-ABAS-019)", () => {
+  afterEach(() => {
+    tabFocus.forgetExcept(new Set());
+    vi.unstubAllGlobals();
+  });
+
+  it("a ativa de antes volta com o foco pedido (o editor ou o filtro dela, quando aparecer), e as outras abas que voltaram não pedem nada", async () => {
+    vi.stubGlobal("document", { activeElement: null });
+    render();
+    const value = await settle();
+
+    const active = value.tabs[1];
+    expect(value.activeTabId).toBe(active.id);
+    expect(tabFocus.take(value.tabs[0].id)).toBeNull();
+    expect(tabFocus.take(active.id)).toEqual({ tabId: active.id, from: null, fromPopup: false });
+  });
+
+  it("a janela que não reabre nada não pede foco", async () => {
+    rt.bridge.claim.mockResolvedValue(false);
+    vi.stubGlobal("document", { activeElement: null });
+    const before = tabFocus.version();
+    render();
+    const value = await settle();
+
+    expect(value.tabs).toEqual([]);
+    expect(tabFocus.version()).toBe(before);
   });
 });

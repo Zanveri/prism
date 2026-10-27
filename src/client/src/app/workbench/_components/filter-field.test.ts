@@ -1,7 +1,7 @@
-import { EditorState } from "@codemirror/state";
-import { describe, expect, it } from "vitest";
+import { EditorSelection, EditorState } from "@codemirror/state";
+import { describe, expect, it, vi } from "vitest";
 
-import { fieldAttributes, fieldThemeSpec, singleLine } from "./filter-field";
+import { fieldAttributes, fieldThemeSpec, focusAtEnd, singleLine } from "./filter-field";
 
 // O campo de filtro (RN-TABELA-005, 010 e 011) é um CodeMirror de uma linha. O vitest não tem DOM: o que se confere é o estado do editor, que é onde a
 // regra mora (a vista do CodeMirror só desenha).
@@ -56,5 +56,45 @@ describe("o tema do campo vale só para o editor, não para o recipiente da list
       const own = selector.trim();
       if (own.startsWith("&")) expect(own, own).toMatch(/^&\.cm-(editor|focused)\b/);
     }
+  });
+});
+
+// RN-ABAS-019: o campo é a entrada da aba de uma tabela. O foco entra com o cursor no fim do texto, e só então o campo toma o foco: o editor de mentira guarda o
+// estado e registra a ordem das duas chamadas.
+describe("focusAtEnd: o foco no campo, com o cursor no fim (RN-ABAS-019)", () => {
+  function fakeEditor(doc: string, anchor = 0) {
+    const calls: string[] = [];
+    const editor = {
+      state: EditorState.create({ doc, selection: EditorSelection.cursor(anchor), extensions: [singleLine] }),
+      dispatch: vi.fn((spec: { selection: EditorSelection }) => {
+        calls.push("dispatch");
+        editor.state = editor.state.update({ selection: spec.selection }).state;
+      }),
+      focus: vi.fn(() => void calls.push("focus")),
+      calls,
+    };
+    return editor;
+  }
+
+  it("com texto no campo, o cursor vai ao fim, antes de o foco entrar", () => {
+    const editor = fakeEditor("refugo > 0", 2);
+
+    focusAtEnd(editor as never);
+
+    expect(editor.state.selection.main.head).toBe(10);
+    expect(editor.state.selection.main.empty).toBe(true);
+    expect(editor.calls).toEqual(["dispatch", "focus"]);
+  });
+
+  it("com o texto selecionado, a seleção se desfaz no fim; com o campo vazio, o cursor fica no começo, que é o fim", () => {
+    const selected = fakeEditor("a = 1");
+    selected.state = selected.state.update({ selection: EditorSelection.range(0, 5) }).state;
+    focusAtEnd(selected as never);
+    expect(selected.state.selection.main).toMatchObject({ anchor: 5, head: 5 });
+
+    const empty = fakeEditor("");
+    focusAtEnd(empty as never);
+    expect(empty.state.selection.main.head).toBe(0);
+    expect(empty.focus).toHaveBeenCalledOnce();
   });
 });

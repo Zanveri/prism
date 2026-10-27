@@ -88,7 +88,7 @@ describe("ScriptsSection: abrir o script genérico (RN-SCRIPT-005)", () => {
     act(generic, "open");
     await settle();
 
-    expect(rt.workbench.openScriptTab).toHaveBeenCalledWith(full(generic), { connectionId: "c2", saved: { generic: true } });
+    expect(rt.workbench.openScriptTab).toHaveBeenCalledWith(full(generic), { connectionId: "c2", saved: { generic: true } }, null);
     expect(rt.toast.warning).not.toHaveBeenCalled();
   });
 
@@ -99,7 +99,7 @@ describe("ScriptsSection: abrir o script genérico (RN-SCRIPT-005)", () => {
     act(generic, "open");
     await settle();
 
-    expect(rt.workbench.openScriptTab).toHaveBeenCalledWith(full(generic), { connectionId: null, saved: { generic: true } });
+    expect(rt.workbench.openScriptTab).toHaveBeenCalledWith(full(generic), { connectionId: null, saved: { generic: true } }, null);
   });
 
   it("sem nenhuma conectada, a aba nasce sem conexão; a aba aberta sem sessão não conta como conectada", async () => {
@@ -108,7 +108,7 @@ describe("ScriptsSection: abrir o script genérico (RN-SCRIPT-005)", () => {
     act(generic, "open");
     await settle();
 
-    expect(rt.workbench.openScriptTab).toHaveBeenCalledWith(full(generic), { connectionId: null, saved: { generic: true } });
+    expect(rt.workbench.openScriptTab).toHaveBeenCalledWith(full(generic), { connectionId: null, saved: { generic: true } }, null);
   });
 
   it("o script com conexão abre nela e no banco dele, mesmo com outra conectada (RN-SCRIPT-003)", async () => {
@@ -117,7 +117,28 @@ describe("ScriptsSection: abrir o script genérico (RN-SCRIPT-005)", () => {
     act(bound, "open");
     await settle();
 
-    expect(rt.workbench.openScriptTab).toHaveBeenCalledWith(full(bound), { connectionId: "c1", database: "vendas", saved: { savedConnectionId: "c1", savedDatabase: "vendas" } });
+    expect(rt.workbench.openScriptTab).toHaveBeenCalledWith(full(bound), { connectionId: "c1", database: "vendas", saved: { savedConnectionId: "c1", savedDatabase: "vendas" } }, null);
+  });
+});
+
+describe("ScriptsSection: o foco de quem pediu o script, lido antes da espera da API (RN-ABAS-019)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("a aba que abre depois da espera leva a quem tinha o foco quando a pessoa pediu (o duplo clique, o Enter), e não a quem o tem quando o texto chega: se o foco andou na árvore nesse meio-tempo, a aba não o rouba", async () => {
+    const row = { closest: () => null };
+    const typedAhead = { closest: () => null };
+    const page = { activeElement: row as unknown };
+    vi.stubGlobal("document", page);
+    let arrive: (value: unknown) => void = () => {};
+    rt.service.getScript.mockReturnValueOnce(new Promise((resolve) => (arrive = resolve)));
+
+    act(bound, "open");
+    page.activeElement = typedAhead;
+    arrive({ ok: true, data: full(bound) });
+    await settle();
+
+    expect(rt.workbench.openScriptTab).toHaveBeenCalledOnce();
+    expect(rt.workbench.openScriptTab.mock.calls[0][2]).toBe(row);
   });
 });
 
