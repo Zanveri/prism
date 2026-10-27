@@ -758,7 +758,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 - **A árvore é plana e virtualizada** (`@tanstack/react-virtual`): `flattenVisible` (`_lib/navigator-model.ts`, testado)
   achata nós abertos em linhas, e só as que se veem existem no DOM. Como uma linha fora da janela não existe, ela não pode
   buscar nada: **quem busca é o `Navigator`, num `useQueries` só, a partir das chaves dos nós abertos**. A busca por nome não
-  passa por aí: ela só lê o que já está em cache (ver "Navegador: clique, menu e busca").
+  passa por aí: ela lê o que já está em cache e pede, num `useQueries` à parte, o índice de nomes de cada banco do escopo dela (ver "Navegador: clique,
+  menu e busca"); nada disso é nível, e nenhum nó abre.
 - **Lista virtual que MEDE as linhas passa `measureElement: measureRendered`** (`_lib/row-measure.ts`; hoje só a árvore mede, porque a linha
   de erro é mais alta que as outras). A área de trabalho fica escondida por baixo das outras telas com `hidden`, que é `display: none`, e o
   painel da aba inativa também: enquanto dura, TODA caixa lá dentro mede 0x0 e o `ResizeObserver` avisa isso. A biblioteca guardava o ZERO
@@ -1611,7 +1612,8 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   de ambiente", que volta a "Todos". Quem filtra é `filterByEnvironment(folders, connections, escolha, environmentLookup)`
   (`_lib/navigator-environment.ts`, pura e testada): as conexões cujo ambiente mostrado (o próprio ou o herdado) tem a chave escolhida, ou que não
   têm nenhum ("Sem ambiente"), e as pastas no caminho até elas, na ordem da lista; "Todos" devolve as MESMAS listas. O navegador monta a árvore
-  (`buildConnectionTree`) sobre o que sai daí, e a busca roda depois, sobre essa árvore: os dois se combinam sem tocar em `searchTree`. A pasta do
+  (`buildConnectionTree`) sobre o que sai daí, e a busca roda depois, sobre essa árvore: os dois se combinam sem tocar em `searchTree`, e limitam também os bancos de que
+  a busca pede o índice de nomes (o escopo, `searchScope`: só as conexões que a árvore mostra, e, delas, as conectadas). A pasta do
   ambiente sem conexão dele dentro não aparece (a regra fala das pastas no caminho). A escolha é estado do `Navigator`, que fica montado enquanto o
   cofre está aberto (`WorkbenchSlot`): vale enquanto a janela está aberta, ir às Configurações e voltar a mantém, e sair do cofre a apaga (uma
   janela nova começa em "Todos"). O ambiente que ninguém mais usa volta a escolha a "Todos" (`choiceAvailable`, um ajuste durante a renderização,
@@ -1711,14 +1713,65 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   (`findMatch`, nas posições do rótulo que a pessoa vê: caminho rápido para ASCII e para acento composto, mapa ponto a ponto para
   acento solto e hangul; o teste de invariante confere os dois). **Olha o que a árvore já carregou, aberto ou não**: `loadedLevels`
   junta os níveis do navegador com o que o cache guarda (`cachedTree`, em `navigator-search.ts`, lê os níveis
-  `["tree", …]`, a começar pela lista dos bancos de cada conexão, e devolve o MESMO objeto enquanto nenhuma dessas consultas mudou), e `levelPathOf` é o inverso de `treeKey` (**mudou `treeKey`, mude `levelPathOf`**: há teste de ida e volta).
-  **Nunca chama a API, nunca abre nó e nunca toca em `expanded` nem nas pastas lembradas** (RN-NAV-014): limpar o campo devolve a árvore como estava.
+  `["tree", …]`, a começar pela lista dos bancos de cada conexão, e devolve `{ cached, indexes }`: cada lista é o MESMO objeto enquanto nada dela mudou), e `levelPathOf` é o inverso de `treeKey` (**mudou `treeKey`, mude `levelPathOf`**: há teste de ida e volta).
+  **Nunca abre nó, nunca conecta sozinha e nunca toca em `expanded` nem nas pastas lembradas** (RN-NAV-014): limpar o campo devolve a árvore como estava. A única
+  chamada à API que ela faz é o índice de nomes, um por banco do escopo (o item seguinte); nenhum nível é buscado (RN-ARVORE-002).
+- **A busca em todas as conexões** (RN-BUSCA-002; pedido do dono em 2026-10-27: três ambientes de tabelas iguais, e a busca só achava a tabela no ambiente em que o esquema
+  tinha sido aberto). Além do que a árvore carregou, acha as tabelas e as visões de TODOS os esquemas de cada banco do escopo, pelo índice de nomes que a rota
+  `object-names` devolve numa consulta só ao catálogo. A busca no servidor a cada tecla ficou de fora (uma ida a cada ambiente por pausa da digitação, e ignorar o acento não se escreve igual nos três
+  bancos), e carregar os níveis de cada esquema também (duas consultas por esquema, e a árvore cheia do que a pessoa não abriu). Peças: `_lib/navigator-search-scope.ts` (o escopo, o
+  filtro dos índices e a linha de estado, tudo puro), `_lib/navigator-index.ts` (`indexLevels`) e `_components/navigator-search-status.tsx` (a vista).
+  - **O índice mora na família da árvore e NÃO é nível.** A chave é `["tree", conexão, …banco, "names"]` (`objectNamesKey`; `objectNamesOf` é o inverso), de propósito: o
+    "Desconectar" (`removeQueries(["tree", c])`), a conexão que some, o bloqueio, a sessão reaberta (`ofDatabase`) e o "Atualizar" de qualquer nó do banco (`treePrefixes`) já cuidam dele, e uma
+    família à parte exigiria lembrar de cada um desses lugares (esquecer um deixa o índice de uma sessão morta). O preço: **quem lê a família `["tree"]` e supõe `NavNode[]` tem de pular o índice**.
+    `levelPathOf` devolve `null` para ele (há teste), o `cachedTree` o entrega à parte (`indexes`) e o `cachedLevels` do autocompletar só recebe nível. Leitor novo da família: filtre por `levelPathOf`.
+  - **O escopo** (`searchScope`). As conexões que a árvore mostra (depois do seletor de ambiente e de "Só as conectadas"), e, delas, só as conectadas, na definição única
+    (`connectedConnectionIds`: a sessão da árvore aberta ou uma aba conectada; menos as que a verificação achou sem sessão). De cada uma, o banco da conexão e cada outro banco do servidor que
+    já tem sessão da árvore em cache (`cachedTreeSessions`). **Nunca abre a sessão de um banco que ninguém abriu**: num servidor com dezenas de bancos seriam dezenas de sessões. A conexão
+    conectada só por uma aba ainda não tem sessão da árvore, e o índice a abre sem abrir o nó (`searchSessionQuery`: ela já está conectada, e isso não é conectar); se não tem usuário ou senha
+    gravados, fica sem índice (abrir chamaria o "Editar conexão", RN-TRANSF-016). As de fora são `openable` ou `withoutCredentials`, e as que estão conectando (o ponto "Conectando…") não são de fora:
+    contam como "buscando" e entram quando a sessão abrir.
+  - **Quando o índice é pedido.** Um `useQueries` no `Navigator`, com um `objectNamesQuery` por banco do escopo, `enabled` só com o texto adiado não vazio. Com o campo vazio os observadores ficam
+    montados e desabilitados, e é isso que faz o índice que falhou, ou que o "Atualizar" deixou velho, ser buscado na busca seguinte (a biblioteca refaz uma consulta com erro quando `enabled`
+    vira `true`; com `enabled` fixo ela não repete, então a falha não vira laço a cada tecla; o teste confere os dois). `keepUntilRefreshed` e `retry: false`: uma vez por banco, a falha aparece na hora, e
+    depois a busca não volta à API até o "Atualizar", o "Desconectar" ou o bloqueio; cada tecla filtra no app, sem pausa e sem mínimo de letras. A consulta é calada (`meta.silent`): a falha vai à linha de estado.
+  - **Armadilha: o escopo se lê do cache na renderização, não por `useSyncExternalStore`.** O "Desconectar" recolhe os nós, solta as abas e SÓ ENTÃO esquece as consultas, tudo no mesmo lote. Uma
+    renderização a mais entre as duas coisas (o que uma assinatura do cache provoca: a atualização dela é urgente e pode sair antes das outras) veria o cache já limpo com os nós e as abas ainda no
+    ar, e os observadores refariam a sessão que a pessoa acabou de fechar. As renderizações que importam já vêm das consultas observadas (a sessão de cada conexão, os níveis abertos, os índices).
+    As listas de ids entram como texto no `useMemo` (como `connectedKey`), para o escopo e o filtro só se refazerem quando uma delas muda.
+  - **O que aparece.** `indexLevels` (pura; depois do `loadedLevels` e antes do `searchTree`, no mesmo `useMemo`, com a identidade estável de sempre) acrescenta SÓ os níveis que faltam: o que a árvore
+    carregou de verdade vale mais, e o grupo "Tabelas" ou "Visões" já carregado não recebe nada do índice nem gasta o corte. As linhas têm as chaves da árvore (a visão leva a posição dela na lista inteira do
+    esquema em `byName`), então o duplo clique, o Enter, o menu e o "Gerar SELECT" valem sem código novo (`tableTargetOf` e `runMenuAction` leem a chave), e a escolha continua na linha quando o nível carregar.
+    Sem a lista dos bancos, a conexão mostra só o banco dela, com o selo "padrão". O grupo diz "3 de 120" (`LevelState.total`); com o índice cortado na API (`truncated`), só o achado.
+    **O corte é de 200 tabelas e visões por banco** (`searchIndexCap`), e não do total: o primeiro ambiente da árvore engoliria os outros, que é o caso do pedido. `indexesInScope` tira do resultado o
+    índice de quem saiu do escopo (o filtro de ambiente, a conexão cuja verificação diz "Sem sessão aberta" e que deixou o índice no cache). "Nada encontrado" só aparece sem índice a caminho: antes disso
+    a linha de estado diz "Buscando…" sozinha.
+  - **A linha de estado** (`NavigatorSearchStatus`, vista sem estado; o que ela diz é `searchStatusOf`, pura, com tabela de casos) fica logo abaixo do `NavigatorFilters`, nunca ao lado do campo, e só existe
+    na busca. Cada texto é um `role="status"` e os botões ficam fora das regiões vivas. A falha de um índice vem do estado da consulta (`isError && !isFetching`, mesmo com resposta velha); se foi a sessão que
+    caiu (`DATABASE_SESSION_NOT_FOUND`), o "Tentar de novo" a reabre por `reopenDatabaseSession`, como a árvore (e avisa), e senão refaz só aquele índice (`refetchQueries` exato). A conexão de fora cuja sessão da
+    árvore está em erro mostra ali a mensagem do banco, com o "Tentar de novo" que abre de novo; a recusa por faltar usuário ou senha não entra (é do "Editar conexão"). **Os botões saem da tela assim que o pedido
+    começa, e o foco que estava neles cairia no `body`: o foco vai ao campo da busca.** A chegada de um índice não move o foco nem a rolagem (`scrollResetKey` continua sendo o texto; nada chama `focus` nem
+    `scrollTo`), e o leitor de tela ouve "1.234 resultados, 600 à vista" quando o corte deixa achados de fora.
+  - **"Buscar nelas também"** (`openSessionForSearch`, em `database-sessions.service.ts`) abre a sessão da árvore de cada conexão de fora que tem usuário e senha gravados, sem abrir o nó (é conectar, a pedido;
+    `expanded` e as pastas lembradas não mudam), e não lança: a falha fica na consulta da sessão, de onde a linha a lê. A conexão de fora que ainda guarda uma sessão em cache é a que a verificação achou "Sem sessão
+    aberta" (RN-VERIF-003): a consulta nunca fica velha sozinha, então a abertura é forçada (`staleTime: 0`) e a sessão nova substitui a morta. **O `meta` calado da sessão não é garantido**: o navegador observa a
+    sessão de cada conexão (o ponto de estado), e cada renderização troca o `meta` da consulta pelo do observador, então a falha de abrir pode chegar também ao aviso central, como a de abrir o nó.
+  - **Medida** (vitest, na máquina de desenvolvimento; os testes exigem menos de 100 ms por tecla): 3 bancos de 50.000 nomes (150.000 nomes, 3.000 com acento e 12.000 visões) mais 20 mil nós carregados em outra
+    conexão. A primeira tecla, que dobra os nomes e ordena as visões (uma vez por resposta), leva 55 a 80 ms; as seguintes, 9 a 15 ms (uma letra, que passa do corte, 15 ms; acento ou visão, 10 ms). O escopo e a linha de
+    estado custam 0,02 ms por renderização. É a conta do cliente: a da rota (uma varredura do catálogo por banco) ainda está por fazer, e `src/api/AGENTS.md` diz onde.
+  - **Testes**: `navigator-search-scope.test.ts` (o escopo, o cache das sessões, o filtro dos índices e a linha de estado, por tabela de casos), `navigator-index.test.ts` e `navigator-search.test.ts` (o índice, o corte, o
+    desempenho), `database-sessions.service.index-observers.test.ts` (o comportamento da biblioteca que o desenho pressupõe, com o `QueriesObserver` de verdade: uma vez por banco, a falha que não repete, o "Atualizar",
+    a sessão reaberta, o "Desconectar"), `database-sessions.service.search-session.test.ts` (o "Buscar nelas também") e `navigator.search.test.ts` (o `Navigator` com os ganchos simulados e o cache de verdade: o escopo, o que
+    aparece, o menu e o "Gerar SELECT", a linha de estado e os botões). **Conferido contra a API de verdade, sem o app** (PostgreSQL de teste: cinco esquemas, um de 300 tabelas, três ambientes e um segundo banco do servidor de Prod): a resposta
+    da rota passa pelo `objectNamesSchema`; "cliente" acha a tabela nos quatro bancos, com o caminho aberto; "pedido_acao" acha `pedido_ação`; a chave da tabela e a da visão que o índice monta são as
+    de `objects?kind=…`; "t_" corta em 200 por banco; a sessão fechada responde 404 `DATABASE_SESSION_NOT_FOUND`. **Não conferido**: o app inteiro sob Xvfb (o "Buscar nelas também" e o
+    "Desconectar" no meio da busca, a rolagem e o foco com o índice chegando).
 - **Na tela filtrada** só tem chevron quem tem algo à vista embaixo; recolher um ancestral ali é estado local daquele texto
   (`searchCollapsed`), não `expanded`; o grupo diz "3 de 120"; o destaque é um `<mark>` de texto (o nome vem do banco). O filtro roda
   sobre `useDeferredValue` do texto, para a digitação não esperar uma lista de milhares de linhas: com 20 mil nós carregados ele leva
   dezenas de milissegundos (o teste exige menos de 100 ms medindo o melhor de cinco execuções depois de uma de aquecimento: uma
-  medida só falhou na suíte inteira, com a máquina disputada). O filtro está num `useMemo` (texto, o que se recolheu, a árvore e o
-  `cachedTree`, de identidade estável): um aviso ou uma tecla no editor, que redesenham o navegador, não o refazem.
+  medida só falhou na suíte inteira, com a máquina disputada). O filtro está num `useMemo` (texto, o que se recolheu, a árvore, o
+  `cachedTree`, de identidade estável, e os índices do escopo): um aviso ou uma tecla no editor, que redesenham o navegador, não o refazem.
 - **`NavigatorList` fica sempre montada**, inclusive no "nada encontrado": a seleção (`selectedKey`) e a rolagem da árvore moram
   nela, e desmontá-la as perdia ao limpar. A rolagem é acompanhada por `onScroll` enquanto a árvore está à mostra e volta ao sair da
   busca; ler `scrollTop` ao entrar na busca não serve, porque a lista já encolheu e o navegador já o ajustou. Ctrl+F com o foco no
@@ -3488,7 +3541,8 @@ fechar não apaga as abas.
 - **Autocompletar** (RN-CONFIG-004; `_lib/sql-completion.ts`; a única dependência nova foi o `@codemirror/autocomplete`, em 6.20.3 exato, a
   versão que a trava já resolvia): as palavras-chave do dialeto da aba e os **nomes que a árvore já carregou** daquela conexão (esquemas,
   tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: `sql-completion.ts` só
-  lê; o que a árvore não abriu não existe para ele, e as duas buscas que o autocompletar faz, as colunas de `tabela.` e as chaves estrangeiras da junção
+  lê; o que a árvore não abriu não existe para ele (o índice de nomes da busca, RN-BUSCA-002, mora na mesma família mas não é nível: `cachedLevels` o pula por `levelPathOf`, e o
+  autocompletar não o usa), e as duas buscas que o autocompletar faz, as colunas de `tabela.` e as chaves estrangeiras da junção
   (`sql-catalog-completion.ts`, logo abaixo), são de outro módulo. Depois de `esquema.` saem as tabelas; depois de
   `tabela.` ou de um apelido, as colunas com o tipo; as tabelas de qualquer esquema carregado aparecem também sem o esquema (o `public` do
   PostgreSQL sem ele, os outros com `esquema.`). A lista abre sem nada escolhido (`selectOnOpen: false`: Enter e Tab seguem como eram),
