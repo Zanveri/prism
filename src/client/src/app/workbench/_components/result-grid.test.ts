@@ -592,3 +592,91 @@ describe("a coluna inteira pendente na grade (RN-EDIT-018)", () => {
     expect(renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[1], item: virtualColumns[1], choosable: true }))).not.toContain("data-column-pending");
   });
 });
+
+describe("a cor do ambiente na grade (RN-AMB-002)", () => {
+  const cellIdOf = (row: number, column: number) => `g-${row}-${column}`;
+  const renderEditable = (extra: Partial<Parameters<typeof GridRow>[0]> = {}) => renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "aberta"], columns, virtualColumns, truncated: undefined, nullText: "NULL", cellIdOf, ...extra }));
+  const cell = (markup: string, column: number) => markup.match(new RegExp(`<div[^>]*id="g-0-${column}"[^>]*>.*?</div>`, "s"))?.[0] ?? "";
+  const classesOf = (tag: string) => (/class="([^"]*)"/.exec(tag)?.[1] ?? "").split(" ");
+  /** A tag da caixa que rola, conferida pelo papel dela: `grid` com a edição, `table` só de leitura. */
+  const box = (markup: string, role: "grid" | "table") => new RegExp(`<div[^>]*role="${role}"[^>]*>`).exec(markup)?.[0] ?? "";
+  const grid = (extra: Partial<Parameters<typeof ResultGrid>[0]> = {}) => renderToStaticMarkup(createElement(ResultGrid, { columns, rows: [["1", "a"]], truncated: new Map(), ...extra }));
+
+  it("só a célula ativa tem o contorno: de 2 px, por dentro, na cor lida da variável, e nunca o acento direto", () => {
+    const markup = renderEditable({ activeColumn: 1, selectedFrom: 1, selectedTo: 1 });
+    const active = classesOf(cell(markup, 1));
+
+    expect(active).toEqual(expect.arrayContaining(["outline-2", "-outline-offset-2", activeOutline]));
+    expect(active).not.toContain("outline-accent");
+    // A outra célula da mesma linha, a linha sem célula ativa e a linha de leitura (sem edição) não têm contorno nenhum.
+    expect(classesOf(cell(markup, 0)).some((name) => name.includes("outline"))).toBe(false);
+    expect(renderEditable({ selectedFrom: 0, selectedTo: 1 })).not.toContain("outline");
+    expect(renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "a"], columns, virtualColumns, truncated: undefined, nullText: "NULL" }))).not.toContain("outline");
+  });
+
+  it("o contorno é o mesmo com a célula pendente, escolhida ou da linha excluída: a cor não depende do que a célula é", () => {
+    const pending = new Map([[1, "paga"]]);
+    const cases = [
+      { mark: { kind: "read" as const, deleted: false, pending, failed: false } },
+      { mark: { kind: "read" as const, deleted: true, pending: new Map(), failed: false } },
+      { mark: { kind: "read" as const, deleted: false, pending: new Map(), failed: true } },
+      { mark: { kind: "new" as const, deleted: false, pending: new Map(), failed: false } },
+      { wholeColumns: new Set([1]) },
+      { columnPending: new Map([[1, { value: "fechada", hint: "h", uncertain: false }]]) },
+    ];
+
+    for (const extra of cases) expect(classesOf(cell(renderEditable({ activeColumn: 1, selectedFrom: 1, selectedTo: 1, ...extra }), 1)), JSON.stringify(extra)).toContain(activeOutline);
+  });
+
+  it("a cor NÃO é propriedade da linha: a linha é memorizada, e a cor chega por herança da variável, sem redesenhar linha nenhuma", () => {
+    // Se a linha ganhasse uma propriedade de cor, trocar o ambiente da aba redesenharia todas. O `@ts-expect-error` falha na verificação de tipos se alguém a criar.
+    // @ts-expect-error a linha da grade não tem propriedade de cor
+    const row = createElement(GridRow, { index: 0, start: 0, row: ["1", "a"], columns, virtualColumns, truncated: undefined, nullText: "NULL", cellIdOf, activeColumn: 1, environmentColor: "#FF8A7A" });
+    const markup = renderToStaticMarkup(row);
+
+    expect(markup).not.toContain("#FF8A7A");
+    expect(markup).not.toContain("--environment-color:");
+    expect(classesOf(cell(markup, 1))).toContain(activeOutline);
+    // `memo` sem comparador próprio: a comparação é a rasa das propriedades que a linha tem, e nenhuma delas é cor.
+    expect((GridRow as unknown as { compare: unknown }).compare).toBeNull();
+  });
+
+  it("a caixa que rola da grade (editável ou só de leitura) lê a variável no anel do foco e nas barras de rolagem", () => {
+    const classes = {
+      table: classesOf(box(grid(), "table")),
+      grid: classesOf(box(grid({ editing: editingFor() }), "grid")),
+    };
+
+    for (const [role, names] of Object.entries(classes)) {
+      expect(names, role).toEqual(
+        expect.arrayContaining([
+          "overflow-auto",
+          "-outline-offset-2",
+          "focus-visible:outline-[color:var(--environment-color,var(--color-accent))]",
+          "[scrollbar-color:var(--environment-color,var(--color-border-strong))_var(--color-panel)]",
+        ]),
+      );
+      // O anel só troca a cor: a espessura e o recuo são os do `:focus-visible` do globals.css e do `-outline-offset-2` da caixa.
+      expect(names.filter((name) => name.includes("outline")), role).toEqual(["-outline-offset-2", "focus-visible:outline-[color:var(--environment-color,var(--color-accent))]"]);
+    }
+  });
+
+  it("a caixa é a mesma em qualquer zoom e com qualquer fonte: a cor não depende deles", () => {
+    const base = classesOf(box(grid(), "table"));
+
+    for (const extra of [{ zoom: 50 as const }, { zoom: 200 as const }, { font: "Inter" }, { showTypes: false }]) expect(classesOf(box(grid(extra), "table")), JSON.stringify(extra)).toEqual(base);
+  });
+
+  it("nada da grade põe a variável: quem a dá é a área de resultado; a caixa só a lê (o `style` dela é o do zoom)", () => {
+    const markup = grid();
+    const style = /<div[^>]*role="table"[^>]*style="([^"]*)"/.exec(markup)?.[1] ?? "";
+
+    expect(style).toContain("--grid-zoom");
+    expect(markup).not.toContain("--environment-color:");
+  });
+});
+
+/** Uma edição mínima, só para a grade se desenhar como editável (o `role` dela passa a `grid`). */
+function editingFor(): NonNullable<Parameters<typeof ResultGrid>[0]["editing"]> {
+  return { rows: [["1", "a"]] } as unknown as NonNullable<Parameters<typeof ResultGrid>[0]["editing"]>;
+}

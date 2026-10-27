@@ -95,6 +95,7 @@ import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
 import { QueryTabPanel } from "./query-tab";
+import { ResultHost } from "./result-host";
 import { ResultActions } from "./result-actions";
 import { ResultPlaceButton } from "./result-place-button";
 import { ResultSplitter } from "./result-splitter";
@@ -2390,5 +2391,61 @@ describe("QueryTabPanel: a entrada da aba (RN-ABAS-019)", () => {
     rt.unmount();
 
     expect(tabEntries.focus("q1")).toBe(false);
+  });
+});
+
+describe("QueryTabPanel: a cor do ambiente da aba vai para a área de resultado (RN-AMB-002)", () => {
+  const colorOf = (view: ReturnType<typeof mount>) => view.show().area.environmentColor;
+
+  it("a cor chega à área de resultado como veio, também a herdada da pasta (a aba só recebe o texto)", () => {
+    const view = mount(fakeRunner(rowsState()));
+    expect(colorOf(view)).toBeNull();
+
+    Object.assign(view.props, { environmentColor: "#FF8A7A" });
+    expect(colorOf(view)).toBe("#FF8A7A");
+  });
+
+  it.each(["panel", "tab", "window"] as const)("com o resultado %s: a mesma cor, e a área de resultado está DENTRO do portal (é ela que põe a variável)", (place) => {
+    const view = mount(fakeRunner(rowsState()));
+    Object.assign(view.props, { environmentColor: "#7DB2FF", place, editorShown: place === "panel", resultShown: true });
+    const { found, area } = view.show();
+
+    expect(area.environmentColor).toBe("#7DB2FF");
+    // A variável de CSS herda pelo DOM, e o portal leva a área para outra raiz (o painel, a aba do resultado, a janela): a cor tem de ser posta na área, que
+    // está dentro do `ResultHost`, e não na raiz da aba de consulta, de onde ela não chegaria.
+    const host = found.find((element) => element.type === ResultHost)!;
+    expect(elementsOf(host.props.children as ReactNode).some((element) => element.type === ResultPanel)).toBe(true);
+  });
+
+  it("nenhum outro elemento da aba recebe a cor: nem o editor, nem a barra, nem o filtro (ficam de fora, no acento)", () => {
+    const view = mount(fakeRunner(rowsState()));
+    Object.assign(view.props, { environmentColor: "#7DB2FF" });
+    const { found } = view.show();
+
+    expect(found.filter((element) => "environmentColor" in element.props).map((element) => element.type)).toEqual([ResultPanel]);
+    expect(JSON.stringify(found.map((element) => element.props.style ?? null))).not.toContain("environment");
+  });
+
+  it("trocar a conexão da aba (RN-ARVORE-008) troca a cor que a área recebe, e sem ambiente ela volta a nula", () => {
+    const view = mount(fakeRunner(rowsState()));
+
+    Object.assign(view.props, { environmentColor: "#FF8A7A" });
+    expect(colorOf(view)).toBe("#FF8A7A");
+    Object.assign(view.props, { environmentColor: "#F2B644", tab: { ...view.props.tab, connectionId: "c2" } });
+    expect(colorOf(view)).toBe("#F2B644");
+    Object.assign(view.props, { environmentColor: null });
+    expect(colorOf(view)).toBeNull();
+  });
+
+  it("vale também com o resultado de um script (as abas do script): é a mesma área de resultado", () => {
+    const runner = fakeRunner(rowsState());
+    const targets: RunTarget[] = [command, { sql: "select 3", offset: 20, engine: pg }];
+    runner.scriptState = startEntry(withEntry(createScriptRun(1, targets), 0, { status: "ok" }), 1);
+    const view = mount(runner);
+    Object.assign(view.props, { environmentColor: "#B79CFF" });
+
+    const { area } = view.show();
+    expect(area.environmentColor).toBe("#B79CFF");
+    expect((area.tabs?.list as { type: unknown }).type).toBe(ScriptTabs);
   });
 });

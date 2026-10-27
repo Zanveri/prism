@@ -2018,3 +2018,33 @@ describe("RecordsView: o campo de filtro é a entrada da aba da tabela (RN-ABAS-
     expect((filter as unknown as { ref?: unknown }).ref).toBeUndefined();
   });
 });
+
+describe("RecordsView: a cor do ambiente da aba vai para a área de resultado (RN-AMB-002)", () => {
+  it("a cor chega à área de resultado como veio: o ambiente próprio e o herdado da pasta são o mesmo texto aqui", () => {
+    expect(mount(fakeRunner({ status: "idle" }), { environmentColor: "#FF8A7A" }).show().panel.environmentColor).toBe("#FF8A7A");
+    expect(mount(fakeRunner(rowsState()), { environmentColor: "#5ED3A3" }).show().panel.environmentColor).toBe("#5ED3A3");
+  });
+
+  it("sem ambiente ou com ambiente sem cor, a área recebe nulo e fica como no tema", () => {
+    expect(mount(fakeRunner({ status: "idle" })).show().panel.environmentColor).toBeNull();
+    expect(mount(fakeRunner({ status: "idle" }), { environmentColor: null }).show().panel.environmentColor).toBeNull();
+  });
+
+  it("trocar a cor (outro ambiente, outra conexão) troca o que a área recebe, no mesmo desenho e sem mexer no executor", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner, { environmentColor: "#FF8A7A" });
+    expect(view.show().panel.environmentColor).toBe("#FF8A7A");
+    const sent = runner.sent.length;
+
+    expect(view.show({ environmentColor: "#F2B644" }).panel.environmentColor).toBe("#F2B644");
+    expect(view.show({ environmentColor: null }).panel.environmentColor).toBeNull();
+    expect(view.show({ environmentColor: "#FF8A7A" }).panel.environmentColor).toBe("#FF8A7A");
+    expect(runner.sent).toHaveLength(sent);
+  });
+
+  it("a cor é só da área de resultado: o campo de filtro não a recebe (fica no acento, RN-AMB-002)", () => {
+    const { filter } = mount(fakeRunner({ status: "idle" }), { environmentColor: "#FF8A7A" }).show();
+
+    expect(filter).not.toHaveProperty("environmentColor");
+  });
+});
