@@ -53,7 +53,7 @@ export function createFakePage() {
       focus: vi.fn(() => {
         if (!connected || !el.visible) return;
         state.active = el;
-        fire("document", "focusin", { target: el });
+        focusIn(el);
       }),
       remove: () => {
         connected = false;
@@ -65,12 +65,9 @@ export function createFakePage() {
     return el;
   }
 
-  function fire(host: "window" | "document", type: string, event: Record<string, unknown>) {
-    const full = { defaultPrevented: false, preventDefault: vi.fn(() => void (full.defaultPrevented = true)), ...event };
-    if (host === "document") for (const { listener } of [...(listeners.document.get(type) ?? [])]) listener(full as never);
-    // O evento da janela passa pelo `document` (captura e bolha) antes de chegar a ela, como no navegador; aqui só a janela o ouve.
-    if (host === "window") for (const listener of [...(listeners.window.get(type) ?? [])]) listener(full as never);
-    return full;
+  /** O `focusin` que o navegador avisa ao `document` quando um elemento recebe o foco (a captura e a bolha, ouvintes na ordem). */
+  function focusIn(target: FakeElement) {
+    for (const { listener } of [...(listeners.document.get("focusin") ?? [])]) listener({ target } as never);
   }
 
   const document = {
