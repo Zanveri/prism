@@ -50,9 +50,8 @@ import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { CheckFailureDialog } from "./connection-check";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
-import { NavigatorConnectedFilter, NavigatorFilteredEmpty } from "./navigator-connected-filter";
-import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
-import { NavigatorSearchField } from "./navigator-search-field";
+import { NavigatorFilteredEmpty } from "./navigator-connected-filter";
+import { NavigatorFilters } from "./navigator-filters";
 import { TypeAheadIndicator } from "./type-ahead-indicator";
 import { NavigatorRow, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
@@ -765,12 +764,19 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
 
     return (
       <>
-        {/* RN-NAV-010 e 013: o seletor de ambiente e "Só as conectadas" ao lado do campo de busca; no navegador estreito eles descem para a linha de baixo. */}
-        <div className="mx-2 mb-2 flex flex-none flex-wrap gap-1.5">
-          <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
-          <NavigatorEnvironmentFilter environments={savedEnvironments} value={environmentChoice} onChange={setEnvironmentChoice} />
-          <NavigatorConnectedFilter count={connectedIds.length} on={onlyConnected} onToggle={() => setOnlyConnected((current) => !current)} />
-        </div>
+        {/* RN-BUSCA-001, RN-NAV-010 e 013: o campo de busca sozinho na primeira linha, na largura toda; "Só as conectadas" e o seletor de ambiente na de baixo. */}
+        <NavigatorFilters
+          query={query}
+          onQueryChange={setQuery}
+          onFocusList={focusList}
+          inputRef={searchInput}
+          environments={savedEnvironments}
+          environmentChoice={environmentChoice}
+          onEnvironmentChange={setEnvironmentChoice}
+          connectedCount={connectedIds.length}
+          onlyConnected={onlyConnected}
+          onToggleConnected={() => setOnlyConnected((current) => !current)}
+        />
         {/* A lista fica sempre montada: a rolagem da árvore mora nela, e "nada encontrado" não pode levá-la embora. */}
         {filtering && tree.roots.length === 0 ? (
           <NavigatorFilteredEmpty environment={environmentChoice.type === "environment" ? (savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : environmentChoice.type === "none" ? null : undefined} onlyConnected={onlyConnected} onShowAll={() => setOnlyConnected(false)} />

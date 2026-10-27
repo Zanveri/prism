@@ -59,8 +59,7 @@ import { navKey, type NavNode } from "../_lib/navigator-model";
 import { importedReveal } from "../_lib/transfer-requests";
 import { FolderActionDialogs } from "./folder-action-dialogs";
 import { Navigator, NavigatorList } from "./navigator";
-import { NavigatorConnectedFilter } from "./navigator-connected-filter";
-import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
+import { NavigatorFilters } from "./navigator-filters";
 import { NavigatorToolbar } from "./navigator-toolbar";
 
 const now = "2026-10-27T12:00:00Z";
@@ -107,12 +106,14 @@ const connectionKey = (connectionId: string) => navKey({ type: "connection", con
 const remembered = () => [...folderMemoryStore.get(rt.userName, "connections")];
 const toolbar = () => tree().find((element) => element.type === NavigatorToolbar)!.props as unknown as ComponentProps<typeof NavigatorToolbar>;
 const nodeOf = (key: string): NavNode => list().rows.find((row) => row.key === key)!;
-/** Escolhe o ambiente "Produção" no seletor (o botão do ambiente é de `NavigatorEnvironmentFilter`). */
+/** A barra de filtros, como o navegador a monta agora: o seletor de ambiente e "Só as conectadas" são dela. */
+const filters = () => tree().find((element) => element.type === NavigatorFilters)!.props as unknown as ComponentProps<typeof NavigatorFilters>;
+/** Escolhe o ambiente "Produção" no seletor. */
 const chooseProduction = () => {
-  const filter = tree().find((element) => element.type === NavigatorEnvironmentFilter)!.props as unknown as ComponentProps<typeof NavigatorEnvironmentFilter>;
-  filter.onChange({ type: "environment", key: filter.environments[0].key });
+  const bar = filters();
+  bar.onEnvironmentChange({ type: "environment", key: bar.environments[0].key });
 };
-const clearEnvironment = () => (tree().find((element) => element.type === NavigatorEnvironmentFilter)!.props as unknown as ComponentProps<typeof NavigatorEnvironmentFilter>).onChange({ type: "all" });
+const clearEnvironment = () => filters().onEnvironmentChange({ type: "all" });
 
 let users = 0;
 const realChange = folderMemoryStore.change;
@@ -358,8 +359,7 @@ describe("o seletor de ambiente abre as pastas do caminho só na vista, sem grav
 
   it("\"Só as conectadas\" tem a mesma vista: o botão e o seletor se combinam, e a escolha dele não grava", () => {
     // Nenhuma conexão conectada: a árvore filtrada fica vazia, sem pasta nenhuma, e nada é gravado.
-    const toggle = tree().find((element) => element.type === NavigatorConnectedFilter)!.props as unknown as ComponentProps<typeof NavigatorConnectedFilter>;
-    toggle.onToggle();
+    filters().onToggleConnected();
 
     expect(list().rows).toEqual([]);
     expect(remembered()).toEqual([]);
