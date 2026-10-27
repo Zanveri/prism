@@ -17,6 +17,24 @@ export function fold(text: string): string {
 }
 
 /**
+ * O rótulo dobrado do jeito que `findMatch` o compara: o texto em que o `needle` (já passado por `fold`) é procurado. É o `fold` do rótulo inteiro, menos quando o
+ * rótulo tem acento solto ou muda de tamanho ao dobrar (hangul): aí `findMatch` dobra ponto de código por ponto de código, e as duas contas só diferem onde a caixa
+ * depende do contexto (o "Σ" final, que o rótulo inteiro dobra para "ς" e o ponto isolado para "σ"). Quem decide se um nome casa SEM chamar `findMatch` (o índice de nomes da
+ * busca, RN-BUSCA-002, dobra 50.000 nomes uma vez só) compara com este texto, e por isso acha exatamente o que a árvore carregada acharia: `foldLabel(rótulo).includes(needle)`
+ * é `findMatch(rótulo, needle) !== null`, e o teste de invariante confere.
+ */
+export function foldLabel(label: string): string {
+  if (!nonAscii.test(label)) return label.toLowerCase();
+
+  const simple = fold(label);
+  if (simple.length === label.length && !combiningMark.test(label)) return simple;
+
+  let folded = "";
+  for (const point of label) folded += fold(point);
+  return folded;
+}
+
+/**
  * Onde `needle` (já passado por `fold`, não vazio) aparece no rótulo, em posições do próprio rótulo, ou `null`. O nome comum de banco
  * (ASCII) tem o mesmo tamanho dobrado ou não, e a conta é uma busca de texto. Com acento, cada ponto de código é dobrado e guarda
  * de onde veio: tirar o acento muda o tamanho do texto (o "ã" decomposto vira uma letra só), e o destaque tem de cair no rótulo
@@ -186,8 +204,8 @@ export type SearchView = {
 };
 
 /**
- * A árvore filtrada por nome (RN-BUSCA-001), sobre o que já está carregado (`levels`; ver `loadedLevels`): não abre conexão, não busca
- * nível, não altera a árvore. Fica o que casa (sem diferenciar caixa nem acento) e os ancestrais dele, abertos; o grupo fixo
+ * A árvore filtrada por nome (RN-BUSCA-001), sobre o que já está carregado (`levels`; ver `loadedLevels`, e `indexLevels`, que acrescenta os níveis montados do
+ * índice de nomes dos bancos, RN-BUSCA-002): não abre conexão, não busca nível, não altera a árvore. Fica o que casa (sem diferenciar caixa nem acento) e os ancestrais dele, abertos; o grupo fixo
  * (Tabelas, Colunas…) não casa pelo próprio nome. Na tela da busca só tem chevron quem tem algo à vista embaixo (`hasChildren`), e um grupo diz
  * quantos aparecem do total ("3 de 120"). `collapsed` são os ancestrais que a pessoa recolheu na busca: ficam com chevron, para reabrir.
  *
@@ -220,7 +238,8 @@ export function searchTree(roots: readonly NavNode[], levels: LoadedLevels, quer
     if (kept > 0 && !collapsed.has(node.key)) open.add(node.key);
     else rows.length = start + 1;
 
-    const total = level?.status === "loaded" ? level.children.length : 0;
+    // O nível montado do índice de nomes diz o total do índice (`total`): os filhos são só os que casaram (RN-BUSCA-002).
+    const total = level?.status === "loaded" ? (level.total ?? level.children.length) : 0;
     rows[start] = { ...node, depth, hasChildren: kept > 0, ...(node.kind === "group" && total > 0 ? { detail: kept < total ? `${kept} de ${total}` : String(total) } : {}) };
     return true;
   }

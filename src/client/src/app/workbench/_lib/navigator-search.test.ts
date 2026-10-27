@@ -6,7 +6,9 @@ import { newVerification, unprotected, type Connection, type Folder } from "@/ap
 
 import { databaseSessionKey, objectNamesKey, treeKey, type FetchedPath } from "./database-sessions.service";
 import { childrenKey, columnNodes, databaseNodes, navKey, objectNodes, parseNavKey, schemaGroupNodes, schemaNodes, tableGroupNodes, treeNodes, type LevelState, type NavNode, type NavPath } from "./navigator-model";
-import { cachedTree, findMatch, fold, levelPathOf, loadedLevels, searchTree } from "./navigator-search";
+import type { ObjectNames } from "./database-sessions.schema";
+import { indexLevels } from "./navigator-index";
+import { cachedTree, findMatch, fold, levelPathOf, loadedLevels, searchTree, type CachedNames } from "./navigator-search";
 
 describe("fold (sem caixa e sem acento)", () => {
   it("tira a caixa e o acento", () => {
@@ -255,6 +257,16 @@ describe("searchTree (RN-BUSCA-001)", () => {
     expect(rows.find((row) => row.label === "Visões")?.detail).toBe("1");
   });
 
+  it("o nível montado do índice diz o total do índice (`total`): o grupo mostra os que casaram do total, e sem `total` o total são os filhos (RN-BUSCA-002)", () => {
+    const group = key({ type: "objects", connectionId: "c1", schema: "producao", objects: "tables" });
+    const withTotal = new Map(levels).set(childrenKey({ key: group }), { status: "loaded", children: objectNodes("c1", "producao", "tables", [{ name: "ordem_producao", kind: "table" }]), total: 120 });
+    const withoutTotal = new Map(levels).set(childrenKey({ key: group }), { status: "loaded", children: objectNodes("c1", "producao", "tables", [{ name: "ordem_producao", kind: "table" }]) });
+
+    expect(searchTree(base.roots, withTotal, "ordem_producao").rows.find((row) => row.label === "Tabelas")?.detail).toBe("1 de 120");
+    expect(searchTree(base.roots, withoutTotal, "ordem_producao").rows.find((row) => row.label === "Tabelas")?.detail).toBe("1");
+    expect(searchTree(base.roots, withTotal, "ordem_producao").count).toBe(1);
+  });
+
   it("não procura no que não foi carregado: uma conexão sem nível carregado só casa pelo próprio nome", () => {
     expect(labels(searchTree(base.roots, levels, "erp").rows)).toEqual(["ERP"]);
     expect(labels(searchTree(base.roots, levels, "cliente").rows)).toEqual([]);
@@ -325,6 +337,83 @@ describe("searchTree com milhares de itens carregados", () => {
 
     expect(searchTree(base.roots, accented, "producao_1").count).toBeGreaterThan(1000);
     expect(bestOf(() => searchTree(base.roots, accented, "producao_1"))).toBeLessThan(100);
+  });
+});
+
+describe("a busca com os índices de nomes e milhares de itens (RN-BUSCA-002)", () => {
+  /** O melhor tempo de cinco execuções, depois de uma de aquecimento (ver o comentário da outra medida desta suíte). */
+  function bestOf(run: () => void): number {
+    run();
+    return Math.min(...Array.from({ length: 5 }, () => {
+      const start = performance.now();
+      run();
+      return performance.now() - start;
+    }));
+  }
+
+  const three = treeNodes(buildConnectionTree([folder], [connection("c1", "Dev", "f1"), connection("c2", "Homolog", "f1"), connection("c3", "Prod", "f1")]));
+
+  /** 50.000 nomes por banco: duas grandes tabelas de esquemas, 4.000 visões e mil nomes com acento (o caminho lento do dobrar). */
+  const bigIndex = (): ObjectNames => ({
+    truncated: false,
+    schemas: [
+      { name: "vendas", isSystem: false, tables: [...Array.from({ length: 29_000 }, (_, index) => `registro_${String(index).padStart(5, "0")}`), ...Array.from({ length: 1000 }, (_, index) => `Produção_${index}`)], views: Array.from({ length: 4000 }, (_, index) => `v_registro_${String(index).padStart(4, "0")}`) },
+      { name: "estoque", isSystem: false, tables: Array.from({ length: 16_000 }, (_, index) => `item_${String(index).padStart(5, "0")}`), views: [] },
+    ],
+  });
+  const indexes = (): CachedNames[] => ["c1", "c2", "c3"].map((connectionId) => ({ connectionId, databaseName: "mes", names: bigIndex() }));
+
+  /** O que o navegador faz a cada tecla com a busca ligada: os níveis da árvore, os do índice e a árvore filtrada. */
+  const keystroke = (cache: readonly CachedNames[], loadedNodes: ReturnType<typeof loadedLevels>, query: string) =>
+    searchTree(three.roots, indexLevels(loadedNodes, cache, fold(query.trim())).levels, query);
+
+  /** A conexão c1 tem a árvore aberta até um grupo de 20 mil tabelas carregadas; as outras duas só têm o índice. */
+  const loadedBulk = () => {
+    const objects = Array.from({ length: 20_000 }, (_, index) => ({ name: `carregado_${String(index).padStart(5, "0")}`, kind: "table" as const }));
+    return loadedLevels(three.levels, [
+      { key: treeKey({ type: "connection", connectionId: "c1" }), nodes: databaseNodes("c1", [{ name: "mes", isCurrent: true }]) },
+      { key: treeKey({ type: "database", connectionId: "c1" }), nodes: schemaNodes("c1", [{ name: "vendas", isSystem: false }, { name: "estoque", isSystem: false }, { name: "public", isSystem: false }]) },
+      { key: treeKey({ type: "objects", connectionId: "c1", schema: "public", objects: "tables" }), nodes: objectNodes("c1", "public", "tables", objects) },
+    ]);
+  };
+
+  it("3 índices de 50.000 nomes e 20 mil nós carregados: um termo que acha poucos filtra em menos de 100 ms por tecla", () => {
+    const cache = indexes();
+    const loadedNodes = loadedBulk();
+    const { rows } = keystroke(cache, loadedNodes, "registro_19999");
+
+    expect(rows.filter((row) => row.label === "registro_19999")).toHaveLength(3);
+    expect(bestOf(() => keystroke(cache, loadedNodes, "registro_19999"))).toBeLessThan(100);
+  });
+
+  it("um termo de uma letra, que acha quase tudo e passa do corte, também fica abaixo de 100 ms, e mostra só o corte de cada banco", () => {
+    const cache = indexes();
+    const loadedNodes = loadedBulk();
+    const { levels, cuts, hidden } = indexLevels(loadedNodes, cache, "r");
+
+    expect(cuts).toHaveLength(3);
+    expect(hidden).toBeGreaterThan(100_000);
+    expect(searchTree(three.roots, levels, "r").rows.filter((row) => row.kind === "table" || row.kind === "view")).toHaveLength(600 + 20_000);
+    expect(bestOf(() => keystroke(cache, loadedNodes, "r"))).toBeLessThan(100);
+  });
+
+  it("um termo com acento (o caminho lento do destaque) e a visão, que pede a posição na lista inteira, também ficam abaixo de 100 ms", () => {
+    const cache = indexes();
+    const loadedNodes = loadedBulk();
+
+    expect(keystroke(cache, loadedNodes, "producao_9").count).toBeGreaterThan(100);
+    expect(bestOf(() => keystroke(cache, loadedNodes, "producao_9"))).toBeLessThan(100);
+    expect(keystroke(cache, loadedNodes, "v_registro_0042").rows.filter((row) => row.kind === "view")).toHaveLength(3);
+    expect(bestOf(() => keystroke(cache, loadedNodes, "v_registro"))).toBeLessThan(100);
+  });
+
+  it("a primeira tecla, que dobra os 150.000 nomes e ordena as visões, custa menos de um segundo", () => {
+    const cache = indexes();
+    const loadedNodes = loadedBulk();
+    const start = performance.now();
+    keystroke(cache, loadedNodes, "v_registro_0042");
+
+    expect(performance.now() - start).toBeLessThan(1000);
   });
 });
 

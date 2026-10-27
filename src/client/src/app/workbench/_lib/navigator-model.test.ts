@@ -4,7 +4,7 @@ import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { newVerification, unprotected, type Connection, type Folder } from "@/app/connections/_lib/connections.schema";
 
 import type { DatabaseObject } from "./database-sessions.schema";
-import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "./navigator-model";
+import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNode, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "./navigator-model";
 import { workbenchCopy } from "./workbench.copy";
 
 const connectionPath: NavPath = { type: "connection", connectionId: "c1" };
@@ -207,6 +207,25 @@ describe("chaves", () => {
     const path: NavPath = { type: "table", connectionId: "c1", schema: 'Vendas "2026"', table: "a/b c" };
 
     expect(parseNavKey(navKey(path))).toEqual(path);
+  });
+});
+
+describe("objectNode (a linha de um item, com a posição dele na lista inteira)", () => {
+  const parent = { type: "objects", connectionId: "c1", database: "arquivo", schema: "vendas", objects: "views" } as const;
+  const items: DatabaseObject[] = [{ name: "zeta", kind: "view" }, { name: "alfa", kind: "view" }, { name: "Beta", kind: "view" }];
+
+  it("é a linha que o objectNodes monta: a visão leva a posição na lista em ordem byName, e a tabela e a rotina, o que sempre levaram", () => {
+    const whole = objectNodes("c1", "vendas", "views", items, "arquivo");
+
+    expect(whole.map((row) => row.label)).toEqual(["alfa", "Beta", "zeta"]);
+    expect(objectNode(parent, { name: "zeta", kind: "view" }, 2)).toEqual(whole[2]);
+    expect(objectNode(parent, { name: "alfa", kind: "view" }, 0)).toEqual(whole[0]);
+    expect(objectNode({ ...parent, objects: "tables" }, { name: "t", kind: "table" }, 7)).toEqual(objectNodes("c1", "vendas", "tables", [{ name: "t", kind: "table" }], "arquivo")[0]);
+    expect(objectNode({ ...parent, objects: "routines" }, { name: "p", kind: "procedure" }, 4)).toMatchObject({ kind: "routine", detail: "procedimento", key: `${navKey({ ...parent, objects: "routines" })}#routine:4` });
+  });
+
+  it("a mesma visão com a posição de outra lista tem outra chave (é a posição que identifica a folha)", () => {
+    expect(objectNode(parent, { name: "alfa", kind: "view" }, 0).key).not.toBe(objectNode(parent, { name: "alfa", kind: "view" }, 1).key);
   });
 });
 
