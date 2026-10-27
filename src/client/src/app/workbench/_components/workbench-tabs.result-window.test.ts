@@ -23,7 +23,7 @@ const rt = await vi.hoisted(async () => {
     detachTab: vi.fn(),
   };
   const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
-  const focus = { request: vi.fn(), forgetExcept: vi.fn() };
+  const focus = { request: vi.fn(), forgetExcept: vi.fn(), pending: vi.fn(() => false) };
   const host = { releaseFocusIn: vi.fn(), focusResultIn: vi.fn(), resultHostOf: vi.fn(() => ({ id: "raiz" })) };
   const sendTabAway = vi.fn(() => Promise.resolve({ ok: true }));
   const endTabDrag = vi.fn<(request: unknown) => Promise<{ action: "none" } | { action: "newWindow"; at: { x: number; y: number } | null }>>(async () => ({ action: "none" }));
@@ -65,6 +65,7 @@ vi.mock("./script-dialogs", () => ({ UnsavedScriptsDialog: () => null }));
 vi.mock("./unsaved-edits-dialog", () => ({ UnsavedEditsDialog: () => null }));
 vi.mock("./tab-strip", () => ({ TabStrip: () => null, panelElementId: (id: string) => `painel-${id}`, tabElementId: (id: string) => `aba-${id}` }));
 
+import { createFakePage } from "@/lib/testing/fake-page";
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
 import { QueryTabPanel } from "./query-tab";
@@ -94,11 +95,16 @@ beforeEach(() => {
   rt.windows.open.mockResolvedValue(true);
   rt.windows.close.mockResolvedValue(true);
   vaultLock.reset();
+  // RN-ABAS-019: a área das abas ouve o foco da página e as teclas da janela; o vitest não tem página, e a de mentira basta.
+  const page = createFakePage();
+  vi.stubGlobal("document", page.document);
+  vi.stubGlobal("window", page.window);
 });
 
 afterEach(() => {
   rt.unmount();
   vaultLock.reset();
+  vi.unstubAllGlobals();
 });
 
 describe("trocar para 'Numa janela' (RN-ABAS-013, 014 e 017)", () => {

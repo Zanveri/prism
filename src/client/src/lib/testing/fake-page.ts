@@ -97,6 +97,27 @@ export function createFakePage() {
     removeEventListener: vi.fn((type: string, listener: Listener) => void listeners.window.get(type)?.delete(listener)),
   };
 
+  type KeyInit = Record<string, unknown>;
+  function keyEvent(init: KeyInit = {}) {
+    const event: Record<string, unknown> & { defaultPrevented: boolean; preventDefault: () => void } = {
+      key: "",
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      shiftKey: false,
+      repeat: false,
+      target: state.active ?? body,
+      ...init,
+      defaultPrevented: false,
+      preventDefault: vi.fn(() => void (event.defaultPrevented = true)),
+    };
+    return event;
+  }
+  function press<T extends { defaultPrevented: boolean }>(event: T): T {
+    for (const listener of [...(listeners.window.get("keydown") ?? [])]) listener(event as never);
+    return event;
+  }
+
   return {
     document,
     window,
@@ -116,8 +137,15 @@ export function createFakePage() {
     },
     /** O elemento focado agora (o corpo, sem nenhum). */
     active: () => state.active ?? body,
-    /** Uma tecla na janela, depois da bolha do `document`: devolve o evento, para a prova ler o `preventDefault`. */
-    key: (event: Record<string, unknown>) => fire("window", "keydown", { key: "", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, target: state.active ?? body, ...event }),
+    /**
+     * Uma tecla de teclado, com `preventDefault` que marca `defaultPrevented`, como a do navegador. O alvo é o elemento focado agora. Quem a trata em React
+     * (o `onKeyDown` de um `section`) a recebe primeiro, e `press` a leva à janela, na bolha, se ninguém a parou.
+     */
+    keyEvent,
+    /** A tecla chega à janela (a bolha depois de os componentes): devolve o evento, para a prova ler o `preventDefault`. */
+    press,
+    /** Uma tecla que só a janela vê, com o alvo dado ou o elemento focado: a pessoa estava num lugar fora da área das abas, ou com o foco perdido. */
+    key: (init: Record<string, unknown>) => press(keyEvent(init)),
     listenerCount: (host: "window" | "document", type: string) => (host === "window" ? (listeners.window.get(type)?.size ?? 0) : (listeners.document.get(type)?.size ?? 0)),
     capturing: (type: string) => [...(listeners.document.get(type) ?? [])].every((entry) => entry.capture),
   };
