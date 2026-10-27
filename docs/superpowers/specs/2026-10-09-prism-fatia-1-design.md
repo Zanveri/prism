@@ -868,6 +868,8 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   segue o "Ver SQL"; o ícone de executar com `{x}` e o da aba de execução (o de executar) seguem o traço dos do
   canvas (16 px, traço 1,5); e a cor da variável no editor é um token novo do tema, derivado como as cores que o
   canvas não define (RN-CONFIG-003).
+- O canvas desenha a árvore do navegador e as grades na IBM Plex Mono: elas usam a fonte da interface, que sem escolha
+  é a IBM Plex Sans, e a largura das colunas da grade é medida nela (RN-CONFIG-008, seção 42).
 
 ## 10. Riscos e sondas
 
@@ -2965,12 +2967,33 @@ fechada, assim, ao reabrir já retorna as queries feitas".
     do editor mostra as monoespaçadas primeiro.
   - A escolha vale na hora, em todas as janelas, e fica nas preferências desta instalação, por
     usuário (RN-CONFIG-001).
-  - A fonte da interface vale para todo o texto do app fora do código. A do editor vale para o
-    editor SQL e para os campos de SQL que usam o mesmo editor (o filtro dos Registros, o "Ver SQL").
+  - A fonte da interface vale para todo o texto do app fora do código, e também para a árvore do
+    navegador (o nome e o detalhe de todos os nós: bancos, esquemas, tabelas, visões, rotinas, colunas,
+    índices e chaves) e para as grades de resultado (a da aba de consulta, a das abas do Executar
+    script e a dos Registros: o cabeçalho, as células, o número da linha e o campo de edição da
+    célula). Vale sempre, também quando é a do app: a árvore e a grade não ficam na IBM Plex Mono.
+    Seguem a interface também o "N linhas afetadas" do resultado, o número de cada comando nas
+    Estatísticas (com os algarismos de largura igual) e o campo do texto do nulo em Configurações ›
+    Resultados, que é a prévia da grade. A largura das colunas da grade é medida nessa fonte, e não
+    contada em caracteres (seção 42).
+  - A do editor vale para o editor SQL, para os campos de SQL que usam o mesmo editor (o filtro dos
+    Registros, o "Ver SQL") e para o SQL que o app mostra só para ler: o "SQL enviado" (RN-VAR-018),
+    o DDL aproximado da Estrutura (RN-TABELA-008) e o comando de cada linha das Estatísticas
+    (RN-SQL-020).
+  - Continuam na fonte mono do app, que nenhuma escolha muda: a mensagem de erro do banco (o `^` que
+    o PostgreSQL põe sob a posição do erro só se alinha numa fonte de largura fixa) e o SQLSTATE, o
+    número da linha na lista dos erros nas variáveis (RN-VAR-012), as etiquetas (a do banco, a da
+    situação), a Estrutura (fora o DDL), o Diagrama, o título da aba da tabela e o que os diálogos já
+    escrevem nela.
+  - Em Configurações › Aparência, a dica da fonte da interface diz "Vale para todo o texto do Prism
+    fora do código, também para o navegador e para as grades do resultado e dos Registros."; a da
+    fonte do editor, "Vale para o editor SQL, o filtro dos Registros e o “Ver SQL”.".
   - Uma fonte escolhida que não está mais instalada volta à do app, sem erro.
   - A lista é lida na máquina, sem rede, de preferência sem dependência nova (a API de fontes locais
     do Chromium ou o processo principal). Se a lista não puder ser lida, o campo aceita o nome
     digitado.
+  - *Alterada a pedido do dono em 2026-10-27 (seção 42): a árvore do navegador e as grades ficavam
+    na fonte mono do app, e a dica do editor dizia que a grade continuava nela.*
 
 ### Trocar o banco da aba de consulta
 
@@ -12374,3 +12397,151 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   colunas.
 - Editar os valores no painel Variáveis.
 - A aba de execução que volta na próxima entrada, e executar o mesmo script em várias conexões de uma vez, lado a lado.
+
+## 42. Complemento de 2026-10-27, versão 0.6.0: a fonte na árvore e na grade, as pastas lembradas, a busca em todas as conexões, o foco das abas e a cor do ambiente no resultado
+
+Pedido do dono em 2026-10-27, em sete frases (a última com capturas da área de resultado):
+
+1. "A fonte que escolhi tanto na interface quanto na fonte do editor do SQL não é utilizada na lista da sidebar e nem
+   nos registros da tabela ou nos resultados de um script SQL. Faça com que a fonte da interface também altere essas
+   fontes."
+2. "Ao abrir o prism ele abre todas as pastas da sidebar por padrão. Faça com que abra exatamente igual a como o
+   usuário fechou o Prism e/ou abra com tudo minimizado por padrão."
+3. "Faça com que o filtro de ambientes fique ao lado das conexões em aberto, deixando a busca ocupar toda a largura
+   que atualmente é ocupada pelo filtro de ambientes."
+4. "Ao filtrar por uma tabela específica, mostre-a em todos os bancos que ela existe, pois como eu tenho 3 ambientes
+   que tem todas tabelas identicas, quando eu busco por uma tabela em específico ele só filtra se eu tiver com o banco
+   de dados aberto, mas deveria buscar em todas as conexões."
+5. "Outra coisa, depois que eu abro uma tabela dando duplo clique, o foco permanece na sidebar e não me deixa utilizar
+   o Ctrl+Espaço pois o foco não está na tabela que eu abri."
+6. "Mesma coisa ao fechar abas com o ctrl+w, após fechar a primeira aba não consigo fechar a segunda."
+7. "Faça com que esses contornos tenha a mesma cor do ambiente que o usuário definiu (caso tenha definido, se não
+   utilize como já está do tema mesmo)"
+
+Na sétima, "esses contornos" são os que as capturas marcavam: o sublinhado do título "Registros" da área de resultado,
+o contorno da célula escolhida na grade e as barras de rolagem vertical e horizontal da grade.
+
+O que já existia:
+
+- **A fonte.** A fonte da interface valia para todo o texto do app fora do código (RN-CONFIG-008, seção 24), e a árvore
+  do navegador e as grades contavam como código: os nomes dos bancos, dos esquemas, das tabelas e do que vem abaixo
+  delas, e as células, ficavam na IBM Plex Mono do app, que nenhuma escolha muda (as pastas e as conexões já seguiam a
+  interface). A largura de saída das colunas saía de contar os caracteres, porque a fonte tinha largura fixa.
+- **As pastas.** As pastas de conexões e as de scripts começavam abertas a cada entrada, e abrir e fechar valia
+  enquanto a janela estava aberta, sem gravar (RN-SCRIPT-008). O navegador escondido e a seção Scripts recolhida já eram
+  lembrados, por usuário, nas preferências desta instalação (RN-NAV-008 e 012). As conexões começam fechadas, porque
+  abrir a conexão é conectar (RN-SESSAO-001).
+- **A barra.** O campo de filtro dividia a linha com o seletor de ambiente, e "Só as conectadas" descia para a linha de
+  baixo no navegador de 320 px, o padrão (RN-NAV-010 e 013). O canvas desenha só o campo, na largura toda.
+- **A busca.** Ela filtrava só o que a árvore já tinha carregado (RN-BUSCA-001), e a árvore só carrega o nível que a
+  pessoa abre (RN-ARVORE-002): a tabela de um esquema cujo grupo "Tabelas" nunca foi aberto não aparecia, e, com três
+  ambientes de tabelas iguais, ela aparecia só naquele em que o esquema já estava aberto. A API lista os objetos de um
+  esquema por vez.
+- **O foco.** Abrir uma tabela pelo navegador (o duplo clique, o Enter, o menu) só mudava a aba ativa: o foco ficava na
+  linha da árvore, onde o Ctrl+Espaço abre e fecha o nó da tabela, e não chegava ao filtro dos Registros, que completa
+  com ele (RN-TABELA-011). O script que já estava aberto tinha o mesmo defeito. O Ctrl+W só era tratado com o foco
+  dentro da área das abas, e fechar a aba tirava da página o elemento que tinha o foco, que caía no corpo dela, fora
+  dessa área: o segundo Ctrl+W não chegava a ninguém. No app empacotado do Windows e do Linux, que não tem menu, ele não
+  fazia nada; no desenvolvimento, o menu padrão do Electron o recebia e fechava a janela.
+- **A cor.** O ambiente aparecia como etiqueta (RN-CONN-015 e RN-PASTA-005). Os destaques da área de resultado (o
+  sublinhado do título e das abas do script, o contorno da célula ativa) usavam o acento do tema, e as barras de
+  rolagem da grade, a cor de rolagem do tema, como o canvas os desenha.
+
+A versão: a fonte na árvore e na grade, as pastas lembradas, a busca em todas as conexões e a cor do ambiente são
+funcionalidade nova depois da 0.5.0, e por isso tudo entra na 0.6.0 (RN-VERSAO-002); o foco e o Ctrl+W são correções,
+que vão junto. O campo `version` de `src/client/package.json` passa a `0.6.0` num commit `chore` desta parte
+(RN-VERSAO-003), e os betas dela saem como `v0.6.0-beta.N` (RN-VERSAO-001). Nenhum atalho documentado muda: o Ctrl+W
+passa a valer em mais lugares da janela, o que não quebra o contrato. O formato do cofre não muda: o que se lembra das
+pastas fica nas preferências desta instalação.
+
+Esta seção:
+
+- faz a fonte da interface valer também para a árvore do navegador e para as grades do resultado e dos Registros,
+  também quando é a do app, com a largura das colunas medida nela (RN-CONFIG-008);
+- faz o navegador lembrar as pastas abertas, as de conexões e as de scripts, e começar com todas fechadas quando não
+  há nada lembrado (RN-NAV-014 e RN-SCRIPT-008);
+- deixa o campo "Filtrar objetos" sozinho, na largura toda, e leva o seletor de ambiente para a linha de baixo, ao
+  lado de "Só as conectadas" (RN-NAV-010 e 013);
+- faz a busca procurar as tabelas e as visões de todos os esquemas das conexões conectadas, por um índice de nomes que
+  a API devolve para cada banco, e dizer quais conexões ficaram de fora (RN-BUSCA-001 e 002);
+- leva o foco à aba aberta por um gesto, nova ou já aberta: ao filtro dos Registros, na aba de tabela, e ao editor, na
+  de consulta (RN-ABAS-019, RN-TABELA-001 e RN-SCRIPT-003);
+- leva o foco, quando uma aba fecha, à aba que fica ativa, e faz o Ctrl+W valer na janela inteira, de modo que o
+  seguinte fecha a próxima (RN-ABAS-019 e RN-ABAS-001);
+- e pinta com a cor do ambiente da conexão da aba os destaques da área de resultado: os sublinhados, o contorno da
+  célula ativa e as barras de rolagem da grade (RN-AMB-002).
+
+As regras novas são a RN-NAV-014, a RN-BUSCA-002, a RN-ABAS-019 e a RN-AMB-002. Muda a RN-CONFIG-008, a RN-SCRIPT-003 e
+008, a RN-NAV-010 e 013, a RN-BUSCA-001, a RN-ARVORE-002, a RN-TABELA-001, a RN-ABAS-001, a RN-CONN-015, a RN-PASTA-005,
+a RN-GRADE-001 e as seções 6, 9 e 33. A API ganha só a rota do índice de nomes (`object-names`). O canvas desenha a
+árvore e a grade na IBM Plex Mono e os destaques do resultado no acento do tema: vale a especificação (seção 9).
+
+### A fonte da interface na árvore e nas grades
+
+Está na própria RN-CONFIG-008, alterada no lugar. A fonte da interface vale sempre, também quando é a do app, e a
+árvore e a grade deixam a IBM Plex Mono também para quem nunca escolheu fonte: é a leitura literal do pedido ("a fonte
+da interface também altere essas fontes"), e o DBeaver também usa fonte proporcional na grade. A outra leitura, seguir
+a interface só quando a pessoa escolhe uma fonte diferente da do app, deixaria sem caminho quem quer a grade na IBM Plex
+Sans, porque escolhê-la é escolher a do app.
+
+O que muda por baixo é a largura das colunas. Ela contava caracteres, porque a fonte tinha largura fixa, e com uma
+fonte proporcional a conta erra: na IBM Plex Sans em seminegrito, a 13 px, a maiúscula mede em média 8,5 px, e o nome
+`WAREHOUSE_ID` desenha 102,5 px onde a conta reservaria 93,6, e seria cortado. Os nomes em maiúsculas são o comum no
+Informix e no Db2.
+
+- A largura de saída de cada coluna é medida na fonte da interface, caractere por caractere, pelo `measureText` de um
+  `canvas` que não entra na página, em três fontes: a da célula (peso 400, 13 px), a do nome no cabeçalho (600, 13 px)
+  e a do tipo e da marca "somente leitura" (400, 11 px). Cada caractere (cada ponto de código) é medido uma vez por
+  fonte e guardado; a largura do texto é a soma, mais 1 px de folga, arredondada para cima. Sem o ajuste entre pares
+  de letras a soma sobra um pouco, que é o lado seguro: o que não pode é cortar.
+- A conta para no teto da coluna: o valor de 10.000 caracteres custa só o que cabe nele.
+- Fica o que a grade já fazia: as larguras de saída saem do cabeçalho e da primeira página, uma vez, e não mudam com o
+  "Carregar mais"; nenhuma célula é medida na página; o duplo clique na divisa ajusta até o teto (RN-GRADE-009); e o
+  zoom da grade multiplica a medida de 100% (RN-GRADE-010). A dica do valor cortado usa a mesma medida.
+- A medida é feita no documento em que a grade está, também na janela do resultado (RN-ABAS-017). Sem documento ou sem
+  o contexto 2D do `canvas`, como nos testes, vale a conta de antes, a da mono. Se a fonte ainda não carregou quando a
+  grade mede (`document.fonts`), a grade mede com o que há, pede a fonte e mede de novo quando ela chega. A pilha da
+  fonte que o `canvas` recebe é a mesma das variáveis de estilo do app, escrita sem `var()`, e um teste confere que as
+  duas são iguais.
+- As larguras que a pessoa escolheu continuam as dela (RN-GRADE-009). Trocar a fonte da interface com a grade à vista
+  refaz só as larguras de saída.
+- O número da linha e o canto da grade usam algarismos de largura igual (`tabular-nums`); as células não, porque o
+  `canvas` não os aplica e a medida e a tela divergiriam. Os algarismos da IBM Plex Sans já têm a mesma largura.
+- A altura das linhas da grade e do navegador, a densidade (RN-NAV-011), o zoom da grade e o do programa (RN-ZOOM-001)
+  não mudam.
+
+### Testes e sondas
+
+Os testes da tela rodam sem página: a medida, o foco e a rolagem se provam em funções puras e nos testes dos
+componentes, e o que só a tela mostra é conferido à mão, no app de verdade, sob Xvfb. O que não puder ser exercitado é
+dito no relatório, e nunca dado como passando.
+
+- **A fonte.** Testes de unidade: o medidor com uma medida falsa (cada caractere medido uma vez por fonte; as três
+  fontes certas para o nome, a célula e o tipo; o emoji de dois códigos UTF-16 conta como um caractere; o teto que para
+  cedo num texto de 10.000 caracteres; a medida zero e a falta do `canvas`, que voltam à conta da mono); as larguras de
+  saída com uma maiúscula larga, que reservam a medida e não a conta; a pilha da fonte igual à da folha de estilos; a
+  grade (o contêiner na fonte da interface, os algarismos do número da linha, a dica do valor cortado pela medida); a
+  árvore sem a mono no nome e no detalhe; e as duas dicas de Configurações. Sob Xvfb: trocar a fonte da interface (uma
+  do sistema e a do app) e ver mudarem a árvore (tabelas, colunas e detalhes), a grade da consulta, a dos Registros, as
+  abas do Executar script e a janela do resultado, com o editor, o filtro dos Registros e o "Ver SQL" na fonte do
+  editor; os nomes em maiúsculas no cabeçalho (`WAREHOUSE_ID`, `NOME_MUNICIPIO`) inteiros, com o tipo ligado e
+  desligado e ordenados, nos zooms de 50, 100, 150 e 200%, pela largura real do nome contra a do texto inteiro; a dica
+  só no valor cortado; o duplo clique na divisa, que ajusta sem cortar; o "Carregar mais", que não muda as larguras; a
+  densidade compacta, com as linhas de 22 px; e o campo de edição da célula na fonte nova.
+- **S-FONTE-1.** No Windows, a medida do `canvas` contra a tela, na fonte do app e numa do sistema, nos zooms de 50 e
+  100%: o Chromium pode arredondar o avanço de cada letra, e a folga de 1 px por texto cobre pouco disso. Se a tela for
+  mais larga que a medida, a folga é calibrada por fonte, e o guia da tela (`src/client/AGENTS.md`) registra o que a
+  sonda achou.
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-CONFIG-008**: a fonte da interface vale também na árvore do navegador e nas grades, também a do app, com a
+  largura das colunas medida nela; o "N linhas afetadas", o número das Estatísticas e o campo do texto do nulo seguem a
+  interface, e o comando das Estatísticas vai à fonte do editor; o que continua na mono; as dicas dos dois campos.
+- **Seção 9**: a árvore e as grades deixam a IBM Plex Mono do canvas.
+
+### Fica para depois
+
+- Uma fonte própria para a grade e o navegador, separada da interface, se o dono quiser.
