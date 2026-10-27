@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import { databaseOfKey, type FetchedPath } from "./database-sessions.service";
+import { databaseOfKey, databaseSessionKey, objectNamesOf, type FetchedPath } from "./database-sessions.service";
+import type { DatabaseSession, ObjectNames } from "./database-sessions.schema";
 import { childrenKey, inDatabase, navKey, schemaGroupNodes, tableGroupNodes, type LevelState, type LoadedLevels, type NavNode, type NavPath, type ObjectsKind, type TableLevel } from "./navigator-model";
 
 /** O trecho do rótulo que casou: posições `[início, fim)` no texto do rótulo, como `slice` as lê. */
@@ -56,7 +57,8 @@ export function findMatch(label: string, needle: string): MatchRange | null {
 
 /**
  * A chave de uma consulta da árvore (`["tree", conexão, …]`, `treeKey`) de volta ao nó cujos filhos ela guarda: o inverso de `treeKey`,
- * que o teste confere. Mudou `treeKey`, mude aqui junto. Chave de outra coisa: `null`.
+ * que o teste confere. Mudou `treeKey`, mude aqui junto. Chave de outra coisa: `null` — inclusive a do índice de nomes da busca
+ * (`["tree", conexão, …, "names"]`, `objectNamesKey`, RN-BUSCA-002): ela mora na família da árvore, mas não é nível, e o dado dela não é `NavNode[]`.
  */
 export function levelPathOf(queryKey: readonly unknown[]): FetchedPath | null {
   const [root, connectionId] = queryKey;
@@ -77,25 +79,72 @@ export function levelPathOf(queryKey: readonly unknown[]): FetchedPath | null {
 /** Uma consulta da árvore já respondida: a chave dela e os filhos que ela trouxe. */
 export type CachedLevel = { key: readonly unknown[]; nodes: NavNode[] };
 
-export type CachedTree = { cached: CachedLevel[] };
+/**
+ * O índice de nomes de um banco já respondido (RN-BUSCA-002): de que conexão e de que banco (`database` ausente: o banco da conexão, RN-ARVORE-006), o nome que o banco tem
+ * (o da marca; no banco da conexão, o que a sessão da árvore diz, ou `undefined` sem ela) e a resposta da API.
+ */
+export type CachedNames = { connectionId: string; database?: string; databaseName?: string; names: ObjectNames };
 
-const snapshots = new WeakMap<QueryClient, { signature: string; value: CachedTree }>();
+export type CachedTree = {
+  /** Os níveis respondidos (`levelPathOf` os entende). */
+  cached: CachedLevel[];
+  /** Os índices de nomes respondidos, um por banco. */
+  indexes: CachedNames[];
+};
+
+const snapshots = new WeakMap<QueryClient, { levels: string; names: string; value: CachedTree }>();
+
+/** Um número para cada dado que o cache já entregou (o objeto que a consulta guarda): a consulta removida e refeita volta com o mesmo hash e a mesma contagem, mas com outro dado. */
+const dataIds = new WeakMap<object, number>();
+let lastDataId = 0;
+
+function dataIdOf(data: unknown): number {
+  if (typeof data !== "object" || data === null) return 0;
+
+  let id = dataIds.get(data);
+  if (id === undefined) {
+    id = ++lastDataId;
+    dataIds.set(data, id);
+  }
+  return id;
+}
+
+/** A parte da assinatura que diz "esta consulta, com este dado, nesta atualização". */
+const stamp = (query: { queryHash: string; state: { data: unknown; dataUpdateCount: number } }) => `${query.queryHash}#${query.state.dataUpdateCount}#${dataIdOf(query.state.data)}`;
 
 /**
  * O que o cache da árvore já guarda, para a busca: os níveis respondidos (`["tree", …]`), a começar pela lista dos bancos de cada conexão
- * (RN-ARVORE-006). Só lê; não busca nada. Devolve o MESMO objeto enquanto nenhuma dessas consultas ganhou, perdeu ou trocou de dado (a
- * assinatura é o hash e a contagem de atualizações de cada uma): é isso que deixa o `useMemo` do filtro valer, em vez de refazê-lo a cada render.
+ * (RN-ARVORE-006), e, à parte, os índices de nomes (RN-BUSCA-002), que moram na mesma família mas não são nível: quem supõe `NavNode[]` não os recebe em `cached`.
+ * Só lê; não busca nada. Devolve o MESMO objeto enquanto nenhuma dessas consultas ganhou, perdeu ou trocou de dado (a assinatura é o hash, a contagem de
+ * atualizações e o dado de cada uma: a consulta removida e refeita entre duas leituras volta com o mesmo hash e a mesma contagem, e só o dado a distingue): é isso
+ * que deixa o `useMemo` do filtro valer, em vez de refazê-lo a cada render. Cada lista também se mantém sozinha: o índice que
+ * chega não troca a de níveis, e o nível que chega não troca a de índices.
  */
 export function cachedTree(queryClient: QueryClient): CachedTree {
   const queries = queryClient.getQueryCache();
-  const levels = queries.findAll({ queryKey: ["tree"] }).filter((query) => query.state.data !== undefined);
-  const signature = levels.map((query) => `${query.queryHash}#${query.state.dataUpdateCount}`).join("|");
+  const answered = queries.findAll({ queryKey: ["tree"] }).filter((query) => query.state.data !== undefined);
+  const levels = answered.filter((query) => levelPathOf(query.queryKey) !== null);
+  const names = answered.flatMap((query) => {
+    const of = objectNamesOf(query.queryKey);
+    return of === null ? [] : [{ query, of, databaseName: of.database ?? queryClient.getQueryData<DatabaseSession>(databaseSessionKey(of.connectionId))?.database }];
+  });
+
+  const signature = {
+    levels: levels.map(stamp).join("|"),
+    names: names.map(({ query, databaseName }) => `${stamp(query)}#${databaseName ?? ""}`).join("|"),
+  };
 
   const previous = snapshots.get(queryClient);
-  if (previous?.signature === signature) return previous.value;
+  if (previous?.levels === signature.levels && previous.names === signature.names) return previous.value;
 
-  const value: CachedTree = { cached: levels.map((query) => ({ key: query.queryKey, nodes: query.state.data as NavNode[] })) };
-  snapshots.set(queryClient, { signature, value });
+  const value: CachedTree = {
+    cached: previous?.levels === signature.levels ? previous.value.cached : levels.map((query) => ({ key: query.queryKey, nodes: query.state.data as NavNode[] })),
+    indexes:
+      previous?.names === signature.names
+        ? previous.value.indexes
+        : names.map(({ query, of, databaseName }) => ({ ...of, ...(databaseName === undefined ? {} : { databaseName }), names: query.state.data as ObjectNames })),
+  };
+  snapshots.set(queryClient, { ...signature, value });
   return value;
 }
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { newVerification, unprotected, type Connection, type Folder } from "@/app/connections/_lib/connections.schema";
 
-import { treeKey, type FetchedPath } from "./database-sessions.service";
+import { databaseSessionKey, objectNamesKey, treeKey, type FetchedPath } from "./database-sessions.service";
 import { childrenKey, columnNodes, databaseNodes, navKey, objectNodes, parseNavKey, schemaGroupNodes, schemaNodes, tableGroupNodes, treeNodes, type LevelState, type NavNode, type NavPath } from "./navigator-model";
 import { cachedTree, findMatch, fold, levelPathOf, loadedLevels, searchTree } from "./navigator-search";
 
@@ -86,6 +86,18 @@ describe("levelPathOf (a chave de uma consulta da árvore, de volta ao nó)", ()
     { type: "tableLevel", connectionId: "c1", schema: "vendas", table: "pedido", level: "foreignKeys" },
   ])("é o inverso de treeKey: %j", (path) => {
     expect(levelPathOf(treeKey(path))).toEqual(path);
+  });
+
+  it("o índice de nomes da busca mora na família da árvore, mas não é nível: a chave dele não vira caminho (RN-BUSCA-002)", () => {
+    expect(levelPathOf(["tree", "c1", "names"])).toBeNull();
+    expect(levelPathOf(["tree", "c1", { database: "arquivo" }, "names"])).toBeNull();
+    expect(levelPathOf(objectNamesKey("c1"))).toBeNull();
+    expect(levelPathOf(objectNamesKey("c1", "arquivo morto"))).toBeNull();
+  });
+
+  it("um esquema ou uma tabela de nome 'names' continua sendo nível: só a chave do índice é de índice", () => {
+    expect(levelPathOf(["tree", "c1", "schema", "names", "objects", "tables"])).toEqual({ type: "objects", connectionId: "c1", schema: "names", objects: "tables" });
+    expect(levelPathOf(["tree", "c1", "schema", "s", "table", "names", "columns"])).toEqual({ type: "tableLevel", connectionId: "c1", schema: "s", table: "names", level: "columns" });
   });
 
   it("chave que não é de nível da árvore não vira caminho", () => {
@@ -321,7 +333,7 @@ describe("cachedTree (o que a busca lê do cache, com identidade estável para o
   const session = { id: "s1", database: "mes" };
 
   it("sem nada no cache, nada a buscar", () => {
-    expect(cachedTree(new QueryClient())).toEqual({ cached: [] });
+    expect(cachedTree(new QueryClient())).toEqual({ cached: [], indexes: [] });
   });
 
   it("devolve os níveis respondidos, e mais nada do cache (nem as sessões: o banco vem da lista dos bancos)", () => {
@@ -330,15 +342,16 @@ describe("cachedTree (o que a busca lê do cache, com identidade estável para o
     client.setQueryData(["tree", "c1", "schemas"], schemas);
     client.setQueryData(["connections"], [{ id: "c1" }]);
 
-    expect(cachedTree(client)).toEqual({ cached: [{ key: ["tree", "c1", "schemas"], nodes: schemas }] });
+    expect(cachedTree(client)).toEqual({ cached: [{ key: ["tree", "c1", "schemas"], nodes: schemas }], indexes: [] });
   });
 
   it("a consulta sem dado (ainda a caminho, ou que falhou) não entra", () => {
     const client = new QueryClient();
     client.getQueryCache().build(client, { queryKey: ["tree", "c1", "schemas"] });
     client.getQueryCache().build(client, { queryKey: ["database-session", "c1"] });
+    client.getQueryCache().build(client, { queryKey: objectNamesKey("c1") });
 
-    expect(cachedTree(client)).toEqual({ cached: [] });
+    expect(cachedTree(client)).toEqual({ cached: [], indexes: [] });
   });
 
   it("é o MESMO objeto enquanto nada do que a busca lê mudou: é isso que deixa o useMemo do navegador valer", () => {
@@ -368,7 +381,7 @@ describe("cachedTree (o que a busca lê do cache, com identidade estável para o
     expect(added).not.toBe(updated);
 
     client.removeQueries({ queryKey: ["tree", "c1"] });
-    expect(cachedTree(client)).toEqual({ cached: [] });
+    expect(cachedTree(client)).toEqual({ cached: [], indexes: [] });
   });
 
   it("cada cliente tem o seu: dois cofres, ou o mesmo depois de a API reiniciar, não se misturam", () => {
@@ -376,7 +389,85 @@ describe("cachedTree (o que a busca lê do cache, com identidade estável para o
     const other = new QueryClient();
     one.setQueryData(["tree", "c1", "schemas"], schemas);
 
-    expect(cachedTree(other)).toEqual({ cached: [] });
+    expect(cachedTree(other)).toEqual({ cached: [], indexes: [] });
     expect(cachedTree(one).cached).toHaveLength(1);
+  });
+});
+
+describe("cachedTree e o índice de nomes (RN-BUSCA-002)", () => {
+  const schemas = schemaNodes("c1", [{ name: "public", isSystem: false }]);
+  const names = { schemas: [{ name: "public", isSystem: false, tables: ["cliente", "pedido"], views: ["v_pedido"] }], truncated: false };
+  const other = { schemas: [{ name: "historico", isSystem: false, tables: ["pedido_2019"], views: [] }], truncated: true };
+
+  it("separa os índices dos níveis: o índice não vai para 'cached' (quem lê os níveis supõe NavNode[]), e o nível não vai para 'indexes'", () => {
+    const client = new QueryClient();
+    client.setQueryData(["tree", "c1", "schemas"], schemas);
+    client.setQueryData(objectNamesKey("c1"), names);
+    client.setQueryData(objectNamesKey("c1", "arquivo"), other);
+
+    const { cached, indexes } = cachedTree(client);
+
+    expect(cached).toEqual([{ key: ["tree", "c1", "schemas"], nodes: schemas }]);
+    expect(indexes).toEqual([
+      { connectionId: "c1", names },
+      { connectionId: "c1", database: "arquivo", databaseName: "arquivo", names: other },
+    ]);
+  });
+
+  it("o banco da conexão leva o nome que a sessão da árvore diz (para montar o banco padrão sem a lista dos bancos); sem a sessão, fica sem nome", () => {
+    const client = new QueryClient();
+    client.setQueryData(objectNamesKey("c1"), names);
+    expect(cachedTree(client).indexes).toEqual([{ connectionId: "c1", names }]);
+
+    client.setQueryData(databaseSessionKey("c1"), { id: "s1", database: "mes" });
+    expect(cachedTree(client).indexes).toEqual([{ connectionId: "c1", databaseName: "mes", names }]);
+  });
+
+  it("a consulta do índice sem dado (a caminho, ou que falhou) não entra", () => {
+    const client = new QueryClient();
+    client.getQueryCache().build(client, { queryKey: objectNamesKey("c1") });
+
+    expect(cachedTree(client).indexes).toEqual([]);
+  });
+
+  it("é o MESMO objeto enquanto nada mudou, índices incluídos; a resposta nova do índice, o índice removido e a sessão que muda de nome o trocam", () => {
+    const client = new QueryClient();
+    client.setQueryData(objectNamesKey("c1"), names);
+    client.setQueryData(databaseSessionKey("c1"), { id: "s1", database: "mes" });
+    const first = cachedTree(client);
+
+    client.setQueryData(["connections"], [{ id: "c1" }]);
+    expect(cachedTree(client)).toBe(first);
+
+    client.setQueryData(objectNamesKey("c1"), { ...names, truncated: true });
+    const updated = cachedTree(client);
+    expect(updated).not.toBe(first);
+    expect(updated.indexes[0].names.truncated).toBe(true);
+
+    client.setQueryData(databaseSessionKey("c1"), { id: "s2", database: "outro" });
+    const renamed = cachedTree(client);
+    expect(renamed).not.toBe(updated);
+    expect(renamed.indexes[0].databaseName).toBe("outro");
+
+    client.removeQueries({ queryKey: objectNamesKey("c1") });
+    expect(cachedTree(client).indexes).toEqual([]);
+  });
+
+  it("cada lista se mantém sozinha: o índice que chega não troca a lista de níveis, e o nível que chega não troca a de índices", () => {
+    const client = new QueryClient();
+    client.setQueryData(["tree", "c1", "schemas"], schemas);
+    client.setQueryData(objectNamesKey("c1"), names);
+    const first = cachedTree(client);
+
+    client.setQueryData(objectNamesKey("c1", "arquivo"), other);
+    const withIndex = cachedTree(client);
+    expect(withIndex).not.toBe(first);
+    expect(withIndex.cached).toBe(first.cached);
+    expect(withIndex.indexes).not.toBe(first.indexes);
+
+    client.setQueryData(["tree", "c1", "schema", "public", "objects", "tables"], []);
+    const withLevel = cachedTree(client);
+    expect(withLevel.cached).not.toBe(withIndex.cached);
+    expect(withLevel.indexes).toBe(withIndex.indexes);
   });
 });

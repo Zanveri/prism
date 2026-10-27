@@ -11,6 +11,7 @@ import {
   databaseSessionSchema,
   foreignKeysSchema,
   indexesSchema,
+  objectNamesSchema,
   referencingForeignKeysSchema,
   serverDatabasesSchema,
   type Column,
@@ -18,11 +19,12 @@ import {
   type DatabaseSchema,
   type DatabaseSession,
   type ForeignKey,
+  type ObjectNames,
   type ReferencingForeignKey,
   type ServerDatabase,
   type TableIndex,
 } from "./database-sessions.schema";
-import { columnNodes, databaseNodes, foreignKeyNodes, inDatabase, indexNodes, objectNodes, schemaNodes, type NavNode, type NavPath, type ObjectsKind } from "./navigator-model";
+import { columnNodes, databaseNodes, foreignKeyNodes, inDatabase, indexNodes, objectNodes, schemaNodes, type DatabaseRef, type NavNode, type NavPath, type ObjectsKind } from "./navigator-model";
 
 /**
  * Uma função por rota de `api/user/database-sessions`. Devolvem `ApiResult`; quem as chama numa
@@ -53,6 +55,14 @@ export function getSchemas(sessionId: string): Promise<ApiResult<DatabaseSchema[
 
 export function getObjects(sessionId: string, schema: string, kind: ObjectsKind): Promise<ApiResult<DatabaseObject[]>> {
   return apiRequest(prismEndpoints.userDatabaseSessionObjects(sessionId, schema, kind), { schema: databaseObjectsSchema });
+}
+
+/**
+ * RN-BUSCA-002: os nomes das tabelas e das visões de todos os esquemas do banco da sessão, numa consulta só ao catálogo (a rota espera a vez na sessão, RN-SESSAO-002).
+ * Falhas: 404 `DATABASE_SESSION_NOT_FOUND` e 422 `SQL_EXECUTION_FAILED`, com a mensagem do banco.
+ */
+export function getObjectNames(sessionId: string): Promise<ApiResult<ObjectNames>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionObjectNames(sessionId), { schema: objectNamesSchema });
 }
 
 export function getColumns(sessionId: string, schema: string, table: string): Promise<ApiResult<Column[]>> {
@@ -103,6 +113,12 @@ export function databaseSessionQuery(connectionId: string, database?: string) {
   return queryOptions({ queryKey: databaseSessionKey(connectionId, database), queryFn: async () => unwrap(await openDatabaseSession(connectionId, database)), ...keepUntilRefreshed });
 }
 
+/**
+ * A sessão da árvore aberta PELA BUSCA (RN-BUSCA-002): a conexão que só uma aba conectou, ou a que "Buscar nelas também" conecta, sem abrir o nó. É a mesma consulta da
+ * sessão (a mesma chave e o mesmo cache), calada: a falha de abrir aparece na linha de estado da busca, e não no aviso central.
+ */
+export const searchSessionQuery = (connectionId: string, database?: string) => ({ ...databaseSessionQuery(connectionId, database), meta: { silent: true } });
+
 /** As sessões da árvore abertas de todos os bancos da conexão (RN-ARVORE-006): é o que "Desconectar" fecha, além das abas. */
 export function treeSessionIds(queryClient: QueryClient, connectionId: string): string[] {
   return queryClient.getQueriesData<DatabaseSession>({ queryKey: ["database-session", connectionId] }).flatMap(([, session]) => (session === undefined ? [] : [session.id]));
@@ -128,8 +144,9 @@ const ofDatabase = (connectionId: string, database: string | undefined) => ({ qu
 
 /**
  * Abre uma sessão nova para o banco no lugar da que caiu: a consulta da sessão e as dos níveis
- * dela voltam ao início e as abertas buscam de novo (a dos níveis espera pela sessão nova, que a
- * `queryFn` pede à consulta dela). Os outros bancos da conexão ficam como estão (RN-ARVORE-006).
+ * dela (e o índice de nomes da busca, RN-BUSCA-002) voltam ao início e as abertas buscam de novo (a dos
+ * níveis espera pela sessão nova, que a `queryFn` pede à consulta dela). Os outros bancos da conexão
+ * ficam como estão (RN-ARVORE-006).
  * Quem chama avisa o usuário (RN-AVISO-003). Devolve se a sessão nova abriu; se não, o aviso de
  * erro é o central.
  */
@@ -175,6 +192,25 @@ export type FetchedPath = Extract<NavPath, { type: "connection" | "database" | "
 /** O começo das chaves de um banco: as do banco da conexão são as de sempre; as de outro levam a marca dele. */
 const treeBase = (connectionId: string, database: string | undefined) => ["tree", connectionId, ...databaseMark(database)];
 
+/** O limite de nomes que a API devolve por banco (RN-BUSCA-002): o índice que traz `truncated` olhou só os primeiros. É o `ObjectNamesLimit` do serviço de sessões. */
+export const objectNamesLimit = 50_000;
+
+/**
+ * A chave do índice de nomes de um banco (RN-BUSCA-002). Fica na família da árvore DE PROPÓSITO: o "Desconectar" (`removeQueries(["tree", conexão])`), a conexão que some,
+ * o bloqueio, a sessão reaberta (`ofDatabase`) e o "Atualizar" (`treePrefixes`) já cuidam dele, e esquecer um deles deixaria o índice de uma sessão morta. Mas **não é um
+ * nível**: o dado não é `NavNode[]`, e `levelPathOf` devolve `null` para a chave. Quem lê a família e supõe `NavNode[]` (`cachedTree`, `cachedLevels`) pula o que não é nível.
+ */
+export const objectNamesKey = (connectionId: string, database?: string) => ["tree", connectionId, ...databaseMark(database), "names"] as const;
+
+/** O inverso de `objectNamesKey`: de que conexão e de que banco é o índice (`database` ausente: o banco da conexão). Chave de outra coisa, inclusive de nível da árvore: `null`. */
+export function objectNamesOf(queryKey: readonly unknown[]): DatabaseRef | null {
+  const [root, connectionId] = queryKey;
+  if (root !== "tree" || typeof connectionId !== "string" || queryKey.at(-1) !== "names") return null;
+
+  const database = databaseOfKey(queryKey);
+  return queryKey.length === (database === undefined ? 3 : 4) ? { connectionId, ...inDatabase(database) } : null;
+}
+
 /** A chave da consulta de um nível. Em array, para "Atualizar" invalidar por prefixo (`treePrefixes`). */
 export function treeKey(path: FetchedPath): readonly unknown[] {
   switch (path.type) {
@@ -194,6 +230,9 @@ export function treeKey(path: FetchedPath): readonly unknown[] {
  * bancos; um banco, o que é dele (o da conexão não tem um começo de chave só seu, e são dois); o
  * esquema, o que está dentro dele; a tabela, as três listas dela. As consultas abertas buscam de
  * novo; as demais ficam velhas e buscam quando o nó abrir. Nunca inclui a sessão (`databaseSessionKey`).
+ *
+ * O índice de nomes do banco (`objectNamesKey`, RN-BUSCA-002) vai junto em todo nó de um banco, e não só no banco: a tabela criada depois da primeira busca só aparece
+ * depois do "Atualizar" (RN-ARVORE-002), e o nó que a pessoa atualiza para vê-la pode ser o esquema ou o grupo. Na conexão e no outro banco os prefixos de cima já o cobrem.
  */
 export function treePrefixes(path: NavPath): readonly (readonly unknown[])[] {
   switch (path.type) {
@@ -202,14 +241,14 @@ export function treePrefixes(path: NavPath): readonly (readonly unknown[])[] {
     case "connection":
       return [["tree", path.connectionId]];
     case "database":
-      return path.database === undefined ? [treeKey(path), ["tree", path.connectionId, "schema"]] : [treeBase(path.connectionId, path.database)];
+      return path.database === undefined ? [treeKey(path), ["tree", path.connectionId, "schema"], objectNamesKey(path.connectionId)] : [treeBase(path.connectionId, path.database)];
     case "schema":
-      return [[...treeBase(path.connectionId, path.database), "schema", path.schema]];
+      return [[...treeBase(path.connectionId, path.database), "schema", path.schema], objectNamesKey(path.connectionId, path.database)];
     case "table":
-      return [[...treeBase(path.connectionId, path.database), "schema", path.schema, "table", path.table]];
+      return [[...treeBase(path.connectionId, path.database), "schema", path.schema, "table", path.table], objectNamesKey(path.connectionId, path.database)];
     case "objects":
     case "tableLevel":
-      return [treeKey(path)];
+      return [treeKey(path), objectNamesKey(path.connectionId, path.database)];
   }
 }
 
@@ -244,6 +283,25 @@ export function treeQuery(path: FetchedPath, queryClient: QueryClient, enabled: 
       }
     },
     enabled,
+    ...keepUntilRefreshed,
+  });
+}
+
+/**
+ * O índice de nomes de um banco (RN-BUSCA-002): as tabelas e as visões de todos os esquemas, numa consulta só ao catálogo. A sessão vem da consulta dela, como no nível da
+ * árvore (`treeQuery`): quem ainda não a tem a abre aqui, sem abrir o nó (a conexão que só uma aba conectou já está conectada, e isso não é conectar). Fica em memória até o
+ * "Atualizar", como a árvore (`keepUntilRefreshed`), e a busca não volta à API enquanto ele está lá. **Calada** (`meta: { silent: true }`, a sessão também): a falha, e a
+ * de abrir a sessão, aparecem na linha de estado da busca, e não no aviso central a cada tecla. `enabled` é só enquanto há texto na busca.
+ */
+export function objectNamesQuery(connectionId: string, database: string | undefined, queryClient: QueryClient, enabled: boolean) {
+  return queryOptions({
+    queryKey: objectNamesKey(connectionId, database),
+    queryFn: async (): Promise<ObjectNames> => {
+      const { id } = await queryClient.ensureQueryData(searchSessionQuery(connectionId, database));
+      return unwrap(await getObjectNames(id));
+    },
+    enabled,
+    meta: { silent: true },
     ...keepUntilRefreshed,
   });
 }

@@ -65,11 +65,11 @@ describe("as chaves da árvore com os bancos do servidor", () => {
     expect(treeKey({ type: "tableLevel", connectionId: "c1", database: "alfa", schema: "loja", table: "pedido", level: "columns" })).toEqual(["tree", "c1", { database: "alfa" }, "schema", "loja", "table", "pedido", "columns"]);
   });
 
-  it("'Atualizar' na conexão leva tudo dela (a lista dos bancos de novo); num banco, só o que é dele", () => {
+  it("'Atualizar' na conexão leva tudo dela (a lista dos bancos de novo); num banco, só o que é dele, com o índice de nomes da busca (RN-BUSCA-002)", () => {
     expect(treePrefixes({ type: "connection", connectionId: "c1" })).toEqual([["tree", "c1"]]);
-    expect(treePrefixes({ type: "database", connectionId: "c1" })).toEqual([["tree", "c1", "schemas"], ["tree", "c1", "schema"]]);
+    expect(treePrefixes({ type: "database", connectionId: "c1" })).toEqual([["tree", "c1", "schemas"], ["tree", "c1", "schema"], ["tree", "c1", "names"]]);
     expect(treePrefixes({ type: "database", connectionId: "c1", database: "alfa" })).toEqual([["tree", "c1", { database: "alfa" }]]);
-    expect(treePrefixes({ type: "schema", connectionId: "c1", database: "alfa", schema: "loja" })).toEqual([["tree", "c1", { database: "alfa" }, "schema", "loja"]]);
+    expect(treePrefixes({ type: "schema", connectionId: "c1", database: "alfa", schema: "loja" })).toEqual([["tree", "c1", { database: "alfa" }, "schema", "loja"], ["tree", "c1", { database: "alfa" }, "names"]]);
     expect(treePrefixes({ type: "folder", id: "f1" })).toEqual([]);
   });
 
