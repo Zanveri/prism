@@ -36,8 +36,22 @@ export const workbenchCopy = {
       label: "Filtrar objetos",
       clear: "Limpar a busca",
       nothingFound: (query: string) => `Nada encontrado para “${query}”.`,
-      onlyLoaded: "A busca olha só o que já está carregado na árvore. Abra uma conexão ou um esquema para buscar dentro dele.",
+      onlyLoaded: "A busca olha as tabelas e visões dos bancos conectados e o que já está aberto na árvore.",
       results: (count: number) => formatCount(count, "resultado", "resultados"),
+      // A conta para o leitor de tela quando o corte deixa achados de fora: "1.234 resultados, 600 à vista".
+      resultsShown: (found: number, shown: number) => `${formatCount(found, "resultado", "resultados")}, ${shown.toLocaleString("pt-BR")} à vista`,
+
+      // RN-BUSCA-002: a linha de estado, logo abaixo dos filtros. O nome de um banco é "Conexão › banco".
+      loading: (databases: number) => `Buscando nas tabelas e visões de ${formatCount(databases, "banco", "bancos")}…`,
+      cut: (cap: number) => `Muitos resultados: cada banco mostra as ${cap.toLocaleString("pt-BR")} primeiras tabelas e visões. Escreva mais do nome para ver as outras.`,
+      truncated: (database: string, limit: number) => `${database} tem mais de ${limit.toLocaleString("pt-BR")} tabelas e visões: a busca olhou as ${limit.toLocaleString("pt-BR")} primeiras e o que já está aberto na árvore.`,
+      // A mensagem é a do banco, como veio (RN-SQL-009).
+      failed: (database: string, message: string) => `Não foi possível buscar em ${database}: ${message}`,
+      retry: "Tentar de novo",
+      retryIn: (database: string) => `Tentar de novo: ${database}`,
+      leftOut: (count: number) => (count === 1 ? "1 conexão não está conectada e ficou de fora da busca." : `${count.toLocaleString("pt-BR")} conexões não estão conectadas e ficaram de fora da busca.`),
+      leftOutWithoutCredentials: (count: number) => (count === 1 ? "1 sem usuário ou senha gravada ficou de fora." : `${count.toLocaleString("pt-BR")} sem usuário ou senha gravada ficaram de fora.`),
+      searchThemToo: "Buscar nelas também",
     },
 
     // RN-MENU-001: o menu de contexto de cada linha.
