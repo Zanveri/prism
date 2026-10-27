@@ -1399,14 +1399,18 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   coluna, índice e chave: copiar nome. Pasta: as ações que a tela de Conexões já oferece para ela, e exportar as
   conexões dela, importar conexões nela e importar do DBeaver nela (RN-TRANSF-001). O espaço vazio: nova conexão, nova
   pasta, exportar e importar conexões e importar do DBeaver (RN-NAV-003). O menu tem papel de menu, anda pelas setas, executa com
-  Enter, fecha com Esc e com clique fora, e devolve o foco ao item. Ação que não se aplica no estado atual aparece
-  desabilitada, não some. *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram exportar e importar
-  conexões. Alterada a pedido do dono em 2026-10-16 (seção 35): entrou exportar dados, na tabela e na visão.
-  Alterada a pedido do dono em 2026-10-16 (seção 36): entrou importar dados, na tabela. Alterada a pedido do dono
-  em 2026-10-20 (seção 40): entrou importar do DBeaver, na pasta e no espaço vazio.*
+  Enter, fecha com Esc e com clique fora, e devolve o foco ao item, menos quando a ação abre uma aba: aí o foco vai à
+  aba (RN-ABAS-019). Ação que não se aplica no estado atual aparece desabilitada, não some. *Alterada a pedido do dono
+  em 2026-10-16 (seção 34): entraram exportar e importar conexões. Alterada a pedido do dono em 2026-10-16 (seção 35):
+  entrou exportar dados, na tabela e na visão. Alterada a pedido do dono em 2026-10-16 (seção 36): entrou importar
+  dados, na tabela. Alterada a pedido do dono em 2026-10-20 (seção 40): entrou importar do DBeaver, na pasta e no
+  espaço vazio. Alterada a pedido do dono em 2026-10-27 (seção 42): a ação que abre uma aba leva o foco a ela.*
 - **RN-TABELA-001.** Duplo clique (ou Enter) numa tabela ou visão do navegador abre a aba dela,
-  uma por tabela: abrir de novo volta para a aba que já existe. A aba tem a sessão dela, como uma
-  aba de consulta (RN-SESSAO-001), e três vistas: Registros, Estrutura e Diagrama.
+  uma por tabela: abrir de novo volta para a aba que já existe. Nos dois casos o foco vai para a
+  aba: no campo de filtro dos Registros, onde o Ctrl+Espaço completa, ou no painel da Estrutura ou do
+  Diagrama, quando a vista é essa (RN-ABAS-019). A aba tem a sessão dela, como uma aba de consulta
+  (RN-SESSAO-001), e três vistas: Registros, Estrutura e Diagrama. *Alterada a pedido do dono em
+  2026-10-27 (seção 42): o foco ficava no navegador.*
 - **RN-TABELA-002.** Registros: a tela executa `SELECT * FROM` a tabela, com o esquema e o nome
   entre aspas duplas (a aspa dobrada dentro do nome), exatamente como o catálogo os devolve, nos
   três bancos: no Informix o driver abre a sessão com identificadores delimitados (sonda de
@@ -2833,8 +2837,12 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
   janela está aberta. A aba do resultado anda com a aba dela, e uma posição passa por uma aba com a do resultado
   (RN-ABAS-012). Solta fora da faixa, a aba vai para uma janela nova (RN-ABAS-010). Ctrl+W (Cmd+W no macOS) fecha a
   aba ativa, com as perguntas de fechar (RN-ABAS-004); com a aba do resultado ativa, volta o resultado ao painel
-  (RN-ABAS-012). As medidas da faixa estão na RN-ABAS-009. *Alterada a pedido do dono em 2026-10-20 (seção 39):
-  entraram a aba do resultado e o soltar fora da faixa, e o Ctrl+W, que já existia, passou a estar escrito.*
+  (RN-ABAS-012). O Ctrl+W vale em toda a janela da área de trabalho, também com o foco no navegador ou perdido no
+  corpo da página, e nunca com um diálogo, um menu ou uma lista aberta; nunca fecha a janela. Depois dele, o foco vai à
+  aba que ficou ativa, e o Ctrl+W seguinte fecha a próxima (RN-ABAS-019). As medidas da faixa estão na RN-ABAS-009. *Alterada a
+  pedido do dono em 2026-10-20 (seção 39): entraram a aba do resultado e o soltar fora da faixa, e o Ctrl+W, que já
+  existia, passou a estar escrito. Alterada a pedido do dono em 2026-10-27 (seção 42): o Ctrl+W valia só com o foco na
+  área das abas, e, depois de fechar uma, o foco caía fora dela, e o seguinte não fechava nada.*
 - **RN-ABAS-002.** Uma aba vai para uma janela nova arrastando-a para fora da faixa e soltando-a em qualquer lugar que
   não seja uma faixa de abas, fora da janela ou dentro dela (a janela nova abre com o canto de cima à esquerda onde
   ela foi solta, no ponto que o processo principal lê, RN-ABAS-010), ou por "Mover para nova janela" no menu da aba.
@@ -2904,8 +2912,9 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
   para outra pasta ("Mover para…", RN-SCRIPT-009), se exclui (com confirmação), tem "Copiar SQL" e,
   conforme o script, "Tornar genérico" ou "Vincular à conexão da aba" (RN-SCRIPT-005). O script
   lembra a conexão e o banco da aba em que foi salvo, menos o genérico, que não lembra nenhum
-  (RN-SCRIPT-005); aberto, vira uma aba de consulta já nessa conexão e nesse banco. Se a conexão
-  não existe mais, a aba abre sem conexão e pede para escolher uma.
+  (RN-SCRIPT-005); aberto, vira uma aba de consulta já nessa conexão e nesse banco, com o foco no
+  editor dela, também quando a aba já estava aberta (RN-ABAS-019). Se a conexão não existe mais, a aba
+  abre sem conexão e pede para escolher uma.
   - Mudança não salva é o texto, a conexão (RN-ARVORE-008) ou o banco (RN-ARVORE-007) da aba
     diferente do que o script tem gravado. O Ctrl+S grava a conexão e o banco da aba junto com o
     texto. No script genérico só o texto conta.
@@ -2918,6 +2927,8 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
   - O script que declara variáveis no topo tem, logo depois de "Abrir", "Executar com valores…" (Shift+Alt+X),
     que executa o script sem abri-lo, com os valores escolhidos num diálogo, numa aba de execução (RN-VAR-026 a
     029). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
+  - *Alterada a pedido do dono em 2026-10-27 (seção 42): o script que já estava aberto voltava à aba
+    dele com o foco na árvore.*
 - **RN-SCRIPT-004.** Nome de 1 a 200 caracteres, sem caractere de controle e único por usuário
   (sem diferenciar maiúsculas); SQL de até 1 MB.
 
@@ -12503,9 +12514,10 @@ Esta seção:
   célula ativa e as barras de rolagem da grade (RN-AMB-002).
 
 As regras novas são a RN-NAV-014, a RN-BUSCA-002, a RN-ABAS-019 e a RN-AMB-002. Muda a RN-CONFIG-008, a RN-SCRIPT-003 e
-008, a RN-NAV-010 e 013, a RN-BUSCA-001, a RN-ARVORE-002, a RN-TABELA-001, a RN-ABAS-001, a RN-CONN-015, a RN-PASTA-005,
-a RN-GRADE-001 e as seções 6, 9 e 33. A API ganha só a rota do índice de nomes (`object-names`). O canvas desenha a
-árvore e a grade na IBM Plex Mono e os destaques do resultado no acento do tema: vale a especificação (seção 9).
+008, a RN-NAV-010 e 013, a RN-BUSCA-001, a RN-ARVORE-002, a RN-TABELA-001, a RN-ABAS-001, a RN-MENU-001, a RN-CONN-015,
+a RN-PASTA-005, a RN-GRADE-001 e as seções 6, 9 e 33. A API ganha só a rota do índice de nomes (`object-names`). O
+canvas desenha a árvore e a grade na IBM Plex Mono e os destaques do resultado no acento do tema: vale a especificação
+(seção 9).
 
 ### A fonte da interface na árvore e nas grades
 
@@ -12667,6 +12679,65 @@ cheia do que a pessoa não abriu (RN-ARVORE-002).
     - Sem nada achado, continua o "Nada encontrado para “x”.", e a explicação embaixo dele passa a ser "A busca olha
       as tabelas e visões dos bancos conectados e o que já está aberto na árvore.".
 
+### O foco das abas
+
+Os pedidos 5 e 6 têm a mesma raiz: abrir, fechar e trocar de aba mudava a aba ativa sem dizer para onde o foco ia, e
+ele ficava no navegador ou caía no corpo da página, fora da área das abas, onde as teclas da aba (o Ctrl+W, o F5, o
+Alt+X, o Ctrl+S) não chegam. A RN-ABAS-019 diz, num lugar só, para onde ele vai em cada caso, e a RN-TABELA-001, a
+RN-SCRIPT-003 e a RN-ABAS-001, alteradas no lugar, a citam.
+
+- **RN-ABAS-019.** O foco ao abrir, fechar e trocar de aba.
+  - **A entrada de cada aba**, onde o foco cai quando vai "para a aba":
+    - na aba de consulta, o editor SQL, com o cursor onde estava;
+    - na aba de consulta com o editor escondido (o resultado maximizado, RN-PAINEL-001) ou com a aba do resultado dela
+      ativa (RN-ABAS-012), o resultado: a grade, ou o botão "Onde mostrar o resultado" quando não há grade;
+    - na aba de execução (RN-VAR-029), que não tem editor, o resultado, do mesmo jeito;
+    - na aba de tabela, na vista Registros, o campo "Filtro e ordem dos registros", com o cursor no fim: ali o
+      Ctrl+Espaço completa as colunas e as palavras do filtro (RN-TABELA-011), e dá para escrever o filtro na hora;
+    - na aba de tabela, na Estrutura ou no Diagrama, conectada ou não, o painel da vista, onde o F5 vale (RN-GRADE-012).
+  - **Abrir por um gesto.** São gestos: o duplo clique e o Enter numa tabela, numa visão ou num script do navegador
+    (RN-TABELA-001 e RN-SCRIPT-003); os itens de abrir, a "Nova consulta" e o "Gerar `SELECT`" dos menus do navegador
+    (RN-MENU-001); o "Abrir registros" do aviso da importação (RN-IMPORT-020); seguir uma chave estrangeira
+    (RN-TABELA-007); o duplo clique numa tabela do diagrama (RN-TABELA-004); o Ctrl+clique no nome de uma tabela no
+    editor (RN-LINK-001); a aba que chega de outra janela (RN-ABAS-002 e 003); e as abas que voltam na entrada
+    (RN-ABAS-006). Com a aba nova ou com a que já estava aberta, o foco vai à entrada da aba que fica ativa.
+    - Não rouba o foco: se, entre o pedido e a aba aparecer (o script que ainda vem da API, a aba que chega de outra
+      janela), o foco saiu de quem pediu para outro lugar vivo da janela (o type-ahead andou na árvore, RN-ARVORE-009;
+      a pessoa clicou num campo), ele fica onde está.
+    - O editor da aba nova não toma mais o foco sozinho ao nascer: quem o leva é esta regra, com essa guarda.
+  - **Fechar, ou a aba sair da janela**: o Ctrl+W, o X, o botão do meio e o menu da aba, depois das perguntas de fechar
+    (RN-ABAS-004 e RN-EDIT-007); levar a aba para outra janela (RN-ABAS-002, 003 e 010); e a aba que sai porque a
+    conexão dela foi excluída. Se o foco estava na aba que saiu, ele vai à aba que ficou ativa, no mesmo lugar em que
+    estava:
+    - estava na faixa: vai à aba ativa, na faixa;
+    - estava no conteúdo da aba: vai à entrada da aba ativa;
+    - sem aba nenhuma: vai à linha do navegador que o Tab alcança, quando o navegador está à mostra (RN-NAV-008).
+
+    O foco que estava fora das abas (no navegador, na barra superior) fica onde está. O clique do mouse no X não leva o
+    foco ao X, como o do botão do meio já não leva. Quando várias fecham de uma vez ("Fechar as outras", "Fechar as da
+    direita", "Fechar todas"), vale o fim, depois da última. "Cancelar" numa pergunta não fecha nada, e o foco volta a
+    quem o tinha.
+  - **Trocar de aba** pela faixa (o clique, as setas, a lista das abas) e por Voltar e Avançar: o foco fica na aba, na
+    faixa (RN-ABAS-018). O F6 segue a RN-ABAS-014. A troca que esconde o painel em que o foco estava (seguir uma chave
+    estrangeira, o duplo clique no diagrama, o Ctrl+clique no nome no editor) é um abrir por gesto: o foco vai à
+    entrada da aba que ficou ativa.
+  - Onde outra regra já diz para onde vai o foco, vale ela: a troca do lugar do resultado e o F6 (RN-ABAS-014), a aba
+    do resultado que fecha e a janela do resultado que volta ao painel (RN-ABAS-012 e 013), e o Voltar e o Avançar
+    (RN-ABAS-018).
+  - **O Ctrl+W** (Cmd+W no macOS) vale em toda a janela da área de trabalho, como no DBeaver: com o foco na faixa, numa
+    aba, no navegador ou perdido no corpo da página. Nunca com um diálogo, um menu ou uma lista aberta, nem com o cofre
+    bloqueado ou outra tela à mostra (Configurações), e nunca fecha a janela; sem aba, não faz nada. Depois de fechar, o
+    foco vai à aba que ficou ativa (acima), e o Ctrl+W seguinte fecha a próxima. Na janela do resultado, ele continua
+    sendo o "Voltar para o painel" (RN-ABAS-013). No desenvolvimento, em que o menu padrão do Electron tem o Ctrl+W de
+    fechar a janela, a tecla que a área de trabalho trata não chega a ele.
+  - Nenhum texto de tela muda: o leitor de tela anuncia o campo que recebe o foco ("Filtro e ordem dos registros",
+    "Editor SQL"). Levar o foco não rola a página.
+  - Como: cada aba diz como a entrada dela se foca, e um lugar só, a área das abas, decide quando, depois de a aba
+    aparecer e de os painéis dela montarem, e depois das perguntas de fechar. A última região em que o foco esteve (a
+    faixa ou o conteúdo de uma aba) é guardada a cada mudança do foco, fora dos diálogos, dos menus e das listas, para
+    o fechar saber de onde ele saiu. O que devolve o foco antigo quando a área de trabalho volta à tela só o faz quando
+    o foco está perdido, para não desfazer o foco da entrada.
+
 ### Rotas e respostas
 
 | Rota | Sucesso | Recusas |
@@ -12754,6 +12825,24 @@ dito no relatório, e nunca dado como passando.
 - **S-BUSCA-1.** O tempo e o tamanho do índice nos três bancos, com 5.000 tabelas e no limite de 50.000, também com o
   catálogo grande do Db2 e do Informix e com a leitura do driver da IBM, que ocupa uma thread enquanto dura. O guia
   da API (`src/api/AGENTS.md`) registra a medida.
+- **O foco.** Testes de unidade: a decisão, uma linha por caso (o pedido com o foco ainda em quem pediu, que vai à
+  entrada; o type-ahead que andou para outra linha, que fica; o foco perdido; o foco que estava na faixa; o que estava
+  fora das abas; sem aba nenhuma, o navegador; o diálogo ou o menu aberto, o cofre bloqueado e o F6, que não mudam
+  nada); a região do foco (a faixa, o conteúdo, o navegador, dentro de um diálogo, de um menu e de uma lista, o corpo
+  da página); o foco perdido (nulo, o corpo, o elemento que saiu da página, o painel escondido); os pedidos de foco e
+  o registro das entradas; o fechar (com o foco no editor e na faixa, as perguntas, a aba de fundo, a última aba, o
+  Ctrl+W com o foco no corpo da página e as recusas: o menu aberto, o cofre bloqueado, a tecla já tratada, outra tela
+  à mostra); cada gesto de abrir, que pede o foco; a entrada da aba de tabela (o filtro nos Registros, o painel nas
+  outras vistas) e da de consulta (o editor, ou o resultado com o editor escondido); o editor que não toma o foco ao
+  nascer; o X que não toma o foco no clique; e a volta da área de trabalho, que não desfaz um foco que não está
+  perdido. Sob Xvfb, com teclas de verdade (`xdotool`): o duplo clique e o Enter numa tabela, que levam o foco ao
+  filtro, onde o Ctrl+Espaço abre a lista das colunas; a tabela que já estava aberta; três Ctrl+W seguidos, que
+  fecham três abas, a partir do editor, da grade e da faixa; o X com o mouse e depois o Ctrl+W; o "Descartar" de uma
+  pergunta e depois o Ctrl+W; a última aba, que leva o foco ao navegador; seguir uma chave estrangeira; o Alt+←, que
+  deixa o foco na aba; o F6 com o resultado numa aba; e o type-ahead enquanto um script lento abre, que não perde o
+  foco. No desenvolvimento, o menu padrão do Electron fecha a janela com o Ctrl+W que a página não trata: ali a
+  conferência registra que a tecla foi tratada (`defaultPrevented`), e a prova final é no app empacotado
+  (`dist:dir`), que não tem menu no Windows e no Linux.
 
 ### O que muda nas regras existentes
 
@@ -12772,6 +12861,11 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - **RN-BUSCA-001**: o campo fica sozinho na linha dele, na largura toda; a busca procura também as tabelas e as visões
   de todos os esquemas das conexões conectadas, pelo índice de nomes, e não conecta sozinha.
 - **RN-ARVORE-002**: o índice de nomes da busca não é nível da árvore.
+- **RN-TABELA-001**: o foco vai à aba da tabela aberta, nova ou já aberta.
+- **RN-SCRIPT-003**: o foco vai ao editor do script aberto, também quando a aba dele já estava aberta.
+- **RN-ABAS-001**: o Ctrl+W vale em toda a janela da área de trabalho, nunca fecha a janela, e o seguinte fecha a
+  próxima.
+- **RN-MENU-001**: a ação do menu que abre uma aba leva o foco a ela, em vez de devolvê-lo ao item.
 - **Seção 6**: a rota `object-names`.
 - **Seção 9**: a árvore e as grades deixam a IBM Plex Mono do canvas; a barra do navegador tem o campo na largura toda,
   como no canvas, e a linha de baixo e a linha de estado da busca, que ele não tem.
@@ -12786,3 +12880,7 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - A busca nos outros bancos do servidor que ninguém abriu, sem abrir uma sessão para cada um.
 - O autocompletar do editor com todas as tabelas e visões do índice (RN-CONFIG-004).
 - A busca no servidor, pelo termo, para o banco cujo índice passa de 50.000 nomes.
+- Trocar de aba pelo Ctrl+Tab e pelo Ctrl+PageUp e Ctrl+PageDown, que hoje não existem (o Ctrl+Shift+PageUp e
+  PageDown movem a aba, RN-ABAS-001).
+- Levar o foco ao conteúdo da aba também no clique na faixa e no Voltar e Avançar, como no Eclipse (mudaria a
+  RN-ABAS-018).
