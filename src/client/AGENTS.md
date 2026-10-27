@@ -431,8 +431,11 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   mover a conexão ou a pasta é outra lista, então a resposta muda sozinha depois do `invalidateLists`. A etiqueta é a
   `ShownEnvironmentPill` (com a dica "Herdado da pasta <pasta>" quando é herdada), na árvore (`NavigatorRow` recebe `environment`), na
   faixa de abas (`environmentOf` do `TabStrip`), no cabeçalho da aba da tabela (`environment` do `TableTabPanel`), na barra de status e no
-  cabeçalho do diálogo da conexão. A conexão continua com o ambiente PRÓPRIO no estado e no `PATCH` (mover e renomear conexão mandam o
-  dela): o herdado nunca é gravado nela. Não há mais "lista" de conexões (RN-NAV-001): a RN-CONN-015 vale na árvore, na aba e na barra.
+  cabeçalho do diálogo da conexão. A COR dele (`ShownEnvironment.color`, o herdado da pasta inclusive) também pinta os destaques da área de resultado
+  da aba (RN-AMB-002, "A cor do ambiente nos destaques da área de resultado", em Design): o `WorkbenchTabs` a leva como texto ao
+  `QueryTabPanel.environmentColor` e, pelo `environment` do `TableTabPanel`, ao `RecordsView.environmentColor`, e os dois ao `ResultPanel`. A conexão
+  continua com o ambiente PRÓPRIO no estado e no `PATCH` (mover e renomear conexão mandam o dela): o herdado nunca é gravado nela. Não há mais "lista" de
+  conexões (RN-NAV-001): a RN-CONN-015 vale na árvore, na aba, na barra e nos destaques da área de resultado.
 - **Os ambientes do usuário** (RN-AMB-001) saem de `userEnvironments(folders, connections)` (`_lib/user-environments.ts`, pura e testada): um
   por nome, sem diferenciar maiúsculas nem os espaços das pontas (`environmentKey`; o acento conta), com o nome e a cor da pasta ou conexão de
   `updatedAt` mais novo (a API manda nas duas; a data que não se lê perde, e no empate fica a primeira encontrada: as pastas antes das conexões,
@@ -468,7 +471,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   quando ela já passa sobre as superfícies do esquema (`iconSurfaces`: o fundo, o painel, a elevada e a linha selecionada de cada tema; o
   `icon-color.test.ts` confere que são as fichas do `globals.css`), e senão a mistura com o preto (claros) ou o branco (escuros) com a menor
   parte, de 1 em 1%, que passa. As seis do canvas são claras: nos escuros ficam como são, e nos claros escurecem (o Âmbar dá 1,7:1 sobre o
-  fundo do Prism Claro). A gravada, e a das bolinhas, é a escolhida. Tema novo: as superfícies dele entram em `iconSurfaces`, e o teste avisa.
+  fundo do Prism Claro). A gravada, e a das bolinhas, é a escolhida. Tema novo: as superfícies dele entram em `iconSurfaces`, e o teste avisa. **A cor do
+  ambiente da aba passa pela mesma conta** (RN-AMB-002): contorno é elemento gráfico, com o mesmo 3:1, então os destaques da área de resultado levam o
+  `iconColorStyle` da cor do ambiente (pela variável `--environment-color`, ver Design), e a etiqueta do ambiente, essa, continua com a cor escolhida.
 - **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente, a cor e as proteções inclusive: o corpo de cada diálogo sai do `folderInputOf` (o que o
   diálogo não perguntou vai como a pasta já tem, senão mover ou renomear tirariam o ambiente e a cor dela, voltariam a confirmação a "Não" e tirariam
   o somente leitura, com a API pedindo a senha). As recusas do ambiente e da cor da pasta são 422 `FOLDER_NAME_INVALID` no campo (`environmentName`,
@@ -1179,6 +1184,8 @@ script escolhida, o filtro e as pendências ficam, e o executor nem fica sabendo
 aba). **Não troque o portal por renderizar a área num lugar ou noutro**: o React a desmontaria a cada troca (um portal com outro contêiner é outra fibra), e a
 rolagem, a seleção e as larguras sairiam junto.
 
+- **O que depende do DOM da área não pode ir para a raiz da aba de consulta**: variável de CSS herda pelo DOM, e a raiz do portal muda de pai (e de documento). A cor do
+  ambiente (`--environment-color`, RN-AMB-002) é posta por isso na `<section>` do `ResultPanel`, que vai junto (ver Design).
 - **O que o elemento perde ao sair da página, a raiz devolve.** A rolagem: o Chromium zera o `scrollTop` de um elemento que sai da página e volta; a raiz guarda a
   de cada elemento de dentro a cada `scroll` (na fase de captura, porque quando ela sai o elemento já não tem caixa para ler) e a devolve quando volta a ter
   caixa (um `ResizeObserver` na raiz), também quando o lugar novo ainda está escondido (a aba do resultado não ativa) e só aparece depois. O foco: quem troca o
@@ -4105,7 +4112,52 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   `db2`, `informix`, `danger`, `success`, `scrim`, mais `selection`, as quatro de sintaxe, `syntax-keyword`, `-string`, `-number` e
   `-comment`, e `link`, o azul de link de cada tema: RN-LINK-001; o canvas não o desenha, e os quatro temas além dos do Prism trazem o da paleta deles). **Cada uma é `light-dark(claro, escuro)`** (seis temas: ver "Configurações"), então
   nenhuma cor fixa (`#rrggbb`, `text-white`, `fill` nomeado) entra em componente: só os tokens. As exceções são a ilustração da
-  marca, a lista de cores de ambiente da conexão e o texto que a etiqueta calcula sobre ela, as prévias do tema e os `.svg` do splash.
+  marca, a lista de cores de ambiente da conexão e o texto que a etiqueta calcula sobre ela, a cor do ambiente nos destaques da área de resultado
+  (a variável `--environment-color`, abaixo), as prévias do tema e os `.svg` do splash.
+- **A cor do ambiente nos destaques da área de resultado** (RN-AMB-002). Na área de resultado de uma aba (os Registros da tabela e o resultado da consulta,
+  no painel, numa aba ou na janela do resultado), estes destaques levam a cor do ambiente da conexão da aba, o próprio ou o herdado da pasta: o sublinhado do
+  título "Registros"/"Resultado" (`ResultPanel`) e o da aba escolhida do Executar script e de "Resultado | Variáveis" (`script-tabs.tsx`); o contorno da
+  célula ativa (`GridRow`) e a borda do campo de edição dela (`cell-editor.tsx`, para o contorno não trocar de cor no F2); o anel do foco da grade; e as
+  barras de rolagem da grade (a vertical, a horizontal e o canto). Sem ambiente, com ambiente sem cor (só o nome), com cor sem nome, com cor fora de
+  `#RRGGBB` ou na aba sem conexão, tudo fica como no tema: o acento nos contornos, e na rolagem o `border-strong` (**não** o acento: sem ambiente a barra não
+  ganha cor).
+  - **`--environment-color` NÃO é token.** Não está no `@theme` nem no `globals.css` (o `environment-accent.test.ts` confere que o `globals.css` nem a cita), não
+    é `--color-*`, não tem as duas colunas `light-dark` que as fichas têm (o teste dos temas as leria e cobraria o par) e não vira classe de cor. É uma variável de
+    estilo, posta por `environmentColorStyle(cor)` (`workbench/_lib/environment-accent.ts`), cujo valor já é o `light-dark(<clara>, <escura>)` do `iconColorStyle`:
+    3:1 sobre as superfícies de todos os temas (RN-CONFIG-003, ver "O ícone colorido"), e quem escolhe a coluna é o `color-scheme` do tema, a janela do resultado
+    inclusive (ela copia o `data-theme` e o `style` do `<html>`). O Âmbar vira `#A77E2F` nos temas claros; o azul-marinho `#1B2A80` vira `#848CBA` nos escuros.
+  - **Onde é posta, e por quê: no `style` da `<section>` do `ResultPanel` (a propriedade `environmentColor`), e só ali.** Variável de CSS herda pelo DOM, não pela
+    árvore do React, e a área de resultado da aba de consulta vai por portal para uma raiz que MUDA de lugar (o painel, a aba do resultado, a janela do
+    resultado: outro documento). Posta na raiz da aba de consulta, ela não chegaria à aba nem à janela do resultado, e nenhum teste sem DOM perceberia. O
+    `ResultPanel` é a passagem única: só ele desenha o `ResultGrid`, e só existem dois (`QueryTabPanel` e `RecordsView`). O `style` de quem chama (o `flex` do
+    painel) continua, e sem cor a `<section>` fica sem a variável.
+  - **A variável só existe com `#RRGGBB` válido**, e `environmentColorStyle` é a única barreira: a leitura de `connections.schema.ts` só confere que o campo é
+    texto, e uma cor que o CSS não entende (um cofre antigo, uma importação) deixaria a propriedade inválida no cálculo, e a borda cairia no `currentColor`, e
+    NÃO na reserva do `var()`. A cor chega pelas propriedades como texto (`string | null`), sem validar no caminho, para o painel memorizado comparar pelo valor.
+  - **Como se lê**: `environmentAccent` (`border`, `outline`, `focusOutline`, `scrollbar`) são classes de valor arbitrário com a reserva do tema DENTRO do
+    `var()`: `border-[color:var(--environment-color,var(--color-accent))]`, e a barra `[scrollbar-color:var(--environment-color,var(--color-border-strong))_var(--color-panel)]`,
+    que sem a variável é, letra por letra, o `scrollbar-color` do `:root`. Destaque novo que deva levar a cor usa uma delas (o Tailwind as acha porque as cadeias
+    são literais no `.ts`: não as monte por pedaços). O anel do foco só troca a COR do `:focus-visible` do `globals.css` (a espessura e o recuo `-outline-offset-2`
+    continuam os de lá). **A linha da grade (`GridRow`) é memorizada e NÃO tem propriedade de cor**: o contorno herda a variável, e trocar o ambiente da aba não
+    redesenha linha nenhuma (um `@ts-expect-error` no `result-grid.test.ts` falha se alguém criar a propriedade).
+  - **A ligação é só por propriedade, como a do `environment` do `TableTabPanel`**: `WorkbenchTabs` (`environmentOf(connectionId)?.color ?? null`, recalculado a
+    cada desenho, então trocar a conexão da aba, editar o ambiente da pasta ou mover a conexão muda a cor na hora) → `QueryTabPanel.environmentColor` →
+    `ResultPanel`; `TableTabPanel` (`environment?.color ?? null`) → `RecordsView.environmentColor` → `ResultPanel`. Contexto do React não serve de atalho
+    aqui: o portal o atravessaria, mas a janela do resultado não, e o resto do projeto passa o ambiente por propriedade. A aba de execução do "Executar com
+    valores…" (RN-VAR-029) ainda não existe; quando existir, usa o mesmo `ResultPanel` e passa a mesma propriedade.
+  - **Fica de fora, no acento ou no token de hoje**: a faixa de abas, o editor SQL (cursor, realce do comando enviado, rolagem), o campo de filtro, o foco das
+    linhas de Variáveis, a Estrutura e o Diagrama, o seletor Registros/Estrutura/Diagrama, as marcas de pendência (`bg-accent/20` e `/35`, a marca da coluna, o
+    "+" da linha nova), a divisa das colunas, as setas de ordenar, os botões e a dica, o ícone e o botão de confirmar do campo de edição (ali o acento é atenção e
+    ação, e não contorno); as outras barras de rolagem da área (Estatísticas, Variáveis, lista das abas do script) ficam na do tema. Pôr a cor trocando o
+    `--color-accent` num contêiner foi descartado: pintaria tudo o que é acento ali dentro (pendência, atenção, botões) e misturaria "ambiente" com "atenção".
+  - **Armadilhas**: (1) o vermelho do canvas (`#FF8A7A`) é o `danger` do Prism Escuro: num ambiente vermelho, o contorno da célula ativa e o da linha marcada para
+    exclusão têm o mesmo tom (a linha excluída segue riscada e com fundo vermelho); (2) o 3:1 vale sobre as quatro superfícies dos temas, e **não** sobre o fundo
+    tingido da célula pendente (`bg-accent/20` e `/35`) nem da linha excluída (`bg-danger/10`), onde ele cai (medido com as seis cores do canvas: de 1,9 a 2,8:1 nos
+    temas claros, e abaixo de 3:1 sobre a pendente mais forte também no Monokai, no Dracula e no Nord), como já caía com o acento; (3) a barra de rolagem na cor
+    do ambiente (3:1) pesa mais que a do tema (o `border-strong` sobre o painel dá de 1,7 a 2,4:1 na maioria dos temas): é o pedido. **Conferir sob
+    Xvfb** (o vitest não tem DOM, e nenhum teste vê o valor calculado): `getComputedStyle` da célula ativa (`outlineColor`), do `<h2>` (`borderBottomColor`) e da caixa
+    da grade (`scrollbarColor`), no Prism Escuro, no Prism Claro, no GitHub Claro e no Kanagawa, com o resultado no painel, numa aba e na janela do resultado, e a
+    conexão sem ambiente igual à 0.5.0.
 - A escala de texto reaproveita os nomes padrão com os tamanhos do canvas: `text-xs` 12/18,
   `text-sm` 13/20 (a área de trabalho inteira, pela raiz dela: RN-CONFIG-009), `text-base` 14/22 (o corpo: formulários, diálogos, login e
   Configurações), `text-lg` 18/24. `rounded-xl` é o raio do diálogo
