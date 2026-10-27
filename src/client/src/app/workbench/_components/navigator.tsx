@@ -35,7 +35,7 @@ import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { importArrived, importRevealOf, revealOf } from "../_lib/navigator-reveal";
 import { indexLevels } from "../_lib/navigator-index";
 import { cachedTree, fold, loadedLevels, searchTree, type CachedNames, type MatchRange } from "../_lib/navigator-search";
-import { cachedTreeSessions, indexesInScope, searchScope, searchStatusOf, type IndexReport, type SearchRetry } from "../_lib/navigator-search-scope";
+import { cachedTreeSessions, indexesInScope, nothingFoundShown, searchScope, searchStatusOf, type IndexReport, type SearchRetry } from "../_lib/navigator-search-scope";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
 import { invalidateStructure } from "../_lib/table-structure.service";
 import { refreshKey } from "../_lib/grid-editing";
@@ -858,8 +858,8 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
         {filtering && tree.roots.length === 0 ? (
           <NavigatorFilteredEmpty environment={environmentChoice.type === "environment" ? (savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : environmentChoice.type === "none" ? null : undefined} onlyConnected={onlyConnected} onShowAll={() => setOnlyConnected(false)} />
         ) : search === null ? null : search.rows.length === 0 ? (
-          // Enquanto um índice ainda vem, "nada encontrado" não é verdade ainda: a linha de estado acima diz "Buscando…" e é só ela.
-          searchStatus !== null && searchStatus.loading > 0 ? null : (
+          // Enquanto um índice ainda vem, ou depois de uma falha, "nada encontrado" não é verdade ainda: a linha de estado acima diz "Buscando…" ou a falha, e é só ela.
+          !nothingFoundShown(searchStatus) ? null : (
             <div role="status" className="flex flex-col gap-1 px-3 py-2">
               <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
               <p className="text-xs text-muted">{copy.search.onlyLoaded}</p>

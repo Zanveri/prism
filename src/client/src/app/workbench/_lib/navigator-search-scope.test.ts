@@ -5,7 +5,7 @@ import { databaseSessionKey, objectNamesKey, treeKey } from "./database-sessions
 import type { ObjectNames } from "./database-sessions.schema";
 import { navKey } from "./navigator-model";
 import type { CachedNames } from "./navigator-search";
-import { cachedTreeSessions, indexesInScope, searchScope, searchStatusOf, type IndexReport, type ScopeConnection, type SearchDatabase, type TreeSession } from "./navigator-search-scope";
+import { cachedTreeSessions, indexesInScope, nothingFoundShown, searchScope, searchStatusOf, type IndexReport, type ScopeConnection, type SearchDatabase, type TreeSession } from "./navigator-search-scope";
 
 const conn = (id: string, name: string, extra: Partial<ScopeConnection> = {}): ScopeConnection => ({ id, name, database: "erp", userName: "prism", hasPassword: true, ...extra });
 const dev = conn("c1", "Dev");
@@ -286,5 +286,19 @@ describe("searchStatusOf: o que a linha de estado diz em cada situação (RN-BUS
     expect(result).toMatchObject({ loading: 2, cut: true, leftOut: 2, withoutCredentials: 1 });
     expect(result.truncated).toHaveLength(1);
     expect(result.failures).toHaveLength(2);
+  });
+});
+
+describe("nothingFoundShown: o 'Nada encontrado' só aparece com a busca terminada e sem falha (RN-BUSCA-002)", () => {
+  const failure = { key: "c2", name: "Hml › erp", message: "Name or service not known", retry: { type: "open", connectionId: "c2" } } as const;
+
+  it.each([
+    ["sem linha de estado (a busca não olha nada)", null, true],
+    ["tudo respondido, nada a dizer", { loading: 0, failures: [] }, true],
+    ["um índice a caminho: a linha de estado diz 'Buscando…' sozinha", { loading: 1, failures: [] }, false],
+    ["um banco falhou: a linha de estado diz a falha sozinha", { loading: 0, failures: [failure] }, false],
+    ["um a caminho e outro falhou", { loading: 2, failures: [failure] }, false],
+  ] as const)("%s", (_name, status, expected) => {
+    expect(nothingFoundShown(status === null ? null : { loading: status.loading, failures: [...status.failures] })).toBe(expected);
   });
 });

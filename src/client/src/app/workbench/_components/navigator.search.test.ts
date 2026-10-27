@@ -573,6 +573,28 @@ describe("a linha de estado da busca (RN-BUSCA-002)", () => {
     expect(tree().some((element) => element.props.children === workbenchCopy.navigator.search.onlyLoaded)).toBe(true);
   });
 
+  it("sem nada achado e com um banco que falhou: só a falha, sem o 'Nada encontrado' (o banco que falhou pode ter o nome); o 'Nada encontrado' volta quando a busca termina sem falha", () => {
+    threeConnected();
+    rt.queryClient.removeQueries({ queryKey: objectNamesKey("c2") });
+    rt.errors.set(JSON.stringify(objectNamesKey("c2")), apiError("SQL_EXECUTION_FAILED", "Falha ao executar o comando.", "Name or service not known"));
+    filters().onToggleConnected();
+    type("zzz");
+    const nothingFound = () => tree().some((element) => element.props.children === workbenchCopy.navigator.search.nothingFound("zzz"));
+    const onlyLoaded = () => tree().some((element) => element.props.children === workbenchCopy.navigator.search.onlyLoaded);
+
+    expect(list().rows).toEqual([]);
+    expect(drawn()?.texts).toEqual(["Não foi possível buscar em Hml › loja_hml: Name or service not known"]);
+    expect(nothingFound()).toBe(false);
+    expect(onlyLoaded()).toBe(false);
+
+    rt.errors.clear();
+    answer("c2");
+    render();
+    expect(drawn()).toBeNull();
+    expect(nothingFound()).toBe(true);
+    expect(onlyLoaded()).toBe(true);
+  });
+
   it("o corte: com mais de 200 achados num banco, a linha explica, e o leitor de tela ouve a conta 'N resultados, 200 à vista'", () => {
     connectTree("c1");
     answer("c1", names([{ name: "public", isSystem: false, tables: Array.from({ length: 300 }, (_, index) => `tab_${index}`), views: [] }]));

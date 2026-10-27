@@ -154,3 +154,12 @@ export function searchStatusOf({ reports, openFailures, cut, scope }: { reports:
     withoutCredentials: scope.withoutCredentials.length,
   };
 }
+
+/**
+ * Se a linha "Nada encontrado para “x”." pode aparecer (RN-BUSCA-002): só quando a busca terminou em todo o escopo, sem índice a caminho e sem banco que falhou. Com um índice
+ * a caminho, a linha de estado diz "Buscando…" sozinha; com uma falha, ela diz "Não foi possível buscar em …", e dizer "Nada encontrado" junto afirmaria o que a busca não
+ * sabe: o banco que falhou pode ter o nome. Sem linha de estado (a busca não olha nada), não há o que esperar.
+ */
+export function nothingFoundShown(status: Pick<SearchStatus, "loading" | "failures"> | null): boolean {
+  return status === null || (status.loading <= 0 && status.failures.length === 0);
+}
