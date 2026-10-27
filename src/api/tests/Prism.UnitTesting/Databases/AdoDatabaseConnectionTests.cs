@@ -1832,6 +1832,93 @@ public sealed partial class AdoDatabaseConnectionTests
     }
 
     /// <summary>
+    /// RN-BUSCA-002: a tabela de casos do corte. A consulta devolve no máximo `limit + 1` linhas; o corte liga só com a de número
+    /// `limit + 1`, e a resposta nunca traz mais que `limit` nomes. A linha a mais que fica do mesmo esquema da última não derruba esse
+    /// esquema, e a que fica de outro derruba o dela. O banco que devolve mais linhas que o pedido (nunca devolveria) também é cortado.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Theory(DisplayName = "OK o corte liga só com a linha limit + 1 e a resposta nunca passa do limite")]
+    [InlineData(0, false, 0, 0)]
+    [InlineData(1, false, 1, 1)]
+    [InlineData(2, false, 2, 1)]
+    [InlineData(3, false, 3, 2)]
+    [InlineData(4, true, 3, 2)]
+    [InlineData(6, true, 3, 2)]
+    public async Task GetObjectNames_ShouldCut_OnlyWithTheRowAfterTheLimit(int rowsReturned, bool truncated, int names, int schemas)
+    {
+        //Arrange: o limite é 3, então a consulta pede 4 linhas. As linhas são de dois esquemas: a, a, b, b, b, b.
+        var all = new object?[][] { ["a", false, "n1", "table"], ["a", false, "n2", "view"], ["b", false, "n3", "table"], ["b", false, "n4", "table"], ["b", false, "n5", "view"], ["b", false, "n6", "table"] };
+        _catalog["OBJECT NAMES 4"] = [.. all.Take(rowsReturned)];
+        var connection = await OpenAsync();
+
+        //Act
+        var result = await connection.GetObjectNamesAsync(3, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(truncated, result.Value.Truncated);
+        Assert.Equal(names, result.Value.Schemas.Sum(schema => schema.Tables.Count + schema.Views.Count));
+        Assert.Equal(schemas, result.Value.Schemas.Count);
+        Assert.Equal(["OBJECT NAMES 4"], _sent);
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: o Db2 e o Informix devolvem o "de sistema" como 0/1 (inteiro de qualquer largura), e o PostgreSQL, como booleano; o
+    /// esquema é de sistema pela primeira linha dele. Os nomes de esquema e de tipo chegam sem os espaços do fim (é a consulta que os tira),
+    /// e a base não os apara nem normaliza: o que chega é o que vale.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "OK o de sistema como número 0/1 de qualquer largura vale como o booleano")]
+    public async Task GetObjectNames_ShouldReadTheSystemFlagAsNumberOrBoolean()
+    {
+        //Arrange
+        _catalog["OBJECT NAMES 11"] =
+        [
+            ["LOJA", 0, "PEDIDO", "table"],
+            ["MEDIDA", (short)0, "T", "table"],
+            ["SYSCAT", 1, "TABLES", "view"],
+            ["SYSIBM", 1L, "SYSDUMMY1", "table"],
+            ["informix", (byte)1, "systables", "table"],
+            ["pg_catalog", true, "pg_class", "table"],
+        ];
+        var connection = await OpenAsync();
+
+        //Act
+        var names = await connection.GetObjectNamesAsync(10, CancellationToken.None);
+
+        //Assert
+        Assert.True(names.IsSuccess);
+        Assert.Equal([("LOJA", false), ("MEDIDA", false), ("SYSCAT", true), ("SYSIBM", true), ("informix", true), ("pg_catalog", true)], names.Value.Schemas.Select(schema => (schema.Name, schema.IsSystem)));
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: nomes que só diferem na caixa, no acento ou nos espaços do fim são nomes diferentes (no PostgreSQL `"a "` e `"a"` são
+    /// duas tabelas), e dois esquemas que só diferem assim também. A base os mantém separados e na ordem em que chegaram.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "GetObjectNamesAsync")]
+    [Fact(DisplayName = "OK nomes que só diferem na caixa, no acento ou no espaço do fim seguem separados e na ordem")]
+    public async Task GetObjectNames_ShouldKeepNamesThatDifferOnlyByCaseAccentOrTrailingSpace_Apart()
+    {
+        //Arrange
+        _catalog["OBJECT NAMES 11"] =
+        [
+            ["Loja", false, "B", "table"],
+            ["Loja", false, "a", "table"],
+            ["Loja", false, "a ", "table"],
+            ["Loja", false, "á", "view"],
+            ["loja", false, "a", "table"],
+            ["loja ", false, "a", "view"],
+        ];
+        var connection = await OpenAsync();
+
+        //Act
+        var names = await connection.GetObjectNamesAsync(10, CancellationToken.None);
+
+        //Assert
+        Assert.Equal([("Loja", false, "B,a,a ", "á"), ("loja", false, "a", ""), ("loja ", false, "", "a")], Flatten(names.Value));
+    }
+
+    /// <summary>
     /// RN-CAT-004: duas tabelas podem ter chaves de mesmo nome apontando para esta. Cada chave é o nome dentro da tabela que a tem, e
     /// as colunas da chave composta se juntam na ordem.
     /// </summary>

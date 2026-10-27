@@ -415,6 +415,61 @@ public sealed class InformixCatalogTests : CatalogContractTests
         }
     }
 
+    /// <summary>
+    /// RN-BUSCA-002: o que o `systables` guarda além de tabela e visão não entra no índice (o sinônimo e a sequência), o dono que só tem sinônimo
+    /// ou sequência fica de fora, o que só tem uma visão entra com a lista de tabelas vazia, e os nomes, com maiúsculas e minúsculas, espaço e
+    /// sublinhado, vêm na ordem da lista de objetos. O nome de tabela, de sinônimo e de sequência é único no banco inteiro: os nomes levam o sorteio.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_LeaveOutWhatIsNeitherATableNorAView_AndKeepTheOrderOfTheLists()
+    {
+        var tag = $"{Guid.NewGuid():N}"[..8];
+        var everything = $"ex_{tag}_a";
+        var onlySynonym = $"ex_{tag}_b";
+        var onlyView = $"ex_{tag}_c";
+        string[] plainTables = [$"{tag}_B", $"{tag}_a", $"{tag}_Z", $"{tag}_t10", $"{tag}_t2", $"_{tag}_x", $"{tag} a b"];
+        await using var connection = await OpenAsync();
+        string[] setup =
+        [
+            .. plainTables.Select(name => $"CREATE TABLE {everything}.{Quote(name)} (id INTEGER)"),
+            $"CREATE VIEW {everything}.visao_{tag} (id) AS SELECT id FROM {everything}.{Quote($"{tag}_a")}",
+            $"CREATE SYNONYM {everything}.sinonimo_{tag} FOR {everything}.{Quote($"{tag}_a")}",
+            $"CREATE SEQUENCE {everything}.sequencia_{tag}",
+            $"CREATE SYNONYM {onlySynonym}.sinonimo_{tag}_b FOR {everything}.{Quote($"{tag}_a")}",
+            $"CREATE SEQUENCE {onlySynonym}.sequencia_{tag}_b",
+            $"CREATE VIEW {onlyView}.unica_{tag} (id) AS SELECT id FROM {everything}.{Quote($"{tag}_a")}"
+        ];
+        await RunAsync(connection, setup);
+        try
+        {
+            var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+            var tables = Value(await connection.GetObjectsAsync(everything, "tables", CancellationToken.None)).Select(item => item.Name).ToList();
+            var views = Value(await connection.GetObjectsAsync(everything, "views", CancellationToken.None)).Select(item => item.Name).ToList();
+
+            var indexed = names.Schemas.Single(schema => schema.Name == everything);
+            Assert.That(indexed.Tables, Is.EqualTo(tables));
+            Assert.That(indexed.Views, Is.EqualTo(views));
+            Assert.That(indexed.Tables, Is.EquivalentTo(plainTables));
+            Assert.That(indexed.Views, Is.EqualTo(new[] { $"visao_{tag}" }));
+            var everyName = names.Schemas.SelectMany(schema => schema.Tables.Concat(schema.Views)).ToList();
+            Assert.That(everyName.Intersect([$"sinonimo_{tag}", $"sequencia_{tag}", $"sinonimo_{tag}_b", $"sequencia_{tag}_b"]), Is.Empty);
+            Assert.That(names.Schemas.Select(schema => schema.Name), Has.No.Member(onlySynonym));
+            Assert.That(names.Schemas.Single(schema => schema.Name == onlyView), Is.EqualTo(new SchemaObjectNamesInfo(onlyView, false, [], [$"unica_{tag}"])).Using<SchemaObjectNamesInfo>(SameNames));
+            var order = names.Schemas.Select(schema => schema.Name).ToList();
+            Assert.That(order.IndexOf(everything), Is.GreaterThanOrEqualTo(0).And.LessThan(order.IndexOf(onlyView)));
+            Assert.That(order.IndexOf(onlyView), Is.LessThan(order.IndexOf("informix")));
+        }
+        finally
+        {
+            foreach (var sql in new[]
+            {
+                $"DROP VIEW {onlyView}.unica_{tag}", $"DROP SEQUENCE {onlySynonym}.sequencia_{tag}_b", $"DROP SYNONYM {onlySynonym}.sinonimo_{tag}_b",
+                $"DROP SEQUENCE {everything}.sequencia_{tag}", $"DROP SYNONYM {everything}.sinonimo_{tag}", $"DROP VIEW {everything}.visao_{tag}"
+            }.Concat(plainTables.Select(name => $"DROP TABLE {everything}.{Quote(name)}")))
+                await connection.ExecuteAsync(sql, CancellationToken.None);
+        }
+    }
+
     /// <summary>Com o dono e o nome sorteados para não esbarrar nos de outro teste: o nome de uma restrição é único no banco inteiro.</summary>
     protected override async Task<string> CreateLargeSchemaAsync()
     {

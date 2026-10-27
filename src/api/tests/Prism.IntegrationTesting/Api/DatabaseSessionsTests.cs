@@ -155,6 +155,7 @@ public sealed class DatabaseSessionsTests
         {
             (HttpMethod.Delete, session),
             (HttpMethod.Get, $"{session}/schemas"),
+            (HttpMethod.Get, $"{session}/object-names"),
             (HttpMethod.Get, $"{session}/schemas/loja/objects?kind=tables"),
             (HttpMethod.Get, $"{session}/schemas/loja/tables/pedido/columns"),
             (HttpMethod.Get, $"{session}/schemas/loja/tables/pedido/indexes"),

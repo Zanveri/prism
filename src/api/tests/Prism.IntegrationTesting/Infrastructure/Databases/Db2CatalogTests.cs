@@ -367,6 +367,68 @@ public sealed class Db2CatalogTests : CatalogContractTests
         }
     }
 
+    /// <summary>
+    /// RN-BUSCA-002: o que o `SYSCAT.TABLES` guarda além de tabela e visão não entra no índice (o apelido, que a árvore não mostra), a tabela
+    /// de consulta materializada entra como visão (tipo `S`), a sequência e a função ficam de fora, o esquema que só tem apelido ou sequência fica
+    /// de fora, o que só tem uma visão entra com a lista de tabelas vazia, e os nomes, com maiúsculas e minúsculas, espaço, sublinhado e acento,
+    /// vêm na ordem da lista de objetos.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_LeaveOutWhatIsNeitherATableNorAView_AndKeepTheOrderOfTheLists()
+    {
+        var prefix = $"EXOTICO_{Guid.NewGuid():N}"[..20].ToUpperInvariant();
+        var everything = $"{prefix}_A";
+        var onlyAlias = $"{prefix}_B";
+        var onlyView = $"{prefix}_C";
+        string[] plainTables = ["B", "a", "Z", "ação", "T10", "T2", "_X", "A B"];
+        await using var connection = await OpenAsync();
+        string[] setup =
+        [
+            $"CREATE SCHEMA {everything}",
+            .. plainTables.Select(name => $"CREATE TABLE {everything}.{Quote(name)} (ID INTEGER NOT NULL PRIMARY KEY)"),
+            $"CREATE VIEW {everything}.VISAO AS SELECT ID FROM {everything}.{Quote("a")}",
+            $"CREATE TABLE {everything}.MATERIALIZADA AS (SELECT ID FROM {everything}.{Quote("a")}) DATA INITIALLY DEFERRED REFRESH DEFERRED",
+            $"CREATE ALIAS {everything}.APELIDO FOR {everything}.{Quote("a")}",
+            $"CREATE SEQUENCE {everything}.SEQUENCIA",
+            $"CREATE FUNCTION {everything}.FUNCAO () RETURNS INTEGER RETURN 1",
+            $"CREATE SCHEMA {onlyAlias}",
+            $"CREATE ALIAS {onlyAlias}.APELIDO FOR {everything}.{Quote("a")}",
+            $"CREATE SEQUENCE {onlyAlias}.SEQUENCIA",
+            $"CREATE SCHEMA {onlyView}",
+            $"CREATE VIEW {onlyView}.UNICA AS SELECT ID FROM {everything}.{Quote("a")}"
+        ];
+        await RunAsync(connection, setup);
+        try
+        {
+            var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+            var tables = Value(await connection.GetObjectsAsync(everything, "tables", CancellationToken.None)).Select(item => item.Name).ToList();
+            var views = Value(await connection.GetObjectsAsync(everything, "views", CancellationToken.None)).Select(item => item.Name).ToList();
+
+            var indexed = names.Schemas.Single(schema => schema.Name == everything);
+            Assert.That(indexed.Tables, Is.EqualTo(tables));
+            Assert.That(indexed.Views, Is.EqualTo(views));
+            Assert.That(indexed.Tables, Is.EquivalentTo(plainTables));
+            Assert.That(indexed.Views, Is.EquivalentTo(new[] { "VISAO", "MATERIALIZADA" }));
+            var everyName = names.Schemas.SelectMany(schema => schema.Tables.Concat(schema.Views)).ToList();
+            Assert.That(everyName.Intersect(["APELIDO", "SEQUENCIA", "FUNCAO"]), Is.Empty);
+            Assert.That(names.Schemas.Select(schema => schema.Name), Has.No.Member(onlyAlias));
+            Assert.That(names.Schemas.Single(schema => schema.Name == onlyView), Is.EqualTo(new SchemaObjectNamesInfo(onlyView, false, [], ["UNICA"])).Using<SchemaObjectNamesInfo>(SameNames));
+            var order = names.Schemas.Select(schema => schema.Name).ToList();
+            Assert.That(order.IndexOf(everything), Is.GreaterThanOrEqualTo(0).And.LessThan(order.IndexOf(onlyView)));
+            Assert.That(order.IndexOf(onlyView), Is.LessThan(order.IndexOf("SYSCAT")));
+        }
+        finally
+        {
+            foreach (var sql in new[]
+            {
+                $"DROP ALIAS {onlyAlias}.APELIDO", $"DROP SEQUENCE {onlyAlias}.SEQUENCIA", $"DROP SCHEMA {onlyAlias} RESTRICT",
+                $"DROP VIEW {onlyView}.UNICA", $"DROP SCHEMA {onlyView} RESTRICT",
+                $"DROP ALIAS {everything}.APELIDO", $"DROP SEQUENCE {everything}.SEQUENCIA", $"DROP FUNCTION {everything}.FUNCAO", $"DROP VIEW {everything}.VISAO", $"DROP TABLE {everything}.MATERIALIZADA"
+            }.Concat(plainTables.Select(name => $"DROP TABLE {everything}.{Quote(name)}")).Append($"DROP SCHEMA {everything} RESTRICT"))
+                await connection.ExecuteAsync(sql, CancellationToken.None);
+        }
+    }
+
     protected override string TableNameOf(int number)
         => $"T{number}";
 

@@ -167,6 +167,71 @@ public abstract class CatalogContractTests
     }
 
     /// <summary>
+    /// RN-BUSCA-002: em TODOS os esquemas do banco, e não só nos dois do outro teste, o índice é o que as listas mostram: o esquema que tem
+    /// tabela ou visão está nele, com as mesmas tabelas e visões na mesma ordem e o mesmo "de sistema"; o que não tem, não está; e os esquemas
+    /// vêm na ordem da lista dos esquemas (`GET .../schemas`) sem os vazios, que é a ordem que a árvore mostra (RN-ARVORE-004).
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_AreWhatTheObjectListsShow_InEverySchemaOfTheDatabase()
+    {
+        await using var connection = await OpenAsync();
+
+        var names = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+        var schemas = Value(await connection.GetSchemasAsync(CancellationToken.None));
+
+        var expected = new List<(string Name, bool IsSystem, List<string> Tables, List<string> Views)>();
+        foreach (var schema in schemas)
+        {
+            var tables = Value(await connection.GetObjectsAsync(schema.Name, "tables", CancellationToken.None)).Select(item => item.Name).ToList();
+            var views = Value(await connection.GetObjectsAsync(schema.Name, "views", CancellationToken.None)).Select(item => item.Name).ToList();
+            if (tables.Count + views.Count > 0)
+                expected.Add((schema.Name, schema.IsSystem, tables, views));
+        }
+
+        Assert.That(names.Truncated, Is.False);
+        Assert.That(names.Schemas.Select(schema => schema.Name), Is.EqualTo(expected.Select(item => item.Name)));
+        foreach (var (indexed, wanted) in names.Schemas.Zip(expected))
+        {
+            Assert.That(indexed.IsSystem, Is.EqualTo(wanted.IsSystem), wanted.Name);
+            Assert.That(indexed.Tables, Is.EqualTo(wanted.Tables), wanted.Name);
+            Assert.That(indexed.Views, Is.EqualTo(wanted.Views), wanted.Name);
+        }
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: o corte cai onde cair a linha `limit + 1`. Para limites de 1 até além do total, a resposta traz exatamente `limit` nomes (ou
+    /// todos, quando o limite passa do total) e só liga `Truncated` quando ficou nome de fora: o limite exato não corta. Os esquemas que sobram
+    /// são os primeiros do índice inteiro, na mesma ordem (os de sistema por último), todos completos menos o último, que traz só os primeiros
+    /// nomes dele. É a prova, no banco, de que `LIMIT`, `FETCH FIRST` e `SELECT FIRST` entram na mesma ordem do `ORDER BY`.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_WithAnyLimit_AreThePrefixOfTheWholeIndex()
+    {
+        await using var connection = await OpenAsync();
+        var whole = Value(await connection.GetObjectNamesAsync(1_000_000, CancellationToken.None));
+        var total = whole.Schemas.Sum(schema => schema.Tables.Count + schema.Views.Count);
+        Assert.That(total, Is.GreaterThan(20));
+
+        foreach (var limit in new[] { 1, 2, 5, 17, total / 2, total - 1, total, total + 1 }.Distinct())
+        {
+            var cut = Value(await connection.GetObjectNamesAsync(limit, CancellationToken.None));
+
+            var message = $"limite {limit} de {total}";
+            Assert.That(cut.Truncated, Is.EqualTo(limit < total), message);
+            Assert.That(cut.Schemas.Sum(schema => schema.Tables.Count + schema.Views.Count), Is.EqualTo(Math.Min(limit, total)), message);
+            Assert.That(cut.Schemas.Select(schema => schema.Name), Is.EqualTo(whole.Schemas.Take(cut.Schemas.Count).Select(schema => schema.Name)), message);
+            foreach (var (indexed, original, position) in cut.Schemas.Zip(whole.Schemas).Select((pair, position) => (pair.First, pair.Second, position)))
+            {
+                Assert.That(indexed.IsSystem, Is.EqualTo(original.IsSystem), $"{message}, {indexed.Name}");
+                Assert.That(original.Tables.Take(indexed.Tables.Count), Is.EqualTo(indexed.Tables), $"{message}, {indexed.Name}");
+                Assert.That(original.Views.Take(indexed.Views.Count), Is.EqualTo(indexed.Views), $"{message}, {indexed.Name}");
+                if (position < cut.Schemas.Count - 1)
+                    Assert.That((indexed.Tables.Count, indexed.Views.Count), Is.EqualTo((original.Tables.Count, original.Views.Count)), $"{message}, {indexed.Name}: só o último esquema pode vir incompleto");
+            }
+        }
+    }
+
+    /// <summary>
     /// RN-BUSCA-002: o índice de um esquema de 300 tabelas, que a classe do banco monta e apaga (o mesmo do diagrama). A prova do custo é o
     /// tempo da chamada e o tamanho do JSON, escritos na saída do teste (o relatório os leva): uma varredura do catálogo.
     /// </summary>
