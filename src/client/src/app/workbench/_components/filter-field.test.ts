@@ -1,7 +1,7 @@
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { describe, expect, it, vi } from "vitest";
 
-import { fieldAttributes, fieldThemeSpec, focusAtEnd, singleLine } from "./filter-field";
+import { fieldAttributes, fieldThemeSpec, focusAtEnd, isHeldEnter, singleLine } from "./filter-field";
 
 // O campo de filtro (RN-TABELA-005, 010 e 011) é um CodeMirror de uma linha. O vitest não tem DOM: o que se confere é o estado do editor, que é onde a
 // regra mora (a vista do CodeMirror só desenha).
@@ -96,5 +96,18 @@ describe("focusAtEnd: o foco no campo, com o cursor no fim (RN-ABAS-019)", () =>
     focusAtEnd(empty as never);
     expect(empty.state.selection.main.head).toBe(0);
     expect(empty.focus).toHaveBeenCalledOnce();
+  });
+});
+
+// RN-ABAS-019: a aba aberta pelo Enter numa linha do navegador leva o foco ao campo, e o Enter que continua apertado chega nele repetido. Cada repetição aplicava o
+// filtro e rodava a consulta de novo (34 consultas em 2 s, vistas na tela), então a repetição do teclado não é um Enter.
+describe("o Enter segurado não aplica o filtro de novo", () => {
+  it.each([
+    ["o Enter apertado", { key: "Enter", repeat: false }, false],
+    ["o Enter que o teclado repete", { key: "Enter", repeat: true }, true],
+    ["outra tecla repetida (as setas, a letra: continuam andando e digitando)", { key: "ArrowRight", repeat: true }, false],
+    ["outra tecla apertada", { key: "a", repeat: false }, false],
+  ])("%s", (_name, event, held) => {
+    expect(isHeldEnter(event)).toBe(held);
   });
 });

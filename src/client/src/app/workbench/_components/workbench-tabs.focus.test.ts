@@ -221,6 +221,68 @@ describe("abrir uma aba por um gesto: o foco vai à entrada dela (RN-ABAS-019)",
     expect(tabFocus.take("a")).toBeNull();
   });
 
+  it("a lista de sugestões do editor aberta (o Ctrl+clique no nome de uma tabela, logo depois de digitar) não bloqueia: ela é do editor que perde o foco, e a aba nova o recebe", () => {
+    show(["a"], "a");
+    render();
+    const focus = entryOf("a");
+    tabFocus.request("a", row);
+    // O painel do editor já está escondido, e a lista dele, que só fecha quando o editor perde o foco de vez, ainda está no `body`.
+    page.setLists([true]);
+    row.remove();
+
+    render();
+
+    expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["uma lista de outro lugar (a lista de conexões, um seletor)", [false]],
+    ["uma lista de outro lugar junto com a de sugestões do editor", [true, false]],
+  ])("%s, essa sim tomou o foco: nada, e o pedido é consumido", (_name, lists) => {
+    show(["a"], "a");
+    render();
+    const focus = entryOf("a");
+    tabFocus.request("a", row);
+    page.setLists(lists);
+
+    render();
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(tabFocus.take("a")).toBeNull();
+  });
+
+  it("em desenvolvimento o `StrictMode` recria o editor logo depois de o foco chegar (o foco cai no corpo da página): a entrada o leva de novo, no fim da mesma tarefa", async () => {
+    show(["a"], "a");
+    render();
+    const editor = page.element({ id: "editor-a", inside: [content] });
+    const focus = entryOf("a", vi.fn(() => (page.focus(editor), true)));
+    tabFocus.request("a", row);
+
+    render();
+    expect(focus).toHaveBeenCalledOnce();
+
+    // O `StrictMode` desmonta o campo que acabou de nascer e o monta de novo: o foco se perde, sem `blur`.
+    page.focus(null);
+    await Promise.resolve();
+
+    expect(focus).toHaveBeenCalledTimes(2);
+    expect(page.active()).toBe(editor);
+  });
+
+  it("no app empacotado o foco fica onde a entrada o pôs, e ela não é chamada de novo", async () => {
+    show(["a"], "a");
+    render();
+    const editor = page.element({ id: "editor-a", inside: [content] });
+    const focus = entryOf("a", vi.fn(() => (page.focus(editor), true)));
+    tabFocus.request("a", row);
+
+    render();
+    await Promise.resolve();
+
+    expect(focus).toHaveBeenCalledOnce();
+    expect(page.active()).toBe(editor);
+  });
+
   it("sem aba ativa (a janela sem abas) o pedido espera, sem erro", () => {
     show([], null);
     render();
@@ -667,6 +729,17 @@ describe("o Ctrl+W vale em toda a janela da área de trabalho (RN-ABAS-001 e 019
 
     expect(rt.workbench.closeTab).not.toHaveBeenCalled();
     expect(event.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("com a lista de sugestões do editor aberta e o foco no editor, o Ctrl+W fecha a aba como sempre: o `section` trata a tecla antes, e a janela, que não age com listas abertas, não a trata de novo", () => {
+    page.focus(editor);
+    page.setLists([true]);
+    const event = page.keyEvent({ ...ctrlW, target: editor });
+
+    sectionKeys()(event);
+    page.press(event);
+
+    expect(rt.workbench.closeTab).toHaveBeenCalledExactlyOnceWith("b");
   });
 
   it("a tecla segurada (repeat) é tratada, mas não fecha outra aba: uma por toque", () => {

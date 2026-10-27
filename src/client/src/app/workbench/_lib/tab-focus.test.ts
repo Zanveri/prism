@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { focusAfterChange, isLost, navigatorRow, popupOpen, regionOf, stillWithRequester, tabEntries, tabFocus, type FocusChange, type FocusRequest } from "./tab-focus";
+import { focusAfterChange, isLost, navigatorRow, popupOpen, popupTakesFocus, regionOf, stillWithRequester, tabEntries, tabFocus, type FocusChange, type FocusRequest } from "./tab-focus";
 
 // O foco ao abrir, fechar e trocar de aba (RN-ABAS-019), sem DOM: o vitest deste projeto não tem página, e a regra mora em funções que só leem o que o elemento
 // diz de si. O elemento de mentira responde a `closest` pelos trechos do seletor que o código pergunta (o seletor dos diálogos, menus e listas é uma lista).
@@ -68,6 +68,30 @@ describe("popupOpen e navigatorRow: o que a página mostra", () => {
     expect(popupOpen({ querySelector: () => ({}) as Element })).toBe(true);
   });
 
+  describe("popupTakesFocus: o diálogo, o menu e a lista que tomaram o foco", () => {
+    // O `closest` da lista diz se ela está dentro de um `.cm-tooltip` (a lista de sugestões do CodeMirror); o seletor dos diálogos e menus é só o que a página responde.
+    const listIn = (selector: string | null): Element => ({ closest: (ancestor: string) => (ancestor === selector ? {} : null) }) as unknown as Element;
+    const page = ({ dialogOrMenu = false, lists = [] as Element[] } = {}) => ({
+      querySelector: (selector: string) => ((dialogOrMenu && selector.includes("aria-modal") ? {} : null) as never),
+      querySelectorAll: (selector: string) => (selector === '[role="listbox"]' ? lists : []) as never,
+    });
+
+    it.each([
+      ["nada aberto", page(), false],
+      ["um diálogo ou um menu", page({ dialogOrMenu: true }), true],
+      ["uma lista de outro lugar (os seletores, a lista de conexões)", page({ lists: [listIn(null)] }), true],
+      ["só a lista de sugestões do editor (um `.cm-tooltip`): ela é do editor que perde o foco, e não bloqueia", page({ lists: [listIn(".cm-tooltip")] }), false],
+      ["a lista de sugestões do editor e uma de outro lugar: a de outro lugar bloqueia", page({ lists: [listIn(".cm-tooltip"), listIn(null)] }), true],
+      ["a lista de sugestões do editor e um diálogo: o diálogo bloqueia", page({ dialogOrMenu: true, lists: [listIn(".cm-tooltip")] }), true],
+    ] as const)("%s", (_name, current, expected) => {
+      expect(popupTakesFocus(current as never)).toBe(expected);
+    });
+
+    it("o `popupOpen`, dos atalhos da janela, continua contando todas as listas, também a de sugestões do editor", () => {
+      expect(popupOpen({ querySelector: (selector: string) => (selector.includes('[role="listbox"]') ? ({} as Element) : null) })).toBe(true);
+    });
+  });
+
   it("a linha do navegador é a que o Tab alcança; sem ela, a primeira que não é pulada; escondido (o navegador retrátil), nenhuma", () => {
     const tabbable = fake();
     const other = fake();
@@ -112,6 +136,47 @@ describe("focusAfterChange: para onde o foco vai (RN-ABAS-019)", () => {
     ["perdido e prometido (o F6, a troca do lugar do resultado): nada", { lost: true, lastRegion: "content", promised: true }, null],
   ] as [string, Partial<FocusChange>, string | null][])("%s", (_name, change, destination) => {
     expect(focusAfterChange({ ...base, ...change })).toBe(destination);
+  });
+});
+
+// Todas as combinações das entradas da decisão (4 regiões x 6 booleanos = 256): o que nenhuma combinação pode produzir, em vez de só os casos escolhidos acima.
+describe("focusAfterChange: o que nenhuma combinação produz", () => {
+  const regions: FocusChange["lastRegion"][] = [null, "strip", "content", "outside"];
+  const flags = [false, true];
+  const all: FocusChange[] = regions.flatMap((lastRegion) =>
+    flags.flatMap((request) => flags.flatMap((lost) => flags.flatMap((atRequester) => flags.flatMap((hasTabs) => flags.flatMap((blocked) => flags.map((promised) => ({ request, lastRegion, lost, atRequester, hasTabs, blocked, promised }))))))),
+  );
+
+  it("cobre as 256 combinações", () => {
+    expect(all).toHaveLength(256);
+  });
+
+  it("bloqueado, ou com o foco prometido por outra regra, nunca move o foco", () => {
+    for (const change of all.filter((current) => current.blocked || current.promised)) expect(focusAfterChange(change), JSON.stringify(change)).toBeNull();
+  });
+
+  it("sem pedido e com o foco vivo (a pessoa o pôs onde está), nunca move o foco", () => {
+    for (const change of all.filter((current) => !current.request && !current.lost)) expect(focusAfterChange(change), JSON.stringify(change)).toBeNull();
+  });
+
+  it("o foco que saiu de quem pediu para outro lugar vivo (o type-ahead, um campo clicado) nunca é tomado", () => {
+    for (const change of all.filter((current) => current.request && !current.lost && !current.atRequester)) expect(focusAfterChange(change), JSON.stringify(change)).toBeNull();
+  });
+
+  it("com pedido, não bloqueado, e o foco em quem pediu ou perdido, vai sempre à entrada da aba, onde quer que o foco tenha estado", () => {
+    for (const change of all.filter((current) => current.request && (current.lost || current.atRequester) && !current.blocked && !current.promised)) expect(focusAfterChange(change), JSON.stringify(change)).toBe("entry");
+  });
+
+  it("o navegador só recebe o foco sem nenhuma aba, e a faixa só o de quem estava na faixa", () => {
+    for (const change of all) {
+      const destination = focusAfterChange(change);
+      if (destination === "navigator") expect(change.hasTabs, JSON.stringify(change)).toBe(false);
+      if (destination === "strip") expect([change.lastRegion, change.lost, change.request], JSON.stringify(change)).toEqual(["strip", true, false]);
+    }
+  });
+
+  it("o foco que estava fora das abas, perdido e sem pedido, fica onde está, com aba ou sem ela", () => {
+    for (const change of all.filter((current) => !current.request && current.lost && (current.lastRegion === "outside" || current.lastRegion === null))) expect(focusAfterChange(change), JSON.stringify(change)).toBeNull();
   });
 });
 
@@ -223,6 +288,61 @@ describe("tabEntries: como cada aba se foca", () => {
     const unregister = tabEntries.register("c", () => {});
     expect(tabEntries.focus("c")).toBe(true);
     unregister();
+  });
+
+  describe("o foco que se perde logo depois de chegar (o `StrictMode`, em desenvolvimento, recria o editor do painel que acabou de nascer)", () => {
+    // O `body` e o elemento focado de agora, como a página os tem; sem `document` (os testes de outros arquivos), a entrada não confere nada.
+    const body = fake({ tag: "BODY" });
+    const page = { body, activeElement: body as Element | null };
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("no fim da tarefa, com o foco perdido, a entrada o leva de novo, uma vez", async () => {
+      vi.stubGlobal("document", page);
+      const editor = fake();
+      const entry = vi.fn(() => void (page.activeElement = editor));
+      const unregister = tabEntries.register("e", entry);
+
+      expect(tabEntries.focus("e")).toBe(true);
+      page.activeElement = body;
+      await Promise.resolve();
+
+      expect(entry).toHaveBeenCalledTimes(2);
+      expect(page.activeElement).toBe(editor);
+      await Promise.resolve();
+      expect(entry).toHaveBeenCalledTimes(2);
+      unregister();
+    });
+
+    it("com o foco no elemento que a entrada pôs, ela não é chamada de novo", async () => {
+      vi.stubGlobal("document", page);
+      const editor = fake();
+      const entry = vi.fn(() => void (page.activeElement = editor));
+      const unregister = tabEntries.register("f", entry);
+
+      tabEntries.focus("f");
+      await Promise.resolve();
+
+      expect(entry).toHaveBeenCalledOnce();
+      unregister();
+    });
+
+    it("a aba que fechou até lá (a entrada saiu do registro) não é focada, e a que diz que o foco não chegou não repete", async () => {
+      vi.stubGlobal("document", page);
+      page.activeElement = body;
+      const entry = vi.fn();
+      const unregister = tabEntries.register("g", entry);
+      tabEntries.focus("g");
+      unregister();
+      await Promise.resolve();
+      expect(entry).toHaveBeenCalledOnce();
+
+      const refusing = vi.fn(() => false);
+      const unregisterRefusing = tabEntries.register("h", refusing);
+      expect(tabEntries.focus("h")).toBe(false);
+      await Promise.resolve();
+      expect(refusing).toHaveBeenCalledOnce();
+      unregisterRefusing();
+    });
   });
 
   it("o painel que monta de novo (o mesmo id) registra a entrada nova, e a limpeza da antiga não tira a nova", () => {
