@@ -71,12 +71,13 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
-- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
-  recarrega é o menu padrão de desenvolvimento (Recarregar Ctrl+R, Forçar recarga Ctrl+Shift+R, Tela cheia F11), e o app empacotado do Windows e do
-  Linux não tem menu, e o do macOS não tem Recarregar. Mesmo assim, cada janela ignora o menu para essas teclas: o `before-input-event` de
-  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5, F6 e F11 com qualquer
-  modificador, Ctrl+R e Cmd+R com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria também da página):
-  ela só não vai ao menu, e a tela a recebe como qualquer outra. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
+- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela; **o Ctrl+W nunca a fecha** (RN-ABAS-019). O Chromium do Electron não
+  recarrega nem fecha nada sem menu: quem o faz é o menu padrão de desenvolvimento (Recarregar Ctrl+R, Forçar recarga Ctrl+Shift+R, Tela cheia F11, Janela › Fechar
+  Ctrl+W), e o app empacotado do Windows e do Linux não tem menu, e o do macOS não tem Recarregar nem Fechar. Mesmo assim, cada janela ignora o menu para essas
+  teclas: o `before-input-event` de `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5, F6 e F11 com
+  qualquer modificador, Ctrl+R e Cmd+R com ou sem Shift, Ctrl+W e Cmd+W com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria
+  também da página): ela só não vai ao menu, e a tela a recebe como qualquer outra. O Ctrl+W que a área de trabalho não trata (um diálogo, um menu ou uma lista
+  aberta, o cofre bloqueado, a tela de entrada) não faz nada, e é por isso que o desenvolvimento se comporta como o pacote. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
   F11 abriu o "Filtrar" (e não a tela cheia), e Ctrl+R e Ctrl+Shift+R não recarregaram a página (um marcador em `window` sobreviveu).
 - **O zoom do programa inteiro** (RN-ZOOM-001; `zoom.ts`, puro e sem Node, porque a tela também o importa, e `zoom-file.ts`, com o disco; os dois com
   teste). É **desta instalação**, e não do usuário: `zoom.json` (`{ "zoom": 110 }`) na pasta de dados, fora do cofre, lido uma vez ao carregar o `main.ts`
@@ -1038,8 +1039,9 @@ entrada anterior era a delas. A janela de abas passou a ter o histórico das ABA
 Pedidos 5 e 6 de 2026-10-27: depois do duplo clique numa tabela o foco ficava no botão da linha do navegador (o Ctrl+Espaço ativava o botão em vez de completar), e depois
 do Ctrl+W o segundo não fechava a segunda aba. A raiz é uma só: abrir, fechar e trocar de aba mudava a aba ativa SEM dizer para onde o foco ia. Fechar tirava da página o
 painel e a entrada da faixa; o elemento com o foco saía com eles, o Chromium o punha no `body` (sem `blur`), e o `body` está FORA do `section` das abas, o único que tratava o
-Ctrl+W, o F5, o Alt+X e o Ctrl+S. No `pnpm dev` o Ctrl+W que ninguém trata cai em Janela › Fechar do menu padrão do Electron e fecha a janela (visto numa reprodução mínima do
-Electron sob Xvfb, com teclas de verdade); no app empacotado, sem menu no Windows e no Linux, nada acontecia. Quem conferir no desenvolvimento vê "a janela fechou", e não "nada aconteceu".
+Ctrl+W, o F5, o Alt+X e o Ctrl+S. No `pnpm dev` o Ctrl+W que ninguém trata caía em Janela › Fechar do menu padrão do Electron e fechava a janela (visto numa reprodução mínima do
+Electron sob Xvfb, com teclas de verdade); no app empacotado, sem menu no Windows e no Linux, nada acontecia. Hoje o menu não recebe o Ctrl+W (`menuShortcutIgnored`, acima): no
+desenvolvimento, como no pacote, o Ctrl+W sem quem o trate não faz nada.
 
 - **A regra** (`_lib/tab-focus.ts`, sem React, com teste de tabela): `focusAfterChange` decide, depois de uma mudança, entre `"entry"` (a entrada da aba ativa), `"strip"` (a aba
   dela na faixa), `"navigator"` (a linha do navegador que o Tab alcança) e `null`. Com um **pedido** (alguém abriu a aba), vai à entrada se o foco ainda está em quem pediu ou se
@@ -1083,7 +1085,7 @@ Electron sob Xvfb, com teclas de verdade); no app empacotado, sem menu no Window
 - **O Ctrl+W** (`closeActive()` extraído; o `section` e um ouvinte `keydown` da `window`, na bolha): vale em TODA a janela da área de trabalho, como no DBeaver: com o foco na faixa,
   numa aba, no navegador (também na busca) ou perdido no `body`. O `section` trata o que nasce dentro dele e marca a tecla (`preventDefault`), então a janela a vê tratada e não fecha duas;
   o campo de edição de uma célula e os diálogos param a propagação, e o Ctrl+W deles não fecha a aba. Nunca com diálogo, menu ou lista aberta, com o cofre bloqueado ou com outra tela à
-  mostra (o ouvinte só existe com a área de trabalho na tela). Trata a tecla até SEM aba (`preventDefault`, para o menu do Electron não fechar a janela), mas as recusas (diálogo, cofre,
+  mostra (o ouvinte só existe com a área de trabalho na tela). Trata a tecla até SEM aba (`preventDefault`: a tecla sem aba fica tratada, e o menu do Electron não a recebe de qualquer modo, `menuShortcutIgnored`), mas as recusas (diálogo, cofre,
   tecla já tratada) deixam a tecla como está. **A tecla segurada (`repeat`) não fecha outra aba**: é tratada, uma aba por toque (segurar passaria por todas as abas, com o foco
   agora indo de uma para a outra). Na janela do resultado, ela continua sendo o "Voltar para o painel" (RN-ABAS-013): a `window` daquela página é outra.
 - **O X da faixa** (`keepFocus`, `onMouseDown` com `preventDefault` só no botão principal): o clique não leva o foco ao X, como o do botão do meio já não leva; se o foco estava na
@@ -1622,8 +1624,11 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
 - **Filtro por ambiente** (RN-NAV-010). Na linha de baixo da barra, ao lado de "Só as conectadas" (acima), o `NavigatorEnvironmentFilter` (`navigator-environment-filter.tsx`,
   sem estado) é o `Select` do app com "Todos os ambientes" (valor vazio, o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente". Cada
   ambiente vai como a `EnvironmentPill` dele, na lista e no controle fechado (o `content` da opção do `Select`); o controle fechado fica numa linha
-  só, cortado com reticências (`[&>span:first-child]:truncate`), e na lista o texto quebra. Com um filtro escolhido aparece o `x` "Limpar o filtro
-  de ambiente", que volta a "Todos". Quem filtra é `filterByEnvironment(folders, connections, escolha, environmentLookup)`
+  só, cortado com reticências (`[&>span:first-child]:truncate`), e a lista aberta é larga (`wideList` do `Select`): as opções não quebram ("Todos os ambientes" cabe numa linha num
+  seletor de 130 px), a lista mede no mínimo o seletor e cresce até o maior texto, sem passar da janela (`panelWidthOf`, pura e testada: `min-width` do seletor, `max-width` da janela à direita
+  dele menos 6 px, `width: max-content`; o que a janela não deixa caber termina em reticências). Com um filtro escolhido aparece o `x` "Limpar o filtro
+  de ambiente", que volta a "Todos" e **leva o foco ao seletor** (`clearChoice`: o clique e o Enter no `x` são o mesmo clique; o foco vai ANTES de a escolha mudar, porque o `x` sai da tela com ela e o
+  foco que estava nele cairia no `body`). O `ref` do botão do seletor é do `Navigator` (`environmentSelect`, como o `searchInput`), passado pela barra ao `Select` por `triggerRef`. Quem filtra é `filterByEnvironment(folders, connections, escolha, environmentLookup)`
   (`_lib/navigator-environment.ts`, pura e testada): as conexões cujo ambiente mostrado (o próprio ou o herdado) tem a chave escolhida, ou que não
   têm nenhum ("Sem ambiente"), e as pastas no caminho até elas, na ordem da lista; "Todos" devolve as MESMAS listas. O navegador monta a árvore
   (`buildConnectionTree`) sobre o que sai daí, e a busca roda depois, sobre essa árvore: os dois se combinam sem tocar em `searchTree`, e limitam também os bancos de que
@@ -1758,8 +1763,9 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
     esquema em `byName`), então o duplo clique, o Enter, o menu e o "Gerar SELECT" valem sem código novo (`tableTargetOf` e `runMenuAction` leem a chave), e a escolha continua na linha quando o nível carregar.
     Sem a lista dos bancos, a conexão mostra só o banco dela, com o selo "padrão". O grupo diz "3 de 120" (`LevelState.total`); com o índice cortado na API (`truncated`), só o achado.
     **O corte é de 200 tabelas e visões por banco** (`searchIndexCap`), e não do total: o primeiro ambiente da árvore engoliria os outros, que é o caso do pedido. `indexesInScope` tira do resultado o
-    índice de quem saiu do escopo (o filtro de ambiente, a conexão cuja verificação diz "Sem sessão aberta" e que deixou o índice no cache). "Nada encontrado" só aparece sem índice a caminho: antes disso
-    a linha de estado diz "Buscando…" sozinha.
+    índice de quem saiu do escopo (o filtro de ambiente, a conexão cuja verificação diz "Sem sessão aberta" e que deixou o índice no cache). "Nada encontrado" só aparece com a busca terminada em todo o
+    escopo (`nothingFoundShown`, pura e testada): sem índice a caminho e sem banco que falhou. Com um a caminho a linha de estado diz "Buscando…" sozinha, e com uma falha diz só "Não foi possível buscar em …":
+    o banco que falhou pode ter o nome, e as duas frases juntas se contradiziam. A falha que conta é qualquer uma da linha de estado, também a da conexão de fora que não abriu.
   - **A linha de estado** (`NavigatorSearchStatus`, vista sem estado; o que ela diz é `searchStatusOf`, pura, com tabela de casos) fica logo abaixo do `NavigatorFilters`, nunca ao lado do campo, e só existe
     na busca. Cada texto é um `role="status"` e os botões ficam fora das regiões vivas. A falha de um índice vem do estado da consulta (`isError && !isFetching`, mesmo com resposta velha); se foi a sessão que
     caiu (`DATABASE_SESSION_NOT_FOUND`), o "Tentar de novo" a reabre por `reopenDatabaseSession`, como a árvore (e avisa), e senão refaz só aquele índice (`refetchQueries` exato). A conexão de fora cuja sessão da
@@ -4174,8 +4180,8 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 - Primitivos (`@/components/ui`): `Button`, `Field`, `FieldLabel`, `Input`, `TextField`, `FieldError`,
   `FormMessage`, `Dialog`, `ConfirmDialog`, `Select`, `Segmented`, `navItem` (a classe da entrada de uma lista de navegação vertical: a lista de Configurações e a de seções da Estrutura), `StatusBadge`, `EngineTag`,
   `EnvironmentPill`, os ícones (`icons.tsx`), `ToastProvider`, `useToast`. Vieram do etio com o que esta fatia usa (o `ContextMenu` é do
-  Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca nem lista mais larga
-  que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, `aria-describedby`, e o `content` da opção, que
+  Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca, e a lista mais larga que o controle é opcional
+  (`wideList`, só o seletor de ambiente a usa; sem ela a lista tem a largura do controle e o texto quebra) (e tem `triggerRef`, o `ref` do botão para quem leva o foco a ele, e `onOpen`, para quem busca as opções só quando a pessoa abre a lista, `aria-describedby`, e o `content` da opção, que
   a desenha no lugar do rótulo, na lista e no controle fechado: a etiqueta de ambiente do navegador; o rótulo segue sendo o da busca pela inicial), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
   ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título e uma faixa no topo do painel (`banner`, a do
   ambiente no aviso de confirmação, RN-PROT-001; com ela o painel recorta o que passa da borda arredondada), e o `describedBy`, os ids do que, no
