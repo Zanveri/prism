@@ -869,7 +869,9 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   canvas (16 px, traço 1,5); e a cor da variável no editor é um token novo do tema, derivado como as cores que o
   canvas não define (RN-CONFIG-003).
 - O canvas desenha a árvore do navegador e as grades na IBM Plex Mono: elas usam a fonte da interface, que sem escolha
-  é a IBM Plex Sans, e a largura das colunas da grade é medida nela (RN-CONFIG-008, seção 42).
+  é a IBM Plex Sans, e a largura das colunas da grade é medida nela (RN-CONFIG-008, seção 42). A barra do navegador
+  tem o campo "Filtrar objetos" sozinho, na largura toda, como no canvas, e, numa linha abaixo dele, "Só as
+  conectadas" e o seletor de ambiente (RN-NAV-010 e 013), que o canvas não tem.
 
 ## 10. Riscos e sondas
 
@@ -1371,11 +1373,13 @@ fatia (seção 13) entra agora, na ordem abaixo. O canvas é a medida de desenho
 `TabelaDados`, `TabelaDetalhe`, `DiagramaER`, `Configuracoes`); onde o canvas mostra algo que
 depende de uma parte da API que ainda não existe, a tela não desenha um controle de mentira.
 
-- **RN-BUSCA-001.** O navegador tem um campo de busca. Ele filtra pelo nome, sem diferenciar
-  maiúsculas nem acentos, o que já está carregado na árvore (pastas, conexões, esquemas, tabelas,
-  visões, rotinas, colunas); o que casa aparece com os ancestrais abertos, e o trecho que casou
-  fica destacado. Limpar o campo devolve a árvore como estava. A busca não abre conexão nem
-  carrega nível que o usuário não abriu.
+- **RN-BUSCA-001.** O navegador tem um campo de busca, sozinho na linha dele, na largura toda,
+  abaixo da barra de ações (RN-NAV-002); "Só as conectadas" e o seletor de ambiente ficam na linha de
+  baixo (RN-NAV-010 e 013). Ele filtra pelo nome, sem diferenciar maiúsculas nem acentos, o que já
+  está carregado na árvore (pastas, conexões, esquemas, tabelas, visões, rotinas, colunas); o que casa
+  aparece com os ancestrais abertos, e o trecho que casou fica destacado. Limpar o campo devolve a
+  árvore como estava. A busca não abre conexão nem carrega nível que o usuário não abriu. *Alterada a
+  pedido do dono em 2026-10-27 (seção 42): o campo dividia a linha com o seletor de ambiente.*
 - **RN-MENU-001.** O botão direito (e Shift+F10, e a tecla de menu) sobre um item do navegador abre um menu de
   contexto com o tema do app, com as ações daquele tipo de item. Conexão: conectar ou desconectar, nova consulta,
   atualizar, editar conexão, exportar conexão, copiar nome. Esquema: nova consulta, atualizar, copiar nome. Tabela
@@ -3248,8 +3252,12 @@ ambiente".
     usuário como etiquetas coloridas. Escolher uma preenche o nome e a cor, que continuam
     editáveis.
   - O campo do nome também completa com eles ao digitar.
-- **RN-NAV-010.** O navegador ganha, ao lado do campo de filtro, um seletor de ambiente: "Todos os
-  ambientes" (o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente".
+- **RN-NAV-010.** O navegador ganha um seletor de ambiente, na linha abaixo do campo de filtro, à
+  direita de "Só as conectadas" (RN-NAV-013), com o resto da largura: "Todos os ambientes" (o padrão),
+  cada ambiente do usuário (RN-AMB-001) e "Sem ambiente".
+  - O campo de filtro fica sozinho na linha dele, na largura toda (RN-BUSCA-001). Quando o seletor não
+    cabe ao lado de "Só as conectadas" (o navegador estreito), ele desce para uma linha só dele, na
+    largura toda. Fechado, o nome que não cabe nele termina em reticências.
   - Com um ambiente escolhido, a árvore mostra só as conexões cujo ambiente (próprio ou herdado da
     pasta, RN-PASTA-005) é esse, e as pastas no caminho até elas, abertas só nessa vista, sem mudar o
     que se lembra delas (RN-NAV-014).
@@ -3257,7 +3265,8 @@ ambiente".
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
   - *Alterada a pedido do dono em 2026-10-27 (seção 42): as pastas no caminho abrem só na vista
-    filtrada, sem gravar.*
+    filtrada, sem gravar; e o seletor saiu da linha do campo de filtro, que ficou com a largura toda,
+    e foi para o lado de "Só as conectadas".*
 
 ## 26. Complemento de 2026-10-15, versão 0.4.0: a linha em branco separa os comandos (issue #7)
 
@@ -4045,9 +4054,10 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
 
 ### Só as conectadas
 
-- **RN-NAV-013.** A barra do navegador ganha "Só as conectadas", um botão de alternar ao lado do
-  seletor de ambiente (RN-NAV-010), que mostra quantas conexões estão conectadas ("3 conectadas"),
-  ligado ou não: é o que o colega pediu, saber se há conexões abertas.
+- **RN-NAV-013.** A barra do navegador ganha "Só as conectadas", um botão de alternar na linha abaixo
+  do campo de filtro, à esquerda, antes do seletor de ambiente (RN-NAV-010), que mostra quantas
+  conexões estão conectadas ("3 conectadas"), ligado ou não: é o que o colega pediu, saber se há
+  conexões abertas. O botão tem a largura do texto, que nunca é cortado.
   - Conectada é a conexão com a sessão da árvore aberta ou com uma aba conectada, a mesma conta da
     lista do botão da conexão da aba (RN-ARVORE-008) e do script genérico (RN-SCRIPT-005).
   - A conexão cuja verificação respondeu que a API não tem sessão aberta com ela (o "Sem sessão
@@ -4066,7 +4076,8 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   - A API não muda: a tela já sabe quais conexões estão conectadas, e a verificação diz quais
     perderam a sessão.
   - *Alterada a pedido do dono em 2026-10-27 (seção 42): as pastas no caminho abrem só na vista
-    filtrada, sem gravar.*
+    filtrada, sem gravar; e o botão foi para a linha de baixo do campo de filtro, antes do seletor de
+    ambiente.*
 
 ### Rotas e respostas
 
@@ -12558,6 +12569,29 @@ Informix e no Db2.
   - Quem revela leva as pastas a abrir junto do pedido, e elas abrem (e se gravam) quando o pedido é atendido, e nunca
     enquanto a tela desenha a árvore.
 
+### A barra de filtros do navegador
+
+Está na RN-NAV-010 e na RN-NAV-013, alteradas no lugar, e no começo da RN-BUSCA-001, que diz onde o campo fica:
+
+- Na primeira linha, abaixo da barra de ações (RN-NAV-002), fica só o campo "Filtrar objetos", na largura toda, como
+  no canvas. No navegador largo ele continua sozinho na linha dele, mesmo quando os três controles caberiam numa só.
+- Na segunda, "N conectadas" (RN-NAV-013) à esquerda, com a largura do texto, que nunca é cortado, e o seletor de
+  ambiente (RN-NAV-010) à direita, com o resto da largura e o X "Limpar o filtro de ambiente" na ponta direita, dentro
+  do lugar do seletor: escolher ou limpar o ambiente não muda a largura de nada.
+- A segunda linha quebra: quando o seletor não cabe ao lado do botão, com pelo menos 128 px, ele desce para uma linha
+  só dele, na largura toda. Na fonte do app, no navegador de 320 px (o padrão), os dois cabem lado a lado também com
+  "Nenhuma conectada"; no de 200 px (o mínimo), o seletor desce. Fechado, o nome que não cabe no seletor termina em
+  reticências.
+- O campo tem a largura toda e a altura fixa de 32 px, sem base flexível: na coluna das duas linhas, a base o faria
+  crescer na altura. Os controles da segunda linha também têm 32 px. Entre as linhas e entre os controles ficam 6 px,
+  onde cabe o anel do foco, e até a árvore, 8 px, como no canvas. No navegador largo, os filtros ocupam uma linha a mais
+  que antes, porque a busca fica sozinha na dela.
+- A ordem do Tab segue a da tela: a barra de ações, o campo, o "Limpar a busca", "Só as conectadas", o seletor, o
+  "Limpar o filtro de ambiente" e a árvore. O Ctrl+F, o Ctrl+Shift+E (RN-NAV-008), o Esc, a seta para baixo e o Enter
+  do campo não mudam, e nenhum texto de tela muda.
+- Quem diz a disposição é um componente só, sem estado (`NavigatorFilters`): o estado dos três controles continua no
+  navegador, e o que cada um faz não muda.
+
 ### Testes e sondas
 
 Os testes da tela rodam sem página: a medida, o foco e a rolagem se provam em funções puras e nos testes dos
@@ -12593,6 +12627,14 @@ dito no relatório, e nunca dado como passando.
   continua aberta na entrada seguinte; duas janelas mexendo em pastas diferentes; outro usuário na mesma instalação; a
   pasta excluída; a busca, o seletor de ambiente e "Só as conectadas", ligados e desligados, que não mudam o que se
   lembra; e o Ctrl+B, que esconde e mostra a árvore como estava.
+- **A barra.** Testes de unidade: a disposição (o campo sozinho na primeira linha; na segunda, "Só as conectadas" e o
+  seletor, nessa ordem; a ordem do Tab pela ordem da página, também com o "Limpar a busca" e o "Limpar o filtro de
+  ambiente" à vista; o botão que não encolhe e o seletor com o resto; a segunda linha que quebra), o campo (a largura
+  toda e a altura fixa, sem base flexível; o Esc, a seta para baixo e o Enter) e as ações que chegam a quem as trata.
+  Sob Xvfb: o navegador de 200, 248, 264, 280, 300, 320, 400 e 640 px; "Nenhuma conectada", "3 conectadas" e "12
+  conectadas"; "Todos os ambientes", um ambiente e um nome longo, com o X; uma fonte de interface mais larga e o zoom
+  do programa a 125%; a 320 px com "Nenhuma conectada", os dois lado a lado e sem reticências; a 200 px, o seletor
+  sozinho na linha dele; a ordem do Tab, o Ctrl+F e o Ctrl+Shift+E.
 
 ### O que muda nas regras existentes
 
@@ -12603,9 +12645,14 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   interface, e o comando das Estatísticas vai à fonte do editor; o que continua na mono; as dicas dos dois campos.
 - **RN-SCRIPT-008**: as pastas de scripts começam fechadas e lembram se ficaram abertas, e o que se abre para mostrar o
   que foi criado fica lembrado.
-- **RN-NAV-010**: com um ambiente escolhido, as pastas no caminho até as conexões abrem só nessa vista, sem gravar.
-- **RN-NAV-013**: o mesmo com "Só as conectadas" ligado.
-- **Seção 9**: a árvore e as grades deixam a IBM Plex Mono do canvas.
+- **RN-NAV-010**: o seletor de ambiente vai para a linha abaixo do campo de filtro, à direita de "Só as conectadas", e
+  desce para uma linha só dele quando não cabe; com um ambiente escolhido, as pastas no caminho até as conexões abrem
+  só nessa vista, sem gravar.
+- **RN-NAV-013**: o botão vai para a linha abaixo do campo de filtro, à esquerda, e a conta nunca é cortada; as pastas
+  no caminho abrem só na vista filtrada, como no seletor de ambiente.
+- **RN-BUSCA-001**: o campo fica sozinho na linha dele, na largura toda.
+- **Seção 9**: a árvore e as grades deixam a IBM Plex Mono do canvas; a barra do navegador tem o campo na largura toda,
+  como no canvas, e a linha de baixo, que ele não tem.
 - **Seção 33**: o "lembrar as pastas abertas" do "Fica para depois" entrou por esta seção.
 
 ### Fica para depois
