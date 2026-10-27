@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  ancestorKeys,
+  ancestorIds,
   buildScriptTree,
   folderContents,
+  folderIdOf,
   folderKey,
   initialSaveFolder,
   scriptFolderNameProblem,
@@ -56,15 +57,22 @@ describe("a árvore da seção Scripts (RN-SCRIPT-008)", () => {
 describe("as linhas à vista e o teclado da árvore (RN-SCRIPT-008)", () => {
   const tree = buildScriptTree(folders, scripts);
   const names = (rows: ReturnType<typeof visibleScriptRows>) => rows.map(({ node, expanded }) => `${node.kind === "folder" ? node.folder.name : node.script.name}${expanded === null ? "" : expanded ? " [-]" : " [+]"}`);
+  /** Todas as pastas com alguma coisa dentro abertas: a árvore inteira à vista. */
+  const allOpen = new Set([folderKey("f1"), folderKey("f3")]);
 
-  it("as pastas começam abertas; a fechada esconde o que tem dentro; a vazia não diz se está aberta", () => {
-    expect(names(visibleScriptRows(tree, new Set()))).toEqual(["Fechamento [-]", "Anual", "Mensal [-]", "Abril", "abril", "relatório", "Rascunhos", "álamo", "Zeta"]);
-    expect(names(visibleScriptRows(tree, new Set([folderKey("f3")])))).toEqual(["Fechamento [-]", "Anual", "Mensal [+]", "relatório", "Rascunhos", "álamo", "Zeta"]);
-    expect(names(visibleScriptRows(tree, new Set([folderKey("f1")])))).toEqual(["Fechamento [+]", "Rascunhos", "álamo", "Zeta"]);
+  it("as pastas só abrem se estão entre as abertas (sem nada lembrado, só o primeiro nível); a aberta mostra o que tem dentro; a vazia não diz se está aberta", () => {
+    expect(names(visibleScriptRows(tree, new Set()))).toEqual(["Fechamento [+]", "Rascunhos", "álamo", "Zeta"]);
+    expect(names(visibleScriptRows(tree, new Set([folderKey("f1")])))).toEqual(["Fechamento [-]", "Anual", "Mensal [+]", "relatório", "Rascunhos", "álamo", "Zeta"]);
+    expect(names(visibleScriptRows(tree, allOpen))).toEqual(["Fechamento [-]", "Anual", "Mensal [-]", "Abril", "abril", "relatório", "Rascunhos", "álamo", "Zeta"]);
+  });
+
+  it("a pasta aberta dentro de uma fechada continua escondida; o que não é pasta da árvore, no conjunto, não tem efeito", () => {
+    expect(names(visibleScriptRows(tree, new Set([folderKey("f3")])))).toEqual(["Fechamento [+]", "Rascunhos", "álamo", "Zeta"]);
+    expect(names(visibleScriptRows(tree, new Set([folderKey("sumiu"), scriptKey("s1")])))).toEqual(["Fechamento [+]", "Rascunhos", "álamo", "Zeta"]);
   });
 
   it("as setas para cima e para baixo andam sem dar a volta, e Home e End vão às pontas", () => {
-    const rows = visibleScriptRows(tree, new Set());
+    const rows = visibleScriptRows(tree, allOpen);
 
     expect(scriptTreeMove("ArrowDown", rows, 0)).toEqual({ focus: 1 });
     expect(scriptTreeMove("ArrowDown", rows, 8)).toEqual({ focus: 8 });
@@ -76,8 +84,8 @@ describe("as linhas à vista e o teclado da árvore (RN-SCRIPT-008)", () => {
   });
 
   it("a seta para a direita abre a pasta fechada e, na aberta, vai à primeira linha dentro dela; na pasta vazia e no script, nada", () => {
-    const open = visibleScriptRows(tree, new Set());
-    const closed = visibleScriptRows(tree, new Set([folderKey("f1")]));
+    const open = visibleScriptRows(tree, allOpen);
+    const closed = visibleScriptRows(tree, new Set());
 
     expect(scriptTreeMove("ArrowRight", closed, 0)).toEqual({ toggle: folderKey("f1") });
     expect(scriptTreeMove("ArrowRight", open, 0)).toEqual({ focus: 1 });
@@ -86,7 +94,7 @@ describe("as linhas à vista e o teclado da árvore (RN-SCRIPT-008)", () => {
   });
 
   it("a seta para a esquerda fecha a pasta aberta e, na fechada ou num script, vai à pasta pai; na raiz, nada", () => {
-    const rows = visibleScriptRows(tree, new Set());
+    const rows = visibleScriptRows(tree, allOpen);
 
     expect(scriptTreeMove("ArrowLeft", rows, 2)).toEqual({ toggle: folderKey("f3") });
     expect(scriptTreeMove("ArrowLeft", rows, 4)).toEqual({ focus: 2 });
@@ -107,8 +115,8 @@ describe("scriptTreeLabels (os nomes do type-ahead, RN-ARVORE-009)", () => {
   it("o nome da pasta ou do script de cada linha à vista, na ordem da árvore", () => {
     const tree = buildScriptTree(folders, scripts);
 
-    expect(scriptTreeLabels(visibleScriptRows(tree, new Set()))).toEqual(["Fechamento", "Anual", "Mensal", "Abril", "abril", "relatório", "Rascunhos", "álamo", "Zeta"]);
-    expect(scriptTreeLabels(visibleScriptRows(tree, new Set([folderKey("f1")])))).toEqual(["Fechamento", "Rascunhos", "álamo", "Zeta"]);
+    expect(scriptTreeLabels(visibleScriptRows(tree, new Set([folderKey("f1"), folderKey("f3")])))).toEqual(["Fechamento", "Anual", "Mensal", "Abril", "abril", "relatório", "Rascunhos", "álamo", "Zeta"]);
+    expect(scriptTreeLabels(visibleScriptRows(tree, new Set()))).toEqual(["Fechamento", "Rascunhos", "álamo", "Zeta"]);
   });
 });
 
@@ -153,9 +161,16 @@ describe("o caminho, as escolhas do campo Pasta e a pasta que o diálogo traz (R
     expect(scriptFolderOptions(folders, "f3").map((option) => option.value)).toEqual(["f1", "f4", "f2"]);
   });
 
-  it("as pastas acima de um nó, para abri-las; na raiz, nenhuma", () => {
-    expect(ancestorKeys(folders, "f5")).toEqual([folderKey("f5"), folderKey("f3"), folderKey("f1")]);
-    expect(ancestorKeys(folders, null)).toEqual([]);
+  it("as pastas acima de um nó, pelo identificador, para abri-las e lembrá-las (RN-NAV-014); na raiz, nenhuma; o ciclo não prende a subida", () => {
+    expect(ancestorIds(folders, "f5")).toEqual(["f5", "f3", "f1"]);
+    expect(ancestorIds(folders, null)).toEqual([]);
+    expect(ancestorIds([folder("a", "A", "b"), folder("b", "B", "a")], "a")).toEqual(["a", "b"]);
+  });
+
+  it("a chave da pasta e o identificador dela, um do outro; a chave do script não é de pasta", () => {
+    expect(folderIdOf(folderKey("f3"))).toBe("f3");
+    expect(folderIdOf(scriptKey("s1"))).toBeNull();
+    expect(folderIdOf(folderKey(""))).toBe("");
   });
 
   it("o Salvar como traz a pasta do script na lista; o script que outra janela excluiu, a que a aba lembra; o resto, Sem pasta", () => {

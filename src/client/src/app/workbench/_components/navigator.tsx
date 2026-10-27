@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
@@ -7,7 +7,7 @@ import { MoveConnectionDialog } from "@/app/connections/_components/move-connect
 import { RenameConnectionDialog } from "@/app/connections/_components/rename-connection-dialog";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
-import type { Connection } from "@/app/connections/_lib/connections.schema";
+import type { Connection, Folder } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
 import { dbeaverCopy } from "@/app/connections/_lib/dbeaver.copy";
@@ -28,6 +28,7 @@ import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, e
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { filterConnected } from "../_lib/navigator-connected";
+import { collapsedAllInFilter, collapsedInFilter, filterFoldersFor, filterViewOf, folderIdOfKey, folderIdsOfKeys, folderKeyOf, noFilterFolders, openTreeKeys, openedInFilter, toggledInFilter } from "../_lib/navigator-folders";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
@@ -40,6 +41,7 @@ import { importedReveal, type TransferRequest } from "../_lib/transfer-requests"
 import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useConnectionChecksSnapshot } from "../_lib/use-connection-checks";
+import { useOpenFolders } from "../_lib/use-navigator-layout";
 import { useTypeAhead } from "../_lib/use-type-ahead";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { connectedConnectionIds, isConnected } from "../_lib/workbench-model";
@@ -151,8 +153,7 @@ type OpenMenu = { /** A linha, ou `null` para o espaço vazio do navegador. */ n
 
 /** A pasta de uma linha de pasta (`NavPath` `folder`). */
 function folderIdOf(node: NavNode): string | null {
-  const path = parseNavKey(node.key);
-  return path.type === "folder" ? path.id : null;
+  return folderIdOfKey(node.key);
 }
 
 /**
@@ -180,15 +181,19 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   const { tabs, expanded, setNodeOpen, openQueryTab, openTableTab, disconnect, disconnecting } = useWorkbench();
   // RN-NAV-011: a densidade da árvore, que muda ao vivo com a escolha em Configurações › Aparência.
   const density = usePreferences().preferences.ui.navigatorDensity;
-  // As pastas começam abertas; só as recolhidas são estado. Ao ir para Conexões e voltar, elas reabrem.
-  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(new Set());
+  // RN-NAV-014: as pastas abertas são as lembradas (por usuário, nas preferências desta instalação); sem nada lembrado, todas fechadas. Quem escreve é um
+  // evento ou um efeito, nunca a renderização. As conexões não se lembram: abrir a conexão é conectar (RN-SESSAO-001).
+  const [openFolderIds, changeFolders] = useOpenFolders("connections");
+  // Com o seletor de ambiente ou "Só as conectadas" ligado, as pastas no caminho até as conexões à vista abrem só nessa vista, sem gravar; o que a pessoa
+  // recolhe nela vale enquanto o filtro está ligado (como `searchCollapsed` na busca), e desligá-lo devolve as pastas como estavam.
+  const [filterFolders, setFilterFolders] = useState(noFilterFolders);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null);
   const [connectionAction, setConnectionAction] = useState<ConnectionAction | null>(null);
   // RN-TRANSF-014 e RN-DBEAVER-014: o que a importação acabou de criar (o diálogo é da página, e o pedido vem por `importedReveal`), à espera de as listas o
   // trazerem para a árvore mostrá-lo. `handledImport` é o pedido que a árvore já atendeu.
   const importedRequest = useSyncExternalStore(importedReveal.subscribe, importedReveal.pending, importedReveal.pending);
-  const [handledImport, setHandledImport] = useState(0);
+  const [handledImport, setHandledImport] = useState<{ seq: number; folderIds: string[] }>({ seq: 0, folderIds: [] });
   // A linha a trazer à vista e a receber o foco (a conexão salva ou duplicada, RN-NAV-004; a primeira importada, RN-TRANSF-014), uma vez por pedido.
   const [rowFocus, setRowFocus] = useState<{ key: string; seq: number } | null>(null);
   const focusRow = (key: string) => setRowFocus((current) => ({ key, seq: (current?.seq ?? 0) + 1 }));
@@ -212,7 +217,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   // A conexão que o formulário acabou de salvar (RN-NAV-004), e a última que esta árvore já mostrou (o número do pedido).
   const onScreen = useWorkbenchOnScreen();
   const revealRequest = useSyncExternalStore(connectionReveal.subscribe, connectionReveal.pending, connectionReveal.pending);
-  const [reveal, setReveal] = useState<{ key: string; seq: number } | null>(null);
+  const [reveal, setReveal] = useState<{ key: string; seq: number; folderIds: string[] } | null>(null);
 
   const connectionList = useMemo(() => connections.data ?? [], [connections.data]);
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
@@ -257,7 +262,14 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   });
   const lackingKey = lackingCredentials.map((connection) => connection.id).join(" ");
   const lackingKeys = new Set(lackingCredentials.map((connection) => navKey({ type: "connection", connectionId: connection.id })));
-  const open = new Set([...[...expanded].filter((key) => !lackingKeys.has(key)), ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
+  // RN-NAV-014: as pastas abertas são as lembradas; com o seletor de ambiente ou "Só as conectadas" ligado (RN-NAV-010 e 013), as do caminho até as conexões à
+  // vista abrem só nessa vista, menos as que a pessoa recolheu nela. Desligar o filtro encerra a vista e trocá-lo começa outra (ajuste durante a renderização: as
+  // recolhidas saem), e desligar devolve as pastas lembradas.
+  const filterView = filterViewOf(environmentChoice, onlyConnected);
+  const filtering = filterView !== null;
+  const heldFilterFolders = filterFoldersFor(filterFolders, filterView);
+  if (heldFilterFolders !== filterFolders) setFilterFolders(heldFilterFolders);
+  const open = openTreeKeys({ expanded, lackingKeys, folderKeys: tree.folderKeys, openFolderIds, filterCollapsed: collapsedInFilter(filterFolders, filterView) });
 
   const paths = [...expanded].map(parseNavKey);
   const fetchedPaths = paths.filter(isFetched);
@@ -292,15 +304,15 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   const rows = search === null ? flattenVisible(tree.roots, open, levels) : search.rows;
 
   // Salvar no formulário volta à área de trabalho com a conexão à vista e escolhida (RN-NAV-004): com a área de trabalho de novo na tela e a
-  // conexão já na lista, as pastas acima dela abrem, a linha é escolhida, uma busca que a escondia é limpa, e a lista a traz à vista e lhe dá o
-  // foco. Ajuste durante a renderização (como no provedor), uma vez por pedido; levar o pedido embora e avisar quem mostra o navegador são efeitos.
+  // conexão já na lista, a linha é escolhida, uma busca que a escondia é limpa, e a lista a traz à vista e lhe dá o foco. Ajuste durante a renderização
+  // (como no provedor), uma vez por pedido. As pastas acima dela abrem e se lembram (RN-NAV-014), e isso é escrita numa loja de fora: vai junto do pedido
+  // (`folderIds`) e se faz no efeito que o leva embora, nunca aqui.
   const revealTarget = revealRequest === null || revealRequest.seq === reveal?.seq || !onScreen ? undefined : connectionById.get(revealRequest.connectionId);
   if (revealRequest !== null && revealTarget !== undefined) {
     const plan = revealOf(revealTarget, folders.data ?? []);
-    setReveal({ key: plan.key, seq: revealRequest.seq });
+    setReveal({ key: plan.key, seq: revealRequest.seq, folderIds: folderIdsOfKeys(plan.folderKeys) });
     setSelectedKey(plan.key);
     focusRow(plan.key);
-    setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     if (search !== null && !search.rows.some((row) => row.key === plan.key)) setQuery("");
     // Os filtros que a escondem também saem (RN-NAV-010 e 013): a conexão salva ou duplicada sem o ambiente escolhido, ou desconectada, tem de aparecer.
     if (!shown.connections.includes(revealTarget)) {
@@ -309,13 +321,13 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     }
   }
 
-  // RN-TRANSF-014: depois da importação, com as listas já trazendo o que entrou, as pastas até ele abrem e a primeira linha importada, na ordem da árvore, é
-  // escolhida e recebe o foco. Os filtros ficam como estavam: se um deles a esconde, o foco vai à pasta de destino, ou, quando o destino é a raiz ou também
-  // está escondido, à primeira linha à vista. Ajuste durante a renderização, uma vez, como o da conexão salva.
-  if (importedRequest !== null && importedRequest.seq !== handledImport && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(importedRequest.value, folders.data, connections.data)) {
+  // RN-TRANSF-014: depois da importação, com as listas já trazendo o que entrou, a primeira linha importada, na ordem da árvore, é escolhida e recebe o foco
+  // (as pastas até ela abrem e se lembram no efeito que leva o pedido embora, como no salvar). Os filtros ficam como estavam: se um deles a esconde, o foco vai
+  // à pasta de destino, ou, quando o destino é a raiz ou também está escondido, à primeira linha à vista. Ajuste durante a renderização, uma vez, como o da
+  // conexão salva.
+  if (importedRequest !== null && importedRequest.seq !== handledImport.seq && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(importedRequest.value, folders.data, connections.data)) {
     const plan = importRevealOf(importedRequest.value, folders.data, connections.data);
-    setHandledImport(importedRequest.seq);
-    setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
+    setHandledImport({ seq: importedRequest.seq, folderIds: folderIdsOfKeys(plan.folderKeys) });
     const shownKeys = new Set([...shown.folders.map((folder) => navKey({ type: "folder", id: folder.id })), ...shown.connections.map((connection) => navKey({ type: "connection", connectionId: connection.id }))]);
     const onView = (key: string | null): key is string => key !== null && shownKeys.has(key) && (search === null || search.rows.some((row) => row.key === key));
     const key = onView(plan.first) ? plan.first : onView(plan.target) ? plan.target : (rows[0]?.key ?? null);
@@ -332,12 +344,33 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     }
   }, [lackingKey, setNodeOpen]);
 
+  /**
+   * Abre as pastas e as lembra (RN-NAV-014): o que foi criado, salvo, duplicado, importado, movido ou revelado fica à vista, e à vista na próxima entrada.
+   * Na vista filtrada elas saem também das recolhidas. Só em evento ou em efeito: a loja é de fora, e a renderização não escreve nela.
+   */
+  const openFolders = (ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    changeFolders({ open: ids });
+    setFilterFolders((current) => openedInFilter(current, filterView, ids.map(folderKeyOf)));
+  };
+  // Os efeitos das revelações abrem as pastas com a versão de agora, sem depender dela: cada pedido é atendido uma vez (o número do pedido), e não a cada troca de filtro.
+  const openForRequest = useEffectEvent(openFolders);
+
+  // RN-NAV-014: a pasta excluída sai do que se lembra, na primeira lista de pastas desta montagem (a lida depois dela, e não a que o cache já tinha).
+  const pruned = useRef(false);
+  useEffect(() => {
+    if (pruned.current || folders.data === undefined || !folders.isFetchedAfterMount) return;
+    pruned.current = true;
+    changeFolders({ retain: folders.data.map((folder) => folder.id) });
+  }, [folders.data, folders.isFetchedAfterMount, changeFolders]);
+
   // RN-DBEAVER-014: com o navegador escondido (RN-NAV-008), a importação o mostra antes de levar o foco à linha; o pedido sai quando a árvore o atendeu.
   const announcedImport = useRef(0);
   useEffect(() => {
-    if (handledImport === 0 || announcedImport.current === handledImport) return;
-    announcedImport.current = handledImport;
-    importedReveal.take(handledImport);
+    if (handledImport.seq === 0 || announcedImport.current === handledImport.seq) return;
+    announcedImport.current = handledImport.seq;
+    openForRequest(handledImport.folderIds);
+    importedReveal.take(handledImport.seq);
     onRevealed?.();
   }, [handledImport, onRevealed]);
 
@@ -345,6 +378,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   useEffect(() => {
     if (reveal === null || announcedReveal.current === reveal.seq) return;
     announcedReveal.current = reveal.seq;
+    openForRequest(reveal.folderIds);
     connectionReveal.take(reveal.seq);
     onRevealed?.();
   }, [reveal, onRevealed]);
@@ -354,7 +388,12 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
 
   function toggle(node: NavNode) {
     if (node.kind === "folder") {
-      setCollapsedFolders((current) => new Set(current.has(node.key) ? [...current].filter((key) => key !== node.key) : [...current, node.key]));
+      const id = folderIdOfKey(node.key);
+      if (id === null) return;
+
+      // RN-NAV-014: a pasta abre e fecha lembrada; na vista filtrada (RN-NAV-010 e 013) vale só enquanto o filtro está ligado, sem gravar.
+      if (filtering) setFilterFolders((current) => toggledInFilter(current, filterView, node.key, open.has(node.key)));
+      else changeFolders(open.has(node.key) ? { close: [id] } : { open: [id] });
       return;
     }
 
@@ -378,8 +417,22 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     setNodeOpen(navKey({ type: "database", connectionId }), true);
   }
 
-  /** A pasta fica aberta: o que acaba de ser criado dentro dela tem de aparecer (como a tela de Conexões fazia). */
-  const expandFolder = (folderId: string) => setCollapsedFolders((current) => new Set([...current].filter((key) => key !== navKey({ type: "folder", id: folderId }))));
+  /** A pasta fica aberta, e lembrada: o que acaba de ser criado dentro dela tem de aparecer (como a tela de Conexões fazia). */
+  const expandFolder = (folderId: string) => openFolders([folderId]);
+
+  /**
+   * "Mover para…" numa pasta (RN-NAV-003, RN-NAV-014): as pastas do destino abrem, lembradas, e ela fica escolhida e à vista, como a conexão salva. O pedido de
+   * foco só vale sem busca: a pasta pode não estar na lista filtrada, e o pedido ficaria armado até ela aparecer. A conexão movida pede pelo `connectionReveal`.
+   */
+  function revealMovedFolder(moved: Folder) {
+    const known = queryClient.getQueryData<Folder[]>(foldersQuery.queryKey) ?? folders.data ?? [];
+    openFolders(folderIdsOfKeys(revealOf({ id: moved.id, folderID: moved.parentID }, known).folderKeys));
+    if (search !== null) return;
+
+    const key = folderKeyOf(moved.id);
+    setSelectedKey(key);
+    focusRow(key);
+  }
 
   /**
    * "Duplicar conexão" (RN-CONN-016): a cópia nasce na mesma pasta, desconectada, e aparece escolhida, com as pastas acima dela abertas e o foco nela
@@ -613,7 +666,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   // Uma pasta só está "aberta" se tem o que mostrar; as conexões, os esquemas e as tabelas abertos estão em `expanded`.
   const hasOpenFolder = tree.folderKeys.some((key) => {
     const level = tree.levels.get(childrenKey({ key }));
-    return !collapsedFolders.has(key) && level?.status === "loaded" && level.children.length > 0;
+    return open.has(key) && level?.status === "loaded" && level.children.length > 0;
   });
 
   const toolbar = toolbarFor(
@@ -643,9 +696,11 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
         if (selected !== null) refresh(selected);
         return;
       // Recolher não desconecta: a sessão de cada conexão continua aberta, e o ponto de estado dela continua verde.
+      // As pastas também (RN-NAV-002, RN-NAV-014), e é isso que volta na próxima entrada; na vista filtrada só a vista se recolhe, e o lembrado fica como estava.
       case "collapseAll":
         for (const key of expanded) setNodeOpen(key, false);
-        setCollapsedFolders(new Set(tree.folderKeys));
+        if (filtering) setFilterFolders(collapsedAllInFilter(filterView, tree.folderKeys));
+        else changeFolders({ closeAll: true });
         return;
       // O diálogo de nova conexão (RN-NAV-004), na pasta escolhida (ou na do item escolhido), ou na raiz; sempre habilitado (RN-NAV-002).
       case "newConnection":
@@ -693,7 +748,6 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
 
     // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página). A árvore vazia pelo
     // filtro de ambiente ou pelo "Só as conectadas" não é o primeiro uso: há o que mostrar, só não com esses filtros.
-    const filtering = environmentChoice.type !== "all" || onlyConnected;
     if (tree.roots.length === 0 && (!filtering || (connectionList.length === 0 && (folders.data ?? []).length === 0))) {
       return (
         <div className="flex flex-col gap-1 px-3 py-2">
@@ -793,9 +847,9 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
         />
       )}
       {failure?.kind === "failed" && failureConnection !== undefined ? <CheckFailureDialog connection={failureConnection.name} state={failure} onClose={() => setCheckFailure(null)} /> : null}
-      {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} />}
+      {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} onMoved={revealMovedFolder} />}
       {connectionAction?.type === "rename" ? <RenameConnectionDialog connection={connectionAction.connection} onClose={() => setConnectionAction(null)} /> : null}
-      {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} /> : null}
+      {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} onMoved={(moved) => connectionReveal.request(moved.id)} /> : null}
       {connectionAction?.type === "delete" ? (
         <DeleteConnectionDialog
           connection={connectionAction.connection}

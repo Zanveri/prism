@@ -24,7 +24,10 @@ export type ScriptTreeNode =
   | { kind: "folder"; key: string; folder: ScriptFolder; depth: number; parentKey: string | null; children: ScriptTreeNode[]; contents: FolderContents }
   | { kind: "script"; key: string; script: ScriptSummary; depth: number; parentKey: string | null };
 
-export const folderKey = (id: string) => `folder:${id}`;
+const folderPrefix = "folder:";
+export const folderKey = (id: string) => `${folderPrefix}${id}`;
+/** O identificador da pasta de uma chave de pasta (`folderKey`), que é o que as pastas abertas lembradas guardam (RN-NAV-014); `null` na chave de um script. */
+export const folderIdOf = (key: string): string | null => (key.startsWith(folderPrefix) ? key.slice(folderPrefix.length) : null);
 export const scriptKey = (id: string) => `script:${id}`;
 
 function groupBy<T>(items: readonly T[], key: (item: T) => string | null): Map<string | null, T[]> {
@@ -69,13 +72,16 @@ export function buildScriptTree(folders: readonly ScriptFolder[], scripts: reado
 /** Uma linha à vista: o nó e, na pasta que tem alguma coisa dentro, se ela está aberta (a pasta vazia não tem a seta de abrir, e não diz nada). */
 export type ScriptTreeRow = { node: ScriptTreeNode; expanded: boolean | null };
 
-/** RN-SCRIPT-008: as linhas à vista, na ordem da árvore. `collapsed` são as chaves das pastas fechadas: as pastas começam abertas. */
-export function visibleScriptRows(tree: readonly ScriptTreeNode[], collapsed: ReadonlySet<string>): ScriptTreeRow[] {
+/**
+ * RN-SCRIPT-008: as linhas à vista, na ordem da árvore. `open` são as chaves das pastas ABERTAS (as lembradas, RN-NAV-014): a pasta que não está nele está
+ * fechada, e sem nada lembrado a seção mostra só o primeiro nível.
+ */
+export function visibleScriptRows(tree: readonly ScriptTreeNode[], open: ReadonlySet<string>): ScriptTreeRow[] {
   return tree.flatMap((node): ScriptTreeRow[] => {
     if (node.kind === "script") return [{ node, expanded: null }];
     if (node.children.length === 0) return [{ node, expanded: null }];
-    const open = !collapsed.has(node.key);
-    return [{ node, expanded: open }, ...(open ? visibleScriptRows(node.children, collapsed) : [])];
+    const expanded = open.has(node.key);
+    return [{ node, expanded }, ...(expanded ? visibleScriptRows(node.children, open) : [])];
   });
 }
 
@@ -157,12 +163,12 @@ export function scriptFolderPath(folders: readonly ScriptFolder[], id: string | 
   return names.length === 0 ? null : names.join(" / ");
 }
 
-/** As chaves das pastas acima de um nó, para abri-las: o que acabou de ser criado, renomeado ou movido fica à vista (RN-SCRIPT-008). */
-export function ancestorKeys(folders: readonly ScriptFolder[], parentID: string | null): string[] {
+/** Os identificadores das pastas acima de um nó, para abri-las e lembrá-las abertas: o que acabou de ser criado, renomeado ou movido fica à vista (RN-SCRIPT-008, RN-NAV-014). */
+export function ancestorIds(folders: readonly ScriptFolder[], parentID: string | null): string[] {
   const byId = new Map(folders.map((folder) => [folder.id, folder]));
-  const keys: string[] = [];
-  for (let current = parentID; current !== null && !keys.includes(folderKey(current)); current = byId.get(current)?.parentID ?? null) keys.push(folderKey(current));
-  return keys;
+  const ids: string[] = [];
+  for (let current = parentID; current !== null && !ids.includes(current); current = byId.get(current)?.parentID ?? null) ids.push(current);
+  return ids;
 }
 
 /**

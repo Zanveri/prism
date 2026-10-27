@@ -42,8 +42,10 @@ const successToast = { create: toasts.folderCreated, edit: toasts.folderUpdated,
  *
  * A pasta pai oferece todas as pastas, a própria e as de dentro dela inclusive: mover para dentro
  * de si mesma é recusa da API (`FOLDER_CYCLE`), que chega como aviso. Só o 422 de nome vai no campo.
+ *
+ * Depois de mover, com as listas já lidas de novo, `onMoved` recebe a pasta como ficou: o navegador abre as pastas do destino e a deixa à vista (RN-NAV-014).
  */
-export function FolderDialog({ state, folders, onClose }: { state: FolderDialogState; folders: Folder[]; onClose: () => void }) {
+export function FolderDialog({ state, folders, onClose, onMoved }: { state: FolderDialogState; folders: Folder[]; onClose: () => void; onMoved?: (folder: Folder) => void }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [parentID, setParentID] = useState(state.mode === "create" ? (state.parentID ?? "") : state.mode === "move" ? (state.folder.parentID ?? "") : "");
@@ -68,6 +70,7 @@ export function FolderDialog({ state, folders, onClose }: { state: FolderDialogS
 
     toast.success(successToast[state.mode]);
     await invalidateLists(queryClient);
+    if (state.mode === "move") onMoved?.(result.data);
     onClose();
   }
 

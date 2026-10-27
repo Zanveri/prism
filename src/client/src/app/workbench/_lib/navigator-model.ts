@@ -215,7 +215,8 @@ export function tabbableKey(rows: readonly NavNode[], selectedKey: string | null
 
 /**
  * Pastas e conexões salvas como nós; os filhos de cada pasta já vêm como nível carregado.
- * `folderKeys` são as pastas, que começam abertas (a tela guarda só as que o usuário recolheu).
+ * `folderKeys` são as pastas, que começam fechadas e voltam abertas como a pessoa as deixou (RN-NAV-014: `openTreeKeys`, que cruza estas chaves com as pastas
+ * lembradas).
  */
 export function treeNodes(tree: TreeNode[]): { roots: NavNode[]; levels: Map<string, LevelState>; folderKeys: string[] } {
   const levels = new Map<string, LevelState>();

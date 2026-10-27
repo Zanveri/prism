@@ -18,7 +18,7 @@ const scripts: ScriptSummary[] = [
   { id: "s2", name: "Pedidos", connectionID: "c1", database: "vendas", folderID: null, icon: "chart", color: "#F2B644", updatedAt: "" },
 ];
 const tree = buildScriptTree(folders, scripts);
-const allOpen = visibleScriptRows(tree, new Set());
+const allOpen = visibleScriptRows(tree, new Set([folderKey("f1")]));
 const noop = () => {};
 const view = (over: Partial<Parameters<typeof ScriptsTreeView>[0]> = {}) => ScriptsTreeView({ rows: allOpen, failed: false, selectedKey: null, onSelect: noop, onToggle: noop, onRequest: noop, onMenu: noop, onRetry: noop, ...over });
 const items = (tree: ReturnType<typeof view>) => elementsOf(tree).filter((element) => element.props.role === "treeitem");
@@ -44,7 +44,7 @@ describe("a árvore da seção Scripts (RN-SCRIPT-008)", () => {
 
     expect(rows.map((row) => row.props["aria-expanded"])).toEqual([true, undefined, undefined, undefined]);
     expect(rows.map((row) => chevrons(row).length)).toEqual([1, 0, 0, 0]);
-    expect(items(view({ rows: visibleScriptRows(tree, new Set([folderKey("f1")])) }))[0].props["aria-expanded"]).toBe(false);
+    expect(items(view({ rows: visibleScriptRows(tree, new Set()) }))[0].props["aria-expanded"]).toBe(false);
   });
 
   it("só uma linha entra no Tab: a escolhida, ou a primeira", () => {
