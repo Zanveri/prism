@@ -546,12 +546,12 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// RN-SQL-009: a mensagem do servidor, e o detalhe e a dica quando ele os manda, cada um na sua linha e com o rótulo que o
     /// PostgreSQL usa, e o nome da coluna do erro, quando ele o diz. A `Message` da exceção não serve: leva o SQLSTATE na frente e junta tudo num formato do driver. O cancelamento
     /// chega embrulhado, com a `PostgresException` por dentro. O que não veio do servidor (host que não responde, conexão que caiu) tem a
-    /// causa na exceção interna.
+    /// causa na exceção interna, e a mensagem diz as duas só quando uma não repete a outra (<see cref="CauseText"/>).
     /// </summary>
     protected override DatabaseFailure ToFailure(EDatabaseFailure kind, Exception exception)
     {
         if ((exception as PostgresException ?? exception.InnerException as PostgresException) is not { } postgres)
-            return new DatabaseFailure(kind, exception.InnerException is null ? exception.Message : $"{exception.Message}: {exception.InnerException.Message}");
+            return new DatabaseFailure(kind, CauseText(exception));
 
         var message = postgres.MessageText;
         if (postgres.Detail is { Length: > 0 } detail)
@@ -562,6 +562,23 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
         // RN-IMPORT-016: a coluna que o banco diz no erro (na recusa do nulo), que a importação leva à coluna do arquivo.
         return new DatabaseFailure(kind, message, postgres.SqlState, postgres.Position > 0 ? postgres.Position : null, ColumnName: postgres.ColumnName is { Length: > 0 } column ? column : null);
+    }
+
+    /// <summary>
+    /// RN-SQL-009: a mensagem de uma falha que não veio do servidor, com a causa quando ela diz mais: "Failed to connect to db.exemplo.invalid:5432: Connection refused". O Npgsql
+    /// repete a causa na própria mensagem quando o nome do host não resolve (a `NpgsqlException` e a `SocketException` por dentro dizem "Name or service not known"), e a tela
+    /// mostrava a frase duas vezes. Se uma das duas já contém a outra, fica a que diz mais; senão, as duas, a da exceção primeiro.
+    /// </summary>
+    internal static string CauseText(Exception exception)
+    {
+        var message = exception.Message;
+        if (exception.InnerException?.Message is not { Length: > 0 } cause)
+            return message;
+
+        if (message.Contains(cause, StringComparison.Ordinal))
+            return message;
+
+        return cause.Contains(message, StringComparison.Ordinal) ? cause : $"{message}: {cause}";
     }
 
     /// <summary>
