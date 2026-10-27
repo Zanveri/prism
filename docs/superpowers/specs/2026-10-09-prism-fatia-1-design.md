@@ -370,7 +370,10 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 - **RN-ARVORE-001.** Níveis: pasta › conexão › bancos do servidor (RN-ARVORE-006) › esquemas › Tabelas, Visões e
   Rotinas (procedimentos e funções) › tabela › Colunas, Índices e Chaves estrangeiras.
 - **RN-ARVORE-002.** Cada nível é buscado só quando o usuário expande, e fica em memória até ele
-  pedir "Atualizar" naquele nó.
+  pedir "Atualizar" naquele nó. O índice de nomes da busca (RN-BUSCA-002) não é nível: não enche
+  nenhum nível nem abre nó, e o "Atualizar" num nó do banco dele, ou na conexão, faz a busca seguinte
+  pedi-lo de novo. *Alterada a pedido do dono em 2026-10-27 (seção 42): entrou o índice de nomes da
+  busca.*
 - **RN-ARVORE-003.** Coluna mostra nome, tipo, se aceita nulo e se faz parte da chave primária.
   Índice mostra nome, colunas e se é único. Chave estrangeira mostra nome, colunas e a tabela e
   as colunas referenciadas.
@@ -624,6 +627,7 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET api/user/database-sessions/{id}/databases` | 200 lista de `{ name, isCurrent }` (RN-ARVORE-006; espera a vez na sessão, como as consultas de catálogo) | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `DELETE api/user/database-sessions/{id}` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
 | `GET api/user/database-sessions/{id}/schemas` | 200 lista | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
+| `GET api/user/database-sessions/{id}/object-names` (o índice de nomes da busca, RN-BUSCA-002, seção 42; espera a vez na sessão, como as consultas de catálogo) | 200 `{ schemas: [{ name, isSystem, tables, views }], truncated }` | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `GET .../schemas/{schema}/objects?kind=` | 200 lista (`tables`, `views`, `routines`) | as mesmas, mais 422 `OBJECT_KIND_INVALID` |
 | `GET .../schemas/{schema}/tables/{table}/columns` | 200 lista | as mesmas |
 | `GET .../schemas/{schema}/tables/{table}/indexes` | 200 lista | as mesmas |
@@ -708,7 +712,8 @@ campos nas notas dela; `QUERY_PARAMETERS_MISMATCH` (422), os marcadores do texto
 `markers` e `values`; `VARIABLE_QUERY_NOT_READ` e `VARIABLE_QUERY_TOO_LARGE` (422), a consulta da variável que não é
 uma leitura e a que passa dos limites, esta com `reason` e `limit`; `VALUES_INVALID` (422, na forma do erro de campo)
 e `VALUES_TABLE_NOT_FOUND` (404), das rotas dos valores; e `SCRIPT_RUN_VALUES_INVALID` (422, no campo), dos valores
-lembrados de um script.
+lembrados de um script. Com a seção 42: a rota do índice de nomes da busca (`object-names`), com os campos nas notas
+dela, sem código novo.
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
@@ -871,7 +876,8 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
 - O canvas desenha a árvore do navegador e as grades na IBM Plex Mono: elas usam a fonte da interface, que sem escolha
   é a IBM Plex Sans, e a largura das colunas da grade é medida nela (RN-CONFIG-008, seção 42). A barra do navegador
   tem o campo "Filtrar objetos" sozinho, na largura toda, como no canvas, e, numa linha abaixo dele, "Só as
-  conectadas" e o seletor de ambiente (RN-NAV-010 e 013), que o canvas não tem.
+  conectadas" e o seletor de ambiente (RN-NAV-010 e 013), que o canvas não tem, nem a linha de estado da busca, que
+  vem abaixo deles (RN-BUSCA-002).
 
 ## 10. Riscos e sondas
 
@@ -1376,10 +1382,15 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
 - **RN-BUSCA-001.** O navegador tem um campo de busca, sozinho na linha dele, na largura toda,
   abaixo da barra de ações (RN-NAV-002); "Só as conectadas" e o seletor de ambiente ficam na linha de
   baixo (RN-NAV-010 e 013). Ele filtra pelo nome, sem diferenciar maiúsculas nem acentos, o que já
-  está carregado na árvore (pastas, conexões, esquemas, tabelas, visões, rotinas, colunas); o que casa
-  aparece com os ancestrais abertos, e o trecho que casou fica destacado. Limpar o campo devolve a
-  árvore como estava. A busca não abre conexão nem carrega nível que o usuário não abriu. *Alterada a
-  pedido do dono em 2026-10-27 (seção 42): o campo dividia a linha com o seletor de ambiente.*
+  está carregado na árvore (pastas, conexões, esquemas, tabelas, visões, rotinas, colunas) e, nas
+  conexões conectadas, as tabelas e as visões de todos os esquemas, também dos que ninguém abriu, pelo
+  índice de nomes de cada banco (RN-BUSCA-002); o que casa aparece com os ancestrais abertos, e o
+  trecho que casou fica destacado. Limpar o campo devolve a árvore como estava: a busca não abre nó,
+  não carrega nível da árvore (RN-ARVORE-002) e não muda o que se lembra das pastas (RN-NAV-014). A
+  busca não conecta sozinha: a conexão desconectada fica de fora, e só o "Buscar nelas também" a
+  conecta, a pedido (RN-BUSCA-002). *Alterada a pedido do dono em 2026-10-27 (seção 42): o campo
+  dividia a linha com o seletor de ambiente; e a busca olhava só o que a árvore tinha carregado, e
+  não achava a tabela de um esquema que ninguém tinha aberto.*
 - **RN-MENU-001.** O botão direito (e Shift+F10, e a tecla de menu) sobre um item do navegador abre um menu de
   contexto com o tema do app, com as ações daquele tipo de item. Conexão: conectar ou desconectar, nova consulta,
   atualizar, editar conexão, exportar conexão, copiar nome. Esquema: nova consulta, atualizar, copiar nome. Tabela
@@ -12592,6 +12603,96 @@ Está na RN-NAV-010 e na RN-NAV-013, alteradas no lugar, e no começo da RN-BUSC
 - Quem diz a disposição é um componente só, sem estado (`NavigatorFilters`): o estado dos três controles continua no
   navegador, e o que cada um faz não muda.
 
+### A busca em todas as conexões
+
+O "Filtrar objetos" continua filtrando o que a árvore já carregou (RN-BUSCA-001, alterada no lugar), e passa a
+procurar também as tabelas e as visões de todos os esquemas dos bancos conectados, num índice de nomes que a API
+devolve para cada banco, numa consulta só ao catálogo. A busca no servidor, a cada tecla, ficou de fora: seria uma ida
+ao banco de cada ambiente a cada pausa da digitação, e ignorar os acentos não se escreve do mesmo jeito nos três
+bancos. Carregar os níveis de cada esquema também ficou de fora: seriam duas consultas por esquema, e a árvore ficaria
+cheia do que a pessoa não abriu (RN-ARVORE-002).
+
+- **RN-BUSCA-002.** O índice de nomes da busca.
+  - **O que entra.** As tabelas e as visões de todos os esquemas de cada banco do escopo (abaixo), também os de
+    sistema, que vêm por último, como na árvore (RN-ARVORE-004). São as mesmas que os grupos "Tabelas" e "Visões" da
+    árvore mostram em cada esquema, com os mesmos tipos de objeto em cada banco. As rotinas, as colunas, os índices e
+    as chaves continuam só no que a árvore já carregou (RN-BUSCA-001).
+  - **O escopo.** As conexões que a árvore mostra, depois do seletor de ambiente (RN-NAV-010) e de "Só as conectadas"
+    (RN-NAV-013), e, delas, só as conectadas, na conta da RN-NAV-013: a sessão da árvore aberta ou uma aba conectada.
+    De cada uma, os bancos:
+    - o banco da conexão. Na conexão conectada só por uma aba, a busca abre a sessão da árvore desse banco, sem abrir
+      o nó: a conexão já está conectada, e isso não é conectar;
+    - e cada outro banco do servidor que a pessoa já expandiu (RN-ARVORE-006), que já tem a sessão da árvore.
+
+    A busca não abre a sessão de um banco que ninguém abriu: num servidor com dezenas de bancos, seriam dezenas de
+    sessões.
+  - **Quando o índice vem.** A tela pede o índice de cada banco do escopo quando o campo tem texto, uma vez por banco,
+    pela rota `object-names` (abaixo). Dali em diante cada tecla filtra no próprio app, sem ir ao banco, sem esperar
+    pausa e sem mínimo de letras. O índice fica em memória até o "Atualizar" num nó daquele banco ou na conexão
+    (RN-ARVORE-002), o "Desconectar", a conexão que some, a sessão reaberta e o bloqueio. O banco que conecta durante
+    a busca, e a conexão que um filtro passa a mostrar, entram sozinhos. A tabela criada depois da primeira busca só
+    aparece depois do "Atualizar", como na árvore.
+  - **Não é nível da árvore.** O índice não enche nenhum nível, não abre nó e não muda o que se lembra das pastas
+    (RN-NAV-014): limpar o campo devolve a árvore como estava. O nível que a árvore já carregou vale mais: o índice só
+    acrescenta o que falta. O autocompletar do editor (RN-CONFIG-004) não usa o índice, e continua com o que a árvore
+    carregou. Na tela, o índice mora junto dos níveis da árvore daquela conexão, para o "Desconectar", a conexão que
+    some, o bloqueio, a sessão reaberta e o "Atualizar" cuidarem dele como cuidam deles; quem lê os níveis o pula.
+  - **O que aparece.** Cada tabela e visão achada aparece no caminho dela (a pasta, a conexão, o banco, o esquema, o
+    grupo "Tabelas" ou "Visões"), com os ancestrais abertos e o trecho destacado, como o que está carregado; sem a
+    lista dos bancos carregada, a conexão mostra só o banco dela, marcado como o padrão. A linha é a mesma que a
+    árvore terá quando o nível carregar, com a mesma identidade: o duplo clique, o Enter, o menu e o "Gerar
+    `SELECT`" valem nela, e a escolha continua nela quando o nível carregar. O grupo diz quantas casaram do total que ele tem no
+    índice ("3 de 120"); com o índice cortado na API, só quantas casaram. Com três ambientes de tabelas iguais, a
+    tabela aparece três vezes, uma em cada conexão.
+  - **O corte.** Cada banco mostra no máximo 200 tabelas e visões do índice que casam, na ordem dos esquemas e dos
+    nomes do banco, e a contagem dos achados continua além do corte. O corte é por banco, e não do total: um corte do
+    total deixaria o primeiro ambiente da árvore esconder os outros, que é o caso do pedido.
+  - **A linha de estado.** Fica logo abaixo das duas linhas dos filtros (RN-NAV-010), nunca ao lado do campo, com o
+    texto numa região `role="status"` e os botões fora dela. A chegada de um índice não move o foco nem a rolagem, e a
+    seta para baixo e o Enter do campo continuam indo à lista.
+    - Enquanto algum índice vem: "Buscando nas tabelas e visões de 3 bancos…" ("de 1 banco…").
+    - Com o corte: "Muitos resultados: cada banco mostra as 200 primeiras tabelas e visões. Escreva mais do nome para
+      ver as outras."
+    - Com o índice cortado na API: "Prod › erp tem mais de 50.000 tabelas e visões: a busca olhou as 50.000 primeiras
+      e o que já está aberto na árvore.", com o nome da conexão e o do banco.
+    - Com a falha: "Não foi possível buscar em Prod › erp: <mensagem do banco>", com a mensagem como veio
+      (RN-SQL-009), e "Tentar de novo", que pede o índice de novo e, se a sessão caiu, a reabre, como a árvore faz. A
+      falha não abre o aviso de erro: ela fica na linha.
+    - Com conexões de fora: "2 conexões não estão conectadas e ficaram de fora da busca." ("1 conexão não está
+      conectada e ficou de fora da busca.") e "Buscar nelas também", que abre a sessão da árvore de cada uma, sem abrir
+      o nó: é conectar, a pedido. A conexão sem usuário ou sem senha gravada fica de fora, porque abri-la abriria o
+      "Editar conexão" (RN-TRANSF-016), e a linha diz quantas: "1 sem usuário ou senha gravada ficou de fora." ("2 sem
+      usuário ou senha gravada ficaram de fora."). A conexão que falha ao conectar mostra a mensagem do banco na linha
+      de estado, e não no nó, como faria a árvore (RN-ARVORE-005), porque o nó não foi aberto: ele continua fechado.
+    - Sem nada achado, continua o "Nada encontrado para “x”.", e a explicação embaixo dele passa a ser "A busca olha
+      as tabelas e visões dos bancos conectados e o que já está aberto na árvore.".
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `GET api/user/database-sessions/{id}/object-names` (RN-BUSCA-002) | 200 `{ schemas: [{ name, isSystem, tables, views }], truncated }` | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
+
+Notas:
+
+- `schemas`: os esquemas do banco da sessão que têm ao menos uma tabela ou visão, os comuns primeiro e depois os de
+  sistema, cada grupo na ordem de nome do banco. `isSystem` segue o critério da lista dos esquemas (`GET …/schemas`)
+  de cada banco. `tables` e `views` são listas de nomes, exatamente como o catálogo os guarda e na ordem do banco: com
+  eles a tela monta a identidade da linha e o `SELECT * FROM "esquema"."nome"` dos Registros (RN-TABELA-002). São as
+  tabelas e as visões das listas `objects?kind=tables` e `objects?kind=views` de cada esquema, com os mesmos tipos de
+  objeto em cada banco.
+- O limite: até 50.000 nomes por banco. A API lê 50.001; com o último, `truncated` vem verdadeiro e ele fica de fora.
+  Como os esquemas de sistema vêm por último, o corte tira o catálogo primeiro. O número é uma constante da API e entra
+  no texto da consulta como constante (`LIMIT`, `FETCH FIRST … ROWS ONLY`, `SELECT FIRST`), nunca como dado de fora.
+- O que cada banco lê: no PostgreSQL, o `pg_class` com o `pg_namespace`; no Db2, o `SYSCAT.TABLES`; no Informix, o
+  `systables`, com o dono como esquema (RN-ARVORE-004). Uma consulta por banco, na sessão dele: o outro banco do
+  servidor tem a sessão dele (RN-ARVORE-006), e o índice dele vem por ela; no Db2, só o banco da conexão.
+- A rota espera a vez na sessão, como as outras consultas de catálogo (RN-SESSAO-002), e não recusa com
+  `SESSION_BUSY`. Não tem corpo nem parâmetro, e exige o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`,
+  como as demais). O erro do banco vem como veio (RN-SQL-009).
+- Na API, o handler é de uma linha e devolve os registros do catálogo como estão, como o guia da API
+  (`src/api/AGENTS.md`) pede.
+
 ### Testes e sondas
 
 Os testes da tela rodam sem página: a medida, o foco e a rolagem se provam em funções puras e nos testes dos
@@ -12635,6 +12736,24 @@ dito no relatório, e nunca dado como passando.
   conectadas"; "Todos os ambientes", um ambiente e um nome longo, com o X; uma fonte de interface mais larga e o zoom
   do programa a 125%; a 320 px com "Nenhuma conectada", os dois lado a lado e sem reticências; a 200 px, o seletor
   sozinho na linha dele; a ordem do Tab, o Ctrl+F e o Ctrl+Shift+E.
+- **A busca.** Na API: testes de unidade (o agrupamento por esquema na ordem em que as linhas chegam; o `truncated` só
+  com a linha a mais, que fica de fora; a lista vazia; o handler, com o 404 e o 422); de integração, nos três bancos
+  (dois esquemas, cada um com tabela, visão e rotina, e a rotina fora; os esquemas de sistema depois; os nomes com
+  espaço, aspas e barra, exatos; o corte com um limite pequeno); o contrato (em cada esquema, o índice é igual à lista
+  das tabelas mais a das visões, o que garante que a linha montada pela tela é a da árvore); e a rota (200 com a forma,
+  404 com a sessão que não existe e, no PostgreSQL e no Informix, a sessão de outro banco, com o índice dele). Na tela:
+  o índice que não é nível (os leitores dos níveis, a busca e o autocompletar, o pulam); o nível carregado, que vale
+  mais; a conexão sem a lista dos bancos, com o banco dela; a identidade da visão, igual à da lista inteira; o "3 de
+  120"; o corte por banco e a contagem além dele; os de sistema por último; o acento e a caixa; três conexões com a
+  mesma tabela; o "Atualizar", o "Desconectar" e a sessão reaberta, que descartam o índice; o desempenho (três índices
+  de 50.000 nomes e 20.000 nós carregados, abaixo de 100 ms por tecla, também com uma letra só); e a linha de estado
+  em cada situação. Sob Xvfb: três conexões com as mesmas tabelas, conectadas e recolhidas, e a tabela nas três, com o
+  caminho aberto; o duplo clique, que abre a aba; desconectar uma, que a tira da busca; "Buscar nelas também", que a
+  traz de volta; a conexão que não responde, que não trava as outras; o seletor de ambiente e "Só as conectadas", que
+  mudam o escopo; limpar o campo, que devolve a árvore como estava; e os pedidos à API, contados, um por banco.
+- **S-BUSCA-1.** O tempo e o tamanho do índice nos três bancos, com 5.000 tabelas e no limite de 50.000, também com o
+  catálogo grande do Db2 e do Informix e com a leitura do driver da IBM, que ocupa uma thread enquanto dura. O guia
+  da API (`src/api/AGENTS.md`) registra a medida.
 
 ### O que muda nas regras existentes
 
@@ -12650,9 +12769,12 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   só nessa vista, sem gravar.
 - **RN-NAV-013**: o botão vai para a linha abaixo do campo de filtro, à esquerda, e a conta nunca é cortada; as pastas
   no caminho abrem só na vista filtrada, como no seletor de ambiente.
-- **RN-BUSCA-001**: o campo fica sozinho na linha dele, na largura toda.
+- **RN-BUSCA-001**: o campo fica sozinho na linha dele, na largura toda; a busca procura também as tabelas e as visões
+  de todos os esquemas das conexões conectadas, pelo índice de nomes, e não conecta sozinha.
+- **RN-ARVORE-002**: o índice de nomes da busca não é nível da árvore.
+- **Seção 6**: a rota `object-names`.
 - **Seção 9**: a árvore e as grades deixam a IBM Plex Mono do canvas; a barra do navegador tem o campo na largura toda,
-  como no canvas, e a linha de baixo, que ele não tem.
+  como no canvas, e a linha de baixo e a linha de estado da busca, que ele não tem.
 - **Seção 33**: o "lembrar as pastas abertas" do "Fica para depois" entrou por esta seção.
 
 ### Fica para depois
@@ -12660,3 +12782,7 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - Uma fonte própria para a grade e o navegador, separada da interface, se o dono quiser.
 - Reabrir, ao conectar, os bancos, os esquemas e os grupos que estavam abertos na última vez. Os nomes deles são dados
   do banco, que não vão às preferências: teriam de ir ao cofre.
+- O índice da busca com as colunas e as rotinas.
+- A busca nos outros bancos do servidor que ninguém abriu, sem abrir uma sessão para cada um.
+- O autocompletar do editor com todas as tabelas e visões do índice (RN-CONFIG-004).
+- A busca no servidor, pelo termo, para o banco cujo índice passa de 50.000 nomes.
