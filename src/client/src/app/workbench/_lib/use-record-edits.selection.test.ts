@@ -811,4 +811,31 @@ describe("o alvo do Gerar SQL e do Copiar como, a busca e a faixa no contexto (s
       vi.useRealTimers();
     }
   });
+
+  it("o painel \"Valor\" (F7) busca e exibe o valor completo da célula cortada sem truncar", async () => {
+    const fullJson = `{"payload":"${"x".repeat(15_000)}"}`;
+    const previewJson = fullJson.slice(0, 10_000);
+    rt.cells.resultCells.mockResolvedValueOnce({ ok: true, data: [fullJson] });
+
+    const view = mount(
+      fakeRunner(
+        rowsState({
+          rows: [["1", previewJson, "10"]],
+          truncated: new Map([[0, new Set([1])]]),
+        }),
+      ),
+    );
+
+    view.show().editing!.onActivate({ row: 0, column: 1 });
+    expect(view.show().editing!.valueViewer!.value).toBe(previewJson);
+    expect(view.show().editing!.valueViewer!.editable).toEqual({ editable: false, reason: edit.readOnly(edit.reasons.truncated) });
+
+    view.show().editing!.onToggleValueViewer!();
+    view.show();
+    await settle();
+
+    expect(rt.cells.resultCells).toHaveBeenCalledWith("s1", "r1", [{ row: 0, column: 1 }], expect.any(AbortSignal));
+    expect(view.show().editing!.valueViewer!.value).toBe(fullJson);
+    expect(view.show().editing!.valueViewer!.editable).toEqual({ editable: true });
+  });
 });

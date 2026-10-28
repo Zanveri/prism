@@ -19,7 +19,7 @@ export type ToolbarSelection = {
 };
 
 /** As linhas que não são um nó que abre: a chave delas é a do pai mais um sufixo (`#coluna:3`, `#loading`, `#error`). */
-const suffixedKinds: ReadonlySet<NavKind> = new Set(["view", "routine", "column", "index", "foreignKey", "loading", "error"]);
+const suffixedKinds: ReadonlySet<NavKind> = new Set(["view", "routine", "sequence", "column", "index", "foreignKey", "loading", "error"]);
 
 /**
  * A conexão a que o item escolhido pertence, qualquer que seja a linha: Conectar e Desconectar agem sobre ela (RN-NAV-002). A conexão e os

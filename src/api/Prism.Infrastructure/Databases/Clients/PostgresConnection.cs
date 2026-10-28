@@ -25,9 +25,10 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal sealed class PostgresConnection(ConnectionSettings settings, ILogger logger) : AdoDatabaseConnection(logger)
 {
-    /// <summary>As letras de `relkind` do que a árvore mostra como tabela (a comum, a particionada e a estrangeira) e como visão (a comum e a materializada).</summary>
+    /// <summary>As letras de `relkind` do que a árvore mostra como tabela (a comum, a particionada e a estrangeira), como visão (a comum e a materializada) e como sequência.</summary>
     private const string TableKinds = "'r', 'p', 'f'";
     private const string ViewKinds = "'v', 'm'";
+    private const string SequenceKinds = "'S'";
 
     /// <summary>Os tipos que a tela alinha de outro jeito, pelo nome que o servidor dá. O resto, inclusive vetores e intervalos, é texto.</summary>
     private static readonly Dictionary<string, string> Kinds = new()
@@ -267,7 +268,10 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     }
 
     protected override void ConfigureUserCommand(DbCommand command)
-        => ((NpgsqlCommand)command).AllResultTypesAreUnknown = true;
+    {
+        base.ConfigureUserCommand(command);
+        ((NpgsqlCommand)command).AllResultTypesAreUnknown = true;
+    }
 
     /// <summary>
     /// RN-EDIT-003: o banco diz, na descrição das linhas, de que tabela (`TableOID`) e de que coluna dela (o número, `attnum`) vem cada
@@ -283,7 +287,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// </summary>
     protected override void BindEditParameter(DbParameter parameter, EditParameter value)
     {
-        ((NpgsqlParameter)parameter).NpgsqlDbType = NpgsqlDbType.Unknown;
+        ((NpgsqlParameter)parameter).NpgsqlDbType = value.Value is byte[] ? NpgsqlDbType.Bytea : NpgsqlDbType.Unknown;
         parameter.Value = value.Value ?? DBNull.Value;
     }
 
@@ -507,6 +511,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
                                                                  ELSE pg_class.reltuples::bigint
                                                              END"),
             "views" => RelationsSql(ViewKinds, "view", "NULL::bigint"),
+            "sequences" => RelationsSql(SequenceKinds, "sequence", "NULL::bigint"),
             "routines" => @"SELECT pg_proc.proname AS name,
                                    CASE pg_proc.prokind WHEN 'p' THEN 'procedure' ELSE 'function' END AS kind,
                                    NULL::bigint AS estimated_rows,

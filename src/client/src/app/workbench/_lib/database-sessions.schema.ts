@@ -38,10 +38,10 @@ export type DatabaseSchema = z.infer<typeof databaseSchemaSchema>;
 
 export const databaseSchemasSchema = z.array(databaseSchemaSchema);
 
-/** O que `objects?kind=` lista: tabelas, visões, ou as rotinas (procedimentos e funções), mais estimativa de linhas e comentário (RN-ESQUEMA-002 e RN-CAT-009). */
+/** O que `objects?kind=` lista: tabelas, visões, rotinas (procedimentos e funções) ou sequências, mais estimativa de linhas e comentário (RN-ESQUEMA-002 e RN-CAT-009). */
 export const databaseObjectSchema = z.object({
   name: z.string(),
-  kind: z.enum(["table", "view", "procedure", "function"]),
+  kind: z.enum(["table", "view", "procedure", "function", "sequence"]),
   estimatedRows: z.number().nullish(),
   comment: z.string().nullish(),
 });

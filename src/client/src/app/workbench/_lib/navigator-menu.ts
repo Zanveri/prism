@@ -246,6 +246,7 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
       ];
 
     case "routine":
+    case "sequence":
     case "column":
     case "index":
     case "foreignKey":

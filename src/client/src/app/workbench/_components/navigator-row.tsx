@@ -7,7 +7,7 @@ import type { ShownEnvironment } from "@/app/connections/_lib/environment";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
-import { AlertIcon, Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon, iconColorStyle } from "@/components/ui";
+import { AlertIcon, Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, SequenceIcon, TableIcon, iconColorStyle } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { checkView, type CheckState } from "../_lib/connection-checks";
@@ -33,6 +33,7 @@ const icons: Partial<Record<NavKind, ReactNode>> = {
   table: <TableIcon />,
   view: <EyeIcon />,
   routine: <RoutineIcon />,
+  sequence: <SequenceIcon />,
   column: <ColumnsIcon className="text-subtle" />,
   index: <IndexIcon className="text-subtle" />,
   foreignKey: <ForeignKeyIcon className="text-subtle" />,

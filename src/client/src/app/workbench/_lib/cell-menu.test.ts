@@ -401,4 +401,14 @@ describe("o menu com várias células escolhidas na coluna e com a coluna inteir
     const only = cellMenu(state({ pending: false, undo: { reason: "A alteração desta coluna vale para todas as linhas: escolha a coluna inteira, pelo cabeçalho, para desfazê-la." } })).flat().find((item) => item.id === "undo");
     expect(only).toMatchObject({ label: "Desfazer alteração", disabled: true, hint: "A alteração desta coluna vale para todas as linhas: escolha a coluna inteira, pelo cabeçalho, para desfazê-la." });
   });
+
+  it("inclui 'Visualizar valor' (F7) no grupo da célula quando viewValue é informado, mesmo em resultado somente leitura", () => {
+    const items = cellMenu(state({ access: { editable: false, reason: "somente leitura" }, viewValue: { editable: true } })).flat();
+    expect(items.find((item) => item.id === "viewValue")).toEqual({
+      id: "viewValue",
+      label: "Visualizar valor",
+      shortcut: "F7",
+      disabled: false,
+    });
+  });
 });

@@ -36,6 +36,8 @@ export type PrismBridge = {
   zoom: PrismZoom;
   transfers: PrismTransfers;
   dbeaver: PrismDbeaver;
+  /** Abre o valor de uma célula num editor de texto externo do sistema (`prism:open-external-editor`), sem devolver caminho (RN-SHELL-002). */
+  openExternalEditor(request: { content: string; extension: string; name?: string }): Promise<unknown>;
 };
 
 /**
@@ -343,6 +345,7 @@ const bridge: PrismBridge = {
     source: (request) => ipcRenderer.invoke("prism:dbeaver-source", request),
     release: (request) => ipcRenderer.invoke("prism:dbeaver-source-release", request),
   },
+  openExternalEditor: (request) => ipcRenderer.invoke("prism:open-external-editor", request),
   verification: {
     claim: (claim) => ipcRenderer.invoke("prism:verification-claim", claim),
     finish: (done) => ipcRenderer.invoke("prism:verification-finish", done),

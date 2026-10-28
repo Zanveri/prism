@@ -60,7 +60,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// <summary>RN-BUSCA-002: o tipo que a quarta coluna de <see cref="ObjectNamesSql"/> traz para a visão; o que não é ele é tabela.</summary>
     private const string ViewObjectKind = "view";
 
-    private const string UnknownObjectKindMessage = "O tipo de objeto pedido não existe: use tables, views ou routines.";
+    private const string UnknownObjectKindMessage = "O tipo de objeto pedido não existe: use tables, views, routines ou sequences.";
     private const string TransactionControlMessage = "Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos: toda sessão é auto-commit, e cada comando é confirmado quando termina.";
     private const string UndoneTransactionMessage = $"O comando deixou uma transação aberta, e o Prism a desfez: nada do que ele gravou dentro dela ficou. {TransactionControlMessage}";
     private const string WritesAfterTheFirstPageMessage = "O comando começou como leitura e tentou gravar depois da primeira página; nada foi gravado. Execute-o de novo: ele será executado até o fim.";
@@ -439,7 +439,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// quando não há estatística, e em tudo o que não é tabela) e o comentário (ou nulo), pelo nome (RN-CAT-009). Nulo para um tipo de
     /// objeto que não existe.
     /// </summary>
-    /// <param name="kind">`tables`, `views` ou `routines`.</param>
+    /// <param name="kind">`tables`, `views`, `routines` ou `sequences`.</param>
     protected abstract string? ObjectsSql(string kind);
 
     /// <summary>
@@ -538,10 +538,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// </summary>
     protected virtual bool IsRoutineRefusal => false;
 
-    /// <summary>O ajuste que o banco precisa num comando do usuário (executar e contar) antes de ele ser enviado. Nenhum, por padrão.</summary>
+    /// <summary>O ajuste que o banco precisa num comando do usuário (executar e contar) antes de ele ser enviado.</summary>
     protected virtual void ConfigureUserCommand(DbCommand command)
-    {
-    }
+        => command.CommandText = SqlText.RewriteDoubleQuotedLiterals(command.CommandText, QueryDialect);
 
     /// <summary>`text`, `number`, `datetime`, `boolean` ou `binary` da coluna de um resultado. Por padrão, pelo tipo do C# que o driver entrega.</summary>
     protected virtual string ColumnKind(DbDataReader reader, int ordinal)

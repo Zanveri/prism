@@ -108,7 +108,7 @@ describe("indexLevels: a tabela de um esquema que ninguém abriu aparece no cami
     const system = schema("pg_catalog", ["pg_class", "pg_proc"], [], true);
     const indexes = [index("c1", answer([vendas, schema("crm", ["classe"]), system]))];
 
-    expect(labels(run("cl", indexes).view.rows.filter((row) => row.kind === "schema"))).toEqual(["crm", "vendas", "pg_catalog"]);
+    expect(labels(run("cl", indexes).view.rows.filter((row) => row.kind === "schema"))).toEqual(["crm", "pg_catalog", "vendas"]);
     expect(run("cl", indexes).view.rows.find((row) => row.label === "pg_catalog")?.detail).toBe("sistema");
 
     const cut = run("cl", indexes, base.levels, 3);

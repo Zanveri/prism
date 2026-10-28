@@ -34,6 +34,9 @@ public static class ExportSql
     /// </summary>
     public static Result<string, ExportSqlRefusal> Query(string sql, string? filter, EDatabaseEngine engine, bool hasParameters = false)
     {
+        var dialect = ReadOnlySql.DialectOf(engine);
+        sql = SqlText.RewriteDoubleQuotedLiterals(sql, dialect);
+
         if (ReadOnlySql.HasSeveralStatements(sql, engine))
             return new ExportSqlRefusal(EExportSqlRefusal.MultipleStatements, SeveralStatementsMessage);
 
@@ -43,7 +46,7 @@ public static class ExportSql
             if (hasParameters && QueryParameterRules.FilterHasMarker(filter, engine))
                 return new ExportSqlRefusal(EExportSqlRefusal.FilterInvalid, QueryParameterRules.FilterMarker);
 
-            var filtered = SqlFilter.Apply(sql, filter, ReadOnlySql.DialectOf(engine));
+            var filtered = SqlFilter.Apply(sql, filter, dialect);
             if (filtered.IsFailure)
                 return new ExportSqlRefusal(filtered.Error.Kind == EDatabaseFailure.FilterInvalid ? EExportSqlRefusal.FilterInvalid : EExportSqlRefusal.MultipleStatements, filtered.Error.Message);
 

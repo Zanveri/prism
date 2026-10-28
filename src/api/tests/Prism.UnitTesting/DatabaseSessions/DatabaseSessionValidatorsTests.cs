@@ -8,7 +8,7 @@ using System.Text.Json;
 
 namespace Prism.UnitTesting.DatabaseSessions;
 
-/// <summary>Seção 6 da especificação: SQL vazio e linhas por busca fora da faixa (RN-SQL-016) são `QUERY_INVALID`, o filtro que não se junta ao comando é `FILTER_INVALID` (RN-GRADE-011), um tipo de objeto fora dos três é `OBJECT_KIND_INVALID`, e o nome de outro banco vazio, longo demais ou com caractere de controle é `DATABASE_NAME_INVALID` (RN-ARVORE-006). Regra de validator sem código vira 500, então cada uma leva o seu.</summary>
+/// <summary>Seção 6 da especificação: SQL vazio e linhas por busca fora da faixa (RN-SQL-016) são `QUERY_INVALID`, o filtro que não se junta ao comando é `FILTER_INVALID` (RN-GRADE-011), um tipo de objeto fora dos quatro é `OBJECT_KIND_INVALID`, e o nome de outro banco vazio, longo demais ou com caractere de controle é `DATABASE_NAME_INVALID` (RN-ARVORE-006). Regra de validator sem código vira 500, então cada uma leva o seu.</summary>
 public sealed class DatabaseSessionValidatorsTests
 {
     private static readonly ExecuteQueryValidator ExecuteQueryValidator = new(new Mock<IDatabaseSessionService>().Object);
@@ -173,22 +173,22 @@ public sealed class DatabaseSessionValidatorsTests
     }
 
     [Trait("GetSchemaObjectsValidator", "GetSchemaObjectsCommand")]
-    [Fact(DisplayName = "OK tables, views e routines")]
+    [Fact(DisplayName = "OK tables, views, routines e sequences")]
     public void GetSchemaObjects_ShouldBeOK()
     {
         //Act
-        var results = new[] { "tables", "views", "routines" }.Select(kind => GetSchemaObjectsValidator.TestValidate(new GetSchemaObjectsCommand(Guid.CreateVersion7(), "loja", kind)));
+        var results = new[] { "tables", "views", "routines", "sequences" }.Select(kind => GetSchemaObjectsValidator.TestValidate(new GetSchemaObjectsCommand(Guid.CreateVersion7(), "loja", kind)));
 
         //Assert
         Assert.All(results, result => result.ShouldNotHaveAnyValidationErrors());
     }
 
     [Trait("GetSchemaObjectsValidator", "GetSchemaObjectsCommand")]
-    [Fact(DisplayName = "Erro tipo de objeto fora de tables, views e routines")]
+    [Fact(DisplayName = "Erro tipo de objeto fora de tables, views, routines e sequences")]
     public void GetSchemaObjects_ShouldBeError_KindInvalid()
     {
         //Act
-        var results = new[] { "sequences", "Tables", "table", " views", string.Empty }.Select(kind => GetSchemaObjectsValidator.TestValidate(new GetSchemaObjectsCommand(Guid.CreateVersion7(), "loja", kind)));
+        var results = new[] { "triggers", "Tables", "table", " views", string.Empty }.Select(kind => GetSchemaObjectsValidator.TestValidate(new GetSchemaObjectsCommand(Guid.CreateVersion7(), "loja", kind)));
 
         //Assert
         Assert.All(results, result => result.ShouldHaveValidationErrorFor(command => command.Kind).WithErrorCode("OBJECT_KIND_INVALID"));

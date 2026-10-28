@@ -244,6 +244,15 @@ export function RoutineIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** A sequência: o sustenido (#) de numeração sequencial. */
+export function SequenceIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 6h9M3.5 10h9M6.5 3l-1 10M10.5 3l-1 10" />
+    </Icon>
+  );
+}
+
 export function RefreshIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>

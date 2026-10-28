@@ -7,7 +7,7 @@ using Prism.Infrastructure.Databases.Services;
 
 namespace Prism.Application.DatabaseSessions.Features.GetSchemaObjects;
 
-/// <param name="Kind">`tables`, `views` ou `routines` (o validator recusa outro valor). O esquema segue como parâmetro até a consulta de catálogo: nunca entra em SQL por concatenação.</param>
+/// <param name="Kind">`tables`, `views`, `routines` ou `sequences` (o validator recusa outro valor). O esquema segue como parâmetro até a consulta de catálogo: nunca entra em SQL por concatenação.</param>
 public sealed record GetSchemaObjectsCommand(Guid SessionID, string Schema, string Kind) : IRequest<Result<IReadOnlyList<DatabaseObjectInfo>, ApiErrorDto>>;
 
 internal sealed class GetSchemaObjectsHandler(IDatabaseSessionService databaseSessionService) : IRequestHandler<GetSchemaObjectsCommand, Result<IReadOnlyList<DatabaseObjectInfo>, ApiErrorDto>>

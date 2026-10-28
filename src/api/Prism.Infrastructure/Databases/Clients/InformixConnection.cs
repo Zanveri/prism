@@ -48,9 +48,10 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     /// </summary>
     private int _lastNativeError;
 
-    /// <summary>As letras de `tabtype` do que a árvore mostra como tabela (a comum e a externa) e como visão, e os `mode` das rotinas do usuário.</summary>
+    /// <summary>As letras de `tabtype` do que a árvore mostra como tabela (a comum e a externa), como visão e como sequência, e os `mode` das rotinas do usuário.</summary>
     private const string TableTypes = "'T', 'E'";
     private const string ViewTypes = "'V'";
+    private const string SequenceTypes = "'Q'";
     private const string RoutineModes = "'D', 'O', 'P', 'R', 'T'";
 
     protected override ESqlDialect Dialect => ESqlDialect.Informix;
@@ -69,7 +70,7 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
                                                       NVL(objects.tables, 0) AS tables,
                                                       NVL(objects.views, 0) AS views,
                                                       NVL(routines.routines, 0) AS routines
-                                                 FROM (SELECT owner FROM systables WHERE tabtype IN ({TableTypes}, {ViewTypes})
+                                                 FROM (SELECT owner FROM systables WHERE tabtype IN ({TableTypes}, {ViewTypes}, {SequenceTypes})
                                                         UNION
                                                        SELECT owner FROM sysprocedures WHERE mode IN ({RoutineModes})) AS owners
                                                  LEFT JOIN (SELECT owner,
@@ -432,6 +433,7 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
         {
             "tables" => TablesSql(TableTypes, "table", "CASE WHEN ustlowts IS NULL THEN NULL ELSE nrows::INT8 END"),
             "views" => TablesSql(ViewTypes, "view", "CAST(NULL AS INT8)"),
+            "sequences" => TablesSql(SequenceTypes, "sequence", "CAST(NULL AS INT8)"),
             "routines" => $@"SELECT procname AS object_name,
                                     TRIM(CASE WHEN isproc = 't' THEN 'procedure' ELSE 'function' END) AS object_kind,
                                     CAST(NULL AS INT8) AS estimated_rows,

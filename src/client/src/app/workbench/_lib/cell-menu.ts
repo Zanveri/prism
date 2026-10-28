@@ -32,6 +32,7 @@ export type CellMenuAction =
   | "copyRowNumbers"
   | CopyAsAction
   | "paste"
+  | "viewValue"
   | "edit"
   | "setNull"
   | "undo"
@@ -122,6 +123,8 @@ export type CellMenuState = {
   exportData?: EditAccess;
   /** RN-GRADE-006: os seis itens do "Gerar SQL", da outra frente; o que não está aqui vale. Sem ele, o menu não tem o submenu. */
   generateSql?: Partial<Record<GenerateSqlKind, EditAccess>>;
+  /** "Visualizar valor" (F7): abre o painel lateral "Valor" para a célula ativa. */
+  viewValue?: EditAccess;
   /** RN-EDIT-015: os atalhos como a plataforma os escreve (`editShortcuts`), os mesmos das dicas da barra de edição; sem eles, os do Windows e do Linux. */
   shortcuts?: Record<"edit" | RowShortcut, EditShortcut>;
   /** O macOS escreve o Cmd no lugar do Ctrl (o "Copiar" e o "Copiar avançado…"). */
@@ -214,6 +217,7 @@ export function cellMenu(state: CellMenuState): CellMenuItem[][] {
     ],
     ...(view.length === 0 ? [] : [view]),
     [
+      ...(state.viewValue === undefined ? [] : [{ id: "viewValue" as const, label: copy.viewValue, shortcut: recordsCopy.edit.shortcuts.viewValue, disabled: false, ...hintOf(state.viewValue) }]),
       { id: "edit", label: copy.edit, shortcut: shortcuts.edit.label, ...hintOf(editAccess) },
       { id: "setNull", label: state.group?.nullLabel ?? copy.setNull, ...notNullable },
       { id: "undo", label: state.undo?.label ?? copy.undo, ...undoHint },

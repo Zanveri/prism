@@ -223,6 +223,7 @@ export function getBridge(): PrismBridge {
       },
       // RN-DBEAVER-003: fora do Electron não há quem procure o DBeaver nem copie os arquivos: as entradas ficam desabilitadas, com a dica.
       dbeaver: { available: false, source: () => Promise.reject(new Error(dbeaverOutsideElectron)), release: async () => {} },
+      openExternalEditor: async () => false,
     };
   }
 
@@ -646,5 +647,19 @@ export async function releaseDbeaverSource(sourceId: string): Promise<void> {
     await getBridge().dbeaver.release({ sourceId });
   } catch {
     // Nada a fazer.
+  }
+}
+
+
+/**
+ * Abre o valor textual de uma célula num editor externo do sistema através do processo principal (`prism:open-external-editor`),
+ * sem expor caminhos do sistema de arquivos. Nunca lança: responde `true` se o sistema aceitou abrir o arquivo.
+ */
+export async function openExternalEditor(request: { content: string; extension: string; name?: string }): Promise<boolean> {
+  try {
+    const reply = await getBridge().openExternalEditor?.(request);
+    return reply === true;
+  } catch {
+    return false;
   }
 }

@@ -230,6 +230,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
             var dialect = DialectOf(session);
+            sql = SqlText.RewriteDoubleQuotedLiterals(sql, dialect);
 
             // RN-GRADE-011: o comando montado é o que roda. A recusa do filtro, como a do texto do comando, deixa o resultado anterior como estava.
             // RN-VAR-032: com `params`, o filtro não tem marcador (os marcadores do comando ficam na ordem, e o filtro entra sem marcador).

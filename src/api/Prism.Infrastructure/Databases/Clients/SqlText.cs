@@ -11,6 +11,293 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal static class SqlText
 {
+    private static readonly HashSet<string> ValuePredecessorWords =
+    [
+        "LIKE",
+        "ILIKE",
+        "SIMILAR",
+        "ESCAPE",
+        "BETWEEN",
+        "THEN",
+        "ELSE",
+        "WHEN",
+        "RETURN",
+        "DEFAULT",
+        "CASE"
+    ];
+
+    private static readonly HashSet<string> NonFunctionWords =
+    [
+        "SELECT",
+        "FROM",
+        "WHERE",
+        "AND",
+        "OR",
+        "NOT",
+        "ON",
+        "JOIN",
+        "HAVING",
+        "GROUP",
+        "ORDER",
+        "BY",
+        "INTO",
+        "TABLE",
+        "UPDATE",
+        "SET",
+        "KEY",
+        "REFERENCES",
+        "UNIQUE",
+        "CHECK",
+        "PRIMARY",
+        "FOREIGN",
+        "USING",
+        "INDEX",
+        "VIEW",
+        "WITH",
+        "AS",
+        "OVER",
+        "PARTITION",
+        "FILTER",
+        "WITHIN",
+        "EXISTS",
+        "CASE",
+        "WHEN",
+        "THEN",
+        "ELSE",
+        "IN",
+        "VALUES",
+        "BEGIN",
+        "END",
+        "LOOP",
+        "WHILE",
+        "FOR"
+    ];
+
+    private static readonly HashSet<string> ColumnListIntroducers =
+    [
+        "INTO",
+        "TABLE",
+        "VIEW",
+        "REFERENCES",
+        "INDEX"
+    ];
+
+    /// <summary>
+    /// Converte textos entre aspas duplas (<c>"..."</c>) escritos em posição de valor ou parâmetro (comparações, <c>LIKE</c>,
+    /// <c>BETWEEN</c>, <c>IN (...)</c>, <c>VALUES (...)</c>, argumentos de função) em constantes de texto entre aspas simples
+    /// (<c>'...'</c>), preservando identificadores qualificados (<c>"esquema"."tabela"</c>, <c>tabela."coluna"</c>) e nomes de tabelas
+    /// ou colunas nas cláusulas da consulta.
+    /// </summary>
+    public static string RewriteDoubleQuotedLiterals(string sql, ESqlDialect dialect)
+    {
+        if (string.IsNullOrEmpty(sql) || !sql.Contains('"', StringComparison.Ordinal))
+            return sql;
+
+        var tokens = EditableSql.Lex(sql, dialect).ToList();
+        if (tokens.Count == 0)
+            return sql;
+
+        StringBuilder? builder = null;
+        var lastCopied = 0;
+
+        for (var index = 0; index < tokens.Count; index++)
+        {
+            var token = tokens[index];
+            if (!IsDoubleQuotedLiteralToken(sql, tokens, index))
+                continue;
+
+            builder ??= new StringBuilder(sql.Length + 8);
+            builder.Append(sql, lastCopied, token.Start - lastCopied);
+            builder.Append('\'').Append(token.Text.Replace("'", "''", StringComparison.Ordinal)).Append('\'');
+            lastCopied = token.End;
+        }
+
+        if (builder is null)
+            return sql;
+
+        builder.Append(sql, lastCopied, sql.Length - lastCopied);
+        return builder.ToString();
+    }
+
+    private static bool IsDoubleQuotedLiteralToken(string sql, List<EditableSql.Token> tokens, int index)
+    {
+        var token = tokens[index];
+        if (token.Kind != EditableSql.ETokenKind.Identifier || token.End - token.Start < 2 || sql[token.Start] != '"' || sql[token.End - 1] != '"')
+            return false;
+
+        if ((index > 0 && tokens[index - 1].Is(".")) || (index + 1 < tokens.Count && tokens[index + 1].Is(".")))
+            return false;
+
+        if (index == 0)
+            return false;
+
+        var prev = tokens[index - 1];
+
+        if (prev.Kind == EditableSql.ETokenKind.Symbol && prev.Text is "=" or "<" or ">" or "!" or "|" or "^" or "~")
+            return true;
+
+        if (prev.Kind == EditableSql.ETokenKind.Word)
+        {
+            if (ValuePredecessorWords.Contains(prev.Upper))
+                return true;
+
+            if (prev.Upper == "FROM" && index >= 2 && tokens[index - 2].IsWord("DISTINCT"))
+                return true;
+
+            if (prev.Upper == "AND" && IsBetweenAnd(tokens, index - 1))
+                return true;
+        }
+
+        if (prev.Is("(") || prev.Is(","))
+            return IsValueParenthesisItem(tokens, index);
+
+        return false;
+    }
+
+    private static bool IsBetweenAnd(List<EditableSql.Token> tokens, int andIndex)
+    {
+        var depth = 0;
+        for (var index = andIndex - 1; index >= 0; index--)
+        {
+            var token = tokens[index];
+            if (token.Is(")"))
+                depth++;
+            else if (token.Is("("))
+            {
+                if (--depth < 0)
+                    return false;
+            }
+            else if (depth == 0 && token.Kind == EditableSql.ETokenKind.Word)
+            {
+                if (token.Upper == "BETWEEN")
+                    return true;
+
+                if (token.Upper is "AND" or "OR" or "WHERE" or "ON" or "HAVING" or "WHEN" or "THEN" or "ELSE" or "CASE" or "SELECT" or "FROM" or "JOIN" or "SET")
+                    return false;
+            }
+            else if (depth == 0 && token.Is(";"))
+                return false;
+        }
+
+        return false;
+    }
+
+    private static bool IsValueParenthesisItem(List<EditableSql.Token> tokens, int itemIndex)
+    {
+        var depth = 0;
+        var openParen = -1;
+
+        for (var index = itemIndex - 1; index >= 0; index--)
+        {
+            if (tokens[index].Is(")"))
+                depth++;
+            else if (tokens[index].Is("("))
+            {
+                if (depth == 0)
+                {
+                    openParen = index;
+                    break;
+                }
+
+                depth--;
+            }
+        }
+
+        if (openParen <= 0)
+            return false;
+
+        var beforeParen = tokens[openParen - 1];
+        if (beforeParen.IsWord("IN"))
+            return true;
+
+        if (IsValuesTupleParen(tokens, openParen))
+            return true;
+
+        return IsFunctionOrRoutineCallParen(tokens, openParen);
+    }
+
+    private static bool IsValuesTupleParen(List<EditableSql.Token> tokens, int openParen)
+    {
+        var cursor = openParen;
+        while (cursor > 0)
+        {
+            var prev = tokens[cursor - 1];
+            if (prev.IsWord("VALUES"))
+                return true;
+
+            if (!prev.Is(",") || cursor < 2 || !tokens[cursor - 2].Is(")"))
+                return false;
+
+            var depth = 0;
+            var previousOpen = -1;
+            for (var index = cursor - 2; index >= 0; index--)
+            {
+                if (tokens[index].Is(")"))
+                    depth++;
+                else if (tokens[index].Is("("))
+                {
+                    if (--depth == 0)
+                    {
+                        previousOpen = index;
+                        break;
+                    }
+                }
+            }
+
+            if (previousOpen <= 0)
+                return false;
+
+            cursor = previousOpen;
+        }
+
+        return false;
+    }
+
+    private static bool IsFunctionOrRoutineCallParen(List<EditableSql.Token> tokens, int openParen)
+    {
+        var nameEnd = openParen - 1;
+        var callee = tokens[nameEnd];
+        if (callee.Kind is not (EditableSql.ETokenKind.Word or EditableSql.ETokenKind.Identifier))
+            return false;
+
+        if (callee.Kind == EditableSql.ETokenKind.Word && NonFunctionWords.Contains(callee.Upper))
+            return false;
+
+        var nameStart = nameEnd;
+        while (nameStart >= 2 && tokens[nameStart - 1].Is(".") && tokens[nameStart - 2].Kind is EditableSql.ETokenKind.Word or EditableSql.ETokenKind.Identifier)
+            nameStart -= 2;
+
+        if (nameStart > 0 && tokens[nameStart - 1].Kind == EditableSql.ETokenKind.Word)
+        {
+            var introducer = tokens[nameStart - 1].Upper;
+            if (ColumnListIntroducers.Contains(introducer))
+                return false;
+
+            if (introducer == "ON" && tokens[0].IsWord("CREATE"))
+                return false;
+        }
+
+        var closeParen = FindMatchingCloseParen(tokens, openParen);
+        if (closeParen > 0 && closeParen + 1 < tokens.Count && tokens[closeParen + 1].IsWord("AS") && nameStart > 0 && (tokens[nameStart - 1].IsWord("WITH") || tokens[nameStart - 1].IsWord("RECURSIVE") || tokens[nameStart - 1].Is(",")))
+            return false;
+
+        return true;
+    }
+
+    private static int FindMatchingCloseParen(List<EditableSql.Token> tokens, int openParen)
+    {
+        var depth = 0;
+        for (var index = openParen; index < tokens.Count; index++)
+        {
+            if (tokens[index].Is("("))
+                depth++;
+            else if (tokens[index].Is(")") && --depth == 0)
+                return index;
+        }
+
+        return -1;
+    }
+
     /// <summary>
     /// RN-SQL-003: `BEGIN`, `START TRANSACTION`, `COMMIT`, `END`, `ROLLBACK`, `ABORT`, `SAVEPOINT`, `RELEASE` e `PREPARE TRANSACTION` como
     /// primeira palavra do comando. `START` pede `TRANSACTION` depois. `PREPARE TRANSACTION` só é a confirmação em duas fases quando o
