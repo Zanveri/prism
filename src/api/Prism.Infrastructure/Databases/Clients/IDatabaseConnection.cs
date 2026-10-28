@@ -74,7 +74,7 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// <summary>Os esquemas, com os de sistema por último (RN-ARVORE-004).</summary>
     Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken);
 
-    /// <param name="kind">`tables`, `views` ou `routines`.</param>
+    /// <param name="kind">`tables`, `views`, `routines` ou `sequences`.</param>
     Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(string schema, string kind, CancellationToken cancellationToken);
 
     /// <summary>

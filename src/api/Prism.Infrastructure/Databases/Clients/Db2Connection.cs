@@ -15,10 +15,11 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger) : IbmDatabaseConnection(settings, logger)
 {
-    /// <summary>As letras de `TYPE` do que a árvore mostra como tabela e como visão, e de `ROUTINETYPE` das rotinas.</summary>
+    /// <summary>As letras de `TYPE` do que a árvore mostra como tabela e como visão, de `ROUTINETYPE` das rotinas e de `SEQTYPE` das sequências.</summary>
     private const string TableTypes = "'T', 'U', 'G', 'N'";
     private const string ViewTypes = "'V', 'W', 'S'";
     private const string RoutineTypes = "'F', 'P'";
+    private const string SequenceTypes = "'S'";
 
     protected override ESqlDialect Dialect => ESqlDialect.Db2;
 
@@ -199,6 +200,14 @@ internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger)
                               WHERE ROUTINESCHEMA = ?
                                 AND ROUTINETYPE IN ({RoutineTypes})
                               ORDER BY ROUTINENAME, SPECIFICNAME",
+            "sequences" => $@"SELECT SEQNAME AS object_name,
+                                     'sequence' AS object_kind,
+                                     CAST(NULL AS BIGINT) AS estimated_rows,
+                                     REMARKS AS object_comment
+                                FROM SYSCAT.SEQUENCES
+                               WHERE SEQSCHEMA = ?
+                                 AND SEQTYPE IN ({SequenceTypes})
+                               ORDER BY SEQNAME",
             _ => null
         };
 
