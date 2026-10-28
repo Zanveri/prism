@@ -28,6 +28,8 @@ public sealed record CreateFolderCommand : IRequest<Result<FolderDto, ApiErrorDt
 
     /// <summary>RN-PROT-002: ausente é falso.</summary>
     public bool ReadOnly { get; init; }
+
+    public bool UseInternalDescriptions { get; init; }
 }
 
 internal sealed class CreateFolderHandler(IFolderQueries folderQueries, IFolderRepository folderRepository, TimeProvider timeProvider) : IRequestHandler<CreateFolderCommand, Result<FolderDto, ApiErrorDto>>
@@ -42,7 +44,7 @@ internal sealed class CreateFolderHandler(IFolderQueries folderQueries, IFolderR
         if (await folderQueries.Exists(name, request.ParentID, cancellationToken))
             return Result.Failure<FolderDto, ApiErrorDto>(FolderErrors.AlreadyExists(name));
 
-        var folder = Folder.Create(name, request.ParentID, request.EnvironmentName, request.EnvironmentColor, request.Color, request.ConfirmCommands, request.ReadOnly, timeProvider.GetUtcNow().UtcDateTime);
+        var folder = Folder.Create(name, request.ParentID, request.EnvironmentName, request.EnvironmentColor, request.Color, request.ConfirmCommands, request.ReadOnly, timeProvider.GetUtcNow().UtcDateTime, request.UseInternalDescriptions);
 
         // As proteções que valem (RN-PROT-004) saem do documento que a gravação escreveu, com as pastas acima.
         var inserted = await folderRepository.Insert(folder, cancellationToken);

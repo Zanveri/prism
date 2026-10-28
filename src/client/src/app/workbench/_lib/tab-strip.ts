@@ -167,12 +167,12 @@ export function closeAsks({ closesTheApp }: { closesTheApp: boolean }): CloseAsk
  * não volta na próxima entrada (fechar uma aba a tira do que volta, RN-ABAS-006). `null` (sem pergunta) para o fechamento de uma aba só, que segue como sempre, e quando nenhuma das que fecham tem SQL
  * digitado (consulta vazia, só espaço, ou aba de tabela). O SQL da aba que FICA não conta.
  */
-export function closeConfirmation(scope: CloseScope, tabs: readonly { id: string; sql: string; table?: unknown; script?: unknown }[], targetId: string): { total: number; withSql: number } | null {
+export function closeConfirmation(scope: CloseScope, tabs: readonly { id: string; sql: string; table?: unknown; schemaTarget?: unknown; databaseTarget?: unknown; script?: unknown }[], targetId: string): { total: number; withSql: number } | null {
   if (scope === "one") return null;
 
   const closing = new Set(tabsToClose(scope, tabs, targetId));
   // A aba de um script não perde o texto: ele está salvo, e a mudança desde a gravação já teve a pergunta dela (RN-SCRIPT-001).
-  const withSql = tabs.filter((tab) => closing.has(tab.id) && tab.table === undefined && tab.script === undefined && tab.sql.trim() !== "").length;
+  const withSql = tabs.filter((tab) => closing.has(tab.id) && tab.table === undefined && tab.schemaTarget === undefined && tab.databaseTarget === undefined && tab.script === undefined && tab.sql.trim() !== "").length;
   return withSql === 0 ? null : { total: closing.size, withSql };
 }
 

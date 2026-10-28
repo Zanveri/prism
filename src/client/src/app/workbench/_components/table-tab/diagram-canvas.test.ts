@@ -2,9 +2,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { defaultPreferences } from "@/app/settings/_lib/preferences";
 import type { Column, ForeignKey } from "../../_lib/database-sessions.schema";
 import { layoutDiagram, referencedTables, type DiagramLayout } from "../../_lib/table-diagram";
-import { DiagramCanvas } from "./diagram-canvas";
+import { DiagramCanvas, applyDiagramPan, shouldStartDiagramPan } from "./diagram-canvas";
 
 const noop = () => {};
 const column = (name: string, position: number, over: Partial<Column> = {}): Column => ({ name, type: "bigint", isNullable: false, isPrimaryKey: false, position, ...over });
@@ -126,12 +127,12 @@ describe("o diagrama (RN-TABELA-004)", () => {
     expect(markup).toMatch(/<span[^>]*>producao<\/span> · 3 tabelas, 2 chaves estrangeiras/);
   });
 
-  it("a legenda explica as marcas e a seta, e diz que as tabelas que apontam para esta não aparecem", () => {
+  it("a legenda explica as marcas e a seta, e que as tabelas que apontam para esta ficam à esquerda e as referenciadas à direita", () => {
     const markup = render(build(withKeys, ["ordem_producao", "maquina"]));
 
     expect(markup).toContain("chave primária");
     expect(markup).toContain("a seta sai da tabela com a chave estrangeira e aponta para a tabela referenciada");
-    expect(markup).toContain("a API ainda não informa as que apontam para ela");
+    expect(markup).toContain("À esquerda ficam as tabelas que apontam para esta; à direita, as que esta tabela referencia.");
   });
 
   it("passando do teto, diz quantas das referenciadas estão no desenho", () => {
@@ -151,5 +152,69 @@ describe("o diagrama (RN-TABELA-004)", () => {
 
   it("'Atualizar' fica desabilitado enquanto busca", () => {
     expect(render(build(withKeys, ["ordem_producao", "maquina"]), { fetching: true })).toMatch(/<button[^>]*disabled=""[^>]*>[^]*Atualizar/);
+  });
+
+  it("oferece os botões de exportar PNG, exportar Mermaid (.md) e copiar Mermaid na barra do diagrama", () => {
+    const markup = render(build(withKeys, ["ordem_producao", "maquina"]));
+
+    expect(markup).toContain(">Exportar PNG<");
+    expect(markup).toContain(">Exportar Mermaid (.md)<");
+    expect(markup).toContain(">Copiar Mermaid<");
+  });
+
+  it("aplica a família e o tamanho da fonte das preferências do usuário ao SVG do diagrama", () => {
+    const layout = build(withKeys, ["ordem_producao", "maquina"]);
+    const markup = renderToStaticMarkup(
+      createElement(DiagramCanvas, {
+        layout,
+        schema: "producao",
+        tableCount: layout.boxes.length,
+        foreignKeyCount: layout.edges.length,
+        omitted: 0,
+        fetching: false,
+        onOpenTable: noop,
+        onRefresh: noop,
+        preferences: {
+          ...defaultPreferences,
+          theme: "dracula",
+          ui: { ...defaultPreferences.ui, fontFamily: "Inter" },
+          editor: { ...defaultPreferences.editor, fontFamily: "JetBrains Mono", fontSize: 16 },
+        },
+      }),
+    );
+
+    expect(markup).toContain("JetBrains Mono");
+    expect(markup).toContain("font-size:16px");
+  });
+
+  it("trunca títulos de tabelas muito longos com reticências e preserva o nome completo em <title> para não vazar da caixa", () => {
+    const longName = "usr_migration_stock_manager_tabela_com_nome_extremamente_longo";
+    const layout = layoutDiagram({
+      center: { ref: { schema: "s", name: longName }, columns: [column("id", 1, { isPrimaryKey: true })] },
+      foreignKeys: [],
+      neighbors: [],
+    });
+    const markup = render(layout);
+
+    expect(markup).toContain(`<title>${longName}</title>`);
+    expect(markup).toContain("…");
+  });
+
+  it("oferece o botão das 4 setas para travar o arraste pelo botão esquerdo e permite arrastar pelo botão direito a qualquer momento", () => {
+    const markup = render(build(withKeys, ["ordem_producao", "maquina"]));
+
+    expect(markup).toMatch(/<button[^>]*aria-label="Mover pelo diagrama"[^>]*aria-pressed="false"/);
+    expect(shouldStartDiagramPan(2, false)).toBe(true);
+    expect(shouldStartDiagramPan(2, true)).toBe(true);
+    expect(shouldStartDiagramPan(0, false)).toBe(false);
+    expect(shouldStartDiagramPan(0, true)).toBe(true);
+    expect(shouldStartDiagramPan(1, true)).toBe(false);
+
+    expect(applyDiagramPan({ scrollLeft: 100, scrollTop: 80, startX: 300, startY: 200 }, { clientX: 240, clientY: 150 })).toEqual({
+      scrollLeft: 160,
+      scrollTop: 130,
+      moved: true,
+    });
+    expect(applyDiagramPan({ scrollLeft: 100, scrollTop: 80, startX: 300, startY: 200 }, { clientX: 301, clientY: 201 }).moved).toBe(false);
   });
 });

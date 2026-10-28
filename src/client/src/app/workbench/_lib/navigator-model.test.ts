@@ -4,7 +4,7 @@ import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { newVerification, unprotected, type Connection, type Folder } from "@/app/connections/_lib/connections.schema";
 
 import type { DatabaseObject } from "./database-sessions.schema";
-import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNode, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "./navigator-model";
+import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, databaseTargetOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNode, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, schemaTargetOf, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "./navigator-model";
 import { workbenchCopy } from "./workbench.copy";
 
 const connectionPath: NavPath = { type: "connection", connectionId: "c1" };
@@ -542,5 +542,28 @@ describe("databaseRefOf (de que banco é a linha: a nova consulta e as abas usam
 
     expect(databaseRefOf(folder)).toBeNull();
     expect(databaseRefOf(routine)).toBeNull();
+  });
+});
+
+
+describe("schemaTargetOf e databaseTargetOf (RN-ESQUEMA-001 e RN-BANCO-001)", () => {
+  it("o esquema traz a conexão, o banco opcional e o nome do esquema", () => {
+    const [inDefault] = schemaNodes("c1", [{ name: "public", isSystem: false }]);
+    const [inOther] = schemaNodes("c1", [{ name: "vendas", isSystem: false }], "alfa");
+
+    expect(schemaTargetOf(inDefault)).toEqual({ connectionId: "c1", schema: "public" });
+    expect(schemaTargetOf(inOther)).toEqual({ connectionId: "c1", database: "alfa", schema: "vendas" });
+    expect(schemaTargetOf(connection)).toBeNull();
+  });
+
+  it("o banco traz a conexão, o nome exibido e o banco opcional quando não é o da conexão", () => {
+    const [current, other] = databaseNodes("c1", [
+      { name: "mes", isCurrent: true },
+      { name: "alfa", isCurrent: false },
+    ]);
+
+    expect(databaseTargetOf(current)).toEqual({ connectionId: "c1", name: "mes" });
+    expect(databaseTargetOf(other)).toEqual({ connectionId: "c1", database: "alfa", name: "alfa" });
+    expect(databaseTargetOf(connection)).toBeNull();
   });
 });

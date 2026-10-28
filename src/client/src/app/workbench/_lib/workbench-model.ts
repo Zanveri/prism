@@ -9,10 +9,23 @@ export type TableView = "data" | "structure" | "diagram";
 /** A tabela (ou visão) que uma aba mostra, e a vista em que ela está. */
 export type TableTarget = { schema: string; name: string; view: TableView };
 
+/** As vistas da aba de um esquema (RN-ESQUEMA-001): Tabelas, Visões, Rotinas e Diagrama. */
+export type SchemaView = "tables" | "views" | "routines" | "diagram";
+
+/** O esquema que uma aba mostra, e a vista em que ele está. */
+export type SchemaTarget = { schema: string; view: SchemaView };
+
+/** As vistas da aba de um banco (RN-BANCO-001 + Diagrama): Esquemas, Diagrama e Propriedades. */
+export type DatabaseView = "schemas" | "diagram" | "properties";
+
+/** O banco que uma aba mostra, e a vista em que ele está. */
+export type DatabaseTarget = { name: string; view: DatabaseView };
+
 /**
  * Uma aba. `sessionId` é a sessão da aba (RN-SESSAO-001), aberta na primeira execução; `sql`, o texto do editor.
  * Com `table`, é a aba de uma tabela, aberta pelo navegador (RN-TABELA-001): tem a sessão dela como qualquer aba, e os
- * registros vêm do mesmo executor. Com `database`, foi aberta a partir de outro banco do servidor da conexão (RN-ARVORE-006):
+ * registros vêm do mesmo executor. Com `schemaTarget`, é a aba de um esquema (RN-ESQUEMA-001). Com `databaseTarget`, é a aba de um banco (RN-BANCO-001).
+ * Com `database`, foi aberta a partir de outro banco do servidor da conexão (RN-ARVORE-006):
  * a sessão dela, a Estrutura e o Diagrama são desse banco.
  *
  * Com `script`, a aba de consulta é um script salvo (RN-SCRIPT-001 a 003): o título é o nome dele, e o ponto da faixa diz que o texto mudou desde a última
@@ -23,7 +36,19 @@ export type TableTarget = { schema: string; name: string; view: TableView };
  * logo depois dela, ou numa janela própria. É da aba: vai com ela para outra janela e volta com ela na próxima entrada. A aba de tabela não o tem. Quem o lê
  * é `placeOf` (`result-place.ts`), que diz também o que vale enquanto a janela do resultado não existe.
  */
-export type QueryTab = { id: string; title: string; connectionId: string | null; database?: string; sessionId: string | null; sql: string; table?: TableTarget; script?: ScriptRef; resultPlace?: ResultPlace };
+export type QueryTab = {
+  id: string;
+  title: string;
+  connectionId: string | null;
+  database?: string;
+  sessionId: string | null;
+  sql: string;
+  table?: TableTarget;
+  schemaTarget?: SchemaTarget;
+  databaseTarget?: DatabaseTarget;
+  script?: ScriptRef;
+  resultPlace?: ResultPlace;
+};
 
 /** RN-ABAS-011: os três lugares do resultado da aba de consulta. */
 export const resultPlaces = ["panel", "tab", "window"] as const;
@@ -35,6 +60,20 @@ export type TableTab = QueryTab & { table: TableTarget; connectionId: string };
 
 export function isTableTab(tab: QueryTab): tab is TableTab {
   return tab.table !== undefined && tab.connectionId !== null;
+}
+
+/** A aba de um esquema (RN-ESQUEMA-001): sempre tem a conexão dela. */
+export type SchemaTab = QueryTab & { schemaTarget: SchemaTarget; connectionId: string };
+
+export function isSchemaTab(tab: QueryTab): tab is SchemaTab {
+  return tab.schemaTarget !== undefined && tab.connectionId !== null;
+}
+
+/** A aba de um banco (RN-BANCO-001): sempre tem a conexão dela. */
+export type DatabaseTab = QueryTab & { databaseTarget: DatabaseTarget; connectionId: string };
+
+export function isDatabaseTab(tab: QueryTab): tab is DatabaseTab {
+  return tab.databaseTarget !== undefined && tab.connectionId !== null;
 }
 
 /**

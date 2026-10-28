@@ -15,6 +15,7 @@ import { userEnvironments } from "../_lib/user-environments";
 import { passwordAsked, readOnlyChange } from "../_lib/user-password";
 import { ColorField } from "./color-field";
 import { EnvironmentPicker } from "./environment-picker";
+import { InternalDescriptionsSection } from "./internal-descriptions-section";
 import { ProtectionsSection } from "./protections-section";
 import { UserPasswordDialog } from "./user-password-dialog";
 
@@ -55,6 +56,7 @@ export function FolderDialog({ state, folders, onClose, onMoved }: { state: Fold
   // RN-PROT-001 e 002: as proteções PRÓPRIAS da pasta; as da pasta pai aparecem na seção, e não são gravadas aqui.
   const [confirm, setConfirm] = useState<ConfirmationChoice>(confirmationChoiceOf(state.mode === "create" ? null : state.folder.confirmCommands));
   const [readOnly, setReadOnly] = useState(state.mode === "create" ? false : state.folder.readOnly);
+  const [useInternalDescriptions, setUseInternalDescriptions] = useState(state.mode === "create" ? false : Boolean(state.folder.useInternalDescriptions));
   // RN-PROT-003: a gravação que espera a senha do usuário, com a frase do que muda.
   const [asking, setAsking] = useState<{ input: FolderInput; change: string } | null>(null);
   const connections = useQuery(connectionsQuery);
@@ -166,6 +168,10 @@ export function FolderDialog({ state, folders, onClose, onMoved }: { state: Fold
               inherited={inheritedProtections(folders, state.mode === "create" ? (parentID === "" ? null : parentID) : state.folder.parentID)}
               errors={errors}
             />
+          )}
+
+          {state.mode === "move" ? null : (
+            <InternalDescriptionsSection idPrefix="folder" subject="folder" checked={useInternalDescriptions} onChange={setUseInternalDescriptions} />
           )}
         </form>
       </Dialog>

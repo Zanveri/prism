@@ -1,9 +1,31 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 
+import { fontStack } from "@/app/settings/_lib/fonts";
+import { defaultPreferences, type Preferences } from "@/app/settings/_lib/preferences";
 import { Button, PlusIcon, RefreshIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
-import { clampZoom, fitText, fitZoom, maxZoom, minZoom, opensNeighbor, rowHeight, settleActions, zoomIn, zoomLabel, zoomOut, type DiagramBox, type DiagramColumn, type DiagramEdge, type DiagramLayout, type TableRef } from "../../_lib/table-diagram";
+import { exportDiagramMermaid, exportDiagramPng, resolveDiagramStyle, toMermaidErDiagram } from "../../_lib/diagram-export";
+import { connectedToTable, filterDiagramLayout, type ColumnsMode } from "../../_lib/schema-diagram";
+import {
+  clampZoom,
+  diagramMetrics,
+  fitText,
+  fitTitle,
+  fitZoom,
+  maxZoom,
+  minZoom,
+  opensNeighbor,
+  settleActions,
+  zoomIn,
+  zoomLabel,
+  zoomOut,
+  type DiagramBox,
+  type DiagramColumn,
+  type DiagramEdge,
+  type DiagramLayout,
+  type TableRef,
+} from "../../_lib/table-diagram";
 import type { DiagramMemory } from "../../_lib/tab-memory";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 
@@ -22,15 +44,48 @@ function MinusIcon() {
   );
 }
 
+/** As quatro setas do modo de mover pelo diagrama com o botão esquerdo do mouse (estilo Mermaid no VS Code). */
+function MoveIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-none">
+      <path d="M2 8h12" />
+      <path d="M8 2v12" />
+      <path d="M6 4l2-2 2 2" />
+      <path d="M6 12l2 2 2-2" />
+      <path d="M4 6l-2 2 2 2" />
+      <path d="M12 6l2 2-2 2" />
+    </svg>
+  );
+}
+
+/** O botão direito (`2`) sempre arrasta o diagrama; o botão esquerdo (`0`) arrasta quando a trava das 4 setas está ativa. */
+export function shouldStartDiagramPan(button: number, panLocked: boolean): boolean {
+  return button === 2 || (button === 0 && panLocked);
+}
+
+/** Calcula a nova posição de rolagem ao arrastar o diagrama com o mouse. */
+export function applyDiagramPan(
+  origin: { scrollLeft: number; scrollTop: number; startX: number; startY: number },
+  point: { clientX: number; clientY: number },
+): { scrollLeft: number; scrollTop: number; moved: boolean } {
+  const dx = point.clientX - origin.startX;
+  const dy = point.clientY - origin.startY;
+  return {
+    scrollLeft: Math.max(0, origin.scrollLeft - dx),
+    scrollTop: Math.max(0, origin.scrollTop - dy),
+    moved: Math.abs(dx) > 2 || Math.abs(dy) > 2,
+  };
+}
+
 const iconButton = "flex size-7 cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-selected hover:text-ink disabled:cursor-not-allowed disabled:opacity-50";
 
 /** Uma linha de coluna da caixa: nome, tipo e as marcas de chave. O que não cabe encurta, e a dica traz o texto inteiro. */
-function ColumnRow({ column, y }: { column: DiagramColumn; y: number }) {
+function ColumnRow({ column, y, maxChars }: { column: DiagramColumn; y: number; maxChars?: number }) {
   const marks = [column.primaryKey ? "PK" : null, column.foreignKey ? "FK" : null].filter((mark) => mark !== null);
-  const fitted = fitText(column.name, column.type, marks.length === 0 ? null : marks.join(" "));
+  const fitted = fitText(column.name, column.type, marks.length === 0 ? null : marks.join(" "), maxChars);
 
   return (
-    <text x={textX} y={y} dominantBaseline="central" className="fill-body font-mono text-[13px]">
+    <text x={textX} y={y} dominantBaseline="central" className="fill-body font-mono text-[13px]" style={{ fontSize: "inherit", fontFamily: "inherit" }}>
       {fitted.cut ? <title>{`${column.name} ${column.type}`}</title> : null}
       <tspan>{fitted.name}</tspan>
       <tspan dx="8" className="fill-subtle">
@@ -50,27 +105,47 @@ function ColumnRow({ column, y }: { column: DiagramColumn; y: number }) {
   );
 }
 
-type TableBoxProps = { box: DiagramBox; onOpen: (ref: TableRef) => void };
+type TableBoxProps = {
+  box: DiagramBox;
+  rowHeight: number;
+  maxChars: number;
+  dimmed?: boolean;
+  selected?: boolean;
+  onSelect?: (key: string) => void;
+  onOpen: (ref: TableRef) => void;
+};
 
 /**
  * Uma tabela do desenho: o contorno, o nome e as colunas. A do centro tem o contorno no acento. As
  * vizinhas abrem a aba delas com duplo clique, Enter ou Espaço (como um botão). O foco por teclado usa o anel do app
  * (`:focus-visible` em `globals.css`) e, além dele, o contorno da caixa no acento.
  */
-function TableBox({ box, onOpen }: TableBoxProps) {
+function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, onSelect, onOpen }: TableBoxProps) {
+  const title = box.title ?? box.ref.name;
+  const highlighted = box.center || selected;
+  const boxMaxChars = box.width === 264 ? maxChars : Math.max(maxChars, Math.floor((maxChars * (box.width - 40)) / (264 - 32)));
+  const fittedTitle = fitTitle(title, boxMaxChars - 1);
   const body = (
     <>
-      <rect width={box.width} height={box.height} rx="6" className={cn("fill-panel", box.center ? "stroke-accent" : "stroke-border-strong group-hover:stroke-subtle group-focus-visible:stroke-accent")} strokeWidth="1" />
-      <text x={textX} y={boxPaddingY + rowHeight / 2} dominantBaseline="central" className="fill-ink font-mono text-[13px] font-semibold">
-        {box.ref.name}
+      <rect
+        width={box.width}
+        height={box.height}
+        rx="6"
+        strokeDasharray={box.external ? "4 3" : undefined}
+        className={cn("fill-panel", highlighted ? "stroke-accent" : "stroke-border-strong group-hover:stroke-subtle group-focus-visible:stroke-accent")}
+        strokeWidth="1"
+      />
+      <text x={textX} y={boxPaddingY + rowHeight / 2} dominantBaseline="central" className="fill-ink font-mono text-[13px] font-semibold" style={{ fontSize: "inherit", fontFamily: "inherit" }}>
+        {fittedTitle.cut ? <title>{title}</title> : null}
+        {fittedTitle.text}
       </text>
-      {box.columns?.map((column, index) => <ColumnRow key={column.name} column={column} y={boxPaddingY + rowHeight * (index + 1) + rowHeight / 2} />)}
+      {box.columns?.map((column, index) => <ColumnRow key={column.name} column={column} y={boxPaddingY + rowHeight * (index + 1) + rowHeight / 2} maxChars={boxMaxChars} />)}
     </>
   );
 
   if (box.center) {
     return (
-      <g transform={`translate(${box.x} ${box.y})`} role="group" aria-label={box.ref.name}>
+      <g transform={`translate(${box.x} ${box.y})`} role="group" aria-label={title} className={dimmed ? "opacity-30 transition-opacity" : undefined}>
         {body}
       </g>
     );
@@ -84,7 +159,17 @@ function TableBox({ box, onOpen }: TableBoxProps) {
   }
 
   return (
-    <g transform={`translate(${box.x} ${box.y})`} role="button" tabIndex={0} aria-label={copy.open(box.ref.name)} onDoubleClick={() => onOpen(box.ref)} onKeyDown={handleKeyDown} className="group cursor-pointer">
+    <g
+      transform={`translate(${box.x} ${box.y})`}
+      role="button"
+      tabIndex={0}
+      aria-label={copy.open(title)}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onSelect ? () => onSelect(box.key) : undefined}
+      onDoubleClick={() => onOpen(box.ref)}
+      onKeyDown={handleKeyDown}
+      className={cn("group cursor-pointer", dimmed && "opacity-30 transition-opacity")}
+    >
       <title>{copy.openHint}</title>
       {body}
     </g>
@@ -92,11 +177,11 @@ function TableBox({ box, onOpen }: TableBoxProps) {
 }
 
 /** A linha de uma chave estrangeira, com a seta na ponta da tabela referenciada. A dica diz a chave e as colunas. */
-function Edge({ edge, marker }: { edge: DiagramEdge; marker: string }) {
+function Edge({ edge, marker, dimmed = false }: { edge: DiagramEdge; marker: string; dimmed?: boolean }) {
   const points = edge.points.map((point) => `${point.x},${point.y}`).join(" ");
 
   return (
-    <g>
+    <g className={dimmed ? "opacity-25 transition-opacity" : undefined}>
       <title>{edge.label}</title>
       <polyline points={points} fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" markerEnd={`url(#${marker})`} className="stroke-postgres" />
       {/* Uma faixa larga e invisível: a linha de 2 px é difícil de acertar para ler a dica. */}
@@ -107,8 +192,12 @@ function Edge({ edge, marker }: { edge: DiagramEdge; marker: string }) {
 
 type DiagramCanvasProps = {
   layout: DiagramLayout;
-  /** O esquema da tabela, e quantas tabelas o desenho tem (a do centro incluída) e quantas chaves estrangeiras: o título conta as três. */
+  /** O esquema (ou nome do banco) exibido no cabeçalho, e quantas tabelas e chaves estrangeiras o desenho tem. */
   schema: string;
+  /** O assunto usado para dar nome ao arquivo exportado (`diagrama-<subject>.png` / `.md`); por padrão, `schema`. */
+  subject?: string;
+  /** O rótulo acessível da área do diagrama; por padrão, `Diagrama da tabela`. */
+  diagramLabel?: string;
   tableCount: number;
   foreignKeyCount: number;
   /** Quantas tabelas referenciadas ficaram de fora do desenho (passou do teto). */
@@ -120,6 +209,15 @@ type DiagramCanvasProps = {
   initial?: DiagramMemory;
   /** O zoom e a rolagem mudaram: quem guarda (a aba) os lembra para a próxima vez. */
   onViewChange?: (view: DiagramMemory) => void;
+  /** As preferências de tema e fonte do usuário, aplicadas na tela e na exportação. */
+  preferences?: Preferences;
+  /** Modo de exibição das colunas em diagramas de esquema e de banco (`all` ou `keys`). */
+  columnsMode?: ColumnsMode;
+  onColumnsModeChange?: (mode: ColumnsMode) => void;
+  /** Se exibe o aviso de que só aparecem as tabelas referenciadas (verdadeiro na aba de tabela, falso no esquema/banco). */
+  showIncomingNotice?: boolean;
+  /** Habilita o campo de filtro de tabelas e o destaque de vizinhança ao clicar numa tabela. */
+  enableTableFilter?: boolean;
 };
 
 /**
@@ -129,17 +227,48 @@ type DiagramCanvasProps = {
  * exibição já cabe nela, a não ser que haja um zoom e uma rolagem lembrados (`initial`). O texto é do
  * banco e entra sempre como texto do SVG (RN-SHELL-002).
  */
-export function DiagramCanvas({ layout, schema, tableCount, foreignKeyCount, omitted, fetching, onOpenTable, onRefresh, initial, onViewChange }: DiagramCanvasProps) {
+export function DiagramCanvas({
+  layout,
+  schema,
+  subject,
+  diagramLabel = copy.label,
+  tableCount,
+  foreignKeyCount,
+  omitted,
+  fetching,
+  onOpenTable,
+  onRefresh,
+  initial,
+  onViewChange,
+  preferences = defaultPreferences,
+  columnsMode,
+  onColumnsModeChange,
+  showIncomingNotice = true,
+  enableTableFilter = false,
+}: DiagramCanvasProps) {
   const marker = useId();
   const scroller = useRef<HTMLDivElement | null>(null);
   // O que estava lembrado ao abrir: lido uma vez, porque quem lembra grava a cada rolada e a propriedade mudaria o tempo todo.
   const [start] = useState(initial);
   const [zoom, setZoom] = useState(start?.zoom ?? 1);
+  const [tableFilter, setTableFilter] = useState("");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [copiedMermaid, setCopiedMermaid] = useState(false);
+  const [panLocked, setPanLocked] = useState(false);
+  const [panning, setPanning] = useState(false);
+  const panSession = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
   const zoomRef = useRef(zoom);
   const fitted = useRef(start !== undefined);
   const restored = useRef(false);
   // O ponto da janela que deve ficar parado quando o zoom muda (o ponteiro, ou o centro), e o zoom de antes.
   const anchor = useRef<{ x: number; y: number; from: number } | null>(null);
+
+  const metrics = useMemo(() => diagramMetrics(preferences.editor.fontSize), [preferences.editor.fontSize]);
+  const visualStyle = useMemo(() => resolveDiagramStyle(preferences), [preferences]);
+  const editorFont = useMemo(() => fontStack("editor", preferences.editor.fontFamily), [preferences.editor.fontFamily]);
+  const activeLayout = useMemo(() => (enableTableFilter ? filterDiagramLayout(layout, tableFilter) : layout), [enableTableFilter, layout, tableFilter]);
+  const neighborhood = useMemo(() => (enableTableFilter && selectedKey !== null ? connectedToTable(activeLayout, selectedKey) : null), [enableTableFilter, activeLayout, selectedKey]);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -162,11 +291,11 @@ export function DiagramCanvas({ layout, schema, tableCount, foreignKeyCount, omi
       }
       if (todo.fit) {
         fitted.current = true;
-        setZoom(fitZoom(layout, size));
+        setZoom(fitZoom(activeLayout, size));
       }
       return true;
     },
-    [layout, start],
+    [activeLayout, start],
   );
 
   const attach = useCallback(
@@ -237,9 +366,57 @@ export function DiagramCanvas({ layout, schema, tableCount, foreignKeyCount, omi
     return () => element.removeEventListener("wheel", handleWheel);
   }, [zoomTo]);
 
+  useEffect(() => {
+    if (!panning) return;
+
+    function handleMouseMove(event: MouseEvent) {
+      const session = panSession.current;
+      const element = scroller.current;
+      if (session === null || element === null) return;
+
+      const next = applyDiagramPan(session, { clientX: event.clientX, clientY: event.clientY });
+      if (next.moved) session.moved = true;
+      element.scrollLeft = next.scrollLeft;
+      element.scrollTop = next.scrollTop;
+    }
+
+    function stopPanning() {
+      if (panSession.current?.moved) {
+        suppressClick.current = true;
+      }
+      panSession.current = null;
+      setPanning(false);
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", stopPanning);
+    window.addEventListener("blur", stopPanning);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", stopPanning);
+      window.removeEventListener("blur", stopPanning);
+    };
+  }, [panning]);
+
+  function handleMouseDown(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!shouldStartDiagramPan(event.button, panLocked)) return;
+    const element = scroller.current;
+    if (element === null) return;
+
+    event.preventDefault();
+    panSession.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: element.scrollLeft,
+      scrollTop: element.scrollTop,
+      moved: false,
+    };
+    setPanning(true);
+  }
+
   function fit() {
     const element = scroller.current;
-    if (element !== null) setZoom(fitZoom(layout, { width: element.clientWidth, height: element.clientHeight }));
+    if (element !== null) setZoom(fitZoom(activeLayout, { width: element.clientWidth, height: element.clientHeight }));
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -252,6 +429,18 @@ export function DiagramCanvas({ layout, schema, tableCount, foreignKeyCount, omi
     event.preventDefault();
   }
 
+  async function handleCopyMermaid() {
+    try {
+      await navigator.clipboard?.writeText(toMermaidErDiagram(activeLayout, visualStyle));
+      setCopiedMermaid(true);
+      window.setTimeout(() => setCopiedMermaid(false), 2000);
+    } catch {
+      // Se a área de transferência recusar, a exportação em arquivo continua disponível.
+    }
+  }
+
+  const exportSubject = subject ?? schema;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1 border-b border-border bg-panel px-3 py-1.5">
@@ -259,7 +448,41 @@ export function DiagramCanvas({ layout, schema, tableCount, foreignKeyCount, omi
           <span className="font-mono font-semibold text-ink">{schema}</span> · {copy.counts(tableCount, foreignKeyCount)}
         </p>
 
-        <div role="toolbar" aria-label={copy.zoom} className="ml-auto flex items-center gap-1">
+        {enableTableFilter ? (
+          <input
+            type="search"
+            value={tableFilter}
+            onChange={(event) => setTableFilter(event.target.value)}
+            placeholder={copy.filterTablesPlaceholder}
+            aria-label={copy.filterTablesPlaceholder}
+            className="h-7 w-44 rounded-sm border border-border bg-background px-2 text-xs text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+          />
+        ) : null}
+
+        {onColumnsModeChange ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="compact"
+            className="h-7 px-2.5 text-xs"
+            aria-pressed={columnsMode === "keys"}
+            onClick={() => onColumnsModeChange(columnsMode === "keys" ? "all" : "keys")}
+          >
+            {columnsMode === "keys" ? copy.allColumns : copy.keysOnly}
+          </Button>
+        ) : null}
+
+        <div role="toolbar" aria-label={copy.zoom} className="ml-auto flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            aria-label={copy.panMode}
+            title={copy.panMode}
+            aria-pressed={panLocked}
+            onClick={() => setPanLocked((current) => !current)}
+            className={cn(iconButton, panLocked && "bg-selected text-accent ring-1 ring-accent/50")}
+          >
+            <MoveIcon />
+          </button>
           <button type="button" aria-label={copy.zoomOut} title={copy.zoomOut} disabled={zoom <= minZoom} onClick={() => zoomTo(zoomOut(zoom))} className={iconButton}>
             <MinusIcon />
           </button>
@@ -276,6 +499,15 @@ export function DiagramCanvas({ layout, schema, tableCount, foreignKeyCount, omi
             <RefreshIcon />
             {workbenchCopy.tableTab.refresh}
           </Button>
+          <Button type="button" variant="secondary" size="compact" className="h-7 px-2.5 text-xs" onClick={() => void exportDiagramPng(exportSubject, activeLayout, visualStyle)}>
+            {copy.exportPng}
+          </Button>
+          <Button type="button" variant="secondary" size="compact" className="h-7 px-2.5 text-xs" onClick={() => void exportDiagramMermaid(exportSubject, activeLayout, visualStyle)}>
+            {copy.exportMermaid}
+          </Button>
+          <Button type="button" variant="secondary" size="compact" className="h-7 px-2.5 text-xs" onClick={() => void handleCopyMermaid()}>
+            {copiedMermaid ? copy.copiedMermaid : copy.copyMermaid}
+          </Button>
         </div>
       </div>
 
@@ -283,23 +515,62 @@ export function DiagramCanvas({ layout, schema, tableCount, foreignKeyCount, omi
         ref={attach}
         tabIndex={0}
         role="group"
-        aria-label={copy.label}
+        aria-label={diagramLabel}
         aria-busy={fetching}
         onKeyDown={handleKeyDown}
         onScroll={report}
-        className="min-h-0 flex-1 overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2"
+        onMouseDown={handleMouseDown}
+        onContextMenu={(event) => event.preventDefault()}
+        onClick={(event) => {
+          if (suppressClick.current) {
+            suppressClick.current = false;
+            return;
+          }
+          if (enableTableFilter && (event.target === event.currentTarget || (event.target instanceof SVGElement && event.target.tagName.toLowerCase() === "svg"))) {
+            setSelectedKey(null);
+          }
+        }}
+        className={cn(
+          "min-h-0 flex-1 overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2 select-none",
+          panning ? "cursor-grabbing [&_*]:cursor-grabbing" : panLocked ? "cursor-grab [&_*]:cursor-grab" : undefined,
+        )}
       >
-        <svg width={layout.width * zoom} height={layout.height * zoom} viewBox={`0 0 ${layout.width} ${layout.height}`} className="block max-w-none">
+        <svg
+          width={activeLayout.width * zoom}
+          height={activeLayout.height * zoom}
+          viewBox={`0 0 ${activeLayout.width} ${activeLayout.height}`}
+          style={{ fontFamily: editorFont, fontSize: `${metrics.fontSize}px` }}
+          className="block max-w-none"
+        >
           <defs>
             <marker id={marker} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
               <path d="M0 0L10 5L0 10z" className="fill-postgres" />
             </marker>
           </defs>
-          {layout.edges.map((edge) => (
-            <Edge key={edge.key} edge={edge} marker={marker} />
+          {activeLayout.edges.map((edge) => (
+            <Edge key={edge.key} edge={edge} marker={marker} dimmed={neighborhood !== null && !neighborhood.edges.has(edge.key)} />
           ))}
-          {layout.boxes.map((box) => (
-            <TableBox key={box.key} box={box} onOpen={onOpenTable} />
+          {activeLayout.boxes.map((box) => (
+            <TableBox
+              key={box.key}
+              box={box}
+              rowHeight={metrics.rowHeight}
+              maxChars={metrics.rowChars}
+              dimmed={neighborhood !== null && !neighborhood.tables.has(box.key)}
+              selected={selectedKey === box.key}
+              onSelect={
+                enableTableFilter
+                  ? (key) => {
+                      if (suppressClick.current) {
+                        suppressClick.current = false;
+                        return;
+                      }
+                      setSelectedKey((current) => (current === key ? null : key));
+                    }
+                  : undefined
+              }
+              onOpen={onOpenTable}
+            />
           ))}
         </svg>
       </div>
@@ -308,7 +579,7 @@ export function DiagramCanvas({ layout, schema, tableCount, foreignKeyCount, omi
         <span>
           <b className="font-mono font-semibold text-accent">PK</b> {copy.legend.primaryKey} · <b className="font-mono font-semibold text-postgres">FK</b> {copy.legend.foreignKey} · {copy.legend.arrow}
         </span>
-        <span>{copy.incoming}</span>
+        {showIncomingNotice ? <span>{copy.incoming}</span> : null}
         {foreignKeyCount === 0 ? <span className="text-ink">{copy.noForeignKeys}</span> : null}
         {omitted > 0 ? <span className="text-ink">{copy.omitted(layout.boxes.length - 1, layout.boxes.length - 1 + omitted)}</span> : null}
       </div>

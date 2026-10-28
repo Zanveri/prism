@@ -1,6 +1,7 @@
 import { Fragment, useId, useRef, type ReactNode } from "react";
 
 import { Button, RefreshIcon } from "@/components/ui";
+import type { TableStructureEnrichment } from "@/lib/plugins/plugin-runtime";
 import { cn } from "@/lib/utils/cn";
 
 import { breakableParts, entryMark, structureSections, type EntryMark, type StructureSection } from "../../_lib/structure-sections";
@@ -139,6 +140,12 @@ type StructureSectionsProps = {
   onOpenDiagram: () => void;
   /** "Tentar de novo": refaz as listas, e abre outra sessão da árvore se a API já não conhece a que elas usavam. */
   onRetry: () => void;
+  /** Nome da tabela para exibir em maiúsculas (ex.: PCAORD) quando houver enriquecimento de informações/descrições. */
+  tableName?: string;
+  /** Enriquecimento de plugins de terceiros ou descrições internas (descrição da tabela, colunas extras e detalhes do atributo). */
+  enrichment?: TableStructureEnrichment | null;
+  selectedColumn?: string | null;
+  onSelectColumn?: (columnName: string) => void;
 };
 
 /** O nome de cada seção na lista lateral e o título dela no painel: um para cada seção, ou o tipo reclama. */
@@ -151,7 +158,23 @@ const sectionTitles: Record<StructureSection, string> = { columns: text.columns.
  * "Atualizar" e, no DDL, "Copiar") fica fora da rolagem; o corpo rola na vertical, com o cabeçalho da tabela fixo no topo. Cada seção tem o estado dela (carregando,
  * erro com "Tentar de novo", vazio ou a tabela), e uma lista que falha não esconde as outras: a entrada dela só ganha a marca de aviso, e continua clicável.
  */
-export function StructureSections({ section, onSection, columns, foreignKeys, indexes, ddl, onCopyDdl, fetching, onRefresh, onOpenDiagram, onRetry }: StructureSectionsProps) {
+export function StructureSections({
+  section,
+  onSection,
+  columns,
+  foreignKeys,
+  indexes,
+  ddl,
+  onCopyDdl,
+  fetching,
+  onRefresh,
+  onOpenDiagram,
+  onRetry,
+  tableName,
+  enrichment,
+  selectedColumn,
+  onSelectColumn,
+}: StructureSectionsProps) {
   // Um id por Estrutura montada: com duas abas de tabela montadas, ids fixos fariam o painel da segunda ser nomeado pela entrada da primeira.
   const idBase = useId();
   const list = useRef<HTMLDivElement>(null);
@@ -163,52 +186,105 @@ export function StructureSections({ section, onSection, columns, foreignKeys, in
     indexes: entryMark(indexes.view, indexes.rows.length),
     ddl: { kind: "none" },
   };
-  const entries: NavEntry[] = structureSections.map((id) => ({ id, label: entryLabels[id], mark: marks[id] }));
+  const hasEnrichment = Boolean(enrichment);
+  const columnsLabel = hasEnrichment ? "Info. e Colunas" : entryLabels.columns;
+  const entries: NavEntry[] = structureSections.map((id) => ({ id, label: id === "columns" ? columnsLabel : entryLabels[id], mark: marks[id] }));
   const copyText = ddl.kind === "ready" ? ddl.text : null;
 
   function body(): ReactNode {
     switch (section) {
-      case "columns":
-        return (
-          <LevelBody view={columns.view} empty={text.columns.empty} onRetry={onRetry}>
-            <table className={tableClass}>
-              <thead>
-                <tr>
-                  <th scope="col" className={cn(headerCell, "w-10 text-right")}>
-                    {text.columns.number}
+      case "columns": {
+        const extraColumns = enrichment?.extraColumns ?? [];
+        const columnValues = enrichment?.columnValues ?? {};
+        const attributeDetails = enrichment?.attributeDetails ?? {};
+        const hasDetails = Object.keys(attributeDetails).length > 0;
+        const activeColName = hasDetails ? (selectedColumn ?? columns.rows[0]?.name ?? null) : null;
+        const activeDetails = activeColName ? (attributeDetails[activeColName.toLowerCase()] ?? attributeDetails[activeColName] ?? []) : [];
+
+        const tableEl = (
+          <table className={tableClass}>
+            <thead>
+              <tr>
+                <th scope="col" className={cn(headerCell, "w-10 text-right")}>
+                  {text.columns.number}
+                </th>
+                <th scope="col" className={headerCell}>
+                  {text.columns.name}
+                </th>
+                {extraColumns.map((extra) => (
+                  <th key={extra.key} scope="col" className={headerCell}>
+                    {extra.label}
                   </th>
-                  <th scope="col" className={headerCell}>
-                    {text.columns.name}
-                  </th>
-                  <th scope="col" className={headerCell}>
-                    {text.columns.type}
-                  </th>
-                  <th scope="col" className={headerCell}>
-                    {text.columns.nullable}
-                  </th>
-                  <th scope="col" className={headerCell}>
-                    {text.columns.key}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {columns.rows.map((row) => (
-                  <tr key={row.position}>
+                ))}
+                <th scope="col" className={headerCell}>
+                  {text.columns.type}
+                </th>
+                <th scope="col" className={headerCell}>
+                  {text.columns.nullable}
+                </th>
+                <th scope="col" className={headerCell}>
+                  {text.columns.key}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {columns.rows.map((row) => {
+                const colKey = row.name.toLowerCase();
+                const extraRow = columnValues[colKey] ?? columnValues[row.name];
+                const isSelected = activeColName !== null && activeColName.toLowerCase() === colKey;
+
+                return (
+                  <tr
+                    key={row.position}
+                    onClick={hasDetails && onSelectColumn ? () => onSelectColumn(row.name) : undefined}
+                    className={hasDetails ? cn("cursor-pointer transition-colors hover:bg-selected/40", isSelected && "bg-selected/60") : undefined}
+                  >
                     <td className={cn(cell, "text-right whitespace-nowrap text-subtle")}>{row.position}</td>
                     <td className={cn(textCell, mono, "font-medium")}>
                       <Breakable text={row.name} />
                     </td>
+                    {extraColumns.map((extra) => (
+                      <td key={extra.key} className={cn(textCell, extra.monospace ? mono : undefined, "text-body")}>
+                        {extraRow?.[extra.key] ?? ""}
+                      </td>
+                    ))}
                     <td className={cn(textCell, mono, "text-body")}>{row.type}</td>
                     <td className={cn(cell, "whitespace-nowrap text-body")}>{row.nullable ? text.columns.yes : text.columns.no}</td>
                     <td className={cn(cell, "whitespace-nowrap")}>
                       <Keys keys={row.keys} />
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                );
+              })}
+            </tbody>
+          </table>
+        );
+
+        return (
+          <LevelBody view={columns.view} empty={text.columns.empty} onRetry={onRetry}>
+            {hasDetails && activeColName && activeDetails.length > 0 ? (
+              <div className="flex flex-col @2xl:flex-row">
+                <div className="min-w-0 flex-1">{tableEl}</div>
+                <aside className="flex w-full flex-none flex-col border-t border-border bg-panel p-4 @2xl:w-72 @2xl:border-t-0 @2xl:border-l">
+                  <div className="mb-3 font-mono text-xs font-semibold text-ink">Inf. do atributo ({activeColName})</div>
+                  <dl className="flex flex-col gap-2.5 text-xs">
+                    {activeDetails.map((detail, index) => (
+                      <div key={index} className="flex flex-col gap-1">
+                        <dt className="font-medium text-muted">{detail.label}</dt>
+                        <dd className="rounded border border-border bg-raised px-2.5 py-1.5 font-mono whitespace-pre-wrap wrap-anywhere text-body">
+                          {detail.value || "—"}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </aside>
+              </div>
+            ) : (
+              tableEl
+            )}
           </LevelBody>
         );
+      }
       case "foreignKeys":
         return (
           <LevelBody view={foreignKeys.view} empty={text.foreignKeys.empty} onRetry={onRetry}>
@@ -290,8 +366,19 @@ export function StructureSections({ section, onSection, columns, foreignKeys, in
         <StructureNav ref={list} orientation={orientation} idBase={idBase} entries={entries} selected={section} onSelect={onSection} />
 
         <div role="tabpanel" id={structurePanelId(idBase)} aria-labelledby={structureTabId(idBase, section)} className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex flex-none flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border bg-panel px-4 py-2">
-            <h3 className="text-base leading-7 font-semibold">{sectionTitles[section]}</h3>
+          <div className="flex flex-none flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-border bg-panel px-4 py-2">
+            <h3 className="text-base leading-7 font-semibold">{section === "columns" ? columnsLabel : sectionTitles[section]}</h3>
+            {hasEnrichment && tableName ? (
+              <span className="rounded border border-border bg-raised px-2 py-0.5 font-mono text-xs font-semibold text-ink">
+                {tableName.toUpperCase()}
+              </span>
+            ) : null}
+            {enrichment?.tableDescription ? (
+              <span className="text-sm text-body">
+                <span className="text-muted">Descrição da tabela: </span>
+                <span className="font-medium text-ink">{enrichment.tableDescription}</span>
+              </span>
+            ) : null}
             <div className="ml-auto flex items-center gap-2">
               {section === "ddl" ? (
                 <Button type="button" variant="secondary" size="compact" className="h-7 px-2.5 text-xs" aria-label={text.ddl.copyLabel} disabled={copyText === null} onClick={() => copyText !== null && onCopyDdl(copyText)}>

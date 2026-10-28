@@ -45,6 +45,8 @@ public sealed record UpdateConnectionCommand : IRequest<Result<ConnectionDto, Ap
     public int? VerificationInterval { get; init; }
     public string? VerificationQuery { get; init; }
 
+    public bool? UseInternalDescriptions { get; init; }
+
     /// <summary>RN-PROT-003: a senha do usuário do Prism, e não a do banco.</summary>
     public string? UserPassword { get; init; }
 
@@ -67,7 +69,7 @@ internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueri
             return Result.Failure<ConnectionDto, ApiErrorDto>(ConnectionErrors.NotFound(request.ID));
 
         var connection = ConnectionRecords.ToDomain(record);
-        var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery);
+        var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery, request.UseInternalDescriptions);
         connection.Update(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, timeProvider.GetUtcNow().UtcDateTime);
 
         // A senha vai à parte: omitida (nula) mantém a do documento na hora da gravação, e não a que esta leitura trouxe (RN-CONN-004). A do usuário

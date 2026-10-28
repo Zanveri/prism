@@ -2,7 +2,7 @@ import { fitsSavedSqlLimit, type SavedTab, type SavedWorkspace } from "../../../
 
 import { inDatabase } from "./navigator-model";
 import { isScriptDirty, scriptPlace, type ScriptRef } from "./saved-scripts";
-import { isTableTab, type QueryTab } from "./workbench-model";
+import { isDatabaseTab, isSchemaTab, isTableTab, type QueryTab } from "./workbench-model";
 
 /**
  * As abas que voltam na próxima entrada (seção 24 da especificação, RN-ABAS-006), sem tocar a página nem a API: o que de cada aba vai para o cofre e o que
@@ -14,6 +14,8 @@ import { isTableTab, type QueryTab } from "./workbench-model";
 
 /** O texto do editor da aba agora, se ela tem editor montado (`liveEditors`): a cópia da aba chega com atraso. */
 export type LiveSql = (tabId: string) => string | null;
+
+const isPersistableTab = (tab: QueryTab): boolean => !isSchemaTab(tab) && !isDatabaseTab(tab);
 
 /**
  * Uma aba como vai para o cofre. A vista da tabela é a enumeração da tela (`TableView`) e a do schema (`workspace-messages.ts`) ao mesmo tempo: a ida (aqui)
@@ -41,8 +43,9 @@ export function savedTabOf(tab: QueryTab, liveSql: string | null): SavedTab {
 
 /** As abas desta janela, na ordem da faixa, e a ativa. */
 export function toSavedWorkspace(tabs: readonly QueryTab[], activeTabId: string | null, liveSql: LiveSql): SavedWorkspace {
-  const index = tabs.findIndex((tab) => tab.id === activeTabId);
-  return { tabs: tabs.map((tab) => savedTabOf(tab, liveSql(tab.id))), activeIndex: index < 0 ? null : index };
+  const persistable = tabs.filter(isPersistableTab);
+  const index = persistable.findIndex((tab) => tab.id === activeTabId);
+  return { tabs: persistable.map((tab) => savedTabOf(tab, liveSql(tab.id))), activeIndex: index < 0 ? null : index };
 }
 
 /**
@@ -53,15 +56,17 @@ export function toSavedWorkspace(tabs: readonly QueryTab[], activeTabId: string 
 export type HeldWorkspace = { order: readonly string[]; byId: ReadonlyMap<string, SavedTab>; activeId: string | null };
 
 export function holdWorkspace(tabs: readonly QueryTab[], activeTabId: string | null, liveSql: LiveSql): HeldWorkspace {
-  return { order: tabs.map((tab) => tab.id), byId: new Map(tabs.map((tab) => [tab.id, savedTabOf(tab, liveSql(tab.id))])), activeId: activeTabId };
+  const persistable = tabs.filter(isPersistableTab);
+  return { order: persistable.map((tab) => tab.id), byId: new Map(persistable.map((tab) => [tab.id, savedTabOf(tab, liveSql(tab.id))])), activeId: activeTabId };
 }
 
 /** O que a janela que fecha conta: as abas de quando ela começou a fechar, com o que mudou nas que ainda estão abertas, e as que chegaram depois no fim. */
 export function withHeld(held: HeldWorkspace, tabs: readonly QueryTab[], liveSql: LiveSql): { held: HeldWorkspace; workspace: SavedWorkspace } {
+  const persistable = tabs.filter(isPersistableTab);
   const byId = new Map(held.byId);
-  for (const tab of tabs) byId.set(tab.id, savedTabOf(tab, liveSql(tab.id)));
+  for (const tab of persistable) byId.set(tab.id, savedTabOf(tab, liveSql(tab.id)));
   const known = new Set(held.order);
-  const order = [...held.order, ...tabs.filter((tab) => !known.has(tab.id)).map((tab) => tab.id)];
+  const order = [...held.order, ...persistable.filter((tab) => !known.has(tab.id)).map((tab) => tab.id)];
   const index = held.activeId === null ? -1 : order.indexOf(held.activeId);
 
   const next: HeldWorkspace = { order, byId, activeId: held.activeId };

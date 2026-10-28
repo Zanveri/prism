@@ -7,9 +7,11 @@ import { buildConnectionTree, folderOptions } from "../_lib/connection-tree";
 import { connectionsCopy } from "../_lib/connections.copy";
 import { newVerification, verificationOf, type Connection, type Folder } from "../_lib/connections.schema";
 import { environmentLookup } from "../_lib/environment";
+import { inheritedInternalDescriptionsFolder } from "../_lib/internal-descriptions";
 import { inheritedProtections, type ConfirmationChoice } from "../_lib/protections";
 import type { UserEnvironment } from "../_lib/user-environments";
 import { EnvironmentPicker } from "./environment-picker";
+import { InternalDescriptionsSection } from "./internal-descriptions-section";
 import { ProtectionsSection } from "./protections-section";
 import { SessionSection } from "./session-section";
 
@@ -43,6 +45,8 @@ type ConnectionFieldsProps = {
   engine: Engine | null;
   verifying: boolean;
   onVerifyingChange: (verifying: boolean) => void;
+  useInternalDescriptions?: boolean | null;
+  onUseInternalDescriptionsChange?: (value: boolean | null) => void;
   /** RN-VERIF-003: o indicador da última verificação da conexão gravada e conectada, no painel "Sessão da conexão". */
   checkIndicator?: ReactNode;
 };
@@ -53,7 +57,7 @@ type ConnectionFieldsProps = {
  * leitura do canvas (a coluna da esquerda, com a sessão embaixo dos campos, e depois a da direita). O que é texto livre vai pelo `FormData` (campos não
  * controlados); a pasta, a porta (que acompanha o banco, RN-CONN-012), a senha, a cor, as proteções e a caixa da verificação são do diálogo.
  */
-export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [], confirm, onConfirmChange, readOnly, onReadOnlyChange, engine, verifying, onVerifyingChange, checkIndicator }: ConnectionFieldsProps) {
+export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [], confirm, onConfirmChange, readOnly, onReadOnlyChange, engine, verifying, onVerifyingChange, useInternalDescriptions = null, onUseInternalDescriptionsChange, checkIndicator }: ConnectionFieldsProps) {
   const folder = folderID === "" ? null : folderID;
 
   return (
@@ -122,6 +126,14 @@ export function ConnectionFields({ connection, folders, errors, folderID, onFold
 
       {/* RN-PROT-004: o que a pasta escolhida no campo impõe (antes de gravar, como o ambiente herdado), marcado e desabilitado. */}
       <ProtectionsSection idPrefix="cx" subject="connection" confirm={confirm} onConfirmChange={onConfirmChange} readOnly={readOnly} onReadOnlyChange={onReadOnlyChange} inherited={inheritedProtections(folders, folder)} errors={errors} />
+
+      <InternalDescriptionsSection
+        idPrefix="cx"
+        subject="connection"
+        value={useInternalDescriptions}
+        onChange={(next) => onUseInternalDescriptionsChange?.(next)}
+        inheritedFolder={inheritedInternalDescriptionsFolder(folders, folder)}
+      />
     </div>
   );
 }

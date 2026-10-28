@@ -5,13 +5,15 @@ using Prism.Infrastructure.ConnectionFiles.Clients;
 using Prism.Infrastructure.ConnectionFiles.Models;
 using Prism.Infrastructure.ConnectionFiles.Services;
 using Prism.Infrastructure.Databases.Clients;
-using Prism.Infrastructure.DbeaverSources.Clients;
-using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.DbeaverSources.Clients;
+using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Drivers;
 using Prism.Infrastructure.Drivers.Clients;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Plugins.Clients;
+using Prism.Infrastructure.Plugins.Models;
 using Prism.Infrastructure.Transfers.Clients;
 using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Transfers.Services;
@@ -85,6 +87,10 @@ public static class DependencyInjection
         services.AddTransient<IDbeaverSourceClient, DbeaverSourceClient>();
         // Singleton, como o registro das transferências: assina o fechamento do cofre para apagar as cópias (resolvido na subida, em `UseApi`).
         services.AddSingleton<IDbeaverSourceService, DbeaverSourceService>();
+
+        // Plugins de terceiros: a pasta `<PRISM_DATA_DIR>/plugins` para os repositórios Git clonados e o client que valida manifestos e bundles.
+        services.AddSingleton(PluginSettings.For(dataDirectory));
+        services.AddTransient<IPluginSourceClient, PluginSourceClient>();
 
         return services;
     }

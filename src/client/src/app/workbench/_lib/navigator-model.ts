@@ -133,6 +133,24 @@ export function tableTargetOf(node: NavNode): TableRef | null {
  * A conexão a que a linha pertence, para as ações do menu (nova consulta, atualizar, abrir a tabela…). A pasta não é de conexão
  * nenhuma, e as folhas que só copiam o nome (rotina, coluna, índice, chave) não precisam dela: a chave delas nem é um caminho.
  */
+/** A conexão, o banco (quando é outro do servidor) e o esquema de uma linha de esquema (RN-ESQUEMA-001). */
+export type SchemaRef = DatabaseRef & { schema: string };
+
+export function schemaTargetOf(node: NavNode): SchemaRef | null {
+  if (node.kind !== "schema" || !node.key.startsWith("{")) return null;
+  const path = parseNavKey(node.key);
+  return path.type === "schema" ? { connectionId: path.connectionId, ...inDatabase(path.database), schema: path.schema } : null;
+}
+
+/** A conexão, o banco (quando é outro do servidor) e o nome do banco de uma linha de banco (RN-BANCO-001). */
+export type DatabaseNodeRef = DatabaseRef & { name: string };
+
+export function databaseTargetOf(node: NavNode): DatabaseNodeRef | null {
+  if (node.kind !== "database" || !node.key.startsWith("{")) return null;
+  const path = parseNavKey(node.key);
+  return path.type === "database" ? { connectionId: path.connectionId, ...inDatabase(path.database), name: node.label } : null;
+}
+
 export function ownerConnectionId(node: NavNode): string | null {
   switch (node.kind) {
     case "connection":
@@ -259,7 +277,7 @@ export function databaseNodes(connectionId: string, databases: readonly ServerDa
 }
 
 /** Esquemas comuns primeiro, os de sistema depois (RN-ARVORE-004); cada grupo em ordem alfabética. `database`: o outro banco do servidor de onde vieram. */
-export function schemaNodes(connectionId: string, schemas: DatabaseSchema[], database?: string): NavNode[] {
+export function schemaNodes(connectionId: string, schemas: readonly Pick<DatabaseSchema, "name" | "isSystem">[], database?: string): NavNode[] {
   return [...schemas]
     .sort(byName)
     .map((schema): NavNode => ({ key: navKey({ type: "schema", connectionId, ...inDatabase(database), schema: schema.name }), kind: "schema", label: schema.name, depth: 0, hasChildren: true, ...(schema.isSystem ? { detail: copy.system } : {}) }));

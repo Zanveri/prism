@@ -11,6 +11,19 @@ export function folderInputOf(existing: Folder | null, asked: Partial<FolderInpu
   const unchanged: FolderInput =
     existing === null
       ? { name: "", parentID: null, color: null, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false }
-      : { name: existing.name, parentID: existing.parentID, color: existing.color, environmentName: existing.environmentName, environmentColor: existing.environmentColor, confirmCommands: existing.confirmCommands, readOnly: existing.readOnly };
-  return { ...unchanged, ...asked };
+      : {
+          name: existing.name,
+          parentID: existing.parentID,
+          color: existing.color,
+          environmentName: existing.environmentName,
+          environmentColor: existing.environmentColor,
+          confirmCommands: existing.confirmCommands,
+          readOnly: existing.readOnly,
+          ...(existing.useInternalDescriptions !== undefined ? { useInternalDescriptions: existing.useInternalDescriptions } : {}),
+        };
+  const merged: FolderInput = { ...unchanged, ...asked };
+  if (merged.useInternalDescriptions === undefined) {
+    delete merged.useInternalDescriptions;
+  }
+  return merged;
 }

@@ -381,7 +381,7 @@ describe("folderSchema e formulários de pasta (RN-PASTA-001, RN-PASTA-005 e RN-
     const renamed = editFolderSchema.safeParse({ name: "Nova", color: "#B79CFF", environmentName: "QAS", environmentColor: "#F2B644", confirmCommands: "all", readOnly: "true" });
 
     expect(renamed.success && renamed.data).toEqual({ name: "Nova", color: "#B79CFF", environmentName: "QAS", environmentColor: "#F2B644", confirmCommands: "all", readOnly: true });
-    expect(Object.keys(editFolderSchema.shape).sort()).toEqual(["color", "confirmCommands", "environmentColor", "environmentName", "name", "readOnly"]);
+    expect(Object.keys(editFolderSchema.shape).sort()).toEqual(["color", "confirmCommands", "environmentColor", "environmentName", "name", "readOnly", "useInternalDescriptions"]);
     expect(Object.keys(renameFolderSchema.shape)).toEqual(["name"]);
     expect(fieldErrors(editFolderSchema, { name: "", ...noEnvironment })).toHaveProperty("name");
 

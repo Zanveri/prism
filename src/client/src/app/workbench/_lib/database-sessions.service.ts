@@ -7,20 +7,24 @@ import { prismEndpoints } from "@/lib/api/prism-endpoints";
 import {
   columnsSchema,
   databaseObjectsSchema,
+  databasePropertiesSchema,
   databaseSchemasSchema,
   databaseSessionSchema,
   foreignKeysSchema,
   indexesSchema,
   objectNamesSchema,
   referencingForeignKeysSchema,
+  schemaDiagramSchema,
   serverDatabasesSchema,
   type Column,
   type DatabaseObject,
+  type DatabaseProperty,
   type DatabaseSchema,
   type DatabaseSession,
   type ForeignKey,
   type ObjectNames,
   type ReferencingForeignKey,
+  type SchemaDiagram,
   type ServerDatabase,
   type TableIndex,
 } from "./database-sessions.schema";
@@ -53,8 +57,18 @@ export function getSchemas(sessionId: string): Promise<ApiResult<DatabaseSchema[
   return apiRequest(prismEndpoints.userDatabaseSessionSchemas(sessionId), { schema: databaseSchemasSchema });
 }
 
+/** RN-BANCO-001 e RN-CAT-010: propriedades somente leitura do servidor e do banco da sessão. */
+export function getDatabaseProperties(sessionId: string): Promise<ApiResult<DatabaseProperty[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionProperties(sessionId), { schema: databasePropertiesSchema });
+}
+
 export function getObjects(sessionId: string, schema: string, kind: ObjectsKind): Promise<ApiResult<DatabaseObject[]>> {
   return apiRequest(prismEndpoints.userDatabaseSessionObjects(sessionId, schema, kind), { schema: databaseObjectsSchema });
+}
+
+/** RN-ESQUEMA-003 e RN-CAT-008: todas as tabelas, colunas e chaves estrangeiras do esquema de uma vez. */
+export function getSchemaDiagram(sessionId: string, schema: string): Promise<ApiResult<SchemaDiagram>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionSchemaDiagram(sessionId, schema), { schema: schemaDiagramSchema });
 }
 
 /**

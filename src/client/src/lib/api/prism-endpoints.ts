@@ -28,10 +28,14 @@ export const prismEndpoints = {
   userDatabaseSession: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}`,
   userDatabaseSessionDatabases: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/databases`,
   userDatabaseSessionSchemas: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/schemas`,
+  // RN-BANCO-001 e RN-CAT-010: propriedades somente leitura do servidor e do banco da sessão.
+  userDatabaseSessionProperties: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/properties`,
   // RN-BUSCA-002: o índice de nomes das tabelas e visões de todos os esquemas do banco da sessão, para a busca do navegador.
   userDatabaseSessionObjectNames: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/object-names`,
   // Nome de esquema e de tabela vêm do banco e podem ter espaço, aspas, barra e maiúsculas: sempre codificados.
   userDatabaseSessionObjects: (id: string, schema: string, kind: "tables" | "views" | "routines" | "sequences") => `api/user/database-sessions/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/objects?kind=${kind}`,
+  // RN-ESQUEMA-003 e RN-CAT-008: todas as tabelas, colunas e chaves estrangeiras do esquema de uma vez.
+  userDatabaseSessionSchemaDiagram: (id: string, schema: string) => `api/user/database-sessions/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/diagram`,
   userDatabaseSessionColumns: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/columns`,
   userDatabaseSessionIndexes: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/indexes`,
   userDatabaseSessionForeignKeys: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/foreign-keys`,
@@ -54,6 +58,13 @@ export const prismEndpoints = {
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
   userDriverInstall: (id: string) => `api/user/drivers/${encodeURIComponent(id)}/install`,
+  userPlugins: "api/user/plugins",
+  userPluginsBundles: "api/user/plugins/bundles",
+  userPluginsConsent: "api/user/plugins/consent",
+  userPluginsInstall: "api/user/plugins/install",
+  userPlugin: (id: string) => `api/user/plugins/${encodeURIComponent(id)}`,
+  userPluginEnabled: (id: string) => `api/user/plugins/${encodeURIComponent(id)}/enabled`,
+  userPluginUpdate: (id: string) => `api/user/plugins/${encodeURIComponent(id)}/update`,
   // RN-EXPORT-016: os trabalhos em segundo plano (a exportação de dados), um registro só para todas as janelas.
   userTransfers: "api/user/transfers",
   userTransferExports: "api/user/transfers/exports",
