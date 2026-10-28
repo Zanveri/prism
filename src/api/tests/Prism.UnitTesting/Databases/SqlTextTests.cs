@@ -1027,4 +1027,21 @@ public sealed class SqlTextTests
         Assert.Empty(readFound);
         Assert.Empty(notReadFound);
     }
+
+    [Trait("SqlText", "RewriteDoubleQuotedLiterals")]
+    [Fact(DisplayName = "OK aspas duplas em posição de parâmetro ou valor viram aspas simples, preservando identificadores qualificados e de cláusula")]
+    public void RewriteDoubleQuotedLiterals_ShouldRewriteValueLiteralsAndPreserveIdentifiers()
+    {
+        //Arrange
+        const string query = "select * from items where items.description = \"FRIGIDEIRA ACO INOX 30CM ALCA GRANO\" and items.code IN (\"A\", \"B'C\")";
+        const string qualifiedQuery = "select t.\"Col Name\" as \"Meu Alias\" from \"usr_schema\".\"items\" t where t.\"Col Name\" = \"Valor 'X'\"";
+
+        //Act
+        var rewritten = SqlText.RewriteDoubleQuotedLiterals(query, ESqlDialect.Informix);
+        var rewrittenQualified = SqlText.RewriteDoubleQuotedLiterals(qualifiedQuery, ESqlDialect.PostgreSql);
+
+        //Assert
+        Assert.Equal("select * from items where items.description = 'FRIGIDEIRA ACO INOX 30CM ALCA GRANO' and items.code IN ('A', 'B''C')", rewritten);
+        Assert.Equal("select t.\"Col Name\" as \"Meu Alias\" from \"usr_schema\".\"items\" t where t.\"Col Name\" = 'Valor ''X'''", rewrittenQualified);
+    }
 }

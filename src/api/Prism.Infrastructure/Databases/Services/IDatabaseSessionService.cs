@@ -63,7 +63,7 @@ public interface IDatabaseSessionService
     /// <summary>As consultas de catálogo esperam a vez na sessão (RN-SESSAO-002): a árvore pede vários níveis ao mesmo tempo.</summary>
     Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(Guid sessionID, CancellationToken cancellationToken);
 
-    /// <param name="kind">`tables`, `views` ou `routines`.</param>
+    /// <param name="kind">`tables`, `views`, `routines` ou `sequences`.</param>
     Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(Guid sessionID, string schema, string kind, CancellationToken cancellationToken);
 
     /// <summary>

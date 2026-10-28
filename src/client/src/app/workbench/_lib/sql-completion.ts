@@ -111,7 +111,7 @@ export function completionNamespace(levels: readonly CachedLevel[], engine: Engi
 
   for (const { key, nodes } of levels) {
     const path = levelPathOf(key);
-    if (path?.type === "objects" && path.objects !== "routines") {
+    if (path?.type === "objects" && (path.objects === "tables" || path.objects === "views")) {
       see(path.schema);
       objects.set(path.schema, [...(objects.get(path.schema) ?? []), ...nodes.map((node) => ({ name: node.label, view: path.objects === "views" }))]);
     }

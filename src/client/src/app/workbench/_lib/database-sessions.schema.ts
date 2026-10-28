@@ -32,8 +32,8 @@ export type DatabaseSchema = z.infer<typeof databaseSchemaSchema>;
 
 export const databaseSchemasSchema = z.array(databaseSchemaSchema);
 
-/** O que `objects?kind=` lista: tabelas, visões, ou as rotinas (procedimentos e funções). */
-export const databaseObjectSchema = z.object({ name: z.string(), kind: z.enum(["table", "view", "procedure", "function"]) });
+/** O que `objects?kind=` lista: tabelas, visões, rotinas (procedimentos e funções) ou sequências. */
+export const databaseObjectSchema = z.object({ name: z.string(), kind: z.enum(["table", "view", "procedure", "function", "sequence"]) });
 
 export type DatabaseObject = z.infer<typeof databaseObjectSchema>;
 

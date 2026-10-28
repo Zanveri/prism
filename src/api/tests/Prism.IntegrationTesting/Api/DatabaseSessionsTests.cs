@@ -244,7 +244,7 @@ public sealed class DatabaseSessionsTests
         await using var host = await ApiHost.StartAsync();
         var sessionID = await StartSessionAsync(host);
 
-        foreach (var path in new[] { "/schemas/loja/objects?kind=sequences", "/schemas/loja/objects?kind=", "/schemas/loja/objects" })
+        foreach (var path in new[] { "/schemas/loja/objects?kind=triggers", "/schemas/loja/objects?kind=", "/schemas/loja/objects" })
             await AssertProblemAsync(await host.Client.GetAsync(Url(sessionID, path)), HttpStatusCode.UnprocessableEntity, "OBJECT_KIND_INVALID");
     }
 

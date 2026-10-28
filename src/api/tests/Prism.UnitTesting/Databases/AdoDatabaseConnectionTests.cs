@@ -2365,7 +2365,12 @@ public sealed partial class AdoDatabaseConnectionTests
             => driver;
 
         protected override string? ObjectsSql(string kind)
-            => kind == "tables" ? "TABLES" : null;
+            => kind switch
+            {
+                "tables" => "TABLES",
+                "sequences" => "SEQUENCES",
+                _ => null
+            };
 
         /// <summary>O texto leva o número de linhas pedido, para o teste conferir que a base lê uma a mais que o limite.</summary>
         protected override string ObjectNamesSql(int rows)

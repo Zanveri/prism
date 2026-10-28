@@ -6,7 +6,7 @@ public sealed class GetSchemaObjectsValidator : AbstractValidator<GetSchemaObjec
 {
     public GetSchemaObjectsValidator()
     {
-        // Seção 6 da especificação: a rota lista tabelas, visões ou rotinas, e só. O valor é o da query string, e a comparação é exata.
-        RuleFor(request => request.Kind).Must(kind => kind is "tables" or "views" or "routines").WithMessage("O tipo de objeto deve ser tables, views ou routines.").WithErrorCode("OBJECT_KIND_INVALID");
+        // Seção 6 da especificação: a rota lista tabelas, visões, rotinas ou sequências, e só. O valor é o da query string, e a comparação é exata.
+        RuleFor(request => request.Kind).Must(kind => kind is "tables" or "views" or "routines" or "sequences").WithMessage("O tipo de objeto deve ser tables, views, routines ou sequences.").WithErrorCode("OBJECT_KIND_INVALID");
     }
 }
