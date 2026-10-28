@@ -24,6 +24,7 @@ import { defaultSchemasOf, linkCatalog, tableLinkAt, type LinkCatalog, type Tabl
 import { liveEditors } from "../_lib/live-editors";
 import { flashRun, runFlash } from "../_lib/run-flash";
 import { scriptMark, scriptMarkEffects } from "../_lib/script-mark";
+import { formatSql, type SqlFormatOptions } from "../_lib/sql-format";
 import { keywordCase } from "../_lib/sql-keyword-case";
 import { hasStatement, scriptStatements, statementAt } from "../_lib/sql-statements";
 import type { RunTarget } from "../_lib/use-query-runner";
@@ -152,6 +153,14 @@ export function scriptTargets(state: EditorState, engine: Engine | undefined, bl
  * O trecho que pisca quando "Executar" envia `target` (RN-SQL-018): sem seleção, o comando do cursor, exatamente o que foi enviado; com a linha em
  * branco separando, é assim que a pessoa vê qual comando o cursor pegou. A seleção já está à vista e não pisca; sem comando, nada pisca.
  */
+export function formatTarget(state: EditorState, options: SqlFormatOptions): { from: number; to: number; insert: string } | null {
+  const { from, to } = state.selection.main;
+  const [rangeFrom, rangeTo, raw] = from !== to ? [from, to, state.sliceDoc(from, to)] : [0, state.doc.length, state.doc.toString()];
+  if (raw.trim().length === 0) return null;
+  const insert = formatSql(raw, options);
+  return insert === raw ? null : { from: rangeFrom, to: rangeTo, insert };
+}
+
 export function flashRangeOf(state: EditorState, target: RunTarget): { from: number; to: number } | null {
   if (!state.selection.main.empty || target.sql === "") return null;
   return { from: target.offset, to: target.offset + target.sql.length };
@@ -284,7 +293,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   // Com "seguir o sistema", o esquema vem do sistema, e muda com o app aberto.
   const systemIsLight = useSyncExternalStore(subscribeSystemScheme, systemPrefersLight, () => false);
   const dark = resolveScheme(preferences.theme, systemIsLight) === "dark";
-  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords, blankLineSeparates, showVariableValues } = preferences.editor;
+  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords, formatStyle, blankLineSeparates, showVariableValues } = preferences.editor;
   // Os nomes sugeridos são os da árvore da conexão DESTA aba, que ela passa por propriedade: as abas ficam todas montadas, e ler a aba ativa
   // daria ao editor de uma aba os nomes da conexão de outra.
   const queryClient = useQueryClient();
@@ -297,6 +306,8 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   // RN-SQL-018: a linha em branco separa os comandos? Lida na hora de executar: não muda nada no editor, e não precisa de compartimento.
   const blankLinesNow = useRef(blankLineSeparates);
   const uppercaseKeywordsNow = useRef(uppercaseKeywords);
+  const formatStyleNow = useRef(formatStyle);
+  const tabSizeNow = useRef(tabSize);
   // RN-VAR-025: o armazém dos valores de agora, lido pelo autocompletar na hora do pedido (o tipo de cada variável).
   const variablesNow = useRef(variables);
   const variableCompletion = useRef<VariablesCompletion | null>(null);
@@ -395,6 +406,26 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
       return true;
     }
 
+    function formatEditorSql(view: EditorView) {
+      const change = formatTarget(view.state, {
+        style: formatStyleNow.current,
+        uppercaseKeywords: uppercaseKeywordsNow.current,
+        tabSize: tabSizeNow.current,
+        engine: engineNow.current,
+        blankLines: blankLinesNow.current,
+      });
+      if (change !== null) {
+        const hadSelection = !view.state.selection.main.empty;
+        view.dispatch({
+          changes: change,
+          selection: hadSelection
+            ? EditorSelection.single(change.from, change.from + change.insert.length)
+            : EditorSelection.cursor(Math.min(view.state.selection.main.head, change.insert.length)),
+        });
+      }
+      return true;
+    }
+
     function openContextMenuShortcut(view: EditorView) {
       openContextMenuFromShortcut(view);
       return true;
@@ -429,6 +460,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
             keymap.of([
               { key: "Mod-Enter", run },
               { key: "Mod-.", run: openContextMenuShortcut },
+              { key: "Mod-Shift-f", run: formatEditorSql },
             ]),
           ),
           completionSlot.of(initial.autocomplete ? completionFor() : []),
@@ -503,13 +535,15 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   // Autocompletar e maiúsculas ligam e desligam no editor que já existe. Efeito à parte: ligar uma caixa não refaz o tema.
   useEffect(() => {
     uppercaseKeywordsNow.current = uppercaseKeywords;
+    formatStyleNow.current = formatStyle;
+    tabSizeNow.current = tabSize;
     const editor = view.current;
     const key = `${autocomplete}|${uppercaseKeywords}`;
     if (editor === null || key === appliedToggles.current) return;
 
     appliedToggles.current = key;
     editor.dispatch({ effects: [completionSlot.reconfigure(autocomplete ? completionFor() : []), caseSlot.reconfigure(uppercaseKeywords ? keywordCase(engineNow.current, () => blankLinesNow.current) : [])] });
-  }, [autocomplete, uppercaseKeywords]);
+  }, [autocomplete, uppercaseKeywords, formatStyle, tabSize]);
 
   // O banco mudou com o editor montado: a gramática, as maiúsculas e o completar passam a ser os dele, e "há o que executar?" é refeito pelas regras dele.
   useEffect(() => {
@@ -603,6 +637,35 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           }}
           groups={[
             [
+              {
+                id: "format-sql",
+                label: workbenchCopy.editor.contextMenu.formatSql,
+                shortcut: isMac
+                  ? workbenchCopy.editor.contextMenu.formatSqlShortcutMac
+                  : workbenchCopy.editor.contextMenu.formatSqlShortcut,
+                onSelect: () => {
+                  const editor = view.current;
+                  setContextMenuState(null);
+                  if (editor === null) return;
+                  const change = formatTarget(editor.state, {
+                    style: formatStyleNow.current,
+                    uppercaseKeywords: uppercaseKeywordsNow.current,
+                    tabSize: tabSizeNow.current,
+                    engine: engineNow.current,
+                    blankLines: blankLinesNow.current,
+                  });
+                  if (change !== null) {
+                    const hadSelection = !editor.state.selection.main.empty;
+                    editor.dispatch({
+                      changes: change,
+                      selection: hadSelection
+                        ? EditorSelection.single(change.from, change.from + change.insert.length)
+                        : EditorSelection.cursor(Math.min(editor.state.selection.main.head, change.insert.length)),
+                    });
+                  }
+                  editor.focus();
+                },
+              },
               {
                 id: "autocomplete-joins",
                 label: workbenchCopy.editor.contextMenu.autocompleteJoins,

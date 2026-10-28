@@ -260,7 +260,6 @@ describe("Editor SQL", () => {
     expect(html).toContain("tab-size:2");
   });
 
-
   describe("autocompletar e maiúsculas (RN-CONFIG-004)", () => {
     it("são duas caixas de marcar com os textos do canvas, não 'em breve': autocompletar ligado e maiúsculas desligado, como no canvas", () => {
       const html = editor(render().markup);
@@ -328,6 +327,38 @@ describe("Editor SQL", () => {
 
       expect(checked(box(html, "cfg-valor-variaveis"))).toBe(false);
       expect(checked(box(html, "cfg-autocompletar"))).toBe(true);
+    });
+  });
+
+  describe("estilo de formatação (Ctrl+Shift+F)", () => {
+    const radios = (html: string) =>
+      [...html.matchAll(/(<input type="radio"[^>]*name="cfg-formatacao"[^>]*\/?>)<span>([^<]*)<\/span>/g)].map(([, input, label]) => [
+        /value="([^"]*)"/.exec(input)?.[1],
+        label,
+        / checked=""/.test(input),
+      ]);
+
+    it("lista os 6 estilos de formatação com Expandido marcado por padrão e explica o atalho Ctrl+Shift+F", () => {
+      const html = editor(render().markup);
+
+      expect(html).toMatch(/<fieldset aria-describedby="cfg-formatacao-dica"[^>]*><legend[^>]*>Estilo de formatação SQL<\/legend>/);
+      expect(radios(html)).toEqual([
+        ["river", "River (rio)", false],
+        ["expanded", "Expandido", true],
+        ["tabular", "Alinhado à esquerda (tabular)", false],
+        ["leadingComma", "Vírgula à esquerda", false],
+        ["compact", "Compacto", false],
+        ["modern", "Moderno (dbt / analytics)", false],
+      ]);
+      expect(html).toContain("Ctrl+Shift+F");
+    });
+
+    it("mostra o estilo que o usuário escolheu e atualiza a prévia conforme o estilo e a caixa das palavras-chave", () => {
+      const html = editor(render({ editor: { formatStyle: "leadingComma", uppercaseKeywords: false } }).markup);
+
+      expect(radios(html)).toContainEqual(["leadingComma", "Vírgula à esquerda", true]);
+      expect(html).toContain(">select<");
+      expect(html).toContain(", ");
     });
   });
 });

@@ -83,6 +83,16 @@ export const settingsCopy = {
     // RN-CONFIG-008: a fonte do editor foi para Aparência, ao lado da fonte da interface.
     fontNote: "A fonte do editor fica em Aparência, ao lado da fonte da interface.",
     preview: "Prévia do editor",
+    formatStyle: {
+      label: "Estilo de formatação SQL",
+      hint: "Aplicado ao pressionar Ctrl+Shift+F no editor (no documento inteiro ou apenas no trecho selecionado). A caixa das palavras-chave segue a opção “Converter palavras-chave para maiúsculas”.",
+      river: "River (rio)",
+      expanded: "Expandido",
+      tabular: "Alinhado à esquerda (tabular)",
+      leadingComma: "Vírgula à esquerda",
+      compact: "Compacto",
+      modern: "Moderno (dbt / analytics)",
+    },
     // RN-CONFIG-004: os dois rótulos são os do canvas; as dicas dizem o que o editor faz de fato.
     autocomplete: "Autocompletar ao digitar",
     autocompleteHint: "Sugere as palavras-chave do banco da aba e os nomes que a árvore já carregou: esquemas, tabelas, visões e colunas. Com a conexão aberta, também busca as colunas de uma tabela que você começa a escrever (tabela. ou apelido.) e as chaves estrangeiras que completam o JOIN; fora isso, não consulta o banco. As setas escolhem uma sugestão, e só então o Enter a aceita.",

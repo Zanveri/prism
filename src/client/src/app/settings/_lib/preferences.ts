@@ -26,6 +26,10 @@ export const gridZoomSteps = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200] 
 /** As densidades do navegador (RN-NAV-011): "Confortável", o desenho do canvas, e "Compacta", com linhas mais baixas. As medidas são do navegador (`navigator-density.ts`). */
 export const navigatorDensities = ["comfortable", "compact"] as const;
 
+/** Os estilos de formatação SQL aplicados por `Ctrl+Shift+F` no editor: River, Expandido (padrão), Alinhado à esquerda (tabular), Vírgula à esquerda, Compacto e Moderno (dbt / analytics). */
+export const sqlFormatStyles = ["river", "expanded", "tabular", "leadingComma", "compact", "modern"] as const;
+export type SqlFormatStyle = (typeof sqlFormatStyles)[number];
+
 /**
  * RN-CONFIG-010: onde o resultado das abas de consulta novas aparece: no painel (o padrão), numa aba ou numa janela. Os mesmos três lugares da aba
  * (`resultPlaces`, em `workbench-model.ts`, RN-ABAS-011); a tela das abas é quem decide o que vale enquanto não há a janela do resultado (`newTabPlace`).
@@ -73,6 +77,8 @@ const fields = {
     blankLineSeparates: z.boolean(),
     /** RN-CONFIG-004 e RN-VAR-025: o valor da variável no fim da linha da declaração, depois de avaliada. */
     showVariableValues: z.boolean(),
+    /** O estilo de formatação SQL aplicado por `Ctrl+Shift+F`. */
+    formatStyle: z.enum(sqlFormatStyles),
   },
   results: {
     /** RN-CONFIG-005: o texto do valor nulo na grade. */
@@ -123,7 +129,16 @@ function freeze<T extends object>(value: T): T {
 export const defaultPreferences: Preferences = freeze({
   theme: "dark",
   ui: { fontFamily: appFonts.ui, navigatorDensity: "comfortable" },
-  editor: { fontFamily: appFonts.editor, fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true, showVariableValues: true },
+  editor: {
+    fontFamily: appFonts.editor,
+    fontSize: 13,
+    tabSize: 4,
+    autocomplete: true,
+    uppercaseKeywords: false,
+    blankLineSeparates: true,
+    showVariableValues: true,
+    formatStyle: "expanded",
+  },
   results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100, resultPlace: "panel" },
   security: { lockEnabled: true, lockAfterMinutes: 10 },
 } as const satisfies Preferences);

@@ -5,7 +5,7 @@ import type { Engine } from "@/components/ui";
 
 import { flashedRange, runFlash } from "../_lib/run-flash";
 import { scriptMark, scriptMarkEffects, scriptMarkedRange } from "../_lib/script-mark";
-import { flashEffect, flashRangeOf, runTarget, scriptTargets } from "./sql-editor";
+import { flashEffect, flashRangeOf, formatTarget, runTarget, scriptTargets } from "./sql-editor";
 
 const postgres: Engine = 1;
 const informix: Engine = 3;
@@ -149,5 +149,68 @@ describe("a marca do comando do script em execução (RN-SQL-019)", () => {
     // O lugar que o executor conhece é o de antes da edição: nada a marcar, e a marca de antes sai.
     expect(scriptMarkedRange(apply(edited, { offset: 0, sql: "select 1" }))).toBeNull();
     expect(scriptMarkEffects(EditorState.create({ doc: sql, extensions: scriptMark }), { offset: 0, sql: "select 9" })).toEqual([]);
+  });
+});
+
+
+describe("formatação com Ctrl+Shift+F (formatTarget)", () => {
+  it("sem seleção, formata o documento inteiro respeitando estilo, uppercaseKeywords e tabSize", () => {
+    const state = stateOf("select c.nome, §c.email from clientes as c where c.ativo = 1;");
+
+    const result = formatTarget(state, {
+      style: "expanded",
+      uppercaseKeywords: true,
+      tabSize: 2,
+      engine: postgres,
+      blankLines: true,
+    });
+
+    expect(result).toEqual({
+      from: 0,
+      to: state.doc.length,
+      insert: ["SELECT", "  c.nome,", "  c.email", "FROM", "  clientes AS c", "WHERE", "  c.ativo = 1;"].join("\n"),
+    });
+  });
+
+  it("com seleção, formata apenas o trecho selecionado preservando o restante do documento", () => {
+    const state = stateOf("select a from t1;\n§select c.nome, c.email from clientes as c§\nselect b from t2;");
+
+    const result = formatTarget(state, {
+      style: "leadingComma",
+      uppercaseKeywords: false,
+      tabSize: 4,
+      engine: postgres,
+      blankLines: true,
+    });
+
+    expect(result).toEqual({
+      from: 18,
+      to: 59,
+      insert: ["select c.nome", "     , c.email", "from clientes as c"].join("\n"),
+    });
+  });
+
+  it("retorna null quando o texto já está formatado igual ou está em branco", () => {
+    const alreadyCompact = stateOf("SELECT a FROM t1;§");
+    expect(
+      formatTarget(alreadyCompact, {
+        style: "compact",
+        uppercaseKeywords: true,
+        tabSize: 2,
+        engine: postgres,
+        blankLines: true,
+      }),
+    ).toBeNull();
+
+    const blank = stateOf("   §  ");
+    expect(
+      formatTarget(blank, {
+        style: "expanded",
+        uppercaseKeywords: true,
+        tabSize: 2,
+        engine: postgres,
+        blankLines: true,
+      }),
+    ).toBeNull();
   });
 });
