@@ -72,6 +72,10 @@ internal static class SqlFilter
         if (refusal is not null)
             return new DatabaseFailure(EDatabaseFailure.FilterInvalid, refusal);
 
+        sql = SqlText.RewriteDoubleQuotedLiterals(sql, dialect);
+        if (condition is not null)
+            condition = SqlText.RewriteDoubleQuotedLiterals(condition, dialect);
+
         var tokens = Lex(sql, dialect).ToList();
         while (tokens.Count > 0 && tokens[^1].Is(";"))
             tokens.RemoveAt(tokens.Count - 1);

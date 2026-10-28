@@ -102,7 +102,7 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
 
     /// <summary>O comando vai sem os `;` soltos em volta dele: o driver mandaria ao banco, como comando, cada pedaço vazio (<see cref="SqlText.Statement"/>).</summary>
     protected override void ConfigureUserCommand(DbCommand command)
-        => command.CommandText = SqlText.Statement(command.CommandText, Dialect);
+        => command.CommandText = SqlText.RewriteDoubleQuotedLiterals(SqlText.Statement(command.CommandText, Dialect), Dialect);
 
     /// <summary>
     /// RN-SQL-010. O `Cancel` do driver só interrompe o comando que já está executando no banco: o pedido que chega um instante
