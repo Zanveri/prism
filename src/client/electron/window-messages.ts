@@ -48,7 +48,7 @@ const sentCommandSchema = z.object({
  * RN-GRADE-011: `filter` é o texto do campo de filtro do resultado, que viaja com o comando para "Executar de novo" o repetir na outra janela. RN-VAR-033: `sent`
  * leva o comando trocado pelos marcadores, para ele também repetir os mesmos valores (o texto do editor, o enviado, os parâmetros e o mapa, os quatro).
  */
-const runTargetSchema = z.object({ sql: z.string().max(maxSqlLength), offset: count, engine: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), filter: z.string().max(maxSqlLength).optional(), sent: sentCommandSchema.optional() });
+const runTargetSchema = z.object({ sql: z.string().max(maxSqlLength), offset: count, engine: z.literal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]).optional(), filter: z.string().max(maxSqlLength).optional(), sent: sentCommandSchema.optional() });
 
 /**
  * RN-VAR-023: os valores da aba (as variáveis avaliadas) vão com ela para a outra janela, como dados puros (`wire.ts` da linguagem: cada valor e cada tipo é um

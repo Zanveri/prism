@@ -149,7 +149,7 @@ public sealed class ConnectionValidatorsTests
     [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
     [Fact(DisplayName = "Erro banco 4")]
     public void CreateConnection_ShouldBeError_EngineUnknown()
-        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Engine = (EDatabaseEngine)4 }, "Engine");
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Engine = (EDatabaseEngine)14 }, "Engine");
 
     [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
     [Fact(DisplayName = "Erro nome do ambiente com 31 caracteres")]
@@ -268,7 +268,7 @@ public sealed class ConnectionValidatorsTests
     [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
     [Fact(DisplayName = "Erro banco 4")]
     public void UpdateConnection_ShouldBeError_EngineUnknown()
-        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { Engine = (EDatabaseEngine)4 }, "Engine");
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { Engine = (EDatabaseEngine)14 }, "Engine");
 
     [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
     [Fact(DisplayName = "Erro nome do ambiente com 31 caracteres")]

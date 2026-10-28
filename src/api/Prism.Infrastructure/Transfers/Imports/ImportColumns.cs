@@ -82,11 +82,14 @@ public static partial class ImportColumns
     {
         var dialect = ReadOnlySql.DialectOf(engine);
         var generated = column.Generated is null && dialect == ESqlDialect.PostgreSql && IsNextValue(column.DefaultValue) ? ColumnGeneration.ByDefault : column.Generated;
-        var shape = dialect switch
+        var shape = engine switch
         {
-            ESqlDialect.PostgreSql => Postgres(baseType ?? column.Type),
-            ESqlDialect.Db2 => Db2(column.Type),
-            _ => Informix(column.Type)
+            EDatabaseEngine.PostgreSql => Postgres(baseType ?? column.Type),
+            EDatabaseEngine.Db2 => Db2(column.Type),
+            EDatabaseEngine.Informix => Informix(column.Type),
+            _ => Standard(column.Type)
+
+
         };
 
         var reason = generated == ColumnGeneration.Always ? GeneratedReason : shape.Class == EImportClass.Other && dialect != ESqlDialect.PostgreSql ? UnsupportedReason : null;
@@ -187,6 +190,27 @@ public static partial class ImportColumns
             "DATE" => Shape(EImportClass.Date),
             "BOOLEAN" => Shape(EImportClass.Boolean),
             "BYTE" or "BLOB" => Shape(EImportClass.Binary),
+            _ => Shape(EImportClass.Other)
+        };
+    }
+
+    private static ImportTargetColumn Standard(string type)
+    {
+        var (bare, arguments) = Split(type);
+
+        return bare switch
+        {
+            "CHAR" or "CHARACTER" or "VARCHAR" or "VARCHAR2" or "NVARCHAR" or "NVARCHAR2" or "NCHAR" or "TEXT" or "NTEXT" or "TINYTEXT" or "MEDIUMTEXT" or "LONGTEXT" or "CLOB" or "NCLOB" or "STRING" or "FIXEDSTRING" or "UUID" or "UNIQUEIDENTIFIER" or "JSON" or "XML" or "ENUM" or "SET" => Shape(EImportClass.Text),
+            "TINYINT" or "SMALLINT" or "INT2" or "INT16" or "UINT8" or "UINT16" or "BYTEINT" => Shape(EImportClass.Number) with { Number = EImportNumber.Int16 },
+            "INTEGER" or "INT" or "MEDIUMINT" or "INT4" or "INT32" or "UINT32" => Shape(EImportClass.Number) with { Number = EImportNumber.Int32 },
+            "BIGINT" or "INT8" or "INT64" or "UINT64" or "HUGEINT" => Shape(EImportClass.Number) with { Number = EImportNumber.Int64 },
+            "DECIMAL" or "DEC" or "NUMERIC" or "BIGNUMERIC" or "NUMBER" or "MONEY" or "SMALLMONEY" or "DECFLOAT" => Shape(EImportClass.Number) with { Number = EImportNumber.Decimal, Scale = arguments.Count > 1 ? arguments[1] : null },
+            "REAL" or "FLOAT" or "FLOAT4" or "FLOAT8" or "FLOAT32" or "FLOAT64" or "DOUBLE" or "DOUBLE PRECISION" or "BINARY_FLOAT" or "BINARY_DOUBLE" => Shape(EImportClass.Number) with { Number = EImportNumber.Float },
+            "DATE" or "DATE32" => Shape(EImportClass.Date),
+            "DATETIME" or "DATETIME2" or "DATETIME64" or "SMALLDATETIME" or "TIMESTAMP" or "TIMESTAMP_NTZ" or "TIMESTAMP_LTZ" or "TIMESTAMPTZ" => Shape(EImportClass.DateTime) with { Fraction = arguments.Count > 0 ? arguments[0] : 6 },
+            "TIME" => Shape(EImportClass.Time) with { Fraction = 0 },
+            "BOOLEAN" or "BOOL" or "BIT" => Shape(EImportClass.Boolean),
+            "BLOB" or "TINYBLOB" or "MEDIUMBLOB" or "LONGBLOB" or "BINARY" or "VARBINARY" or "RAW" or "LONG RAW" or "BYTEA" or "BYTES" or "IMAGE" => Shape(EImportClass.Binary),
             _ => Shape(EImportClass.Other)
         };
     }

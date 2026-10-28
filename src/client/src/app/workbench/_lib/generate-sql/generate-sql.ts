@@ -135,6 +135,16 @@ const notComparable: Record<Engine, ReadonlySet<string>> = {
   1: new Set(["json", "xml", "point", "line", "lseg", "box", "path", "polygon", "circle"]),
   2: new Set(["blob", "clob", "dbclob", "xml", "long varchar", "long vargraphic"]),
   3: new Set(["byte", "text", "blob", "clob"]),
+  4: new Set(["blob"]),
+  5: new Set(["blob", "tinyblob", "mediumblob", "longblob", "json", "geometry"]),
+  6: new Set(["blob", "tinyblob", "mediumblob", "longblob", "json", "geometry"]),
+  7: new Set(["image", "text", "ntext", "xml", "geography", "geometry"]),
+  8: new Set(["blob", "clob", "nclob", "bfile", "long", "long raw", "xmltype"]),
+  9: new Set(["blob"]),
+  10: new Set(["blob"]),
+  11: new Set(["json"]),
+  12: new Set(["json", "geography"]),
+  13: new Set(["binary"]),
 };
 
 /** A coluna serve à condição sem chave: o banco a compara com `=`. */

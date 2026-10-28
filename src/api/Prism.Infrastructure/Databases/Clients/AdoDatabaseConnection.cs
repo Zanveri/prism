@@ -388,6 +388,11 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             BindEditParameter(parameter, value);
     }
 
+    /// <summary>RN-SQL-008: prepara os marcadores e nomes de parâmetros do comando antes do envio nas engines que exigem parâmetros nomeados.</summary>
+    protected virtual void PrepareCommand(DbCommand command)
+    {
+    }
+
     /// <summary>RN-EDIT-006: o valor de um comando do "Salvar" no parâmetro. Por padrão, o valor convertido, com o tipo quando ele vem.</summary>
     protected virtual void BindEditParameter(DbParameter parameter, EditParameter value)
     {
@@ -1595,6 +1600,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         // O `Cancel` o alcança por aqui; se ele lança, quem o descarta é o fim do cursor abandonado.
         _command = command;
+        PrepareCommand(command);
         var affected = await command.ExecuteNonQueryAsync(cancellationToken);
         _command = null;
         await command.DisposeAsync();
@@ -1622,6 +1628,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         // O `Cancel` o alcança por aqui; se ele lança, quem o descarta é o fim do cursor abandonado.
         _command = command;
+        PrepareCommand(command);
         long affected;
         await using (var reader = await ExecuteReaderAsync(command, cancellationToken))
         {
@@ -1727,7 +1734,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     }
 
     /// <summary>RN-TABELA-002: o nome entre aspas duplas, com a aspa de dentro dobrada.</summary>
-    private static string QuotedName(string name)
+    protected virtual string QuotedName(string name)
         => $"\"{name.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 
     /// <summary>RN-IMPORT-016: a recusa de um dado (classe 22) ou de uma restrição (classe 23), que o Db2 desfaz só no comando recusado.</summary>
@@ -1848,6 +1855,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         _command = command;
         if (!prepared)
         {
+            PrepareCommand(command);
             await command.PrepareAsync(cancellationToken);
             _loadCommand = command;
         }
@@ -2031,6 +2039,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     private async Task NonQueryAsync(string sql, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(sql))
+            return;
+
         await using var command = _connection!.CreateCommand();
         command.CommandText = sql;
         command.Transaction = _editTransaction;
@@ -2066,6 +2077,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         }
 
         BindQueryParameters(command, query);
+        PrepareCommand(command);
 
         _command = command;
         _reader = behavior == CommandBehavior.Default ? await ExecuteReaderAsync(command, cancellationToken) : await command.ExecuteReaderAsync(behavior, cancellationToken);
@@ -2084,6 +2096,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         command.CommandTimeout = 0;
         ConfigureUserCommand(command);
         BindQueryParameters(command, parameters);
+        PrepareCommand(command);
 
         _command = command;
         long total;

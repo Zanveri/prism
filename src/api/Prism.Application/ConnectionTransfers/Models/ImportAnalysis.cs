@@ -272,7 +272,17 @@ internal sealed class ImportAnalysis
     {
         [nameof(EDatabaseEngine.PostgreSql)] = EDatabaseEngine.PostgreSql,
         [nameof(EDatabaseEngine.Db2)] = EDatabaseEngine.Db2,
-        [nameof(EDatabaseEngine.Informix)] = EDatabaseEngine.Informix
+        [nameof(EDatabaseEngine.Informix)] = EDatabaseEngine.Informix,
+        [nameof(EDatabaseEngine.Sqlite)] = EDatabaseEngine.Sqlite,
+        [nameof(EDatabaseEngine.MySql)] = EDatabaseEngine.MySql,
+        [nameof(EDatabaseEngine.MariaDb)] = EDatabaseEngine.MariaDb,
+        [nameof(EDatabaseEngine.SqlServer)] = EDatabaseEngine.SqlServer,
+        [nameof(EDatabaseEngine.Oracle)] = EDatabaseEngine.Oracle,
+        [nameof(EDatabaseEngine.Firebird)] = EDatabaseEngine.Firebird,
+        [nameof(EDatabaseEngine.DuckDb)] = EDatabaseEngine.DuckDb,
+        [nameof(EDatabaseEngine.ClickHouse)] = EDatabaseEngine.ClickHouse,
+        [nameof(EDatabaseEngine.BigQuery)] = EDatabaseEngine.BigQuery,
+        [nameof(EDatabaseEngine.Databricks)] = EDatabaseEngine.Databricks
     };
 
     /// <summary>O banco do arquivo, quando este Prism o conhece; a prévia o mostra também no item que não pode ser importado por outro motivo.</summary>

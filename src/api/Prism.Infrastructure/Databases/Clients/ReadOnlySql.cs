@@ -81,9 +81,10 @@ public static class ReadOnlySql
     internal static ESqlDialect DialectOf(EDatabaseEngine engine)
         => engine switch
         {
+            EDatabaseEngine.PostgreSql => ESqlDialect.PostgreSql,
             EDatabaseEngine.Db2 => ESqlDialect.Db2,
             EDatabaseEngine.Informix => ESqlDialect.Informix,
-            _ => ESqlDialect.PostgreSql
+            _ => ESqlDialect.Db2
         };
 
     private static string? Read(IEnumerable<Token> tokens, ESqlDialect dialect, bool singleStatement)

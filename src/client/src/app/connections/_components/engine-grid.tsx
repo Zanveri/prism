@@ -24,7 +24,21 @@ const stateColors: Record<EngineChoiceState, string> = {
 };
 
 /** A chave da marca de um banco da grade: a do banco que o Prism conecta, ou o id do driver do "em breve". */
-const engineBrands: Record<Engine, string> = { 1: "postgresql", 2: "db2", 3: "informix" };
+const engineBrands: Record<Engine, string> = {
+  1: "postgresql",
+  2: "db2",
+  3: "informix",
+  4: "sqlite",
+  5: "mysql",
+  6: "mariadb",
+  7: "sql-server",
+  8: "oracle",
+  9: "firebird",
+  10: "duckdb",
+  11: "clickhouse",
+  12: "bigquery",
+  13: "databricks",
+};
 
 function brandOf(choice: Pick<EngineChoice, "engine" | "driver">): string | null {
   return choice.engine === null ? (choice.driver?.id ?? null) : engineBrands[choice.engine];
@@ -32,6 +46,7 @@ function brandOf(choice: Pick<EngineChoice, "engine" | "driver">): string | null
 
 /** O fundo da marca: transparente, ou a ficha no esquema de cor em que a logo some (`light-dark` segue o esquema do tema aplicado). */
 function chipBackground(chip: DatabaseLogo["chip"]): string | undefined {
+  if (chip === "both") return `light-dark(${logoChips.light}, ${logoChips.dark})`;
   if (chip === "dark") return `light-dark(transparent, ${logoChips.dark})`;
   return chip === "light" ? `light-dark(${logoChips.light}, transparent)` : undefined;
 }

@@ -63,13 +63,385 @@
         }
       }
     },
-    { "id": "sqlite", "name": "SQLite", "vendor": "SQLite Consortium", "kind": "comingSoon" },
-    { "id": "mysql", "name": "MySQL", "vendor": "Oracle", "kind": "comingSoon" },
-    { "id": "mariadb", "name": "MariaDB", "vendor": "MariaDB Foundation", "kind": "comingSoon" },
-    { "id": "sql-server", "name": "Microsoft SQL Server", "vendor": "Microsoft", "kind": "comingSoon" },
-    { "id": "oracle", "name": "Oracle", "vendor": "Oracle", "kind": "comingSoon" },
-    { "id": "firebird", "name": "Firebird", "vendor": "Firebird Project", "kind": "comingSoon" },
-    { "id": "duckdb", "name": "DuckDB", "vendor": "DuckDB Foundation", "kind": "comingSoon" },
-    { "id": "clickhouse", "name": "ClickHouse", "vendor": "ClickHouse, Inc.", "kind": "comingSoon" }
+    {
+      "id": "sqlite",
+      "name": "SQLite",
+      "vendor": "SQLite Consortium",
+      "kind": "downloadable",
+      "engines": [4],
+      "version": "10.0.0",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "Microsoft.Data.Sqlite.Core",
+          "sha512": "ee44M69yIN+nDt/M8kzU7xrb2GvxLfv8h7GpAD1bGeq8Y+OUDvr4rn4mq079XcBgcG9E7htWG5hZXsvOIGAdfA==",
+          "sizeBytes": 208242,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.0/Microsoft.Data.Sqlite.dll", "to": "Microsoft.Data.Sqlite.dll" } ],
+          "trees": [],
+          "managedAssembly": "Microsoft.Data.Sqlite.dll"
+        },
+        "linux-x64": {
+          "id": "Microsoft.Data.Sqlite.Core",
+          "sha512": "ee44M69yIN+nDt/M8kzU7xrb2GvxLfv8h7GpAD1bGeq8Y+OUDvr4rn4mq079XcBgcG9E7htWG5hZXsvOIGAdfA==",
+          "sizeBytes": 208242,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.0/Microsoft.Data.Sqlite.dll", "to": "Microsoft.Data.Sqlite.dll" } ],
+          "trees": [],
+          "managedAssembly": "Microsoft.Data.Sqlite.dll"
+        },
+        "osx-arm64": {
+          "id": "Microsoft.Data.Sqlite.Core",
+          "sha512": "ee44M69yIN+nDt/M8kzU7xrb2GvxLfv8h7GpAD1bGeq8Y+OUDvr4rn4mq079XcBgcG9E7htWG5hZXsvOIGAdfA==",
+          "sizeBytes": 208242,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.0/Microsoft.Data.Sqlite.dll", "to": "Microsoft.Data.Sqlite.dll" } ],
+          "trees": [],
+          "managedAssembly": "Microsoft.Data.Sqlite.dll"
+        }
+      }
+    },
+    {
+      "id": "mysql",
+      "name": "MySQL",
+      "vendor": "Oracle",
+      "kind": "downloadable",
+      "engines": [5],
+      "version": "9.2.0",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "MySql.Data",
+          "sha512": "rV4wIq3JLXmARR+qXrXoXeV7eFN/ST4pc9YnplsALIrOq3kJ2nKQZUeVrwcrplk2qpGNP7QktY3FBCEYXjMccw==",
+          "sizeBytes": 4017629,
+          "license": { "name": "GPL-2.0-or-later WITH Universal-FOSS-exception-1.0", "url": "https://www.nuget.org/packages/MySql.Data/9.2.0/license" },
+          "files": [ { "from": "lib/netstandard2.1/MySql.Data.dll", "to": "MySql.Data.dll" } ],
+          "trees": [],
+          "managedAssembly": "MySql.Data.dll"
+        },
+        "linux-x64": {
+          "id": "MySql.Data",
+          "sha512": "rV4wIq3JLXmARR+qXrXoXeV7eFN/ST4pc9YnplsALIrOq3kJ2nKQZUeVrwcrplk2qpGNP7QktY3FBCEYXjMccw==",
+          "sizeBytes": 4017629,
+          "license": { "name": "GPL-2.0-or-later WITH Universal-FOSS-exception-1.0", "url": "https://www.nuget.org/packages/MySql.Data/9.2.0/license" },
+          "files": [ { "from": "lib/netstandard2.1/MySql.Data.dll", "to": "MySql.Data.dll" } ],
+          "trees": [],
+          "managedAssembly": "MySql.Data.dll"
+        },
+        "osx-arm64": {
+          "id": "MySql.Data",
+          "sha512": "rV4wIq3JLXmARR+qXrXoXeV7eFN/ST4pc9YnplsALIrOq3kJ2nKQZUeVrwcrplk2qpGNP7QktY3FBCEYXjMccw==",
+          "sizeBytes": 4017629,
+          "license": { "name": "GPL-2.0-or-later WITH Universal-FOSS-exception-1.0", "url": "https://www.nuget.org/packages/MySql.Data/9.2.0/license" },
+          "files": [ { "from": "lib/netstandard2.1/MySql.Data.dll", "to": "MySql.Data.dll" } ],
+          "trees": [],
+          "managedAssembly": "MySql.Data.dll"
+        }
+      }
+    },
+    {
+      "id": "mariadb",
+      "name": "MariaDB",
+      "vendor": "MariaDB Foundation",
+      "kind": "downloadable",
+      "engines": [6],
+      "version": "2.5.0",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "MySqlConnector",
+          "sha512": "aFsJ0xnRShNTTKbBDYq03R7F/I3mqcmdSDchShu5aloAmbtLLI+ua7mgtFhFGGa/t7yW5N9kCtNEx24rRFTmGQ==",
+          "sizeBytes": 3773946,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.1/MySqlConnector.dll", "to": "MySqlConnector.dll" } ],
+          "trees": [],
+          "managedAssembly": "MySqlConnector.dll"
+        },
+        "linux-x64": {
+          "id": "MySqlConnector",
+          "sha512": "aFsJ0xnRShNTTKbBDYq03R7F/I3mqcmdSDchShu5aloAmbtLLI+ua7mgtFhFGGa/t7yW5N9kCtNEx24rRFTmGQ==",
+          "sizeBytes": 3773946,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.1/MySqlConnector.dll", "to": "MySqlConnector.dll" } ],
+          "trees": [],
+          "managedAssembly": "MySqlConnector.dll"
+        },
+        "osx-arm64": {
+          "id": "MySqlConnector",
+          "sha512": "aFsJ0xnRShNTTKbBDYq03R7F/I3mqcmdSDchShu5aloAmbtLLI+ua7mgtFhFGGa/t7yW5N9kCtNEx24rRFTmGQ==",
+          "sizeBytes": 3773946,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.1/MySqlConnector.dll", "to": "MySqlConnector.dll" } ],
+          "trees": [],
+          "managedAssembly": "MySqlConnector.dll"
+        }
+      }
+    },
+    {
+      "id": "sql-server",
+      "name": "Microsoft SQL Server",
+      "vendor": "Microsoft",
+      "kind": "downloadable",
+      "engines": [7],
+      "version": "6.0.1",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "Microsoft.Data.SqlClient",
+          "sha512": "/oKEKGlb+c1hXVeh0CKtxETsakn0DWsv5c2PcW+R9i/mN2yHJDSyWI8MrnLI4s6jgPwEgfp3uTEPrIy0H/Nang==",
+          "sizeBytes": 8863887,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/net9.0/Microsoft.Data.SqlClient.dll", "to": "Microsoft.Data.SqlClient.dll" } ],
+          "trees": [],
+          "managedAssembly": "Microsoft.Data.SqlClient.dll"
+        },
+        "linux-x64": {
+          "id": "Microsoft.Data.SqlClient",
+          "sha512": "/oKEKGlb+c1hXVeh0CKtxETsakn0DWsv5c2PcW+R9i/mN2yHJDSyWI8MrnLI4s6jgPwEgfp3uTEPrIy0H/Nang==",
+          "sizeBytes": 8863887,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/net9.0/Microsoft.Data.SqlClient.dll", "to": "Microsoft.Data.SqlClient.dll" } ],
+          "trees": [],
+          "managedAssembly": "Microsoft.Data.SqlClient.dll"
+        },
+        "osx-arm64": {
+          "id": "Microsoft.Data.SqlClient",
+          "sha512": "/oKEKGlb+c1hXVeh0CKtxETsakn0DWsv5c2PcW+R9i/mN2yHJDSyWI8MrnLI4s6jgPwEgfp3uTEPrIy0H/Nang==",
+          "sizeBytes": 8863887,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/net9.0/Microsoft.Data.SqlClient.dll", "to": "Microsoft.Data.SqlClient.dll" } ],
+          "trees": [],
+          "managedAssembly": "Microsoft.Data.SqlClient.dll"
+        }
+      }
+    },
+    {
+      "id": "oracle",
+      "name": "Oracle",
+      "vendor": "Oracle",
+      "kind": "downloadable",
+      "engines": [8],
+      "version": "23.7.0",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "Oracle.ManagedDataAccess.Core",
+          "sha512": "DtewgsGp3kPXVLcGVQvakOyJmPf/lmv8Ieu3skBVyPDODMh7oWqblAGZ1nsgZPxgxBfFD6Dvlpw6S+CT7zDShw==",
+          "sizeBytes": 4765292,
+          "license": { "name": "Oracle Free Use Terms and Conditions (FUTC)", "url": "https://www.nuget.org/packages/Oracle.ManagedDataAccess.Core/23.7.0/license" },
+          "files": [ { "from": "lib/netstandard2.1/Oracle.ManagedDataAccess.dll", "to": "Oracle.ManagedDataAccess.dll" } ],
+          "trees": [],
+          "managedAssembly": "Oracle.ManagedDataAccess.dll"
+        },
+        "linux-x64": {
+          "id": "Oracle.ManagedDataAccess.Core",
+          "sha512": "DtewgsGp3kPXVLcGVQvakOyJmPf/lmv8Ieu3skBVyPDODMh7oWqblAGZ1nsgZPxgxBfFD6Dvlpw6S+CT7zDShw==",
+          "sizeBytes": 4765292,
+          "license": { "name": "Oracle Free Use Terms and Conditions (FUTC)", "url": "https://www.nuget.org/packages/Oracle.ManagedDataAccess.Core/23.7.0/license" },
+          "files": [ { "from": "lib/netstandard2.1/Oracle.ManagedDataAccess.dll", "to": "Oracle.ManagedDataAccess.dll" } ],
+          "trees": [],
+          "managedAssembly": "Oracle.ManagedDataAccess.dll"
+        },
+        "osx-arm64": {
+          "id": "Oracle.ManagedDataAccess.Core",
+          "sha512": "DtewgsGp3kPXVLcGVQvakOyJmPf/lmv8Ieu3skBVyPDODMh7oWqblAGZ1nsgZPxgxBfFD6Dvlpw6S+CT7zDShw==",
+          "sizeBytes": 4765292,
+          "license": { "name": "Oracle Free Use Terms and Conditions (FUTC)", "url": "https://www.nuget.org/packages/Oracle.ManagedDataAccess.Core/23.7.0/license" },
+          "files": [ { "from": "lib/netstandard2.1/Oracle.ManagedDataAccess.dll", "to": "Oracle.ManagedDataAccess.dll" } ],
+          "trees": [],
+          "managedAssembly": "Oracle.ManagedDataAccess.dll"
+        }
+      }
+    },
+    {
+      "id": "firebird",
+      "name": "Firebird",
+      "vendor": "Firebird Project",
+      "kind": "downloadable",
+      "engines": [9],
+      "version": "10.3.2",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "FirebirdSql.Data.FirebirdClient",
+          "sha512": "ZB11jq42zVex1cAPCzfXWK7ogX5Q6khGz7PvwwtBYUeZis9knpLBmDKbTxeVsuXeWwnts3dT6dw1Maq9fp6bPg==",
+          "sizeBytes": 2623227,
+          "license": { "name": "InterBase Public License / Initial Developer's Public License", "url": "https://www.nuget.org/packages/FirebirdSql.Data.FirebirdClient/10.3.2/license" },
+          "files": [ { "from": "lib/netstandard2.1/FirebirdSql.Data.FirebirdClient.dll", "to": "FirebirdSql.Data.FirebirdClient.dll" } ],
+          "trees": [],
+          "managedAssembly": "FirebirdSql.Data.FirebirdClient.dll"
+        },
+        "linux-x64": {
+          "id": "FirebirdSql.Data.FirebirdClient",
+          "sha512": "ZB11jq42zVex1cAPCzfXWK7ogX5Q6khGz7PvwwtBYUeZis9knpLBmDKbTxeVsuXeWwnts3dT6dw1Maq9fp6bPg==",
+          "sizeBytes": 2623227,
+          "license": { "name": "InterBase Public License / Initial Developer's Public License", "url": "https://www.nuget.org/packages/FirebirdSql.Data.FirebirdClient/10.3.2/license" },
+          "files": [ { "from": "lib/netstandard2.1/FirebirdSql.Data.FirebirdClient.dll", "to": "FirebirdSql.Data.FirebirdClient.dll" } ],
+          "trees": [],
+          "managedAssembly": "FirebirdSql.Data.FirebirdClient.dll"
+        },
+        "osx-arm64": {
+          "id": "FirebirdSql.Data.FirebirdClient",
+          "sha512": "ZB11jq42zVex1cAPCzfXWK7ogX5Q6khGz7PvwwtBYUeZis9knpLBmDKbTxeVsuXeWwnts3dT6dw1Maq9fp6bPg==",
+          "sizeBytes": 2623227,
+          "license": { "name": "InterBase Public License / Initial Developer's Public License", "url": "https://www.nuget.org/packages/FirebirdSql.Data.FirebirdClient/10.3.2/license" },
+          "files": [ { "from": "lib/netstandard2.1/FirebirdSql.Data.FirebirdClient.dll", "to": "FirebirdSql.Data.FirebirdClient.dll" } ],
+          "trees": [],
+          "managedAssembly": "FirebirdSql.Data.FirebirdClient.dll"
+        }
+      }
+    },
+    {
+      "id": "duckdb",
+      "name": "DuckDB",
+      "vendor": "DuckDB Foundation",
+      "kind": "downloadable",
+      "engines": [10],
+      "version": "1.2.0",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "DuckDB.NET.Data.Full",
+          "sha512": "wyIiO5kDkv3jG1lDmov8n5GmFNr5ry0tI0DqO3ekv7RMKLnPjkF2AJ+tIcAD437+DePWzSxV9R6sXHUh8e3PLw==",
+          "sizeBytes": 241507,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.0/DuckDB.NET.Data.dll", "to": "DuckDB.NET.Data.dll" } ],
+          "trees": [],
+          "managedAssembly": "DuckDB.NET.Data.dll"
+        },
+        "linux-x64": {
+          "id": "DuckDB.NET.Data.Full",
+          "sha512": "wyIiO5kDkv3jG1lDmov8n5GmFNr5ry0tI0DqO3ekv7RMKLnPjkF2AJ+tIcAD437+DePWzSxV9R6sXHUh8e3PLw==",
+          "sizeBytes": 241507,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.0/DuckDB.NET.Data.dll", "to": "DuckDB.NET.Data.dll" } ],
+          "trees": [],
+          "managedAssembly": "DuckDB.NET.Data.dll"
+        },
+        "osx-arm64": {
+          "id": "DuckDB.NET.Data.Full",
+          "sha512": "wyIiO5kDkv3jG1lDmov8n5GmFNr5ry0tI0DqO3ekv7RMKLnPjkF2AJ+tIcAD437+DePWzSxV9R6sXHUh8e3PLw==",
+          "sizeBytes": 241507,
+          "license": { "name": "MIT License", "url": "https://licenses.nuget.org/MIT" },
+          "files": [ { "from": "lib/netstandard2.0/DuckDB.NET.Data.dll", "to": "DuckDB.NET.Data.dll" } ],
+          "trees": [],
+          "managedAssembly": "DuckDB.NET.Data.dll"
+        }
+      }
+    },
+    {
+      "id": "clickhouse",
+      "name": "ClickHouse",
+      "vendor": "ClickHouse, Inc.",
+      "kind": "downloadable",
+      "engines": [11],
+      "version": "7.14.0",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "ClickHouse.Client",
+          "sha512": "r8ddtdKrJaoiTVDaGBPoBa5Fbha+KHAh7haSJyqtIMqMKmjbD0dDZG5J4zwg4dUfHnJX5R//UVyB0gnEahKrSQ==",
+          "sizeBytes": 329197,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.1/ClickHouse.Client.dll", "to": "ClickHouse.Client.dll" } ],
+          "trees": [],
+          "managedAssembly": "ClickHouse.Client.dll"
+        },
+        "linux-x64": {
+          "id": "ClickHouse.Client",
+          "sha512": "r8ddtdKrJaoiTVDaGBPoBa5Fbha+KHAh7haSJyqtIMqMKmjbD0dDZG5J4zwg4dUfHnJX5R//UVyB0gnEahKrSQ==",
+          "sizeBytes": 329197,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.1/ClickHouse.Client.dll", "to": "ClickHouse.Client.dll" } ],
+          "trees": [],
+          "managedAssembly": "ClickHouse.Client.dll"
+        },
+        "osx-arm64": {
+          "id": "ClickHouse.Client",
+          "sha512": "r8ddtdKrJaoiTVDaGBPoBa5Fbha+KHAh7haSJyqtIMqMKmjbD0dDZG5J4zwg4dUfHnJX5R//UVyB0gnEahKrSQ==",
+          "sizeBytes": 329197,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.1/ClickHouse.Client.dll", "to": "ClickHouse.Client.dll" } ],
+          "trees": [],
+          "managedAssembly": "ClickHouse.Client.dll"
+        }
+      }
+    },
+    {
+      "id": "bigquery",
+      "name": "Google BigQuery",
+      "vendor": "Google",
+      "kind": "downloadable",
+      "engines": [12],
+      "version": "3.11.0",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "Google.Cloud.BigQuery.V2",
+          "sha512": "g24bapZcMglw/RCw5gEWflO8U1lhoDSDwf/YF5zFhzPfF0oFxboUj6sNSRWnG3aohxOxUcljwW41aJ8XxOQtIw==",
+          "sizeBytes": 384116,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.0/Google.Cloud.BigQuery.V2.dll", "to": "Google.Cloud.BigQuery.V2.dll" } ],
+          "trees": [],
+          "managedAssembly": "Google.Cloud.BigQuery.V2.dll"
+        },
+        "linux-x64": {
+          "id": "Google.Cloud.BigQuery.V2",
+          "sha512": "g24bapZcMglw/RCw5gEWflO8U1lhoDSDwf/YF5zFhzPfF0oFxboUj6sNSRWnG3aohxOxUcljwW41aJ8XxOQtIw==",
+          "sizeBytes": 384116,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.0/Google.Cloud.BigQuery.V2.dll", "to": "Google.Cloud.BigQuery.V2.dll" } ],
+          "trees": [],
+          "managedAssembly": "Google.Cloud.BigQuery.V2.dll"
+        },
+        "osx-arm64": {
+          "id": "Google.Cloud.BigQuery.V2",
+          "sha512": "g24bapZcMglw/RCw5gEWflO8U1lhoDSDwf/YF5zFhzPfF0oFxboUj6sNSRWnG3aohxOxUcljwW41aJ8XxOQtIw==",
+          "sizeBytes": 384116,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.0/Google.Cloud.BigQuery.V2.dll", "to": "Google.Cloud.BigQuery.V2.dll" } ],
+          "trees": [],
+          "managedAssembly": "Google.Cloud.BigQuery.V2.dll"
+        }
+      }
+    },
+    {
+      "id": "databricks",
+      "name": "Databricks",
+      "vendor": "Databricks",
+      "kind": "downloadable",
+      "engines": [13],
+      "version": "0.23.0",
+      "unavailableNote": "Este driver está disponível para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "Apache.Arrow.Adbc.Drivers.Databricks",
+          "sha512": "OcLxbXiB82RCVmaJhgpdrPHqXs6zm+OZTRwC0nB/JeLZbD3yZF/kZhTUSO5iCb76+Efn00tksg5v6bPKFcZ+0Q==",
+          "sizeBytes": 274579,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.0/Apache.Arrow.Adbc.Drivers.Databricks.dll", "to": "Apache.Arrow.Adbc.Drivers.Databricks.dll" } ],
+          "trees": [],
+          "managedAssembly": "Apache.Arrow.Adbc.Drivers.Databricks.dll"
+        },
+        "linux-x64": {
+          "id": "Apache.Arrow.Adbc.Drivers.Databricks",
+          "sha512": "OcLxbXiB82RCVmaJhgpdrPHqXs6zm+OZTRwC0nB/JeLZbD3yZF/kZhTUSO5iCb76+Efn00tksg5v6bPKFcZ+0Q==",
+          "sizeBytes": 274579,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.0/Apache.Arrow.Adbc.Drivers.Databricks.dll", "to": "Apache.Arrow.Adbc.Drivers.Databricks.dll" } ],
+          "trees": [],
+          "managedAssembly": "Apache.Arrow.Adbc.Drivers.Databricks.dll"
+        },
+        "osx-arm64": {
+          "id": "Apache.Arrow.Adbc.Drivers.Databricks",
+          "sha512": "OcLxbXiB82RCVmaJhgpdrPHqXs6zm+OZTRwC0nB/JeLZbD3yZF/kZhTUSO5iCb76+Efn00tksg5v6bPKFcZ+0Q==",
+          "sizeBytes": 274579,
+          "license": { "name": "Apache License 2.0", "url": "https://licenses.nuget.org/Apache-2.0" },
+          "files": [ { "from": "lib/netstandard2.0/Apache.Arrow.Adbc.Drivers.Databricks.dll", "to": "Apache.Arrow.Adbc.Drivers.Databricks.dll" } ],
+          "trees": [],
+          "managedAssembly": "Apache.Arrow.Adbc.Drivers.Databricks.dll"
+        }
+      }
+    }
   ]
 }

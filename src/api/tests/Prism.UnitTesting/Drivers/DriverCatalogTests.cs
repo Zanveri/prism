@@ -40,8 +40,8 @@ public sealed class DriverCatalogTests
         var drivers = Catalog.Drivers;
 
         //Assert
-        Assert.Equal(["postgresql", IbmDriverID, "sqlite", "mysql", "mariadb", "sql-server", "oracle", "firebird", "duckdb", "clickhouse"], drivers.Select(driver => driver.ID));
-        Assert.Equal(["PostgreSQL", "IBM Data Server", "SQLite", "MySQL", "MariaDB", "Microsoft SQL Server", "Oracle", "Firebird", "DuckDB", "ClickHouse"], drivers.Select(driver => driver.Name));
+        Assert.Equal(["postgresql", IbmDriverID, "sqlite", "mysql", "mariadb", "sql-server", "oracle", "firebird", "duckdb", "clickhouse", "bigquery", "databricks"], drivers.Select(driver => driver.ID));
+        Assert.Equal(["PostgreSQL", "IBM Data Server", "SQLite", "MySQL", "MariaDB", "Microsoft SQL Server", "Oracle", "Firebird", "DuckDB", "ClickHouse", "Google BigQuery", "Databricks"], drivers.Select(driver => driver.Name));
         Assert.Equal(EDriverKind.Bundled, drivers[0].Kind);
         Assert.Equal([EDatabaseEngine.PostgreSql], drivers[0].Engines);
         Assert.Equal(EDriverKind.Downloadable, drivers[1].Kind);
@@ -49,11 +49,11 @@ public sealed class DriverCatalogTests
         Assert.Equal([EDatabaseEngine.Db2, EDatabaseEngine.Informix], drivers[1].Engines);
         Assert.All(drivers.Skip(2), driver =>
         {
-            Assert.Equal(EDriverKind.ComingSoon, driver.Kind);
-            Assert.Null(driver.Engines);
-            Assert.Null(driver.Version);
+            Assert.Equal(EDriverKind.Downloadable, driver.Kind);
+            Assert.NotEmpty(driver.Engines!);
+            Assert.NotNull(driver.Version);
             Assert.Null(driver.License);
-            Assert.Null(driver.Packages);
+            Assert.NotEmpty(driver.Packages!);
         });
     }
 

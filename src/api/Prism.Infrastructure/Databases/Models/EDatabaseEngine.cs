@@ -5,5 +5,15 @@ public enum EDatabaseEngine : short
 {
     PostgreSql = 1,
     Db2 = 2,
-    Informix = 3
+    Informix = 3,
+    Sqlite = 4,
+    MySql = 5,
+    MariaDb = 6,
+    SqlServer = 7,
+    Oracle = 8,
+    Firebird = 9,
+    DuckDb = 10,
+    ClickHouse = 11,
+    BigQuery = 12,
+    Databricks = 13
 }
