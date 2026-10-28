@@ -274,4 +274,53 @@ describe("formatSql", () => {
       }),
     ).toBe("SELECT a FROM t1;\n\nSELECT b FROM t2;");
   });
+
+  it("preserva comentários no topo, no fim, antes de SELECT e antes de vírgulas, e respeita uppercaseKeywords em CTEs no estilo River", () => {
+    const withLooseAndLeadingComments = [
+      "-- cabeçalho solto",
+      "",
+      "-- comentário colado na query",
+      "select c.nome, c.email from clientes as c;",
+      "-- rodapé solto",
+    ].join("\n");
+
+    const formatted = formatSql(withLooseAndLeadingComments, {
+      style: "expanded",
+      uppercaseKeywords: true,
+      tabSize: 2,
+    });
+
+    expect(formatted).toBe(
+      [
+        "-- cabeçalho solto",
+        "",
+        "-- comentário colado na query",
+        "SELECT",
+        "  c.nome,",
+        "  c.email",
+        "FROM",
+        "  clientes AS c;",
+        "",
+        "-- rodapé solto",
+      ].join("\n"),
+    );
+
+    const withCommentBeforeComma = "select a -- primeiro\n, b from t;";
+    const formattedInlineComment = formatSql(withCommentBeforeComma, {
+      style: "expanded",
+      uppercaseKeywords: true,
+      tabSize: 2,
+    });
+    expect(formattedInlineComment).not.toContain("-- primeiro,");
+    expect(formattedInlineComment).toContain("-- primeiro\n, b");
+
+    const riverCteLower = "WITH cte AS (SELECT id FROM pedidos) SELECT id FROM cte;";
+    expect(
+      formatSql(riverCteLower, {
+        style: "river",
+        uppercaseKeywords: false,
+        tabSize: 4,
+      }),
+    ).toContain("select id\n      from pedidos");
+  });
 });

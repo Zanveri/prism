@@ -664,9 +664,8 @@ function extractCtes(tokens: readonly Token[]): { ctes: CteItem[]; rest: readonl
 }
 
 function parseSelectQuery(tokens: readonly Token[]): ParsedSelect | null {
-  if (tokens.some((t) => t.kind === "lineComment" || t.kind === "blockComment")) {
-    // Queries com comentários nos tokens usam o formatador linear de cláusulas ou compacto
-    // para preservar a posição exata dos comentários.
+  if (tokens.some((t) => t.kind === "lineComment")) {
+    return null;
   }
 
   const { ctes, rest } = extractCtes(tokens);
@@ -786,11 +785,8 @@ function renderRiver(parsed: ParsedSelect, baseIndent = ""): string {
 
   if (parsed.ctes.length > 0) {
     for (const cte of parsed.ctes) {
-      const inner = formatQueryTokens(cte.bodyTokens, {
-        style: "river",
-        uppercaseKeywords: true,
-        tabSize: 4,
-      });
+      const subParsed = parseSelectQuery(cte.bodyTokens);
+      const inner = subParsed ? renderRiver(subParsed) : joinTokens(cte.bodyTokens);
       const indentedInner = inner
         .split("\n")
         .map((l) => `    ${l}`)
@@ -1222,18 +1218,39 @@ function formatQueryTokens(tokens: readonly Token[], options: SqlFormatOptions):
   const cased = applyKeywordCase(tokens, options.uppercaseKeywords);
   if (cased.length === 0) return "";
 
-  const hasTrailingSemicolon = cased.at(-1)?.text === ";";
-  const bodyTokens = hasTrailingSemicolon ? cased.slice(0, -1) : cased;
+  let firstSqlIdx = 0;
+  while (
+    firstSqlIdx < cased.length &&
+    (cased[firstSqlIdx].kind === "lineComment" || cased[firstSqlIdx].kind === "blockComment")
+  ) {
+    firstSqlIdx++;
+  }
+
+  if (firstSqlIdx === cased.length) {
+    return cased.map((t) => t.text).join("\n");
+  }
+
+  const leadingComments = cased
+    .slice(0, firstSqlIdx)
+    .map((t) => t.text)
+    .join("\n");
+  const sqlTokens = cased.slice(firstSqlIdx);
+
+  const hasTrailingSemicolon = sqlTokens.at(-1)?.text === ";";
+  const bodyTokens = hasTrailingSemicolon ? sqlTokens.slice(0, -1) : sqlTokens;
+
+  const withLeading = (formattedSql: string): string =>
+    leadingComments.length > 0 ? `${leadingComments}\n${formattedSql}` : formattedSql;
 
   if (options.style === "compact") {
     const body = joinTokens(bodyTokens);
-    return hasTrailingSemicolon ? `${body};` : body;
+    return withLeading(hasTrailingSemicolon ? `${body};` : body);
   }
 
   const parsed = parseSelectQuery(bodyTokens);
   if (parsed === null) {
     const fallback = joinTokens(bodyTokens);
-    return hasTrailingSemicolon ? `${fallback};` : fallback;
+    return withLeading(hasTrailingSemicolon ? `${fallback};` : fallback);
   }
 
   let formatted: string;
@@ -1255,13 +1272,13 @@ function formatQueryTokens(tokens: readonly Token[], options: SqlFormatOptions):
       break;
   }
 
-  return hasTrailingSemicolon ? `${formatted};` : formatted;
+  return withLeading(hasTrailingSemicolon ? `${formatted};` : formatted);
 }
 
-function hasSemicolonAfter(sql: string, end: number): boolean {
+function semicolonAfterPos(sql: string, end: number): number {
   let pos = end;
   while (pos < sql.length && isWhitespaceCode(sql.charCodeAt(pos))) pos++;
-  return sql.charCodeAt(pos) === 59;
+  return sql.charCodeAt(pos) === 59 ? pos : -1;
 }
 
 /**
@@ -1279,17 +1296,34 @@ export function formatSql(sql: string, options: SqlFormatOptions): string {
 
   if (items.length === 0) return sql;
 
-  const formattedItems = items.map((item) => {
-    const withSemi = hasSemicolonAfter(sql, item.end);
+  const blocks: string[] = [];
+  let cursor = 0;
+
+  for (const item of items) {
+    const gap = sql.slice(cursor, item.start).trim();
+    if (gap.length > 0) {
+      blocks.push(gap);
+    }
+
+    const semiPos = semicolonAfterPos(sql, item.end);
+    const withSemi = semiPos !== -1;
+    cursor = withSemi ? semiPos + 1 : item.end;
+
     if (item.kind !== "statement" || statementHasBody(item.text, options.engine)) {
       const trimmed = item.text.trim();
-      return withSemi && !trimmed.endsWith(";") ? `${trimmed};` : trimmed;
+      blocks.push(withSemi && !trimmed.endsWith(";") ? `${trimmed};` : trimmed);
+      continue;
     }
 
     const rawText = withSemi ? `${item.text};` : item.text;
     const tokens = tokenizeSql(rawText, rules);
-    return formatQueryTokens(tokens, options);
-  });
+    blocks.push(formatQueryTokens(tokens, options));
+  }
 
-  return formattedItems.join("\n\n");
+  const tail = sql.slice(cursor).trim();
+  if (tail.length > 0) {
+    blocks.push(tail);
+  }
+
+  return blocks.join("\n\n");
 }
