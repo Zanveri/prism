@@ -51,13 +51,19 @@ const columnRows = (...names: string[]) => names.map((name, index) => ({ name, t
 const ok = (data: unknown) => Promise.resolve({ ok: true, data });
 
 /** Cada rota da API com o que ela responde, por tabela. */
-type Catalog = { columns?: Record<string, unknown[]>; foreignKeys?: Record<string, unknown[]>; referencedBy?: Record<string, unknown[]> };
+type Catalog = {
+  objectNames?: { schemas: { name: string; isSystem: boolean; tables: string[]; views: string[] }[]; truncated: boolean };
+  columns?: Record<string, unknown[]>;
+  foreignKeys?: Record<string, unknown[]>;
+  referencedBy?: Record<string, unknown[]>;
+};
 
 const fk = (name: string, columns: string[], table: string, referencedColumns: string[]) => ({ name, columns, referencedSchema: "public", referencedTable: table, referencedColumns });
 const refd = (name: string, table: string, columns: string[], referencedColumns: string[]) => ({ name, referencingSchema: "public", referencingTable: table, columns, referencedColumns });
 
 const serve = (catalog: Catalog) => {
   api.respond = (endpoint) => {
+    if (endpoint.endsWith("/object-names")) return ok(catalog.objectNames ?? { schemas: [], truncated: false });
     const [, table, kind] = /\/tables\/([^/]+)\/(columns|foreign-keys|referenced-by)$/.exec(endpoint) ?? [];
     const decoded = decodeURIComponent(table ?? "");
     if (kind === "columns") return ok(catalog.columns?.[decoded] ?? []);
@@ -73,19 +79,20 @@ const failing = (code = "SQL_EXECUTION_FAILED") => {
 
 let queryClient: QueryClient;
 let blankLines = false;
+let uppercaseKeywords = true;
 
 /** Uma árvore com `public.pedidos`, `public.clientes`, `public.itens_pedido`, `erp.produtos` carregadas (só os nomes das tabelas). */
 function seedTree(client: QueryClient, connection = "c1") {
   client.setQueryData(["tree", connection, "schemas"], [node("schema", "erp"), node("schema", "public")]);
   client.setQueryData(["tree", connection, "schema", "public", "objects", "tables"], [node("table", "pedidos"), node("table", "clientes"), node("table", "itens_pedido"), node("table", "Pedidos Antigos")]);
-  client.setQueryData(["tree", connection, "schema", "public", "objects", "views", ], [node("view", "v_ativos")]);
+  client.setQueryData(["tree", connection, "schema", "public", "objects", "views"], [node("view", "v_ativos")]);
   client.setQueryData(["tree", connection, "schema", "erp", "objects", "tables"], [node("table", "produtos")]);
 }
 
 const openSession = (client: QueryClient, connection = "c1") => client.setQueryData(["database-session", connection], { id: "s1", database: "erp" });
 
 function build(engine: Engine = postgres) {
-  return catalogCompletion({ queryClient, engine: () => engine, connectionId: () => "c1", database: () => undefined, userName: () => undefined, blankLines: () => blankLines });
+  return catalogCompletion({ queryClient, engine: () => engine, connectionId: () => "c1", database: () => undefined, userName: () => undefined, blankLines: () => blankLines, uppercaseKeywords: () => uppercaseKeywords });
 }
 
 /** Roda uma fonte no texto, com o cursor onde está o `|`. */
@@ -104,6 +111,7 @@ const labelsOf = (result: CompletionResult | null) => (result?.options ?? []).ma
 beforeEach(() => {
   api.calls = [];
   blankLines = false;
+  uppercaseKeywords = true;
   configured.length = 0;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   seedTree(queryClient);
@@ -392,11 +400,65 @@ describe("a junção (RN-SQL-025)", () => {
     expect(labelsOf(result)).toEqual(['clientes c ON c.empresa = p.empresa AND c.id = p."Cliente Id"']);
   });
 
-  it("a tabela de outro esquema é escrita com o esquema; a do esquema padrão, sem", async () => {
-    serve({ foreignKeys: { pedidos: [{ name: "fk_produto", columns: ["produto_id"], referencedSchema: "erp", referencedTable: "produtos", referencedColumns: ["id"] }] } });
-    const result = await settled(ask(build().sources[1], "select * from pedidos p join |").result);
+  it("respeita a preferência uppercaseKeywords desabilitada (on e and em minúsculas)", async () => {
+    uppercaseKeywords = false;
+    serve({ foreignKeys: { pedidos: [{ name: "fk_empresa", columns: ["empresa", "cliente_id"], referencedSchema: "public", referencedTable: "clientes", referencedColumns: ["empresa", "id"] }] } });
+    const [, join] = build().sources;
 
-    expect(labelsOf(result)).toEqual(["erp.produtos p2 ON p2.id = p.produto_id"]);
+    const joinResult = await settled(ask(join, "select * from pedidos join |").result);
+    expect(labelsOf(joinResult)).toEqual(["clientes on clientes.empresa = pedidos.empresa and clientes.id = pedidos.cliente_id"]);
+  });
+
+  it("segue o padrão de qualificação do esquema que o usuário escreveu na tabela de origem", async () => {
+    serve({ foreignKeys: { pedidos: [{ name: "fk_produto", columns: ["produto_id"], referencedSchema: "erp", referencedTable: "produtos", referencedColumns: ["id"] }] } });
+    const [, join] = build().sources;
+
+    // Sem esquema no FROM: sugere sem esquema no JOIN.
+    const unqualified = await settled(ask(join, "select * from pedidos p join |").result);
+    expect(labelsOf(unqualified)).toEqual(["produtos p2 ON p2.id = p.produto_id"]);
+
+    // Com esquema no FROM: sugere com esquema no JOIN quando a tabela é de outro esquema.
+    const qualified = await settled(ask(join, "select * from public.pedidos p join |").result);
+    expect(labelsOf(qualified)).toEqual(["erp.produtos p2 ON p2.id = p.produto_id"]);
+  });
+
+  it("funciona sem a lista de tabelas aberta na barra lateral e sem informar o esquema no FROM", async () => {
+    uppercaseKeywords = false;
+    queryClient.removeQueries({ queryKey: ["tree", "c1"] });
+    serve({
+      objectNames: {
+        schemas: [
+          {
+            name: "usr_migration_stock_manager",
+            isSystem: false,
+            tables: ["orders", "orders_packings"],
+            views: [],
+          },
+        ],
+        truncated: false,
+      },
+      columns: { orders: columnRows("id", "code") },
+      foreignKeys: { orders: [] },
+      referencedBy: {
+        orders: [
+          {
+            name: "fk_orders_packings_order",
+            referencingSchema: "usr_migration_stock_manager",
+            referencingTable: "orders_packings",
+            columns: ["order_id"],
+            referencedColumns: ["id"],
+          },
+        ],
+      },
+    });
+
+    const [columns, join] = build().sources;
+
+    const joinResult = await settled(ask(join, "select *\n  from orders\n inner join |").result);
+    expect(labelsOf(joinResult)).toEqual(["orders_packings on orders_packings.order_id = orders.id"]);
+
+    const colsResult = await settled(ask(columns, "select orders.| from orders").result);
+    expect(labelsOf(colsResult)).toEqual(["id", "code"]);
   });
 
   it("só as tabelas escritas antes do cursor: um JOIN mais adiante ainda não existe no ON de agora", async () => {
@@ -554,7 +616,7 @@ describe("o Atualizar do navegador e da Estrutura refaz o que o autocompletar bu
     failing();
     queryClient.removeQueries({ queryKey: ["tree", "c1", "schema", "public", "table", "clientes"] });
     expect(await settled(ask(columns, "select c.| from clientes c").result)).toBeNull();
-    invalidateStructure(queryClient, { type: "connection", connectionId: "c1" }, new Set());
+    invalidateStructure(queryClient, tablePath, new Set());
     serve(everything);
     expect(labelsOf(await settled(ask(columns, "select c.| from clientes c").result))).toEqual(["id", "nome"]);
   });
