@@ -4,11 +4,11 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { Button } from "@/components/ui";
 
-import { layoutDiagram, referencedTables, type TableRef } from "../../_lib/table-diagram";
+import { layoutDiagram, referencedTables, referencingTables, type TableRef } from "../../_lib/table-diagram";
 import { useRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import { recall, remember, type DiagramMemory } from "../../_lib/tab-memory";
 import { levelView } from "../../_lib/table-structure";
-import { columnsQuery, foreignKeysQuery } from "../../_lib/table-structure.service";
+import { columnsQuery, foreignKeysQuery, referencedByQuery } from "../../_lib/table-structure.service";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { DiagramCanvas } from "./diagram-canvas";
 import { useStructureActions } from "./use-structure-actions";
@@ -32,11 +32,12 @@ type DiagramViewProps = {
 };
 
 /**
- * A vista Diagrama (RN-TABELA-004): as colunas e as chaves estrangeiras da tabela e, das tabelas que
- * as chaves apontam (até 12), as colunas, uma consulta por tabela, em paralelo. Todas pelas mesmas
- * consultas da Estrutura (`table-structure.service.ts`): quem já abriu uma vista não busca de novo. O
- * desenho só aparece quando todas chegaram, para as caixas não crescerem por baixo do usuário; a vizinha
- * cujas colunas falharam aparece só com o nome (o aviso central diz o que houve).
+ * A vista Diagrama (RN-TABELA-004): as colunas, as chaves estrangeiras da tabela (à direita) e as chaves
+ * estrangeiras de outras tabelas que apontam para ela (à esquerda), além das colunas das tabelas vizinhas
+ * (até 12 de cada lado), uma consulta por tabela, em paralelo. Todas pelas mesmas consultas da Estrutura
+ * (`table-structure.service.ts`): quem já abriu uma vista não busca de novo. O desenho só aparece quando
+ * todas chegaram, para as caixas não crescerem por baixo do usuário; a vizinha cujas colunas falharam
+ * aparece só com o nome (o aviso central diz o que houve).
  */
 export function DiagramView({ connectionId, database, schema, name, visible, onOpenTable, memoryKey, refreshSlot }: DiagramViewProps) {
   const queryClient = useQueryClient();
@@ -44,31 +45,39 @@ export function DiagramView({ connectionId, database, schema, name, visible, onO
   const { refresh } = useStructureActions(connectionId, database);
   const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible, database));
   const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible, database));
+  const referencedBy = useQuery(referencedByQuery(connectionId, schema, name, queryClient, visible, database));
 
   const neighbors = useMemo(() => (foreignKeys.data === undefined ? null : referencedTables({ schema, name }, foreignKeys.data)), [foreignKeys.data, schema, name]);
+  const incoming = useMemo(() => (referencedBy.data === undefined ? null : referencingTables({ schema, name }, referencedBy.data)), [referencedBy.data, schema, name]);
+  const neighborTables = useMemo(() => [...(neighbors?.tables ?? []), ...(incoming?.tables ?? [])], [neighbors, incoming]);
+
   const loaded = useQueries({
-    queries: (neighbors?.tables ?? []).map((table) => columnsQuery(connectionId, table.schema, table.name, queryClient, visible, database)),
+    queries: neighborTables.map((table) => columnsQuery(connectionId, table.schema, table.name, queryClient, visible, database)),
     // Um objeto só, com a mesma forma enquanto os dados não mudam: o desenho não é refeito a cada renderização.
     combine: (results) => ({ columns: results.map((result) => result.data ?? null), pending: results.some((result) => result.data === undefined && !result.isError) }),
   });
 
   const layout = useMemo(() => {
-    if (columns.data === undefined || foreignKeys.data === undefined || neighbors === null || loaded.pending) return null;
+    if (columns.data === undefined || foreignKeys.data === undefined || referencedBy.data === undefined || neighbors === null || incoming === null || loaded.pending) return null;
 
+    const outgoingCount = neighbors.tables.length;
     return layoutDiagram({
       center: { ref: { schema, name }, columns: columns.data },
       foreignKeys: foreignKeys.data,
       neighbors: neighbors.tables.map((ref, index) => ({ ref, columns: loaded.columns[index] })),
+      referencedBy: referencedBy.data,
+      incomingNeighbors: incoming.tables.map((ref, index) => ({ ref, columns: loaded.columns[outgoingCount + index] })),
     });
-  }, [columns.data, foreignKeys.data, neighbors, loaded, schema, name]);
+  }, [columns.data, foreignKeys.data, referencedBy.data, neighbors, incoming, loaded, schema, name]);
 
   const rememberView = useCallback((view: DiagramMemory) => remember(memoryKey, "diagram", view), [memoryKey]);
   // RN-GRADE-012: F5 recarrega a vista (a tabela e as vizinhas), como o "Atualizar" dela.
-  const refreshByKey = useCallback(() => void refresh([{ schema, name }, ...(neighbors?.tables ?? [])]), [refresh, schema, name, neighbors]);
+  const refreshByKey = useCallback(() => void refresh([{ schema, name }, ...neighborTables]), [refresh, schema, name, neighborTables]);
   useRefreshSlot(refreshSlot, refreshByKey);
 
-  const failed = levelView(columns).kind === "error" ? levelView(columns) : levelView(foreignKeys);
-  const everyone: TableRef[] = [{ schema, name }, ...(neighbors?.tables ?? [])];
+  const failed = levelView(columns).kind === "error" ? levelView(columns) : levelView(foreignKeys).kind === "error" ? levelView(foreignKeys) : levelView(referencedBy);
+  const everyone: TableRef[] = [{ schema, name }, ...neighborTables];
+  const totalForeignKeyCount = (foreignKeys.data?.length ?? 0) + (referencedBy.data?.filter((fk) => fk.referencingSchema !== schema || fk.referencingTable !== name).length ?? 0);
 
   if (failed.kind === "error") {
     return (
@@ -95,9 +104,9 @@ export function DiagramView({ connectionId, database, schema, name, visible, onO
       schema={schema}
       subject={`${schema}.${name}`}
       tableCount={layout.boxes.length}
-      foreignKeyCount={foreignKeys.data?.length ?? 0}
-      omitted={neighbors?.omitted ?? 0}
-      fetching={columns.isFetching || foreignKeys.isFetching}
+      foreignKeyCount={totalForeignKeyCount}
+      omitted={(neighbors?.omitted ?? 0) + (incoming?.omitted ?? 0)}
+      fetching={columns.isFetching || foreignKeys.isFetching || referencedBy.isFetching}
       onOpenTable={onOpenTable}
       onRefresh={() => void refresh(everyone)}
       initial={recall(memoryKey, "diagram")}

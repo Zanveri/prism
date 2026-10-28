@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 
 import { fontStack } from "@/app/settings/_lib/fonts";
 import { defaultPreferences, type Preferences } from "@/app/settings/_lib/preferences";
@@ -42,6 +42,39 @@ function MinusIcon() {
       <path d="M3 8h10" />
     </svg>
   );
+}
+
+/** As quatro setas do modo de mover pelo diagrama com o botão esquerdo do mouse (estilo Mermaid no VS Code). */
+function MoveIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-none">
+      <path d="M2 8h12" />
+      <path d="M8 2v12" />
+      <path d="M6 4l2-2 2 2" />
+      <path d="M6 12l2 2 2-2" />
+      <path d="M4 6l-2 2 2 2" />
+      <path d="M12 6l2 2-2 2" />
+    </svg>
+  );
+}
+
+/** O botão direito (`2`) sempre arrasta o diagrama; o botão esquerdo (`0`) arrasta quando a trava das 4 setas está ativa. */
+export function shouldStartDiagramPan(button: number, panLocked: boolean): boolean {
+  return button === 2 || (button === 0 && panLocked);
+}
+
+/** Calcula a nova posição de rolagem ao arrastar o diagrama com o mouse. */
+export function applyDiagramPan(
+  origin: { scrollLeft: number; scrollTop: number; startX: number; startY: number },
+  point: { clientX: number; clientY: number },
+): { scrollLeft: number; scrollTop: number; moved: boolean } {
+  const dx = point.clientX - origin.startX;
+  const dy = point.clientY - origin.startY;
+  return {
+    scrollLeft: Math.max(0, origin.scrollLeft - dx),
+    scrollTop: Math.max(0, origin.scrollTop - dy),
+    moved: Math.abs(dx) > 2 || Math.abs(dy) > 2,
+  };
 }
 
 const iconButton = "flex size-7 cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-selected hover:text-ink disabled:cursor-not-allowed disabled:opacity-50";
@@ -221,6 +254,10 @@ export function DiagramCanvas({
   const [tableFilter, setTableFilter] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [copiedMermaid, setCopiedMermaid] = useState(false);
+  const [panLocked, setPanLocked] = useState(false);
+  const [panning, setPanning] = useState(false);
+  const panSession = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
   const zoomRef = useRef(zoom);
   const fitted = useRef(start !== undefined);
   const restored = useRef(false);
@@ -329,6 +366,54 @@ export function DiagramCanvas({
     return () => element.removeEventListener("wheel", handleWheel);
   }, [zoomTo]);
 
+  useEffect(() => {
+    if (!panning) return;
+
+    function handleMouseMove(event: MouseEvent) {
+      const session = panSession.current;
+      const element = scroller.current;
+      if (session === null || element === null) return;
+
+      const next = applyDiagramPan(session, { clientX: event.clientX, clientY: event.clientY });
+      if (next.moved) session.moved = true;
+      element.scrollLeft = next.scrollLeft;
+      element.scrollTop = next.scrollTop;
+    }
+
+    function stopPanning() {
+      if (panSession.current?.moved) {
+        suppressClick.current = true;
+      }
+      panSession.current = null;
+      setPanning(false);
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", stopPanning);
+    window.addEventListener("blur", stopPanning);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", stopPanning);
+      window.removeEventListener("blur", stopPanning);
+    };
+  }, [panning]);
+
+  function handleMouseDown(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!shouldStartDiagramPan(event.button, panLocked)) return;
+    const element = scroller.current;
+    if (element === null) return;
+
+    event.preventDefault();
+    panSession.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: element.scrollLeft,
+      scrollTop: element.scrollTop,
+      moved: false,
+    };
+    setPanning(true);
+  }
+
   function fit() {
     const element = scroller.current;
     if (element !== null) setZoom(fitZoom(activeLayout, { width: element.clientWidth, height: element.clientHeight }));
@@ -388,6 +473,16 @@ export function DiagramCanvas({
         ) : null}
 
         <div role="toolbar" aria-label={copy.zoom} className="ml-auto flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            aria-label={copy.panMode}
+            title={copy.panMode}
+            aria-pressed={panLocked}
+            onClick={() => setPanLocked((current) => !current)}
+            className={cn(iconButton, panLocked && "bg-selected text-accent ring-1 ring-accent/50")}
+          >
+            <MoveIcon />
+          </button>
           <button type="button" aria-label={copy.zoomOut} title={copy.zoomOut} disabled={zoom <= minZoom} onClick={() => zoomTo(zoomOut(zoom))} className={iconButton}>
             <MinusIcon />
           </button>
@@ -424,12 +519,21 @@ export function DiagramCanvas({
         aria-busy={fetching}
         onKeyDown={handleKeyDown}
         onScroll={report}
+        onMouseDown={handleMouseDown}
+        onContextMenu={(event) => event.preventDefault()}
         onClick={(event) => {
+          if (suppressClick.current) {
+            suppressClick.current = false;
+            return;
+          }
           if (enableTableFilter && (event.target === event.currentTarget || (event.target instanceof SVGElement && event.target.tagName.toLowerCase() === "svg"))) {
             setSelectedKey(null);
           }
         }}
-        className="min-h-0 flex-1 overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2"
+        className={cn(
+          "min-h-0 flex-1 overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2 select-none",
+          panning ? "cursor-grabbing [&_*]:cursor-grabbing" : panLocked ? "cursor-grab [&_*]:cursor-grab" : undefined,
+        )}
       >
         <svg
           width={activeLayout.width * zoom}
@@ -454,7 +558,17 @@ export function DiagramCanvas({
               maxChars={metrics.rowChars}
               dimmed={neighborhood !== null && !neighborhood.tables.has(box.key)}
               selected={selectedKey === box.key}
-              onSelect={enableTableFilter ? (key) => setSelectedKey((current) => (current === key ? null : key)) : undefined}
+              onSelect={
+                enableTableFilter
+                  ? (key) => {
+                      if (suppressClick.current) {
+                        suppressClick.current = false;
+                        return;
+                      }
+                      setSelectedKey((current) => (current === key ? null : key));
+                    }
+                  : undefined
+              }
               onOpen={onOpenTable}
             />
           ))}
