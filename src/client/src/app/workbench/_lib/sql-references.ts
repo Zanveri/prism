@@ -286,14 +286,15 @@ export function joinScope(analysis: Analysis): Reference[] {
 export type ResolvedReference = { reference: Reference; schema: string; name: string };
 
 /**
- * A tabela ou visão que um nome do comando é, pelo catálogo da árvore: com esquema (`esquema.tabela`), ou sem ele, pelo esquema padrão da sessão (`defaultSchemas`;
- * `null` é qualquer esquema, como o Informix), como em `tableLinkAt`. Nome que o catálogo não tem (uma expressão de tabela, uma tabela que a árvore ainda não abriu)
- * não resolve.
+ * A tabela ou visão que um nome do comando é, pelo catálogo: com esquema (`esquema.tabela`), ou sem ele, primeiro pelo esquema padrão da sessão (`defaultSchemas`;
+ * `null` é qualquer esquema, como o Informix) e depois pelos demais esquemas do banco, para descobrir a qual esquema a tabela pertence sem obrigar a escrevê-lo.
  */
 export function resolveName(schema: string | null, name: string, catalog: LinkCatalog, defaultSchemas: readonly string[] | null): { schema: string; name: string } | null {
   if (schema !== null) return catalog.get(schema)?.has(name) === true ? { schema, name } : null;
 
-  const found = (defaultSchemas ?? [...catalog.keys()]).find((candidate) => catalog.get(candidate)?.has(name) === true);
+  const allSchemas = [...catalog.keys()];
+  const candidates = defaultSchemas === null ? allSchemas : [...defaultSchemas, ...allSchemas.filter((candidate) => !defaultSchemas.includes(candidate))];
+  const found = candidates.find((candidate) => catalog.get(candidate)?.has(name) === true);
   return found === undefined ? null : { schema: found, name };
 }
 

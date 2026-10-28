@@ -136,6 +136,25 @@ export const workbenchCopy = {
     runShortcut: "Ctrl+Enter",
     cancel: "Cancelar",
     cancelling: "Cancelando…",
+    contextMenu: {
+      label: "Ações do editor SQL",
+      autocompleteJoins: "Autocompletar ligações…",
+      autocompleteJoinsShortcut: "Ctrl+.",
+      autocompleteJoinsShortcutMac: "⌘.",
+    },
+    joinModal: {
+      title: "Sugestão de ligações de tabelas",
+      description: "Marque as tabelas que deseja ligar a partir da cláusula FROM. Ao marcar uma tabela filha, novas ligações a partir dela são abertas abaixo.",
+      loading: "Buscando as tabelas e chaves estrangeiras…",
+      loadingChildren: "Buscando ligações…",
+      noConnection: "Conecte esta aba a um banco para buscar as ligações das tabelas.",
+      noFromTable: "Nenhuma tabela encontrada na cláusula FROM do comando atual.",
+      unresolvedTables: (names: string) => `Não foi possível encontrar no banco: ${names}.`,
+      noLinks: "Esta tabela não possui chaves estrangeiras cadastradas.",
+      previewLabel: "Pré-visualização dos JOINs",
+      cancel: "Cancelar",
+      insert: (count: number) => (count <= 1 ? "Inserir ligação" : `Inserir ${count.toLocaleString("pt-BR")} ligações`),
+    },
     // RN-ARVORE-007: o banco em que a aba roda, e a lista dos bancos do servidor (a mesma da árvore, RN-ARVORE-006).
     database: {
       label: "Banco",
@@ -339,7 +358,7 @@ export const workbenchCopy = {
     connected: "Conectado",
     disconnected: "Desconectado",
     noTab: "Nenhuma aba ativa",
-    // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na barra do editor.
+    // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na troca na barra do editor.
     place: (connection: string, database: string) => `${connection} / ${database}`,
     autoCommit: "Auto-commit",
     // RN-PROT-002: a conexão da aba é somente leitura (a dica diz de onde vem).

@@ -1,5 +1,6 @@
 import type { Engine } from "@/components/ui";
 
+import type { ObjectNames } from "./database-sessions.schema";
 import { levelPathOf, type CachedLevel } from "./navigator-search";
 import { isReservedWord } from "./sql-completion";
 import { sqlTokens, type SqlToken } from "./sql-statements";
@@ -19,8 +20,8 @@ export type LinkCatalog = ReadonlyMap<string, ReadonlySet<string>>;
 /** O trecho do texto que vira link (o nome inteiro, com o esquema e as aspas) e a tabela que ele abre. */
 export type TableLink = { from: number; to: number; schema: string; name: string };
 
-/** O catálogo do banco da aba: os níveis de tabelas e visões que a árvore já carregou (`cachedLevels`); rotinas não entram. */
-export function linkCatalog(levels: readonly CachedLevel[]): LinkCatalog {
+/** O catálogo do banco da aba: os níveis de tabelas e visões que a árvore já carregou (`cachedLevels`) e, quando já buscada, a lista de nomes do banco (`objectNames`); rotinas não entram. */
+export function linkCatalog(levels: readonly CachedLevel[], objectNames?: ObjectNames): LinkCatalog {
   const catalog = new Map<string, Set<string>>();
   for (const { key, nodes } of levels) {
     const path = levelPathOf(key);
@@ -28,6 +29,14 @@ export function linkCatalog(levels: readonly CachedLevel[]): LinkCatalog {
     const names = catalog.get(path.schema) ?? new Set<string>();
     for (const node of nodes) names.add(node.label);
     catalog.set(path.schema, names);
+  }
+  if (objectNames !== undefined) {
+    for (const schema of objectNames.schemas) {
+      const names = catalog.get(schema.name) ?? new Set<string>();
+      for (const table of schema.tables) names.add(table);
+      for (const view of schema.views) names.add(view);
+      if (names.size > 0) catalog.set(schema.name, names);
+    }
   }
   return catalog;
 }

@@ -31,6 +31,8 @@ export type StatementTable = TableName & {
   /** O apelido como está escrito, ou o nome da tabela como o autocompletar o escreve. */
   qualifier: string;
   links: readonly TableLink[];
+  /** A tabela de origem foi escrita com o esquema na frente (`esquema.tabela`)? Quando `false`, a sugestão segue o padrão sem esquema. */
+  qualified?: boolean;
 };
 
 /** Uma sugestão: o texto que entra (`label`) e a chave que a motivou (`detail`). */
@@ -64,8 +66,9 @@ export function writtenTable(table: TableName, engine: Engine | undefined, defau
 }
 
 /** `a.x = b.y AND a.z = b.w`: as colunas do mesmo lugar na chave, na ordem dela. */
-function condition(left: string, leftColumns: readonly string[], right: string, rightColumns: readonly string[], engine: Engine | undefined): string {
-  return leftColumns.map((column, index) => `${left}.${sqlName(column, engine)} = ${right}.${sqlName(rightColumns[index], engine)}`).join(" AND ");
+export function joinCondition(left: string, leftColumns: readonly string[], right: string, rightColumns: readonly string[], engine: Engine | undefined, uppercaseKeywords = true): string {
+  const andKeyword = uppercaseKeywords ? " AND " : " and ";
+  return leftColumns.map((column, index) => `${left}.${sqlName(column, engine)} = ${right}.${sqlName(rightColumns[index], engine)}`).join(andKeyword);
 }
 
 export type JoinInput = {
@@ -77,6 +80,8 @@ export type JoinInput = {
   usesAliases: boolean;
   engine: Engine | undefined;
   defaultSchemas: readonly string[] | null;
+  /** Respeita a preferência de palavras-chave em maiúsculas (`ON`/`AND` vs `on`/`and`). Padrão: `true`. */
+  uppercaseKeywords?: boolean;
 };
 
 /**
@@ -86,10 +91,11 @@ export type JoinInput = {
  * ligação a traz de novo). Sem apelidos no comando, a tabela nova entra pelo nome inteiro (`clientes ON clientes.id = pedidos.cliente_id`), e só ganha apelido
  * se o nome já é de outra tabela do comando.
  */
-export function joinSuggestions({ tables, used, usesAliases, engine, defaultSchemas }: JoinInput): LinkSuggestion[] {
+export function joinSuggestions({ tables, used, usesAliases, engine, defaultSchemas, uppercaseKeywords = true }: JoinInput): LinkSuggestion[] {
   const last = tables.at(-1);
   if (last === undefined) return [];
 
+  const onKeyword = uppercaseKeywords ? "ON" : "on";
   const suggestions: LinkSuggestion[] = [];
   const seen = new Set<string>();
 
@@ -98,11 +104,12 @@ export function joinSuggestions({ tables, used, usesAliases, engine, defaultSche
       const inStatement = tables.some((table) => sameTable(table, link.table));
       if (inStatement && !sameTable(source, link.table)) continue;
 
-      const written = writtenTable(link.table, engine, defaultSchemas);
+      const sameNameOtherSchema = tables.some((table) => table.name === link.table.name && table.schema !== link.table.schema);
       const plain = sqlName(link.table.name, engine);
+      const written = source.qualified === false && !sameNameOtherSchema ? plain : writtenTable(link.table, engine, defaultSchemas);
       const aliased = usesAliases || inStatement || used.has(link.table.name.toLowerCase());
       const alias = aliased ? aliasFor(link.table.name, used) : null;
-      const label = `${written}${alias === null ? "" : ` ${alias}`} ON ${condition(alias ?? plain, link.other, source.qualifier, link.own, engine)}`;
+      const label = `${written}${alias === null ? "" : ` ${alias}`} ${onKeyword} ${joinCondition(alias ?? plain, link.other, source.qualifier, link.own, engine, uppercaseKeywords)}`;
 
       const key = `${label}\u0000${link.name}`;
       if (seen.has(key)) continue;
@@ -119,7 +126,7 @@ export function joinSuggestions({ tables, used, usesAliases, engine, defaultSche
  * dela), `c.id = p.cliente_id`: primeiro as da última tabela escrita. Uma tabela que se liga a si mesma, junto de outra instância dela no comando, traz as duas
  * condições (a pai e a filha).
  */
-export function onSuggestions(table: StatementTable, others: readonly StatementTable[], engine: Engine | undefined): LinkSuggestion[] {
+export function onSuggestions(table: StatementTable, others: readonly StatementTable[], engine: Engine | undefined, uppercaseKeywords = true): LinkSuggestion[] {
   const suggestions: LinkSuggestion[] = [];
   const seen = new Set<string>();
 
@@ -127,7 +134,7 @@ export function onSuggestions(table: StatementTable, others: readonly StatementT
     for (const link of table.links) {
       if (!sameTable(link.table, other)) continue;
 
-      const label = condition(table.qualifier, link.own, other.qualifier, link.other, engine);
+      const label = joinCondition(table.qualifier, link.own, other.qualifier, link.other, engine, uppercaseKeywords);
       const key = `${label}\u0000${link.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
