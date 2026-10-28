@@ -11,7 +11,7 @@ import { isMacPlatform } from "@/lib/utils/platform";
 import { environmentAccent } from "../_lib/environment-accent";
 import { baseWidths, cellPadding, fitWidth } from "../_lib/grid-columns";
 import { movementOf, moveCell, type GridCell } from "../_lib/grid-cursor";
-import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowMarkClasses, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
+import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowMarkClasses, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, valueViewerKey, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { cellAtPoint, columnStarts, edgeScroll, pageRows, type GridBox } from "../_lib/grid-pointer";
 import { choseWholeColumns, collapse, deleteKeyRows, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
@@ -838,6 +838,9 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       if (editing.onCopyAdvanced === undefined) return;
       event.preventDefault();
       editing.onCopyAdvanced();
+    } else if (valueViewerKey(event) && editing.onToggleValueViewer !== undefined) {
+      event.preventDefault();
+      editing.onToggleValueViewer();
     } else if (event.key === "F2" || event.key === "Enter") {
       event.preventDefault();
       editing.onEdit(active);

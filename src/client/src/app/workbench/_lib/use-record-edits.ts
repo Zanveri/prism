@@ -581,6 +581,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const copyingRef = useRef<AbortController | null>(null);
   // RN-GRADE-023: o carregar das linhas que faltam, que a faixa mostra ("Carregando as linhas que faltam… 1.400 linhas") e deixa cancelar.
   const [loadingRest, setLoadingRest] = useState<string | null>(null);
+  const [valueViewerOpen, setValueViewerOpen] = useState(false);
   const loadingRef = useRef<AbortController | null>(null);
 
   // RN-EDIT-002: numa junção, a pendência de uma linha de uma tabela aparece em todas as linhas da grade que a mostram.
@@ -1982,6 +1983,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         rows: wholeColumns ? 1 : rows.length,
         several,
         hasActive: activeCell(chosen, grid) !== null,
+        viewValue: activeCell(chosen, grid) !== null ? { editable: true } : { editable: false, reason: selectionCopy.copy.chooseCell },
         newRow: rowAccess,
         duplicateRow: !rowAccess.editable ? rowAccess : wholeColumns ? chooseRows : duplicateRowsAccess(rows.length),
         deleteRow: wholeColumns ? (rowAccess.editable ? chooseRows : rowAccess) : deleteRowsAccess(selectedRowsOf(current, pending, rows), reason, known, writing || running),
@@ -2056,6 +2058,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
                 .finally(reading);
               break;
             }
+            case "viewValue":
+              setValueViewerOpen(true);
+              break;
             case "edit":
               openEditor(cell);
               break;
@@ -2168,6 +2173,22 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   // RN-GRADE-021: o botão de ordenar do cabeçalho, onde a grade tem o "Ordenar" (não nas abas guardadas do script): a ordem aplicada e o motivo de agora.
   const sortApplied = sort === undefined ? null : sort.applied();
   const sortReason = shown === null ? null : sortReasonFor({ personBusy, saving, busy, shown, subject });
+  const activeAccess: EditAccess = useMemo(() => {
+    if (shown === null || active === null) return { editable: false, reason: selectionCopy.copy.chooseCell };
+    const access = cellAccess({ readOnly: readOnlyReason, target, busy: saving || busy, column: active.column, row: rowContextOf(shown, edits, active.row) });
+    return access.editable && building !== null ? { editable: false, reason: multi.applyingBusy } : access;
+  }, [shown, active, readOnlyReason, target, saving, busy, edits, building]);
+  const activeValue: EditValue = useMemo(() => {
+    if (shown === null || active === null) return null;
+    const read = shown.rows.length;
+    if (active.row < read) {
+      const changed = pendingCell(view, active.row, active.column);
+      if (changed !== null) return changed.value;
+      const whole = columnEditOf(edits, active.column);
+      return whole !== null && !edits.deleted.includes(active.row) ? whole.value : (shown.rows[active.row]?.[active.column] ?? null);
+    }
+    return edits.added[active.row - read]?.values[active.column] ?? null;
+  }, [shown, active, view, edits]);
 
   const editing: GridEditing | undefined =
     shown === null
@@ -2206,6 +2227,24 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onNewRow: () => void newRow(),
           onDuplicateRow: () => rowAction("duplicateRow"),
           onDeleteRow: () => rowAction("deleteRow"),
+          onToggleValueViewer: () => setValueViewerOpen((prev) => !prev),
+          valueViewer: {
+            open: valueViewerOpen,
+            active,
+            column: active !== null ? (shown.columns[active.column] ?? null) : null,
+            value: activeValue,
+            editable: activeAccess,
+            setNullAccess:
+              active !== null && activeAccess.editable
+                ? (target?.columns[active.column]?.nullable ?? true)
+                  ? { editable: true }
+                  : { editable: false, reason: copy.menu.notNullable }
+                : activeAccess,
+            onCommitValue: (nextValue: string | null) => {
+              if (active !== null) void whenEditable(active, () => applyValue(active, nextValue));
+            },
+            onClose: () => setValueViewerOpen(false),
+          },
           bar: {
             buttons,
             onAction: (id: EditBarAction) => {

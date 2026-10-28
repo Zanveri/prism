@@ -3,10 +3,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
+import { emptySelection, select } from "../_lib/grid-selection";
 import type { RowsState, RunnerState } from "../_lib/use-query-runner";
 import type { PaneMode } from "../_lib/result-layout";
 import { ResultActions } from "./result-actions";
 import { collapsedSummary, ResultPanel } from "./result-panel";
+
+vi.mock("@/components/ui", async () => {
+  const actual = await vi.importActual<typeof import("@/components/ui")>("@/components/ui");
+  return {
+    ...actual,
+    useToast: () => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }),
+  };
+});
 
 // A área de resultado lê as preferências da grade (o tipo no cabeçalho, o zoom); aqui valem as de saída.
 vi.mock("@/app/settings/_lib/use-preferences", async () => {
@@ -458,5 +467,75 @@ describe("as medidas da barra da área de resultado (RN-ABAS-009, seção 39)", 
     expect(classOf(markup, /<button[^>]*aria-label="Diminuir o zoom da grade"[^>]*>/)).toContain("size-7");
     expect(classOf(markup, /<button[^>]*>Contar total<\/button>/)).toContain("h-7");
     expect(classOf(markup, /<button[^>]*title="Exportar todas as linhas da tabela[^"]*"[^>]*>/)).toContain("h-7");
+  });
+});
+
+describe("o painel Valor (F7) ao lado da grade de resultados", () => {
+  const panelWithViewer = (open: boolean) =>
+    renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(ResultPanel, {
+          state: {
+            ...rowsState,
+            columns: [{ name: "payload", type: "jsonb", kind: "text" }],
+            rows: [['{"id":1}']],
+          },
+          connected: true,
+          onLoadMore: noop,
+          onCount: noop,
+          onRerun: noop,
+          editing: {
+            rows: [['{"id":1}']],
+            selection: select(emptySelection, { row: 0, column: 0 }, { read: 1, added: [], columns: 1 }),
+            layout: { read: 1, added: [], columns: 1 },
+            onSelection: noop,
+            onSelecting: noop,
+            status: null,
+            pending: 0,
+            marks: new Map(),
+            active: { row: 0, column: 0 },
+            editor: null,
+            columnHints: null,
+            onActivate: noop,
+            onEdit: noop,
+            onDraft: noop,
+            onCommit: noop,
+            onCancel: noop,
+            onMenu: noop,
+            onRowMenu: noop,
+            onColumnMenu: noop,
+            onCopy: noop,
+            onDeleteRows: noop,
+            onSave: noop,
+            onNewRow: noop,
+            onDuplicateRow: noop,
+            onDeleteRow: noop,
+            bar: { buttons: [], onAction: noop },
+            valueViewer: {
+              open,
+              active: { row: 0, column: 0 },
+              column: { name: "payload", type: "jsonb", kind: "text" },
+              value: '{"id":1}',
+              editable: { editable: true },
+              setNullAccess: { editable: true },
+              onCommitValue: noop,
+              onClose: noop,
+            },
+          },
+        }),
+      ),
+    );
+
+  it("exibe o painel Valor ao lado da grade quando `editing.valueViewer.open` é verdadeiro e o oculta quando é falso", () => {
+    const opened = panelWithViewer(true);
+    expect(opened).toContain('role="grid"');
+    expect(opened).toContain('data-testid="cell-value-viewer-panel"');
+    expect(opened).toContain("payload (jsonb)");
+
+    const closed = panelWithViewer(false);
+    expect(closed).toContain('role="grid"');
+    expect(closed).not.toContain('data-testid="cell-value-viewer-panel"');
   });
 });

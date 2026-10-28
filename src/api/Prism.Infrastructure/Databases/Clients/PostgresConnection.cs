@@ -283,7 +283,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// </summary>
     protected override void BindEditParameter(DbParameter parameter, EditParameter value)
     {
-        ((NpgsqlParameter)parameter).NpgsqlDbType = NpgsqlDbType.Unknown;
+        ((NpgsqlParameter)parameter).NpgsqlDbType = value.Value is byte[] ? NpgsqlDbType.Bytea : NpgsqlDbType.Unknown;
         parameter.Value = value.Value ?? DBNull.Value;
     }
 
