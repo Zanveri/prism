@@ -177,6 +177,114 @@ describe("layoutDatabaseDiagram: diagrama de banco inteiro com múltiplos esquem
     expect(funcionarios.title).toBe("rh.funcionarios");
     expect(pedidos.title).toBe("loja.pedidos");
   });
+
+  it("não repete o prefixo do esquema quando apenas um esquema do banco possui tabelas", () => {
+    const layout = layoutDatabaseDiagram([
+      { schema: "usr_migration_stock_manager", diagram: sampleSchema },
+      { schema: "informix", diagram: { tables: [], foreignKeys: [] } },
+      { schema: "sysadmin", diagram: { tables: [], foreignKeys: [] } },
+    ]);
+
+    const pedidos = boxOf(layout, "usr_migration_stock_manager", "pedidos");
+    expect(pedidos.title).toBeUndefined();
+  });
+
+  it("mantém espaçamento amplo entre caixas e entre trilhas verticais em esquemas grandes (70 tabelas, 92 FKs)", () => {
+    const tables: SchemaDiagram["tables"] = [];
+    const foreignKeys: SchemaDiagram["foreignKeys"] = [];
+
+    for (let i = 0; i < 70; i++) {
+      tables.push({
+        name: `tabela_estoque_modulo_${String(i).padStart(2, "0")}_detalhe`,
+        columns: [
+          { name: "id", type: "bigint", isNullable: false, isPrimaryKey: true },
+          { name: "ref_a_id", type: "bigint", isNullable: true, isPrimaryKey: false },
+          { name: "ref_b_id", type: "bigint", isNullable: true, isPrimaryKey: false },
+          { name: "descricao_item", type: "varchar(120)", isNullable: false, isPrimaryKey: false },
+        ],
+      });
+    }
+
+    // 10 tabelas-mestre (0..9), 20 tabelas intermediárias (10..29) e 40 tabelas de movimento (30..69) totalizando 92 FKs.
+    let fkCount = 0;
+    for (let i = 10; i < 30 && fkCount < 92; i++) {
+      foreignKeys.push({
+        name: `fk_${fkCount++}`,
+        referencingTable: tables[i].name,
+        columns: ["ref_a_id"],
+        referencedSchema: "usr_migration_stock_manager",
+        referencedTable: tables[i % 10].name,
+        referencedColumns: ["id"],
+      });
+    }
+    for (let i = 30; i < 70 && fkCount < 92; i++) {
+      foreignKeys.push({
+        name: `fk_${fkCount++}`,
+        referencingTable: tables[i].name,
+        columns: ["ref_a_id"],
+        referencedSchema: "usr_migration_stock_manager",
+        referencedTable: tables[10 + (i % 20)].name,
+        referencedColumns: ["id"],
+      });
+      if (fkCount < 92) {
+        foreignKeys.push({
+          name: `fk_${fkCount++}`,
+          referencingTable: tables[i].name,
+          columns: ["ref_b_id"],
+          referencedSchema: "usr_migration_stock_manager",
+          referencedTable: tables[(i + 3) % 10].name,
+          referencedColumns: ["id"],
+        });
+      }
+    }
+
+    const layout = layoutDatabaseDiagram([
+      { schema: "usr_migration_stock_manager", diagram: { tables, foreignKeys } },
+      { schema: "empty_schema", diagram: { tables: [], foreignKeys: [] } },
+    ]);
+
+    expect(layout.boxes).toHaveLength(70);
+    expect(layout.edges).toHaveLength(92);
+
+    // Nenhuma caixa se sobrepõe: caixas na mesma faixa vertical mantêm >= 56px de distância vertical,
+    // e caixas na mesma faixa horizontal mantêm >= 180px de distância horizontal.
+    for (const [i, a] of layout.boxes.entries()) {
+      expect(a.width).toBeGreaterThan(264);
+      for (const b of layout.boxes.slice(i + 1)) {
+        const overlapsHorizontally = !(a.x + a.width <= b.x || b.x + b.width <= a.x);
+        const overlapsVertically = !(a.y + a.height <= b.y || b.y + b.height <= a.y);
+        expect(overlapsHorizontally && overlapsVertically).toBe(false);
+        if (overlapsHorizontally) {
+          const verticalGap = a.y < b.y ? b.y - (a.y + a.height) : a.y - (b.y + b.height);
+          expect(verticalGap).toBeGreaterThanOrEqual(56);
+        }
+        if (overlapsVertically) {
+          const horizontalGap = a.x < b.x ? b.x - (a.x + a.width) : a.x - (b.x + b.width);
+          expect(horizontalGap).toBeGreaterThanOrEqual(180);
+        }
+      }
+    }
+
+    // Nenhum segmento vertical de aresta encosta nas bordas laterais das caixas (mínimo 36px de respiro).
+    for (const edge of layout.edges) {
+      for (let i = 1; i < edge.points.length; i++) {
+        const p1 = edge.points[i - 1];
+        const p2 = edge.points[i];
+        if (p1.x === p2.x && p1.y !== p2.y) {
+          const segMinY = Math.min(p1.y, p2.y);
+          const segMaxY = Math.max(p1.y, p2.y);
+          for (const box of layout.boxes) {
+            const overlapsY = !(segMaxY < box.y || segMinY > box.y + box.height);
+            if (overlapsY) {
+              const distLeft = box.x - p1.x;
+              const distRight = p1.x - (box.x + box.width);
+              expect(Math.max(distLeft, distRight)).toBeGreaterThanOrEqual(36);
+            }
+          }
+        }
+      }
+    }
+  });
 });
 
 describe("connectedToTable e filterDiagramBoxes: busca e destaque no diagrama", () => {

@@ -230,8 +230,8 @@ export function pngExportScale(width: number, height: number, desiredScale = 3, 
   return Math.max(1, Math.min(desiredScale, bySide, byArea));
 }
 
-const titleMaxChars = 28;
-const fitTitle = (name: string) => (name.length <= titleMaxChars ? name : `${name.slice(0, titleMaxChars - 1)}…`);
+const defaultTitleMaxChars = 28;
+const fitTitle = (name: string, maxChars = defaultTitleMaxChars) => (name.length <= maxChars ? name : `${name.slice(0, Math.max(1, maxChars - 1))}…`);
 
 function drawRoundedBox(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
   ctx.beginPath();
@@ -321,18 +321,19 @@ export function renderDiagramToCanvas(ctx: CanvasRenderingContext2D, layout: Dia
     ctx.setLineDash([]);
 
     // Título da tabela.
+    const boxRowChars = box.width === 264 ? metrics.rowChars : Math.max(metrics.rowChars, Math.floor((metrics.rowChars * (box.width - 32)) / (264 - 32)));
     const rawTitle = box.title ?? box.ref.name;
     ctx.font = `600 ${metrics.titleFontSize}px ${uiFontFamily}`;
     ctx.fillStyle = box.center ? palette.ink : palette.muted;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(fitTitle(rawTitle), box.x + 16, box.y + 12 + rowHeight / 2);
+    ctx.fillText(fitTitle(rawTitle, boxRowChars), box.x + 16, box.y + 12 + rowHeight / 2);
 
     // Linhas de colunas.
     for (const [index, column] of (box.columns ?? []).entries()) {
       const y = box.y + 12 + rowHeight * (index + 1) + rowHeight / 2;
       const mark = column.primaryKey ? "PK" : column.foreignKey ? "FK" : null;
-      const fitted = fitText(column.name, column.type, mark, metrics.rowChars);
+      const fitted = fitText(column.name, column.type, mark, boxRowChars);
       const nameX = mark === null ? box.x + 16 : box.x + 36;
 
       if (mark !== null) {

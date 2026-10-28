@@ -179,15 +179,24 @@ describe("o diagrama (RN-TABELA-004)", () => {
           theme: "dracula",
           ui: { ...defaultPreferences.ui, fontFamily: "Inter" },
           editor: { ...defaultPreferences.editor, fontFamily: "JetBrains Mono", fontSize: 16 },
-
-
-
-
         },
       }),
     );
 
     expect(markup).toContain("JetBrains Mono");
     expect(markup).toContain("font-size:16px");
+  });
+
+  it("trunca títulos de tabelas muito longos com reticências e preserva o nome completo em <title> para não vazar da caixa", () => {
+    const longName = "usr_migration_stock_manager_tabela_com_nome_extremamente_longo";
+    const layout = layoutDiagram({
+      center: { ref: { schema: "s", name: longName }, columns: [column("id", 1, { isPrimaryKey: true })] },
+      foreignKeys: [],
+      neighbors: [],
+    });
+    const markup = render(layout);
+
+    expect(markup).toContain(`<title>${longName}</title>`);
+    expect(markup).toContain("…");
   });
 });

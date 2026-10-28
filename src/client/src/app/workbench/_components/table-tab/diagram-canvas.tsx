@@ -89,6 +89,9 @@ type TableBoxProps = {
 function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, onSelect, onOpen }: TableBoxProps) {
   const title = box.title ?? box.ref.name;
   const highlighted = box.center || selected;
+  const boxMaxChars = box.width === 264 ? maxChars : Math.max(maxChars, Math.floor((maxChars * (box.width - 32)) / (264 - 32)));
+  const titleCut = title.length > boxMaxChars;
+  const displayTitle = titleCut ? `${title.slice(0, Math.max(1, boxMaxChars - 1))}…` : title;
   const body = (
     <>
       <rect
@@ -100,9 +103,10 @@ function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, 
         strokeWidth="1"
       />
       <text x={textX} y={boxPaddingY + rowHeight / 2} dominantBaseline="central" className="fill-ink font-mono text-[13px] font-semibold" style={{ fontSize: "inherit", fontFamily: "inherit" }}>
-        {title}
+        {titleCut ? <title>{title}</title> : null}
+        {displayTitle}
       </text>
-      {box.columns?.map((column, index) => <ColumnRow key={column.name} column={column} y={boxPaddingY + rowHeight * (index + 1) + rowHeight / 2} maxChars={maxChars} />)}
+      {box.columns?.map((column, index) => <ColumnRow key={column.name} column={column} y={boxPaddingY + rowHeight * (index + 1) + rowHeight / 2} maxChars={boxMaxChars} />)}
     </>
   );
 
@@ -127,6 +131,7 @@ function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, 
       role="button"
       tabIndex={0}
       aria-label={copy.open(title)}
+      onMouseDown={(event) => event.preventDefault()}
       onClick={onSelect ? () => onSelect(box.key) : undefined}
       onDoubleClick={() => onOpen(box.ref)}
       onKeyDown={handleKeyDown}
@@ -420,7 +425,9 @@ export function DiagramCanvas({
         onKeyDown={handleKeyDown}
         onScroll={report}
         onClick={(event) => {
-          if (enableTableFilter && event.target === event.currentTarget) setSelectedKey(null);
+          if (enableTableFilter && (event.target === event.currentTarget || (event.target instanceof SVGElement && event.target.tagName.toLowerCase() === "svg"))) {
+            setSelectedKey(null);
+          }
         }}
         className="min-h-0 flex-1 overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2"
       >
