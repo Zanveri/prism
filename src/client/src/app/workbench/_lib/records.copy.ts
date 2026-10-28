@@ -165,6 +165,7 @@ export const recordsCopy = {
     copy: "Copiar valor",
     saveFile: "Salvar em arquivo…",
     openExternal: "Abrir no editor externo",
+    editValue: "Editar valor",
     loadFile: "Carregar de arquivo…",
     setNull: "Definir NULL",
     apply: "Aplicar",

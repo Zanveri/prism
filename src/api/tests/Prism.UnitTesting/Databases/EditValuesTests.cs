@@ -35,8 +35,12 @@ public sealed class EditValuesTests
     [InlineData("Db2", "TIMESTAMP(12)", "datetime", "Timestamp")]
     [InlineData("Db2", "BOOLEAN", "boolean", "Boolean")]
     [InlineData("Db2", "BLOB(1048576)", "binary", "Binary")]
-    [InlineData("Db2", "CLOB(1048576)", "text", "Unsupported")]
-    [InlineData("Db2", "XML", "text", "Unsupported")]
+    [InlineData("Db2", "CLOB(1048576)", "text", "Text")]
+    [InlineData("Db2", "DBCLOB(1048576)", "text", "Text")]
+    [InlineData("Db2", "NCLOB(1048576)", "text", "Text")]
+    [InlineData("Db2", "LONG VARCHAR", "text", "Text")]
+    [InlineData("Db2", "XML", "text", "Text")]
+    [InlineData("Db2", "JSON", "text", "Text")]
     [InlineData("Informix", "LVARCHAR(2048)", "text", "Text")]
     [InlineData("Informix", "SERIAL", "number", "Int32")]
     [InlineData("Informix", "INT8", "number", "Int64")]
@@ -47,17 +51,31 @@ public sealed class EditValuesTests
     [InlineData("Informix", "DATETIME MONTH TO DAY", "datetime", "Unsupported")]
     [InlineData("Informix", "INTERVAL DAY TO SECOND", "text", "Unsupported")]
     [InlineData("Informix", "BOOLEAN", "number", "Boolean")]
-    [InlineData("Informix", "TEXT", "text", "Unsupported")]
+    [InlineData("Informix", "TEXT", "text", "Text")]
+    [InlineData("Informix", "CLOB", "text", "Text")]
+    [InlineData("Informix", "JSON", "text", "Text")]
+    [InlineData("Informix", "BSON", "text", "Text")]
     [InlineData("Informix", "BYTE", "binary", "Binary")]
+    [InlineData("Informix", "BLOB", "binary", "Binary")]
     public void TypeOf_ShouldClassifyTheIbmTypes(string dialect, string type, string kind, string expected)
         => Assert.Equal(Enum.Parse<EEditType>(expected), EditValues.TypeOf(Enum.Parse<ESqlDialect>(dialect), type, kind));
 
     [Trait("EditValues", "Convert")]
-    [Fact(DisplayName = "OK no PostgreSQL o texto vai como está, e nulo é NULL")]
+    [Fact(DisplayName = "OK no PostgreSQL o texto vai como está, nulo é NULL e binário vira byte[]")]
     public void Convert_ShouldKeepThePostgresText()
     {
         Assert.Equal("2026-01-02 03:04:05+00", EditValues.Convert(ESqlDialect.PostgreSql, EEditType.Text, "2026-01-02 03:04:05+00").Value.Value);
         Assert.Null(EditValues.Convert(ESqlDialect.PostgreSql, EEditType.Text, null).Value.Value);
+
+        var hexBinary = EditValues.Convert(ESqlDialect.PostgreSql, EEditType.Binary, "0x4F69").Value;
+        Assert.Equal(new byte[] { 0x4F, 0x69 }, (byte[])hexBinary.Value!);
+        Assert.Equal(DbType.Binary, hexBinary.Type);
+
+        var pgHexBinary = EditValues.Convert(ESqlDialect.PostgreSql, EEditType.Binary, @"\x4F69").Value;
+        Assert.Equal(new byte[] { 0x4F, 0x69 }, (byte[])pgHexBinary.Value!);
+
+        var utf8Binary = EditValues.Convert(ESqlDialect.PostgreSql, EEditType.Binary, "Oi").Value;
+        Assert.Equal(new byte[] { 0x4F, 0x69 }, (byte[])utf8Binary.Value!);
     }
 
     [Trait("EditValues", "Convert")]
@@ -102,6 +120,8 @@ public sealed class EditValuesTests
     [InlineData("Informix", "Timestamp", "2026-10-09 13:05:07.12345678", "«2026-10-09 13:05:07.12345678» não é uma data e hora no formato aaaa-mm-dd hh:mm:ss, com até 7 casas de fração.")]
     [InlineData("Db2", "Boolean", "sim", "«sim» não é um valor lógico: use true ou false.")]
     [InlineData("Informix", "Boolean", "sim", "«sim» não é um valor lógico: use 1 ou 0.")]
+    [InlineData("Db2", "Binary", "0xZZ", "«0xZZ» não é um binário em hexadecimal (0x…).")]
+    [InlineData("PostgreSql", "Binary", "0x123", "«0x123» não é um binário em hexadecimal (0x…).")]
     public void Convert_ShouldRefuseTextThatDoesNotConvert(string dialect, string type, string text, string message)
     {
         //Act
@@ -128,6 +148,9 @@ public sealed class EditValuesTests
         Assert.Equal("DATETIME (2026-10-09 13:05:07.12345) YEAR TO FRACTION(5)", EditValues.Literal(ESqlDialect.Informix, EEditType.Timestamp, "datetime", "2026-10-09 13:05:07.123456"));
         Assert.Equal("'t'", EditValues.Literal(ESqlDialect.Informix, EEditType.Boolean, "number", "1"));
         Assert.Equal("1.5", EditValues.Literal(ESqlDialect.Informix, EEditType.Decimal, "text", "1.5"));
+        Assert.Equal("decode('4F69', 'hex')", EditValues.Literal(ESqlDialect.PostgreSql, EEditType.Binary, "binary", "0x4F69"));
+        Assert.Equal("X'4F69'", EditValues.Literal(ESqlDialect.Db2, EEditType.Binary, "binary", "0x4F69"));
+        Assert.Null(EditValues.Literal(ESqlDialect.Informix, EEditType.Binary, "binary", "0x4F69"));
         Assert.Null(EditValues.Literal(ESqlDialect.PostgreSql, EEditType.Text, "text", "linha 1\nlinha 2"));
     }
 

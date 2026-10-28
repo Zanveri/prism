@@ -1,17 +1,20 @@
 import { useRef, useState } from "react";
 
-import { CloseIcon, DownloadIcon, DuplicateIcon, UploadIcon, useHost, useToast } from "@/components/ui";
+import { CloseIcon, DownloadIcon, DuplicateIcon, PencilIcon, UploadIcon, useHost, useToast } from "@/components/ui";
 import { openExternalEditor } from "@/lib/api/bridge";
 import { hostClipboard } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
 import {
+  bytesToHexPrefixed,
   CELL_VALUE_FORMATS,
   cellFilePayload,
   cellFormatExtension,
   cellValueToBytes,
   detectCellValueFormat,
   formatCellValue,
+  isHexPrefixedBinary,
+  normalizeEditedCellValue,
   type CellValueFormat,
 } from "../_lib/cell-value-viewer";
 import type { CellValueViewerState } from "../_lib/grid-editing";
@@ -81,6 +84,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
   const [manualFormat, setManualFormat] = useState<{ column: number; format: CellValueFormat } | null>(null);
   const [formatted, setFormatted] = useState(true);
   const [wordWrap, setWordWrap] = useState(true);
+  const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
   const [draftState, setDraftState] = useState<{ cellKey: string; value: string } | null>(null);
 
   const active = state.active;
@@ -106,8 +110,27 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
     isBinaryColumn,
   });
 
-  const displayedText = hasDraft ? draftState.value : isNull ? "" : rendered.text;
-  const canEdit = state.editable?.editable === true && format !== "binary" && active !== null;
+  const initialEditableText =
+    isNull
+      ? ""
+      : format === "binary"
+        ? rawValue !== null && isHexPrefixedBinary(rawValue)
+          ? rawValue
+          : bytesToHexPrefixed(cellValueToBytes(rawValue ?? "", isBinaryColumn))
+        : rendered.text;
+
+  const canEdit =
+    state.editable?.editable === true &&
+    active !== null &&
+    typeof state.onCommitValue === "function";
+  const isEditing = canEdit && editingCellKey === cellKey;
+  const displayedText = hasDraft
+    ? draftState.value
+    : isEditing && format === "binary"
+      ? initialEditableText
+      : isNull
+        ? ""
+        : rendered.text;
   const canSetNull = state.setNullAccess?.editable === true && active !== null && typeof state.onCommitValue === "function";
   const supportsFormatToggle = format === "json" || format === "xml" || format === "html";
 
@@ -117,6 +140,16 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
   function handleFormatChange(nextFormat: CellValueFormat) {
     setManualFormat({ column: active?.column ?? -1, format: nextFormat });
     setDraftState(null);
+  }
+
+  function handleToggleEdit() {
+    if (!canEdit) return;
+    if (isEditing) {
+      setEditingCellKey(null);
+      setDraftState(null);
+    } else {
+      setEditingCellKey(cellKey);
+    }
   }
 
   function handleToggleFormatted(nextFormatted: boolean) {
@@ -166,20 +199,27 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
   }
 
   function handleApply() {
-    if (!canEdit || !state.onCommitValue) return;
-    const valueToCommit = hasDraft ? draftState.value : displayedText;
+    if (!isEditing || !state.onCommitValue) return;
+    const rawDraft = hasDraft ? draftState.value : initialEditableText;
+    const valueToCommit = normalizeEditedCellValue(rawDraft, {
+      format,
+      isBinaryColumn,
+    });
     state.onCommitValue(valueToCommit);
     setDraftState(null);
+    setEditingCellKey(null);
   }
 
   function handleRevert() {
     setDraftState(null);
+    setEditingCellKey(null);
   }
 
   function handleSetNull() {
     if (!canSetNull || !state.onCommitValue) return;
     state.onCommitValue(null);
     setDraftState(null);
+    setEditingCellKey(null);
   }
 
   return (
@@ -294,7 +334,25 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
         </div>
 
         <div className="flex items-center gap-1">
-          {format !== "binary" && (
+          {canEdit && (
+            <button
+              type="button"
+              data-testid="value-viewer-edit-toggle"
+              aria-pressed={isEditing}
+              onClick={handleToggleEdit}
+              title={copy.editValue}
+              aria-label={copy.editValue}
+              className={cn(
+                "inline-flex h-6 items-center gap-1 rounded border px-1.5 text-2xs transition-colors",
+                isEditing
+                  ? "border-accent/40 bg-selected text-ink"
+                  : "border-border bg-surface text-muted hover:text-ink",
+              )}
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {(format !== "binary" || isEditing) && (
             <button
               type="button"
               data-testid="value-viewer-word-wrap"
@@ -321,26 +379,13 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
           <div className="flex flex-1 items-center justify-center p-4 text-center text-xs text-muted">
             {copy.noCellSelected}
           </div>
-        ) : isNull && !hasDraft ? (
+        ) : isNull && !hasDraft && !isEditing ? (
           <div className="flex flex-1 flex-col p-3">
             <span className="inline-flex w-fit rounded bg-raised px-1.5 py-0.5 font-mono text-xs italic text-subtle">
               {nullText}
             </span>
-            {canEdit && (
-              <textarea
-                data-testid="value-viewer-textarea"
-                aria-label={copy.title}
-                value=""
-                placeholder={nullText}
-                onChange={(event) => setDraftState({ cellKey, value: event.target.value })}
-                className={cn(
-                  "mt-2 min-h-0 flex-1 resize-none rounded border border-border bg-surface p-2 font-mono text-xs text-ink outline-none focus:border-accent",
-                  wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto",
-                )}
-              />
-            )}
           </div>
-        ) : format === "binary" && rendered.hexDump !== undefined ? (
+        ) : format === "binary" && rendered.hexDump !== undefined && !isEditing ? (
           <div className="min-h-0 flex-1 overflow-auto bg-surface p-2 font-mono text-[11px] leading-5">
             <table data-testid="value-viewer-hex-table" className="w-full border-collapse text-left">
               <thead>
@@ -392,10 +437,11 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
             <textarea
               data-testid="value-viewer-textarea"
               aria-label={copy.title}
-              readOnly={!canEdit}
+              readOnly={!isEditing}
               value={displayedText}
+              placeholder={isNull ? nullText : undefined}
               onChange={(event) => {
-                if (!canEdit) return;
+                if (!isEditing) return;
                 setDraftState({ cellKey, value: event.target.value });
               }}
               className={cn(
@@ -422,9 +468,9 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
           )}
         </div>
 
-        {(canEdit || canSetNull) && (
+        {(isEditing || canSetNull) && (
           <div className="flex items-center gap-1">
-            {canEdit && (
+            {isEditing && (
               <>
                 <input
                   ref={fileInputRef}
@@ -433,6 +479,12 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (!file) return;
+                    if ((isBinaryColumn || format === "binary") && typeof file.arrayBuffer === "function") {
+                      void file.arrayBuffer().then((buffer) => {
+                        setDraftState({ cellKey, value: bytesToHexPrefixed(new Uint8Array(buffer)) });
+                      });
+                      return;
+                    }
                     void file.text().then((text) => {
                       setDraftState({ cellKey, value: text });
                     });
@@ -459,7 +511,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
                 {copy.setNull}
               </button>
             )}
-            {canEdit && hasDraft && (
+            {isEditing && (
               <button
                 type="button"
                 data-testid="value-viewer-revert"
@@ -469,11 +521,11 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
                 {copy.revert}
               </button>
             )}
-            {canEdit && (
+            {isEditing && (
               <button
                 type="button"
                 data-testid="value-viewer-apply"
-                disabled={!hasDraft}
+                disabled={!hasDraft && !isNull}
                 onClick={handleApply}
                 className="inline-flex h-6 items-center rounded bg-accent px-2 text-2xs font-medium text-white transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40"
               >

@@ -40,6 +40,7 @@ vi.mock("@/lib/api/bridge", () => ({
 import { elementsOf } from "@/lib/testing/react-tree";
 
 import type { CellValueViewerState } from "../_lib/grid-editing";
+import { addRow, changesOf, editCell, editNewCell, noEdits } from "../_lib/record-edits";
 import { CellValueViewerPanel } from "./cell-value-viewer-panel";
 
 function makeState(overrides: Partial<CellValueViewerState> = {}): CellValueViewerState {
@@ -148,7 +149,7 @@ describe("CellValueViewerPanel (painel Valor — F7)", () => {
     ]);
   });
 
-  it("permite editar o valor e aplicar na célula ou definir NULL quando a célula é editável", () => {
+  it("exige clicar no ícone de lápis para habilitar a edição no F7 e permite aplicar ou definir NULL", () => {
     rt.unmount();
     const onCommitValue = vi.fn();
     const state = makeState({
@@ -160,6 +161,18 @@ describe("CellValueViewerPanel (painel Valor — F7)", () => {
     });
 
     let tree = rt.render(() => CellValueViewerPanel({ state }));
+    // Antes de clicar no lápis, o textarea fica somente leitura e o botão Aplicar não aparece
+    expect(byTestId(tree, "value-viewer-textarea")?.props.readOnly).toBe(true);
+    expect(byTestId(tree, "value-viewer-apply")).toBeUndefined();
+
+    // Clica no ícone de lápis para entrar em modo de edição explícito
+    const editToggleBtn = byTestId(tree, "value-viewer-edit-toggle")!;
+    expect(editToggleBtn).toBeDefined();
+    expect(editToggleBtn.props["aria-pressed"]).toBe(false);
+    (editToggleBtn.props.onClick as () => void)();
+
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+    expect(byTestId(tree, "value-viewer-edit-toggle")?.props["aria-pressed"]).toBe(true);
     const textarea = byTestId(tree, "value-viewer-textarea")!;
     expect(textarea.props.readOnly).toBe(false);
 
@@ -176,5 +189,126 @@ describe("CellValueViewerPanel (painel Valor — F7)", () => {
     const setNullBtn = byTestId(tree, "value-viewer-set-null")!;
     (setNullBtn.props.onClick as () => void)();
     expect(onCommitValue).toHaveBeenCalledWith(null);
+  });
+
+  it("ao editar um JSON formatado (prettified) no F7, salva o JSON compactado sem quebras de linha no UPDATE e no INSERT", () => {
+    rt.unmount();
+    const target = {
+      tables: [{ schema: "public", name: "eventos", key: [0], editable: true, reason: null, kind: "table" as const, keyColumns: ["id"] }],
+      columns: [
+        { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: null, type: "integer" },
+        { table: 0, baseColumn: "payload", editable: true, reason: null, nullable: true, generated: null, type: "jsonb" },
+      ],
+      rowOperations: true,
+      oneAtATime: false,
+    };
+    const rows = [["1", '{"id":1,"ativo":true}']];
+    let edits = noEdits;
+
+    const onCommitUpdate = vi.fn((nextValue: string | null) => {
+      edits = editCell(edits, 0, 1, nextValue, rows[0][1]);
+    });
+
+    const state = makeState({
+      column: { name: "payload", type: "jsonb", kind: "text" },
+      value: '{"id":1,"ativo":true}',
+      editable: { editable: true },
+      setNullAccess: { editable: true },
+      onCommitValue: onCommitUpdate,
+    });
+
+    let tree = rt.render(() => CellValueViewerPanel({ state }));
+    // Visualização inicial está formatada (prettified) com quebras de linha e indentação
+    expect(byTestId(tree, "value-viewer-textarea")?.props.value).toBe('{\n  "id": 1,\n  "ativo": true\n}');
+
+    // Clica no lápis para editar o JSON formatado
+    (byTestId(tree, "value-viewer-edit-toggle")!.props.onClick as () => void)();
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+
+    // Usuário edita mantendo o JSON prettified (com quebras de linha e espaços)
+    const textarea = byTestId(tree, "value-viewer-textarea")!;
+    (textarea.props.onChange as (event: { target: { value: string } }) => void)({
+      target: {
+        value: '{\n  "id": 1,\n  "ativo": false,\n  "tags": [\n    "a",\n    "b"\n  ]\n}',
+      },
+    });
+
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+    (byTestId(tree, "value-viewer-apply")!.props.onClick as () => void)();
+
+    // Verifica que o valor comitado na célula para UPDATE foi minificado/compactado em uma linha só
+    expect(onCommitUpdate).toHaveBeenCalledWith('{"id":1,"ativo":false,"tags":["a","b"]}');
+
+    // Agora testa também numa linha nova (INSERT)
+    const added = addRow(edits, { 0: "2" });
+    edits = added.edits;
+    const insertState = makeState({
+      active: { row: 1, column: 1 },
+      column: { name: "payload", type: "jsonb", kind: "text" },
+      value: null,
+      editable: { editable: true },
+      setNullAccess: { editable: true },
+      onCommitValue: (nextValue) => {
+        edits = editNewCell(edits, added.id, 1, nextValue);
+      },
+    });
+
+    rt.unmount();
+    tree = rt.render(() => CellValueViewerPanel({ state: insertState }));
+    (byTestId(tree, "value-viewer-edit-toggle")!.props.onClick as () => void)();
+    tree = rt.render(() => CellValueViewerPanel({ state: insertState }));
+    (byTestId(tree, "value-viewer-textarea")!.props.onChange as (event: { target: { value: string } }) => void)({
+      target: { value: '{\n  "novo": true,\n  "total": 10\n}' },
+    });
+    tree = rt.render(() => CellValueViewerPanel({ state: insertState }));
+    (byTestId(tree, "value-viewer-apply")!.props.onClick as () => void)();
+
+    const planned = changesOf(edits, rows, target);
+    expect(planned.changes).toEqual([
+      {
+        kind: "update",
+        table: 0,
+        key: ["1"],
+        set: [{ column: 1, value: '{"id":1,"ativo":false,"tags":["a","b"]}' }],
+      },
+      {
+        kind: "insert",
+        table: 0,
+        values: [
+          { column: 0, value: "2" },
+          { column: 1, value: '{"novo":true,"total":10}' },
+        ],
+      },
+    ]);
+  });
+
+  it("permite editar colunas binárias (BLOB / BYTEA) clicando no ícone de lápis", () => {
+    rt.unmount();
+    const onCommitValue = vi.fn();
+    const state = makeState({
+      column: { name: "anexo", type: "bytea", kind: "binary" },
+      value: "0x4F69",
+      editable: { editable: true },
+      setNullAccess: { editable: true },
+      onCommitValue,
+    });
+
+    let tree = rt.render(() => CellValueViewerPanel({ state }));
+    // No modo leitura, mostra a tabela hexadecimal
+    expect(byTestId(tree, "value-viewer-hex-table")).toBeDefined();
+
+    // Clica no lápis para editar o binário
+    (byTestId(tree, "value-viewer-edit-toggle")!.props.onClick as () => void)();
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+
+    const textarea = byTestId(tree, "value-viewer-textarea")!;
+    expect(textarea.props.value).toBe("0x4F69");
+    (textarea.props.onChange as (event: { target: { value: string } }) => void)({
+      target: { value: "0xcafe" },
+    });
+
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+    (byTestId(tree, "value-viewer-apply")!.props.onClick as () => void)();
+    expect(onCommitValue).toHaveBeenCalledWith("0xCAFE");
   });
 });

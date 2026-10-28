@@ -43,7 +43,7 @@ public sealed class EditTargetResolverTests
         var table = Assert.Single(target.Tables);
         Assert.Equal(("loja", "pedido", true, null), (table.Schema, table.Name, table.Editable, table.Reason));
         Assert.Equal([0], table.Key);
-        Assert.Equal([(true, null), (true, null), (false, "gerada pelo banco"), (false, "coluna binária"), (true, null), (false, "coluna calculada")], target.Columns.Select(column => (column.Editable, column.Reason)));
+        Assert.Equal([(true, null), (true, null), (false, "gerada pelo banco"), (true, null), (true, null), (false, "coluna calculada")], target.Columns.Select(column => (column.Editable, column.Reason)));
         Assert.Equal(["id", "status", "total", "anexo", "codigo", null], target.Columns.Select(column => column.BaseColumn));
         Assert.Equal([0, 0, 0, 0, 0, null], target.Columns.Select(column => column.Table));
         Assert.Equal([false, true, false, true, false, true], target.Columns.Select(column => column.Nullable));
@@ -191,7 +191,7 @@ public sealed class EditTargetResolverTests
 
         //Assert
         Assert.Equal(["ID", "STATUS", "NOTA", "STATUS", null, null], target.Columns.Select(column => column.BaseColumn));
-        Assert.Equal([(true, null), (true, null), (false, "o Prism ainda não edita este tipo neste banco"), (true, null), (false, "coluna calculada"), (false, "coluna calculada")], target.Columns.Select(column => (column.Editable, column.Reason)));
+        Assert.Equal([(true, null), (true, null), (true, null), (true, null), (false, "coluna calculada"), (false, "coluna calculada")], target.Columns.Select(column => (column.Editable, column.Reason)));
         Assert.Equal(["INTEGER", "VARCHAR(20)", "CLOB(1048576)", "VARCHAR(20)", null, null], target.Columns.Select(column => column.Type));
     }
 

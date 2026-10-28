@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bytesToHexPrefixed,
   CELL_VALUE_FORMATS,
   cellFilePayload,
   cellFormatExtension,
@@ -13,6 +14,7 @@ import {
   formatHtmlValue,
   formatJsonValue,
   formatXmlValue,
+  normalizeEditedCellValue,
   suggestedCellFileName,
 } from "./cell-value-viewer";
 
@@ -290,5 +292,43 @@ describe("salvar arquivo e abrir em editor externo a partir do visualizador de v
     expect(jsonPayload.filename).toBe("content.json");
     expect(jsonPayload.mime).toBe("application/json;charset=utf-8");
     expect(jsonPayload.content).toBe('{\n  "a": 1\n}');
+  });
+});
+
+describe("a normalização do valor editado no F7 antes de salvar (UPDATE / INSERT)", () => {
+  it("compacta o JSON formatado (prettified) em uma linha única sem indentação nem quebras de linha ao aplicar a edição", () => {
+    const prettifiedDraft = '{\n  "processId": "2500",\n  "ativo": true,\n  "itens": [\n    1,\n    2\n  ]\n}';
+    expect(
+      normalizeEditedCellValue(prettifiedDraft, {
+        format: "json",
+        isBinaryColumn: false,
+      }),
+    ).toBe('{"processId":"2500","ativo":true,"itens":[1,2]}');
+  });
+
+  it("remove a indentação entre tags no XML e no HTML formatados ao aplicar a edição", () => {
+    const prettyXml = '<pedido>\n  <id>123</id>\n  <status>ok</status>\n</pedido>';
+    expect(
+      normalizeEditedCellValue(prettyXml, {
+        format: "xml",
+        isBinaryColumn: false,
+      }),
+    ).toBe("<pedido><id>123</id><status>ok</status></pedido>");
+  });
+
+  it("converte edições em colunas binárias (BLOB, BYTEA, BYTE) para hexadecimal 0x...", () => {
+    expect(bytesToHexPrefixed(new Uint8Array([0x4f, 0x69]))).toBe("0x4F69");
+    expect(
+      normalizeEditedCellValue("0x4f69", {
+        format: "binary",
+        isBinaryColumn: true,
+      }),
+    ).toBe("0x4F69");
+    expect(
+      normalizeEditedCellValue("Oi", {
+        format: "text",
+        isBinaryColumn: true,
+      }),
+    ).toBe("0x4F69");
   });
 });

@@ -83,6 +83,56 @@ export function isHexPrefixedBinary(value: string): boolean {
   return value === "0x" || HEX_BINARY_PATTERN.test(value);
 }
 
+/** Converte `Uint8Array` para a representação `"0x..."` em hexadecimal maiúsculo esperada pela API. */
+export function bytesToHexPrefixed(bytes: Uint8Array): string {
+  return (
+    "0x" +
+    Array.from(bytes, (b) => b.toString(16).padStart(2, "0").toUpperCase()).join("")
+  );
+}
+
+/**
+ * Normaliza o valor editado no painel "Valor" (`F7`) antes de gravar na célula (para `UPDATE` ou `INSERT`):
+ * - No modo `json`, compacta o JSON em uma única linha (`JSON.stringify(JSON.parse(...))`), garantindo que a indentação e as quebras de linha do modo `Formatado` nunca sejam salvas no banco nem quebrem o `UPDATE`, o `INSERT` ou o "Ver SQL".
+ * - Nos modos `xml` e `html`, remove as quebras de linha e a indentação entre tags geradas pela visualização formatada.
+ * - Em colunas binárias (`BYTEA`, `BLOB`, `BINARY`, `VARBINARY`, `BYTE`), garante que o valor saia sempre no formato hexadecimal `"0x..."` esperado pela API.
+ */
+export function normalizeEditedCellValue(
+  draft: string,
+  options: { format: CellValueFormat; isBinaryColumn: boolean },
+): string {
+  let normalized = draft;
+
+  if (options.format === "json") {
+    const trimmed = draft.trim();
+    if (trimmed.length > 0) {
+      try {
+        normalized = JSON.stringify(JSON.parse(trimmed));
+      } catch {
+        normalized = draft;
+      }
+    }
+  } else if (options.format === "xml" || options.format === "html") {
+    const trimmed = draft.trim();
+    if (trimmed.startsWith("<") && (trimmed.includes("\n") || trimmed.includes("\r"))) {
+      normalized = trimmed.replace(/>\s*\r?\n\s*</g, "><");
+    }
+  }
+
+  if (options.isBinaryColumn) {
+    const trimmed = normalized.trim();
+    if (/^0x(?:[0-9a-fA-F]{2})*$/i.test(trimmed)) {
+      return "0x" + trimmed.slice(2).toUpperCase();
+    }
+    if (/^\\x(?:[0-9a-fA-F]{2})*$/i.test(trimmed)) {
+      return "0x" + trimmed.slice(2).toUpperCase();
+    }
+    return bytesToHexPrefixed(new TextEncoder().encode(normalized));
+  }
+
+  return normalized;
+}
+
 /** Converte um texto `"0x..."` em `Uint8Array`, ou `null` quando não é hexadecimal par. */
 export function hexToBytes(value: string): Uint8Array | null {
   if (!isHexPrefixedBinary(value)) return null;
