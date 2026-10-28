@@ -673,12 +673,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => new([.. result.Source.Tables.Select(table => table.Name)], [.. result.Columns.Select(column => column.Origin?.Table ?? 0).Where(table => table != 0).Distinct()]);
 
     private static ESqlDialect DialectOf(Session session)
-        => session.Info.Engine switch
-        {
-            EDatabaseEngine.Db2 => ESqlDialect.Db2,
-            EDatabaseEngine.Informix => ESqlDialect.Informix,
-            _ => ESqlDialect.PostgreSql
-        };
+        => ReadOnlySql.DialectOf(session.Info.Engine);
 
     /// <summary>
     /// RN-EDIT-010: o alvo da edição de um resultado, consultado uma vez e guardado com ele. O resultado inteiro só leitura responde

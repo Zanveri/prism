@@ -56,7 +56,7 @@ export type Folder = z.infer<typeof folderSchema>;
 
 export const foldersSchema = z.array(folderSchema);
 
-export const engineSchema = z.literal([1, 2, 3], { error: "Escolha o banco de dados." });
+export const engineSchema = z.literal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], { error: "Escolha o banco de dados." });
 
 /**
  * A conexão como a API a devolve: sem a senha, só `hasPassword` (RN-CONN-001). A tela não aceita
@@ -119,6 +119,16 @@ export const engineOptions = [
   { value: 1, label: "PostgreSQL", tag: engineTags[1], defaultPort: 5432, verificationQuery: "SELECT 1" },
   { value: 2, label: "Db2", tag: engineTags[2], defaultPort: 50000, verificationQuery: "SELECT 1 FROM SYSIBM.SYSDUMMY1" },
   { value: 3, label: "Informix", tag: engineTags[3], defaultPort: 9089, verificationQuery: "SELECT 1 FROM systables WHERE tabid = 1" },
+  { value: 4, label: "SQLite", tag: engineTags[4], defaultPort: 1, verificationQuery: "SELECT 1" },
+  { value: 5, label: "MySQL", tag: engineTags[5], defaultPort: 3306, verificationQuery: "SELECT 1" },
+  { value: 6, label: "MariaDB", tag: engineTags[6], defaultPort: 3306, verificationQuery: "SELECT 1" },
+  { value: 7, label: "Microsoft SQL Server", tag: engineTags[7], defaultPort: 1433, verificationQuery: "SELECT 1" },
+  { value: 8, label: "Oracle", tag: engineTags[8], defaultPort: 1521, verificationQuery: "SELECT 1 FROM DUAL" },
+  { value: 9, label: "Firebird", tag: engineTags[9], defaultPort: 3050, verificationQuery: "SELECT 1 FROM RDB$DATABASE" },
+  { value: 10, label: "DuckDB", tag: engineTags[10], defaultPort: 1, verificationQuery: "SELECT 1" },
+  { value: 11, label: "ClickHouse", tag: engineTags[11], defaultPort: 8123, verificationQuery: "SELECT 1" },
+  { value: 12, label: "Google BigQuery", tag: engineTags[12], defaultPort: 443, verificationQuery: "SELECT 1" },
+  { value: 13, label: "Databricks", tag: engineTags[13], defaultPort: 443, verificationQuery: "SELECT 1" },
 ] as const;
 
 /** O rótulo, a etiqueta, a porta sugerida e a consulta de verificação de um banco. */

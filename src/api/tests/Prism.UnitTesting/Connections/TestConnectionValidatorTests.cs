@@ -51,7 +51,7 @@ public sealed class TestConnectionValidatorTests
     [Trait("TestConnectionValidator", "TestConnectionCommand")]
     [Fact(DisplayName = "Erro banco fora da lista")]
     public void TestConnection_ShouldBeError_EngineInvalid()
-        => AssertInvalid(Valid(engine: (EDatabaseEngine)9), nameof(TestConnectionCommand.Engine));
+        => AssertInvalid(Valid(engine: (EDatabaseEngine)14), nameof(TestConnectionCommand.Engine));
 
     [Trait("TestConnectionValidator", "TestConnectionCommand")]
     [Fact(DisplayName = "Erro host em branco")]

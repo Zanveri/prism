@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Driver } from "@/app/drivers/_lib/drivers.schema";
 import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 
+import db2Logo from "@/assets/databases/db2.png";
 import { connectionsCopy } from "../_lib/connections.copy";
 import { newVerification, unprotected, type Connection, type Folder } from "../_lib/connections.schema";
 import { ConnectionDialog, type ConnectionDialogRequest } from "./connection-dialog";
@@ -76,7 +77,7 @@ describe("o diálogo de conexão sobre a área de trabalho (RN-NAV-004 e 005)", 
     expect(markup).toContain("Conexão Db2 salva no seu cofre.");
     expect(markup).not.toContain('role="radiogroup"');
     expect(settingsBlock(markup)).toBe('<div class="flex flex-col gap-5">');
-    expect(markup).toMatch(/>DB2<\/span>[\s\S]*?>Db2<\/span>[\s\S]*?>Driver não instalado<\/span>/);
+    expect(markup).toMatch(new RegExp(`<img[^>]*src="${db2Logo}"[^>]*>[\\s\\S]*?>Db2<\\/span>[\\s\\S]*?>Driver não instalado<\\/span>`));
     expect(markup).toContain('<input type="hidden" name="engine" value="2"/>');
     expect(markup).toMatch(/<input [^>]*name="port"[^>]*value="50000"/);
     expect(markup).toContain('placeholder="Deixe vazio para manter"');

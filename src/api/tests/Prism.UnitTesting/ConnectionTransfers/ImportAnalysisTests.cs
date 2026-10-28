@@ -205,7 +205,7 @@ public sealed class ImportAnalysisTests
     /// </summary>
     [Trait("ImportAnalysis", "Analyze")]
     [Theory(DisplayName = "OK conexão fora da regra fica não importável, com o motivo")]
-    [InlineData("banco-desconhecido", "Este Prism não conhece o banco MySql.")]
+    [InlineData("banco-desconhecido", "Este Prism não conhece o banco Snowflake.")]
     [InlineData("banco-em-numero", "Este Prism não conhece o banco 1.")]
     [InlineData("banco-em-minusculas", "Este Prism não conhece o banco informix.")]
     [InlineData("sem-banco", "Falta o banco da conexão no arquivo.")]
@@ -242,7 +242,7 @@ public sealed class ImportAnalysisTests
         var connection = FileConnection("c1", null, "DATA FIX");
         switch (change)
         {
-            case "banco-desconhecido": connection["engine"] = "MySql"; break;
+            case "banco-desconhecido": connection["engine"] = "Snowflake"; break;
             case "banco-em-numero": connection["engine"] = 1; break;
             case "banco-em-minusculas": connection["engine"] = "informix"; break;
             case "sem-banco": connection.Remove("engine"); break;

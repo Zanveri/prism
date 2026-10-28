@@ -6,4 +6,4 @@ namespace Prism.Infrastructure.Drivers.Models;
 /// últimos campos são o SHA-512 do assembly gerenciado e da biblioteca nativa principal como foram extraídos: é contra eles que a
 /// partida confere os arquivos antes de carregar o driver.
 /// </summary>
-internal sealed record DriverInstallRecord(string DriverID, string Version, string PackageID, string PackageSha512, DriverLicense License, DateTimeOffset AcceptedAt, string ManagedAssemblySha512, string NativeLibrarySha512);
+internal sealed record DriverInstallRecord(string DriverID, string Version, string PackageID, string PackageSha512, DriverLicense License, DateTimeOffset AcceptedAt, string ManagedAssemblySha512, string? NativeLibrarySha512 = null);

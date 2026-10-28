@@ -100,7 +100,7 @@ describe("actionOf: o botão de cada linha (itens B, C, D e F)", () => {
 
 describe("knownEngines", () => {
   it("deixa as etiquetas só dos bancos que o Prism conhece, sem repetir", () => {
-    expect(knownEngines(driver("a", { engines: [3, 9, 2, 2, 0] }))).toEqual([2, 3]);
+    expect(knownEngines(driver("a", { engines: [3, 99, 2, 2, 0] }))).toEqual([2, 3]);
     expect(knownEngines(driver("a", { engines: [] }))).toEqual([]);
   });
 });

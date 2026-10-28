@@ -212,7 +212,7 @@ public sealed class ImportPlacementTests
         //Arrange
         var content = FileContent(
             [FileFolder("f1", null, "Estoque"), FileFolder("f2", "f1", "Production PRD"), FileFolder("f3", "f1", "Desenvolvimento DEV"), FileFolder("f4", null, "Vazia")],
-            [FileConnection("c1", "f2", "DATA FIX"), FileConnection("c2", "f3", "NOMINAL"), FileConnection("c3", "f2", "Inválida", engine: "MySql")]);
+            [FileConnection("c1", "f2", "DATA FIX"), FileConnection("c2", "f3", "NOMINAL"), FileConnection("c3", "f2", "Inválida", engine: "Snowflake")]);
 
         //Act
         var result = Place(Document(), content, selected: new HashSet<string> { "c1", "f4", "c3" });

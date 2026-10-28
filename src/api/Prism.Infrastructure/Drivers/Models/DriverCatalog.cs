@@ -25,7 +25,7 @@ internal sealed record DriverPackageMapping(string From, string To);
 /// guarda) e o tamanho dele. `Files` e `Trees` são as únicas entradas que saem do pacote (RN-DRIVER-003); `ManagedAssembly` e
 /// `NativeLibrary` são os dois arquivos, já na pasta do driver, cujo hash é gravado na instalação e conferido na partida.
 /// </summary>
-internal sealed record DriverPackage(string ID, string Sha512, long SizeBytes, DriverLicense License, IReadOnlyList<DriverPackageMapping> Files, IReadOnlyList<DriverPackageMapping> Trees, string ManagedAssembly, string NativeLibrary, string? Note = null);
+internal sealed record DriverPackage(string ID, string Sha512, long SizeBytes, DriverLicense License, IReadOnlyList<DriverPackageMapping> Files, IReadOnlyList<DriverPackageMapping> Trees, string ManagedAssembly, string? NativeLibrary = null, string? Note = null);
 
 internal sealed record DriverDefinition(string ID, string Name, string Vendor, EDriverKind Kind, IReadOnlyList<EDatabaseEngine>? Engines = null, string? Version = null, DriverLicense? License = null, string? UnavailableNote = null, IReadOnlyDictionary<string, DriverPackage>? Packages = null)
 {
@@ -151,7 +151,7 @@ internal sealed partial record DriverCatalog(IReadOnlyList<DriverDefinition> Dri
         if (package.Trees.Any(tree => !DriverPaths.IsSafeTree(tree.From) || !DriverPaths.IsSafeTree(tree.To)))
             throw Invalid($"{where} tem uma pasta com caminho que não é relativo e simples.");
 
-        if (!DriverPaths.IsSafe(package.ManagedAssembly) || !DriverPaths.IsSafe(package.NativeLibrary))
+        if (!DriverPaths.IsSafe(package.ManagedAssembly) || (package.NativeLibrary is not null && !DriverPaths.IsSafe(package.NativeLibrary)))
             throw Invalid($"{where} não diz o assembly gerenciado ou a biblioteca nativa.");
     }
 

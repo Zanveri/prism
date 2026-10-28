@@ -71,7 +71,7 @@ public sealed class ImportHandlersTests
                 FileConnection("c1", "f2", "DATA FIX", verificationQuery: "SELECT 1 FROM systables WHERE tabid = 1"),
                 FileConnection("c2", "f2", "NOMINAL", userName: "nominal", password: null),
                 FileConnection("c3", "f2", "Sem credenciais", userName: null, password: null),
-                FileConnection("c4", "f2", "MySql", engine: "MySql")
+                FileConnection("c4", "f2", "Snowflake", engine: "Snowflake")
             ]);
 
     /// <summary>
@@ -111,7 +111,7 @@ public sealed class ImportHandlersTests
         Assert.Equal(("nominal", false), (connections["c2"].UserName, connections["c2"].HasPassword));
         Assert.Equal((string.Empty, false), (connections["c3"].UserName, connections["c3"].HasPassword));
         Assert.Null(connections["c4"].Engine);
-        Assert.Equal("Este Prism não conhece o banco MySql.", connections["c4"].Invalid);
+        Assert.Equal("Este Prism não conhece o banco Snowflake.", connections["c4"].Invalid);
         Assert.Null(connections["c4"].Effective);
         Assert.DoesNotContain("senha-ficticia-do-banco", System.Text.Json.JsonSerializer.Serialize(preview));
         Assert.Null(_saved);
