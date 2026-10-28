@@ -87,7 +87,7 @@ describe("CellValueViewerPanel (painel Valor — F7)", () => {
     expect(byTestId(tree, "value-viewer-textarea")?.props.value).toBe('{\n  "id": 1,\n  "ativo": true\n}');
   });
 
-  it("permite trocar para o formato Binary e exibe a grade hexadecimal + ASCII igual ao DBeaver", () => {
+  it("permite trocar para o formato Binary usando o componente Select e exibe a grade hexadecimal + ASCII igual ao DBeaver", () => {
     rt.unmount();
     const state = makeState({
       column: { name: "Testa", type: "varchar", kind: "text" },
@@ -97,7 +97,7 @@ describe("CellValueViewerPanel (painel Valor — F7)", () => {
     expect(byTestId(tree, "value-viewer-format-select")?.props.value).toBe("text");
 
     const select = byTestId(tree, "value-viewer-format-select")!;
-    (select.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "binary" } });
+    (select.props.onChange as (value: string) => void)("binary");
 
     tree = rt.render(() => CellValueViewerPanel({ state }));
     expect(byTestId(tree, "value-viewer-format-select")?.props.value).toBe("binary");
@@ -108,6 +108,50 @@ describe("CellValueViewerPanel (painel Valor — F7)", () => {
     const asciiCell = byTestId(tree, "value-viewer-hex-ascii-0");
     expect(offsetCell?.props.children).toBe("00000000");
     expect(asciiCell?.props.children).toBe("Testando");
+  });
+
+  it("permite arrastar a divisória lateral para aumentar ou diminuir a largura do painel Valor", () => {
+    rt.unmount();
+    const state = makeState();
+    let tree = rt.render(() => CellValueViewerPanel({ state }));
+
+    const panel = byTestId(tree, "cell-value-viewer-panel")!;
+    expect((panel.props.style as { width: number }).width).toBe(352);
+
+    const handle = byTestId(tree, "value-viewer-resize-handle")!;
+    expect(handle.props.role).toBe("separator");
+    expect(handle.props["aria-orientation"]).toBe("vertical");
+
+    // Arrasta 120px para a esquerda -> aumenta a largura de 352 para 472
+    (handle.props.onPointerDown as (event: { pointerId: number; clientX: number; currentTarget: { setPointerCapture?: (id: number) => void } }) => void)({
+      pointerId: 1,
+      clientX: 600,
+      currentTarget: { setPointerCapture: vi.fn() },
+    });
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+    (byTestId(tree, "value-viewer-resize-handle")!.props.onPointerMove as (event: { clientX: number }) => void)({
+      clientX: 480,
+    });
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+    expect((byTestId(tree, "cell-value-viewer-panel")!.props.style as { width: number }).width).toBe(472);
+
+    // Arrasta para a direita para diminuir ainda mais (ex.: 220px)
+    (byTestId(tree, "value-viewer-resize-handle")!.props.onPointerMove as (event: { clientX: number }) => void)({
+      clientX: 732,
+    });
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+    expect((byTestId(tree, "cell-value-viewer-panel")!.props.style as { width: number }).width).toBe(220);
+
+    (byTestId(tree, "value-viewer-resize-handle")!.props.onPointerUp as () => void)();
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+
+    // Teclado (ArrowLeft aumenta 16px, ArrowRight diminui 16px)
+    (byTestId(tree, "value-viewer-resize-handle")!.props.onKeyDown as (event: { key: string; preventDefault: () => void }) => void)({
+      key: "ArrowLeft",
+      preventDefault: vi.fn(),
+    });
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+    expect((byTestId(tree, "cell-value-viewer-panel")!.props.style as { width: number }).width).toBe(236);
   });
 
   it("copia o valor exibido, salva em arquivo e abre no editor externo com a extensão do formato ativo", async () => {

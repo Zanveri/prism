@@ -171,6 +171,7 @@ export const recordsCopy = {
     apply: "Aplicar",
     revert: "Reverter",
     close: "Fechar painel Valor (F7)",
+    resize: "Ajustar a largura do painel Valor",
     noCellSelected: "Selecione uma célula na grade para visualizar o valor.",
     invalidJson: "O conteúdo não é um JSON válido; exibindo na forma crua.",
     bytesCount: (bytes: number) => `${bytes.toLocaleString("pt-BR")} ${bytes === 1 ? "byte" : "bytes"}`,

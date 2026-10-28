@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
-import { CloseIcon, DownloadIcon, DuplicateIcon, PencilIcon, UploadIcon, useHost, useToast } from "@/components/ui";
+import { CloseIcon, DownloadIcon, DuplicateIcon, PencilIcon, Select, UploadIcon, useHost, useToast } from "@/components/ui";
 import { openExternalEditor } from "@/lib/api/bridge";
 import { hostClipboard } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
@@ -23,6 +23,14 @@ import { saveCellFile } from "../_lib/save-file";
 
 const copy = recordsCopy.valueViewer;
 const HEX_COLUMNS = ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0A", "0B", "0C", "0D", "0E", "0F"] as const;
+
+/** Largura padrão, mínima e máxima (em px) do painel "Valor", ajustável arrastando a borda esquerda para os lados. */
+const DEFAULT_VIEWER_WIDTH = 352;
+const MIN_VIEWER_WIDTH = 180;
+const MAX_VIEWER_WIDTH = 1200;
+const RESIZE_KEY_STEP = 16;
+
+const clampViewerWidth = (width: number) => Math.min(MAX_VIEWER_WIDTH, Math.max(MIN_VIEWER_WIDTH, Math.round(width)));
 
 function ExternalEditorIcon({ className }: { className?: string }) {
   return (
@@ -70,7 +78,7 @@ type CellValueViewerPanelProps = {
 
 /**
  * Painel lateral "Valor" (atalho `F7`), inspirado no visualizador de células do DBeaver:
- * - Fica ao lado da grade de resultados (tanto nos Registros da tabela quanto no resultado de consultas SQL), mantendo os resultados visíveis.
+ * - Fica ao lado da grade de resultados (tanto nos Registros da tabela quanto no resultado de consultas SQL), mantendo os resultados visíveis e permitindo arrastar sua borda esquerda para aumentar ou diminuir a largura.
  * - Detecta automaticamente o formato (`JSON`, `XML`, `HTML`, `Binary` ou `Text`) a partir do tipo de dado da coluna (`JSON`, `JSONB`, `BSON`, `XML`, `BYTEA`, `BLOB`, `TEXT`, etc.).
  * - No modo `JSON` (e também `XML` / `HTML`), permite ver tanto a forma formatada (`Formatado`) quanto a forma crua (`Cru`).
  * - No modo `Binary`, exibe a tabela hexadecimal + ASCII (16 bytes por linha: `Offset | 00..0F | ASCII`).
@@ -79,8 +87,11 @@ type CellValueViewerPanelProps = {
 export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueViewerPanelProps) {
   const host = useHost();
   const toast = useToast();
+  const panelRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [width, setWidth] = useState(DEFAULT_VIEWER_WIDTH);
+  const [drag, setDrag] = useState<{ startX: number; startWidth: number } | null>(null);
   const [manualFormat, setManualFormat] = useState<{ column: number; format: CellValueFormat } | null>(null);
   const [formatted, setFormatted] = useState(true);
   const [wordWrap, setWordWrap] = useState(true);
@@ -136,6 +147,24 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
 
   const bytesCount = rawValue !== null ? cellValueToBytes(hasDraft ? draftState.value : rawValue, isBinaryColumn).length : 0;
   const charsCount = displayedText.length;
+
+  function handleResizePointerDown(event: PointerEvent<HTMLDivElement>) {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const measuredWidth = panelRef.current?.getBoundingClientRect().width ?? width;
+    setDrag({ startX: event.clientX, startWidth: measuredWidth > 0 ? measuredWidth : width });
+  }
+
+  function handleResizePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (drag === null) return;
+    // O painel Valor fica à direita da grade: arrastar a divisória para a esquerda aumenta a largura; para a direita, diminui.
+    setWidth(clampViewerWidth(drag.startWidth + (drag.startX - event.clientX)));
+  }
+
+  function handleResizeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    setWidth((current) => clampViewerWidth(current + (event.key === "ArrowLeft" ? RESIZE_KEY_STEP : -RESIZE_KEY_STEP)));
+  }
 
   function handleFormatChange(nextFormat: CellValueFormat) {
     setManualFormat({ column: active?.column ?? -1, format: nextFormat });
@@ -224,10 +253,31 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
 
   return (
     <aside
+      ref={panelRef}
       aria-label={copy.title}
       data-testid="cell-value-viewer-panel"
-      className="flex h-full w-88 min-w-72 max-w-[50%] shrink-0 flex-col border-l border-border bg-panel select-text"
+      style={{ width }}
+      className="relative flex h-full max-w-[85%] shrink-0 flex-col border-l border-border bg-panel select-text"
     >
+      {/* Divisória vertical na borda esquerda: arrastar para os lados (ou setas) aumenta ou diminui a largura do painel Valor */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={copy.resize}
+        aria-valuemin={MIN_VIEWER_WIDTH}
+        aria-valuemax={MAX_VIEWER_WIDTH}
+        aria-valuenow={width}
+        data-testid="value-viewer-resize-handle"
+        data-dragging={drag === null ? undefined : ""}
+        tabIndex={0}
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={() => setDrag(null)}
+        onPointerCancel={() => setDrag(null)}
+        onKeyDown={handleResizeKeyDown}
+        className="absolute inset-y-0 -left-1 z-20 w-2 cursor-col-resize touch-none bg-transparent select-none transition-colors hover:bg-accent/60 focus-visible:bg-accent/60 data-[dragging]:bg-accent"
+      />
+
       {/* Cabeçalho estilo DBeaver: aba "Valor" + informações da coluna + ações rápidas */}
       <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-border bg-surface px-2.5">
         <div className="flex min-w-0 items-center gap-2">
@@ -289,19 +339,15 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
       {/* Barra de formato (Binary, HTML, JSON, Text, XML) + alternância Formatado / Cru + Quebrar linhas */}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-1.5 border-b border-border bg-panel px-2.5 py-1.5">
         <div className="flex items-center gap-1.5">
-          <select
+          <Select
             aria-label={copy.formatLabel}
             data-testid="value-viewer-format-select"
             value={format}
-            onChange={(event) => handleFormatChange(event.target.value as CellValueFormat)}
-            className="h-6 rounded border border-border bg-surface px-1.5 text-xs text-ink outline-none focus:border-accent"
-          >
-            {CELL_VALUE_FORMATS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={CELL_VALUE_FORMATS}
+            onChange={(value) => handleFormatChange(value as CellValueFormat)}
+            wideList
+            className="h-6 min-h-6 w-24 gap-1.5 px-2 py-0 text-xs [&>span:first-child]:truncate"
+          />
 
           {supportsFormatToggle && (
             <div className="inline-flex h-6 items-center rounded border border-border bg-surface p-0.5">
