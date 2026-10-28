@@ -9,7 +9,7 @@ const copy = workbenchCopy.navigator;
  * Uma linha da árvore (RN-ARVORE-001). `loading` e `error` são as linhas que o modelo cria no
  * lugar dos filhos de um nó aberto que ainda não carregou ou que falhou (RN-ARVORE-005).
  */
-export type NavKind = "folder" | "connection" | "database" | "schema" | "group" | "table" | "view" | "routine" | "column" | "index" | "foreignKey" | "error" | "loading";
+export type NavKind = "folder" | "connection" | "database" | "schema" | "group" | "table" | "view" | "routine" | "sequence" | "column" | "index" | "foreignKey" | "error" | "loading";
 
 export type NavNode = {
   key: string;
@@ -29,7 +29,7 @@ export type NavNode = {
   errorDriverID?: string;
 };
 
-export type ObjectsKind = "tables" | "views" | "routines";
+export type ObjectsKind = "tables" | "views" | "routines" | "sequences";
 export type TableLevel = "columns" | "indexes" | "foreignKeys";
 
 /**
@@ -261,13 +261,13 @@ export function databaseNodes(connectionId: string, databases: readonly ServerDa
 /** Esquemas comuns primeiro, os de sistema depois (RN-ARVORE-004); cada grupo em ordem alfabética. `database`: o outro banco do servidor de onde vieram. */
 export function schemaNodes(connectionId: string, schemas: DatabaseSchema[], database?: string): NavNode[] {
   return [...schemas]
-    .sort((a, b) => Number(a.isSystem) - Number(b.isSystem) || byName(a, b))
+    .sort(byName)
     .map((schema): NavNode => ({ key: navKey({ type: "schema", connectionId, ...inDatabase(database), schema: schema.name }), kind: "schema", label: schema.name, depth: 0, hasChildren: true, ...(schema.isSystem ? { detail: copy.system } : {}) }));
 }
 
 /** Tabelas, Visões e Rotinas: fixos, sem ir ao banco. */
 export function schemaGroupNodes(connectionId: string, schema: string, database?: string): NavNode[] {
-  return (["tables", "views", "routines"] as const).map((objects): NavNode => ({ key: navKey({ type: "objects", connectionId, ...inDatabase(database), schema, objects }), kind: "group", label: copy.groups[objects], depth: 0, hasChildren: true }));
+  return (["tables", "views", "routines", "sequences"] as const).map((objects): NavNode => ({ key: navKey({ type: "objects", connectionId, ...inDatabase(database), schema, objects }), kind: "group", label: copy.groups[objects], depth: 0, hasChildren: true }));
 }
 
 /** Só a tabela abre (RN-ARVORE-001); visão e rotina são folhas. */
@@ -285,6 +285,7 @@ export function objectNodes(connectionId: string, schema: string, objects: Objec
 export function objectNode(parent: ObjectsPath, item: DatabaseObject, index: number): NavNode {
   if (item.kind === "table") return { key: navKey({ type: "table", connectionId: parent.connectionId, ...inDatabase(parent.database), schema: parent.schema, table: item.name }), kind: "table", label: item.name, depth: 0, hasChildren: true };
   if (item.kind === "view") return { key: leafKey(parent, "view", index), kind: "view", label: item.name, depth: 0, hasChildren: false };
+  if (item.kind === "sequence") return { key: leafKey(parent, "sequence", index), kind: "sequence", label: item.name, depth: 0, hasChildren: false };
   return { key: leafKey(parent, "routine", index), kind: "routine", label: item.name, depth: 0, hasChildren: false, detail: copy.routineKinds[item.kind] };
 }
 

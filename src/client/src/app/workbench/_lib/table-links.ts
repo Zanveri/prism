@@ -25,7 +25,7 @@ export function linkCatalog(levels: readonly CachedLevel[], objectNames?: Object
   const catalog = new Map<string, Set<string>>();
   for (const { key, nodes } of levels) {
     const path = levelPathOf(key);
-    if (path?.type !== "objects" || path.objects === "routines") continue;
+    if (path?.type !== "objects" || (path.objects !== "tables" && path.objects !== "views")) continue;
     const names = catalog.get(path.schema) ?? new Set<string>();
     for (const node of nodes) names.add(node.label);
     catalog.set(path.schema, names);

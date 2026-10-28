@@ -18,7 +18,7 @@ export const workbenchCopy = {
 
     // As linhas que o modelo cria no lugar de um nível ainda sem filhos.
     loading: "Carregando…",
-    groups: { tables: "Tabelas", views: "Visões", routines: "Rotinas", columns: "Colunas", indexes: "Índices", foreignKeys: "Chaves estrangeiras" },
+    groups: { tables: "Tabelas", views: "Visões", routines: "Rotinas", sequences: "Sequências", columns: "Colunas", indexes: "Índices", foreignKeys: "Chaves estrangeiras" },
     system: "sistema",
     nullable: "nulo",
     primaryKey: "PK",

@@ -49,6 +49,7 @@ export {
   PowerIcon,
   RefreshIcon,
   RoutineIcon,
+  SequenceIcon,
   SearchIcon,
   StarIcon,
   StopIcon,
