@@ -11,6 +11,7 @@ import {
   clampZoom,
   diagramMetrics,
   fitText,
+  fitTitle,
   fitZoom,
   maxZoom,
   minZoom,
@@ -89,9 +90,8 @@ type TableBoxProps = {
 function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, onSelect, onOpen }: TableBoxProps) {
   const title = box.title ?? box.ref.name;
   const highlighted = box.center || selected;
-  const boxMaxChars = box.width === 264 ? maxChars : Math.max(maxChars, Math.floor((maxChars * (box.width - 32)) / (264 - 32)));
-  const titleCut = title.length > boxMaxChars;
-  const displayTitle = titleCut ? `${title.slice(0, Math.max(1, boxMaxChars - 1))}…` : title;
+  const boxMaxChars = box.width === 264 ? maxChars : Math.max(maxChars, Math.floor((maxChars * (box.width - 40)) / (264 - 32)));
+  const fittedTitle = fitTitle(title, boxMaxChars - 1);
   const body = (
     <>
       <rect
@@ -103,8 +103,8 @@ function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, 
         strokeWidth="1"
       />
       <text x={textX} y={boxPaddingY + rowHeight / 2} dominantBaseline="central" className="fill-ink font-mono text-[13px] font-semibold" style={{ fontSize: "inherit", fontFamily: "inherit" }}>
-        {titleCut ? <title>{title}</title> : null}
-        {displayTitle}
+        {fittedTitle.cut ? <title>{title}</title> : null}
+        {fittedTitle.text}
       </text>
       {box.columns?.map((column, index) => <ColumnRow key={column.name} column={column} y={boxPaddingY + rowHeight * (index + 1) + rowHeight / 2} maxChars={boxMaxChars} />)}
     </>

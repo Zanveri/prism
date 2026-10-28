@@ -338,6 +338,30 @@ const rowChars = 29;
 const ellipsize = (text: string, room: number) => (text.length <= room ? text : `${text.slice(0, Math.max(1, room - 1))}…`);
 
 /**
+ * Ajusta o título da tabela ao espaço do cabeçalho da caixa. Quando o título vem qualificado
+ * (`esquema.tabela`) e passa do limite, encurta primeiro o prefixo do esquema para preservar o nome da tabela.
+ */
+export function fitTitle(title: string, maxChars = rowChars - 1): { text: string; cut: boolean } {
+  const budget = Math.max(8, maxChars);
+  if (title.length <= budget) return { text: title, cut: false };
+
+  const dot = title.indexOf(".");
+  if (dot > 0) {
+    const schema = title.slice(0, dot);
+    const table = title.slice(dot + 1);
+    if (table.length + 5 <= budget) {
+      const schemaRoom = budget - table.length - 2;
+      return { text: `${schema.slice(0, schemaRoom)}….${table}`, cut: true };
+    }
+    const prefix = schema.length > 5 ? `${schema.slice(0, 4)}….` : `${schema}.`;
+    const tableRoom = Math.max(4, budget - prefix.length);
+    return { text: `${prefix}${ellipsize(table, tableRoom)}`, cut: true };
+  }
+
+  return { text: ellipsize(title, budget), cut: true };
+}
+
+/**
  * O nome e o tipo de uma coluna ajustados à linha da caixa, que não quebra nem rola. A marca de chave
  * (`PK`, `FK`) leva o seu espaço; o que passar do orçamento de caracteres encurta com reticências, o
  * tipo primeiro (guarda ao menos o começo) e depois o nome. `cut` diz se algo foi cortado: a linha

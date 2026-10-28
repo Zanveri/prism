@@ -3,7 +3,7 @@ import type { Preferences } from "@/app/settings/_lib/preferences";
 import { appliedTheme, systemPrefersLight, type ThemeId } from "@/app/settings/_lib/theme";
 
 import { saveBlob, saveText } from "./save-file";
-import { diagramMetrics, fitText, rowHeight, type DiagramBox, type DiagramLayout } from "./table-diagram";
+import { diagramMetrics, fitText, fitTitle, rowHeight, type DiagramBox, type DiagramLayout } from "./table-diagram";
 
 export type DiagramPalette = {
   background: string;
@@ -230,9 +230,6 @@ export function pngExportScale(width: number, height: number, desiredScale = 3, 
   return Math.max(1, Math.min(desiredScale, bySide, byArea));
 }
 
-const defaultTitleMaxChars = 28;
-const fitTitle = (name: string, maxChars = defaultTitleMaxChars) => (name.length <= maxChars ? name : `${name.slice(0, Math.max(1, maxChars - 1))}…`);
-
 function drawRoundedBox(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
   ctx.beginPath();
   if (typeof ctx.roundRect === "function") {
@@ -321,13 +318,13 @@ export function renderDiagramToCanvas(ctx: CanvasRenderingContext2D, layout: Dia
     ctx.setLineDash([]);
 
     // Título da tabela.
-    const boxRowChars = box.width === 264 ? metrics.rowChars : Math.max(metrics.rowChars, Math.floor((metrics.rowChars * (box.width - 32)) / (264 - 32)));
+    const boxRowChars = box.width === 264 ? metrics.rowChars : Math.max(metrics.rowChars, Math.floor((metrics.rowChars * (box.width - 40)) / (264 - 32)));
     const rawTitle = box.title ?? box.ref.name;
     ctx.font = `600 ${metrics.titleFontSize}px ${uiFontFamily}`;
     ctx.fillStyle = box.center ? palette.ink : palette.muted;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(fitTitle(rawTitle, boxRowChars), box.x + 16, box.y + 12 + rowHeight / 2);
+    ctx.fillText(fitTitle(rawTitle, boxRowChars - 1).text, box.x + 16, box.y + 12 + rowHeight / 2);
 
     // Linhas de colunas.
     for (const [index, column] of (box.columns ?? []).entries()) {

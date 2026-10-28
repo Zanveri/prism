@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SchemaDiagram } from "./database-sessions.schema";
 import { connectedToTable, filterDiagramBoxes, layoutDatabaseDiagram, layoutSchemaDiagram } from "./schema-diagram";
-import { rowHeight, tableKey, type DiagramBox, type DiagramLayout } from "./table-diagram";
+import { fitTitle, rowHeight, tableKey, type DiagramBox, type DiagramLayout } from "./table-diagram";
 
 const sampleSchema: SchemaDiagram = {
   tables: [
@@ -306,5 +306,14 @@ describe("connectedToTable e filterDiagramBoxes: busca e destaque no diagrama", 
     const matches = filterDiagramBoxes(layout.boxes, "rh.func");
 
     expect(matches.map((box) => box.key)).toEqual([tableKey({ schema: "rh", name: "funcionarios" })]);
+  });
+
+  it("fitTitle preserva o nome da tabela ao encurtar primeiro o esquema em títulos qualificados longos", () => {
+    expect(fitTitle("pedidos", 28)).toEqual({ text: "pedidos", cut: false });
+
+    const qualified = fitTitle("usr_migration_stock_manager.integration_statuses", 28);
+    expect(qualified.cut).toBe(true);
+    expect(qualified.text.length).toBeLessThanOrEqual(28);
+    expect(qualified.text.endsWith(".integration_statuses")).toBe(true);
   });
 });

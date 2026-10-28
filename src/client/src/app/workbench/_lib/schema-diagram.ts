@@ -4,7 +4,7 @@ import { boxWidth, rowHeight, tableKey, type DiagramBox, type DiagramColumn, typ
 const boxPadding = 12;
 const margin = 64;
 const minBoxWidth = boxWidth;
-const maxBoxWidth = 368;
+const maxBoxWidth = 480;
 const baseColumnGap = 180;
 const corridorPadding = 40;
 const minTrackSpacing = 16;
@@ -70,7 +70,7 @@ function estimateBoxWidth(displayTitle: string, columns: DiagramColumn[] | null)
     const rowChars = col.name.length + 1 + col.type.length + marksChars;
     if (rowChars > maxRowChars) maxRowChars = rowChars;
   }
-  const estimated = Math.ceil((maxRowChars * 7.8 + 36) / 8) * 8;
+  const estimated = Math.ceil((maxRowChars * 8.4 + 44) / 8) * 8;
   return Math.max(minBoxWidth, Math.min(maxBoxWidth, estimated));
 }
 
