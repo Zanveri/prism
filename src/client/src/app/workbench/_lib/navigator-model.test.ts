@@ -165,11 +165,11 @@ describe("schemaNodes", () => {
       { name: "public", isSystem: false },
     ]);
 
-    expect(nodes.map((schema) => schema.label)).toEqual(["Álamo", "public", "vendas", "information_schema", "pg_catalog"]);
+    expect(nodes.map((schema) => schema.label)).toEqual(["Álamo", "information_schema", "pg_catalog", "public", "vendas"]);
   });
 
   it("o esquema de sistema é marcado como tal", () => {
-    const [common, system] = schemaNodes("c1", [
+    const [system, common] = schemaNodes("c1", [
       { name: "public", isSystem: false },
       { name: "pg_catalog", isSystem: true },
     ]);
@@ -242,6 +242,12 @@ describe("filhos de um nível", () => {
     expect([view.kind, view.hasChildren]).toEqual(["view", false]);
     expect([procedure.kind, procedure.detail, procedure.hasChildren]).toEqual(["routine", "procedimento", false]);
     expect(fn.detail).toBe("função");
+  });
+
+  it("as quatro listas de um esquema são Tabelas, Visões, Rotinas e Sequências, e as sequências são folhas", () => {
+    expect(schemaGroupNodes("c1", "public").map((group) => group.label)).toEqual(["Tabelas", "Visões", "Rotinas", "Sequências"]);
+    const [seq] = objectNodes("c1", "public", "sequences", [{ name: "seq_pedidos", kind: "sequence" }]);
+    expect([seq.kind, seq.label, seq.hasChildren]).toEqual(["sequence", "seq_pedidos", false]);
   });
 
   it("as três listas de uma tabela são Colunas, Índices e Chaves estrangeiras", () => {
