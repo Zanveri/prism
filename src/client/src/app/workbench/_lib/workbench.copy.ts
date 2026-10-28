@@ -150,6 +150,9 @@ export const workbenchCopy = {
       autocompleteJoins: "Autocompletar ligações…",
       autocompleteJoinsShortcut: "Ctrl+.",
       autocompleteJoinsShortcutMac: "⌘.",
+      formatSql: "Formatar SQL",
+      formatSqlShortcut: "Ctrl+Shift+F",
+      formatSqlShortcutMac: "⇧⌘F",
     },
     joinModal: {
       title: "Sugestão de ligações de tabelas",
