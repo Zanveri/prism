@@ -26,6 +26,7 @@ import { createResultWindows, type ResultWindowEntry } from "./result-windows";
 import { createSplash, splashGeometry } from "./splash";
 import { startUp } from "./startup";
 import { createDbeaverSource } from "./dbeaver-source";
+import { cleanExternalEditorTempDir, openCellInExternalEditor } from "./external-editor";
 import { createTransferDesk } from "./transfer-desk";
 import { createTransferSource } from "./transfer-source";
 import { installedForAllUsers } from "./update/install-scope";
@@ -1013,6 +1014,15 @@ ipcMain.handle("prism:dbeaver-source-release", (event, request: unknown) => {
   return dbeaverSource.release(windowIdOf(event.sender), request);
 });
 
+// Abre o conteúdo textual de uma célula num arquivo temporário seguro (`0o600`) usando o editor de texto padrão do sistema (RN-SHELL-002).
+ipcMain.handle("prism:open-external-editor", (event, request: unknown) => {
+  assertFromApp(event);
+  return openCellInExternalEditor(request, {
+    tempRoot: app.getPath("temp"),
+    openPath: (target) => shell.openPath(target),
+  });
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -1052,6 +1062,7 @@ if (!app.requestSingleInstanceLock()) {
     void Promise.all([transferDesk.releaseAll(), transferSource.releaseAll(), dbeaverSource.releaseAll(), workspaceHub.flush()])
       .then(() => stopApi((running) => closeVaultAndStop(running, (message) => console.log(`[prism] ${message}`))))
       .finally(() => {
+        cleanExternalEditorTempDir(app.getPath("temp"));
         quitting = "ready";
         app.quit();
       });

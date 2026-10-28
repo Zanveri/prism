@@ -2449,3 +2449,38 @@ describe("QueryTabPanel: a cor do ambiente da aba vai para a área de resultado 
     expect((area.tabs?.list as { type: unknown }).type).toBe(ScriptTabs);
   });
 });
+
+
+describe("QueryTabPanel: o painel lateral de Visualizar valor (F7)", () => {
+  beforeEach(() => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+  });
+
+  it("alterna o painel lateral pelo F7 (onToggleValueViewer), abre pelo menu da célula e aplica a edição na célula selecionada", async () => {
+    const view = mount(fakeRunner(rowsState()));
+    expect(view.show().area.editing?.valueViewer?.open).toBe(false);
+
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.onToggleValueViewer!();
+
+    const viewer = view.show().area.editing?.valueViewer;
+    expect(viewer?.open).toBe(true);
+    expect(viewer?.column).toMatchObject({ name: "status", type: "text" });
+    expect(viewer?.value).toBe("aberta");
+    expect(viewer?.editable).toEqual({ editable: true });
+
+    viewer?.onCommitValue?.("fechada");
+    await settle();
+    expect(view.show().area.editing?.valueViewer?.value).toBe("fechada");
+
+    viewer?.onClose();
+    expect(view.show().area.editing?.valueViewer?.open).toBe(false);
+
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    const viewValueItem = view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "viewValue");
+    expect(viewValueItem?.shortcut).toBe("F7");
+    viewValueItem!.onSelect!();
+    expect(view.show().area.editing?.valueViewer?.open).toBe(true);
+  });
+});

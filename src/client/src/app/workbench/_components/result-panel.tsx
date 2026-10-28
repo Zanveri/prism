@@ -20,6 +20,7 @@ import { recall, remember } from "../_lib/tab-memory";
 import { isPersonBusy, type RowsState, type RunnerState, type VariableErrorsState } from "../_lib/use-query-runner";
 import { variableRunCopy } from "../_lib/variable-run.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { CellValueViewerPanel } from "./cell-value-viewer-panel";
 import { EditBar } from "./edit-bar";
 import { GridZoomControls } from "./grid-zoom-controls";
 import { ResultGrid } from "./result-grid";
@@ -452,7 +453,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
           <>
             {banner ?? null}
             {/* O mesmo lugar na árvore com o comando rodando ou não: a grade não é refeita, e a rolagem fica onde estava. */}
-            <div className={cn("flex min-h-0 flex-1 flex-col", running && "opacity-50")}>
+            <div className={cn("flex min-h-0 flex-1 flex-row", running && "opacity-50")}>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <ResultGrid
                 key={rows.id}
                 columns={rows.columns}
@@ -472,6 +474,9 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 onZoom={zoomTo}
                 editing={editing}
               />
+            </div>
+
+              {editing?.valueViewer?.open ? <CellValueViewerPanel state={editing.valueViewer} nullText={nullText} /> : null}
             </div>
 
             {/* RN-EDIT-013: no resultado de um comando, a barra de edição numa linha própria, alinhada à esquerda, entre a grade e os rodapés dela. */}
