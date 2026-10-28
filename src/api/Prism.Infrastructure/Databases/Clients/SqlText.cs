@@ -26,65 +26,9 @@ internal static class SqlText
         "CASE"
     ];
 
-    private static readonly HashSet<string> NonFunctionWords =
-    [
-        "SELECT",
-        "FROM",
-        "WHERE",
-        "AND",
-        "OR",
-        "NOT",
-        "ON",
-        "JOIN",
-        "HAVING",
-        "GROUP",
-        "ORDER",
-        "BY",
-        "INTO",
-        "TABLE",
-        "UPDATE",
-        "SET",
-        "KEY",
-        "REFERENCES",
-        "UNIQUE",
-        "CHECK",
-        "PRIMARY",
-        "FOREIGN",
-        "USING",
-        "INDEX",
-        "VIEW",
-        "WITH",
-        "AS",
-        "OVER",
-        "PARTITION",
-        "FILTER",
-        "WITHIN",
-        "EXISTS",
-        "CASE",
-        "WHEN",
-        "THEN",
-        "ELSE",
-        "IN",
-        "VALUES",
-        "BEGIN",
-        "END",
-        "LOOP",
-        "WHILE",
-        "FOR"
-    ];
-
-    private static readonly HashSet<string> ColumnListIntroducers =
-    [
-        "INTO",
-        "TABLE",
-        "VIEW",
-        "REFERENCES",
-        "INDEX"
-    ];
-
     /// <summary>
     /// Converte textos entre aspas duplas (<c>"..."</c>) escritos em posição de valor ou parâmetro (comparações, <c>LIKE</c>,
-    /// <c>BETWEEN</c>, <c>IN (...)</c>, <c>VALUES (...)</c>, argumentos de função) em constantes de texto entre aspas simples
+    /// <c>BETWEEN</c>, <c>IN (...)</c>, <c>VALUES (...)</c>) em constantes de texto entre aspas simples
     /// (<c>'...'</c>), preservando identificadores qualificados (<c>"esquema"."tabela"</c>, <c>tabela."coluna"</c>) e nomes de tabelas
     /// ou colunas nas cláusulas da consulta.
     /// </summary>
@@ -207,13 +151,7 @@ internal static class SqlText
             return false;
 
         var beforeParen = tokens[openParen - 1];
-        if (beforeParen.IsWord("IN"))
-            return true;
-
-        if (IsValuesTupleParen(tokens, openParen))
-            return true;
-
-        return IsFunctionOrRoutineCallParen(tokens, openParen);
+        return beforeParen.IsWord("IN") || IsValuesTupleParen(tokens, openParen);
     }
 
     private static bool IsValuesTupleParen(List<EditableSql.Token> tokens, int openParen)
@@ -251,51 +189,6 @@ internal static class SqlText
         }
 
         return false;
-    }
-
-    private static bool IsFunctionOrRoutineCallParen(List<EditableSql.Token> tokens, int openParen)
-    {
-        var nameEnd = openParen - 1;
-        var callee = tokens[nameEnd];
-        if (callee.Kind is not (EditableSql.ETokenKind.Word or EditableSql.ETokenKind.Identifier))
-            return false;
-
-        if (callee.Kind == EditableSql.ETokenKind.Word && NonFunctionWords.Contains(callee.Upper))
-            return false;
-
-        var nameStart = nameEnd;
-        while (nameStart >= 2 && tokens[nameStart - 1].Is(".") && tokens[nameStart - 2].Kind is EditableSql.ETokenKind.Word or EditableSql.ETokenKind.Identifier)
-            nameStart -= 2;
-
-        if (nameStart > 0 && tokens[nameStart - 1].Kind == EditableSql.ETokenKind.Word)
-        {
-            var introducer = tokens[nameStart - 1].Upper;
-            if (ColumnListIntroducers.Contains(introducer))
-                return false;
-
-            if (introducer == "ON" && tokens[0].IsWord("CREATE"))
-                return false;
-        }
-
-        var closeParen = FindMatchingCloseParen(tokens, openParen);
-        if (closeParen > 0 && closeParen + 1 < tokens.Count && tokens[closeParen + 1].IsWord("AS") && nameStart > 0 && (tokens[nameStart - 1].IsWord("WITH") || tokens[nameStart - 1].IsWord("RECURSIVE") || tokens[nameStart - 1].Is(",")))
-            return false;
-
-        return true;
-    }
-
-    private static int FindMatchingCloseParen(List<EditableSql.Token> tokens, int openParen)
-    {
-        var depth = 0;
-        for (var index = openParen; index < tokens.Count; index++)
-        {
-            if (tokens[index].Is("("))
-                depth++;
-            else if (tokens[index].Is(")") && --depth == 0)
-                return index;
-        }
-
-        return -1;
     }
 
     /// <summary>

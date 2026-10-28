@@ -141,7 +141,7 @@ public abstract partial class DatabaseEditContractTests
         Assert.That(target.OneAtATime, Is.False);
         Assert.That(target.Columns[Column(page, "status")].Editable, Is.True);
         Assert.That(target.Columns[Column(page, "id")].Editable, Is.True);
-        Assert.That(target.Columns[Column(page, "anexo")], Has.Property(nameof(EditColumn.Editable)).False.And.Property(nameof(EditColumn.Reason)).EqualTo("coluna binária"));
+        Assert.That(target.Columns[Column(page, "anexo")].Editable, Is.True);
 
         if (GeneratedColumn is { } generated)
             Assert.That(target.Columns[Column(page, generated)], Has.Property(nameof(EditColumn.Editable)).False.And.Property(nameof(EditColumn.Reason)).EqualTo("gerada pelo banco"));

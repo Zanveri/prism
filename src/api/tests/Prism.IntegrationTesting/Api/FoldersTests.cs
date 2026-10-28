@@ -522,7 +522,7 @@ public sealed class FoldersTests
         var folders = await ListFoldersAsync(host);
 
         Assert.That(folders.Select(item => item.GetProperty("name").GetString()), Is.EqualTo(new[] { "Alfa", "beta", "Delta", "Gama" }));
-        Assert.That(folders[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "parentID", "name", "environmentName", "environmentColor", "color", "confirmCommands", "readOnly", "protections", "createdAt", "updatedAt" }));
+        Assert.That(folders[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "parentID", "name", "environmentName", "environmentColor", "color", "confirmCommands", "readOnly", "useInternalDescriptions", "protections", "createdAt", "updatedAt" }));
     }
 
     /// <summary>O que foi salvo está no arquivo cifrado, e não na memória da API: fechar o cofre e entrar de novo devolve as pastas.</summary>

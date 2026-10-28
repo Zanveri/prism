@@ -1034,7 +1034,7 @@ public sealed class SqlTextTests
     {
         //Arrange
         const string query = "select * from items where items.description = \"FRIGIDEIRA ACO INOX 30CM ALCA GRANO\" and items.code IN (\"A\", \"B'C\")";
-        const string qualifiedQuery = "select t.\"Col Name\" as \"Meu Alias\" from \"usr_schema\".\"items\" t where t.\"Col Name\" = \"Valor 'X'\"";
+        const string qualifiedQuery = "select t.\"Col Name\" as \"Meu Alias\", LENGTH(\"texto\") from \"usr_schema\".\"items\" t where t.\"Col Name\" = \"Valor 'X'\"";
 
         //Act
         var rewritten = SqlText.RewriteDoubleQuotedLiterals(query, ESqlDialect.Informix);
@@ -1042,6 +1042,6 @@ public sealed class SqlTextTests
 
         //Assert
         Assert.Equal("select * from items where items.description = 'FRIGIDEIRA ACO INOX 30CM ALCA GRANO' and items.code IN ('A', 'B''C')", rewritten);
-        Assert.Equal("select t.\"Col Name\" as \"Meu Alias\" from \"usr_schema\".\"items\" t where t.\"Col Name\" = 'Valor ''X'''", rewrittenQualified);
+        Assert.Equal("select t.\"Col Name\" as \"Meu Alias\", LENGTH(\"texto\") from \"usr_schema\".\"items\" t where t.\"Col Name\" = 'Valor ''X'''", rewrittenQualified);
     }
 }
