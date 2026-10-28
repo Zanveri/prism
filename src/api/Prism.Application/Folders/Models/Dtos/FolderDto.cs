@@ -23,6 +23,8 @@ public sealed record FolderDto
     /// <summary>RN-PROT-002: o somente leitura próprio da pasta. O que vale, com o das pastas acima, está em `Protections`.</summary>
     public bool ReadOnly { get; init; }
 
+    public bool UseInternalDescriptions { get; init; }
+
     /// <summary>RN-PROT-004: as proteções que valem para a pasta (a própria e as das pastas acima) e de onde cada uma vem.</summary>
     public ProtectionsDto Protections { get; init; } = new();
     public DateTime CreatedAt { get; init; }

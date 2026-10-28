@@ -20,6 +20,7 @@ export function movedConnectionInput(connection: Connection, folderID: string | 
     environmentColor: connection.environmentColor,
     confirmCommands: connection.confirmCommands,
     readOnly: connection.readOnly,
+    ...(connection.useInternalDescriptions !== undefined ? { useInternalDescriptions: connection.useInternalDescriptions } : {}),
     ...verificationOf(connection),
   };
 }

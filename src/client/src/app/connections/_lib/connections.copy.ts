@@ -175,6 +175,14 @@ export const connectionsCopy = {
     folderCannotLoosen: (folder: string) => `A pasta ${folder} impõe esta proteção a tudo o que está dentro dela, e esta pasta não a afrouxa: para tirá-la, mude a pasta ${folder} ou mova esta para fora dela.`,
   },
 
+  internalDescriptions: {
+    label: "Utilizar descrições internas",
+    folderHint: "Todas as conexões desta pasta e das subpastas terão esta opção marcada por padrão, mas ela pode ser desmarcada individualmente em cada conexão.",
+    connectionHint: "Exibe a descrição da tabela (diaabr) e dos atributos (diadii) consultando o mesmo servidor e banco onde a tabela está sendo visualizada.",
+    inheritedFrom: (folder: string) => `Marcado por padrão pela pasta ${folder} (pode ser desmarcado nesta conexão).`,
+    overriddenOffFrom: (folder: string) => `Desmarcado nesta conexão (a pasta ${folder} tem esta opção marcada).`,
+  },
+
   // RN-PROT-003: a senha do usuário que a mudança do somente leitura pede, num diálogo como o de revelar a senha.
   userPassword: {
     title: "Confirme a sua senha",

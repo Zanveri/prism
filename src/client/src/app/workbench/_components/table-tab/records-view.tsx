@@ -41,6 +41,7 @@ import { ResultPanel } from "../result-panel";
 import { UnsavedEditsDialog } from "../unsaved-edits-dialog";
 import type { FilterFieldHandle } from "../filter-field";
 import { RecordsFilter } from "./records-filter";
+import { TableDescriptionBanner } from "./table-description-banner";
 
 type RecordsViewProps = {
   /** O id da aba: o filtro e a ordem ficam lembrados por ele (`tab-memory.ts`), e sobrevivem a trocar de vista e ao bloqueio, que troca o executor. */
@@ -393,6 +394,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         columns={gridColumns ?? seenColumns}
         autocomplete={preferences.editor.autocomplete}
       />
+      <TableDescriptionBanner connectionId={connectionId} database={database} table={name} visible={visible && !disconnected} />
       <ResultPanel
         state={state}
         connected={connected}

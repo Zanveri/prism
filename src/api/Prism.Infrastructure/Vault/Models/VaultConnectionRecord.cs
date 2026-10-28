@@ -13,7 +13,7 @@ namespace Prism.Infrastructure.Vault.Models;
 /// A origem (`Origin`, RN-DBEAVER-018: de onde a conexão importada veio) veio depois, do mesmo jeito e também sem subir o formato: nula na conexão que o usuário
 /// criou, e mantida quando ela é editada, renomeada ou movida (o `ConnectionRepository.Update`); a cópia (RN-CONN-016) e a exportação não a levam.
 /// </summary>
-public sealed record VaultConnectionRecord(Guid ID, Guid? FolderID, string Name, EDatabaseEngine Engine, string Host, int Port, string Database, string UserName, string Password, string? EnvironmentName, string? EnvironmentColor, DateTime CreatedAt, DateTime UpdatedAt, string? ConfirmCommands = null, bool? ReadOnly = null, bool? VerificationEnabled = null, int? VerificationInterval = null, string? VerificationQuery = null, VaultConnectionOrigin? Origin = null)
+public sealed record VaultConnectionRecord(Guid ID, Guid? FolderID, string Name, EDatabaseEngine Engine, string Host, int Port, string Database, string UserName, string Password, string? EnvironmentName, string? EnvironmentColor, DateTime CreatedAt, DateTime UpdatedAt, string? ConfirmCommands = null, bool? ReadOnly = null, bool? VerificationEnabled = null, int? VerificationInterval = null, string? VerificationQuery = null, VaultConnectionOrigin? Origin = null, bool? UseInternalDescriptions = null)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria host, usuário, senha e a consulta de verificação onde quer que o record fosse parar.</summary>
     public override string ToString()

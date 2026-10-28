@@ -54,6 +54,13 @@ export const prismEndpoints = {
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
   userDriverInstall: (id: string) => `api/user/drivers/${encodeURIComponent(id)}/install`,
+  userPlugins: "api/user/plugins",
+  userPluginsBundles: "api/user/plugins/bundles",
+  userPluginsConsent: "api/user/plugins/consent",
+  userPluginsInstall: "api/user/plugins/install",
+  userPlugin: (id: string) => `api/user/plugins/${encodeURIComponent(id)}`,
+  userPluginEnabled: (id: string) => `api/user/plugins/${encodeURIComponent(id)}/enabled`,
+  userPluginUpdate: (id: string) => `api/user/plugins/${encodeURIComponent(id)}/update`,
   // RN-EXPORT-016: os trabalhos em segundo plano (a exportação de dados), um registro só para todas as janelas.
   userTransfers: "api/user/transfers",
   userTransferExports: "api/user/transfers/exports",
