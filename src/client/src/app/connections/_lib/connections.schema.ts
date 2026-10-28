@@ -47,6 +47,7 @@ export const folderSchema = z.object({
   color: z.string().nullable(),
   confirmCommands: confirmationSchema,
   readOnly: z.boolean(),
+  useInternalDescriptions: z.boolean().optional(),
   protections: protectionsSchema,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -82,6 +83,7 @@ export const connectionSchema = z.object({
   verificationEnabled: z.boolean(),
   verificationInterval: z.number().int(),
   verificationQuery: z.string().nullable(),
+  useInternalDescriptions: z.boolean().nullable().optional(),
   protections: protectionsSchema,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -225,6 +227,7 @@ const connectionFields = z.object({
   ...environmentFields,
   ...protectionFields,
   ...verificationFields,
+  useInternalDescriptions: z.enum(["true", "false", ""]).transform((value) => (value === "" ? null : value === "true")).optional(),
 });
 
 /** A senha do banco tem até 1.024 caracteres, contados como veio (RN-CONN-010): ela não é aparada. */
@@ -280,10 +283,10 @@ const folderName = z
  * Criar uma pasta: o nome, onde ela fica (`""` é a raiz), a cor do ícone dela (RN-PASTA-007, no formato da cor do ambiente), o ambiente (RN-PASTA-005) e as
  * proteções (RN-PROT-001 e 002).
  */
-export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull), color: environmentFields.environmentColor, ...environmentFields, ...protectionFields });
+export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull), color: environmentFields.environmentColor, ...environmentFields, ...protectionFields, useInternalDescriptions: z.enum(["true", "false"]).transform((value) => value === "true").optional() });
 
 /** "Editar pasta…" (RN-PASTA-006) pergunta o nome, a cor, o ambiente e as proteções. */
-export const editFolderSchema = createFolderSchema.pick({ name: true, color: true, environmentName: true, environmentColor: true, confirmCommands: true, readOnly: true });
+export const editFolderSchema = createFolderSchema.pick({ name: true, color: true, environmentName: true, environmentColor: true, confirmCommands: true, readOnly: true, useInternalDescriptions: true });
 
 /** O "Renomear" da pasta (F2, RN-NAV-009) pergunta só o nome. */
 export const renameFolderSchema = createFolderSchema.pick({ name: true });

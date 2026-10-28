@@ -31,7 +31,7 @@ internal sealed class FolderRepository(IVaultService vaultService) : IFolderRepo
         if (record is null)
             return Task.FromResult(Result.Failure<(Folder, EffectiveProtections), ApiErrorDto>(FolderErrors.NotFound(id)));
 
-        var folder = Folder.Restore(record.ID, record.ParentID, record.Name, record.EnvironmentName, record.EnvironmentColor, record.Color, record.ConfirmCommands, record.ReadOnly == true, record.CreatedAt, record.UpdatedAt);
+        var folder = Folder.Restore(record.ID, record.ParentID, record.Name, record.EnvironmentName, record.EnvironmentColor, record.Color, record.ConfirmCommands, record.ReadOnly == true, record.CreatedAt, record.UpdatedAt, record.UseInternalDescriptions);
 
         return Task.FromResult(Result.Success<(Folder, EffectiveProtections), ApiErrorDto>((folder, ProtectionRules.Of(read.Value, record))));
     }
@@ -119,5 +119,5 @@ internal sealed class FolderRepository(IVaultService vaultService) : IFolderRepo
     /// conexões (RN-TRANSF-014) cria as pastas dela por aqui também.
     /// </summary>
     internal static VaultFolderRecord ToRecord(Folder folder)
-        => new(folder.ID, folder.ParentID, folder.Name, folder.CreatedAt, folder.UpdatedAt, folder.EnvironmentName, folder.EnvironmentColor, folder.Color, folder.ConfirmCommands, ProtectionRules.ToRecord(folder.ReadOnly));
+        => new(folder.ID, folder.ParentID, folder.Name, folder.CreatedAt, folder.UpdatedAt, folder.EnvironmentName, folder.EnvironmentColor, folder.Color, folder.ConfirmCommands, ProtectionRules.ToRecord(folder.ReadOnly), folder.UseInternalDescriptions);
 }

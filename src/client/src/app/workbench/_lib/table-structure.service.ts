@@ -206,7 +206,12 @@ export async function refreshStructure(queryClient: QueryClient, connectionId: s
   const keys = tables.map((table) => structurePrefix(connectionId, table.schema, table.name, database));
   const sessionId = () => queryClient.getQueryData<{ id: string }>(databaseSessionKey(connectionId, database))?.id;
   const lost = () => keys.some((queryKey) => queryClient.getQueryCache().findAll({ queryKey }).some((query) => isSessionLost(query.state.error)));
-  const refetch = () => Promise.all(keys.map((queryKey) => queryClient.refetchQueries({ queryKey })));
+  const refetch = () =>
+    Promise.all([
+      ...keys.map((queryKey) => queryClient.refetchQueries({ queryKey })),
+      ...tables.map((table) => queryClient.refetchQueries({ queryKey: ["plugin-table-enrichment", connectionId, ...databaseMark(database), table.schema, table.name] })),
+      ...tables.map((table) => queryClient.refetchQueries({ queryKey: ["internal-table-description", connectionId, ...databaseMark(database), table.name.trim().toLowerCase()] })),
+    ]);
 
   const before = sessionId();
   let reopened = lost();

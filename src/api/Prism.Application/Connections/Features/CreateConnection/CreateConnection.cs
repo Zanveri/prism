@@ -36,6 +36,8 @@ public sealed record CreateConnectionCommand : IRequest<Result<ConnectionDto, Ap
     public int? VerificationInterval { get; init; }
     public string? VerificationQuery { get; init; }
 
+    public bool? UseInternalDescriptions { get; init; }
+
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e esta é a senha do banco (e o host e o usuário vão junto).</summary>
     public override string ToString() => nameof(CreateConnectionCommand);
 }
@@ -44,7 +46,7 @@ internal sealed class CreateConnectionHandler(IConnectionRepository connectionRe
 {
     public async Task<Result<ConnectionDto, ApiErrorDto>> Handle(CreateConnectionCommand request, CancellationToken cancellationToken)
     {
-        var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery);
+        var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery, request.UseInternalDescriptions);
         var connection = Connection.Create(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, timeProvider.GetUtcNow().UtcDateTime);
 
         // Que a pasta exista (404) e que o nome esteja livre nela (409, RN-CONN-011) quem diz é a gravação, o único lugar em que um cofre

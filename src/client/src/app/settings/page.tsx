@@ -12,6 +12,7 @@ import { AppearanceSection } from "./_components/appearance-section";
 import { DriversSection } from "./_components/drivers-section";
 import { EditorSection } from "./_components/editor-section";
 import { ImportSection } from "./_components/import-section";
+import { PluginsSection } from "./_components/plugins-section";
 import { ResultsSection } from "./_components/results-section";
 import { SecuritySection } from "./_components/security-section";
 import { ComingSoonCard } from "./_components/settings-card";
@@ -40,6 +41,8 @@ function SectionBody({ section, highlightedDriver }: { section: SettingsSection;
       return <DriversSection anchor={section.anchor} highlightedId={highlightedDriver} />;
     case "about":
       return <AboutSection anchor={section.anchor} />;
+    case "plugins":
+      return <PluginsSection anchor={section.anchor} />;
     case "results":
       return <ResultsSection anchor={section.anchor} />;
     case "security":

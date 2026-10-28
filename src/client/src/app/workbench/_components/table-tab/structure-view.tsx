@@ -12,6 +12,7 @@ import { ddlState } from "../../_lib/table-ddl";
 import { levelView, structureColumns, structureForeignKeys, structureIndexes } from "../../_lib/table-structure";
 import { columnsQuery, foreignKeysQuery, indexesQuery } from "../../_lib/table-structure.service";
 import { treeQuery } from "../../_lib/database-sessions.service";
+import { useTableStructureEnrichment } from "../../_lib/use-table-structure-enrichment";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { StructureSections } from "./structure-sections";
 import { useStructureActions } from "./use-structure-actions";
@@ -49,6 +50,7 @@ type StructureViewProps = {
  */
 export function StructureView({ tabId, connectionId, database, engine, schema, name, visible, onOpenDiagram, refreshSlot }: StructureViewProps) {
   const [section, setSection] = useState<StructureSection>(() => recall(tabId, "structure") ?? firstSection);
+  const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
   useEffect(() => remember(tabId, "structure", section), [tabId, section]);
 
   const queryClient = useQueryClient();
@@ -56,6 +58,15 @@ export function StructureView({ tabId, connectionId, database, engine, schema, n
   const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible, database));
   const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible, database));
   const indexes = useQuery(indexesQuery(connectionId, schema, name, queryClient, visible, database));
+  const enrichment = useTableStructureEnrichment({
+    connectionId,
+    database,
+    engine,
+    schema,
+    table: name,
+    columns: columns.data,
+    visible,
+  });
   const table = [{ schema, name }];
   const toast = useToast();
   // RN-GRADE-012: F5 recarrega a vista, como o "Atualizar" dela.
@@ -95,6 +106,10 @@ export function StructureView({ tabId, connectionId, database, engine, schema, n
       onRefresh={() => void refresh(table)}
       onRetry={() => void refresh(table)}
       onOpenDiagram={onOpenDiagram}
+      tableName={name}
+      enrichment={enrichment}
+      selectedColumn={selectedColumn}
+      onSelectColumn={setSelectedColumn}
     />
   );
 }

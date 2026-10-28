@@ -35,6 +35,8 @@ public sealed record UpdateFolderCommand : IRequest<Result<FolderDto, ApiErrorDt
     /// <summary>RN-PROT-002: ausente é falso.</summary>
     public bool ReadOnly { get; init; }
 
+    public bool UseInternalDescriptions { get; init; }
+
     /// <summary>RN-PROT-003: a senha do usuário do Prism.</summary>
     public string? UserPassword { get; init; }
 
@@ -63,10 +65,11 @@ internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderR
         var environmentChanged = EnvironmentRules.NormalizeName(request.EnvironmentName) != folder.EnvironmentName || EnvironmentRules.NormalizeColor(request.EnvironmentColor) != folder.EnvironmentColor;
         var colorChanged = EnvironmentRules.NormalizeColor(request.Color) != folder.Color;
         var protectionsChanged = ProtectionRules.NormalizeConfirmation(request.ConfirmCommands) != folder.ConfirmCommands || request.ReadOnly != folder.ReadOnly;
+        var internalDescriptionsChanged = request.UseInternalDescriptions != folder.UseInternalDescriptions;
 
         // Nada mudou depois da normalização (a tela salva sem editar): carimbar UpdatedAt e regravar o cofre fingiria uma alteração que não houve.
         // Nada mudou também não pede a senha do usuário: o somente leitura continua o mesmo.
-        if (!parentChanged && name == folder.Name && !environmentChanged && !colorChanged && !protectionsChanged)
+        if (!parentChanged && name == folder.Name && !environmentChanged && !colorChanged && !protectionsChanged && !internalDescriptionsChanged)
             return Result.Success<FolderDto, ApiErrorDto>(folder.ToDto(protections));
 
         // RN-PASTA-002, só quando a chave (nome sem diferenciar maiúsculas, pasta pai) mudou: com ela igual
@@ -81,6 +84,7 @@ internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderR
         folder.ChangeEnvironment(request.EnvironmentName, request.EnvironmentColor, now);
         folder.ChangeColor(request.Color, now);
         folder.ChangeProtections(request.ConfirmCommands, request.ReadOnly, now);
+        folder.ChangeInternalDescriptions(request.UseInternalDescriptions, now);
 
         // A senha do usuário vai à gravação, que a confere só se a mudança do somente leitura a pede (RN-PROT-003). As proteções que valem
         // (RN-PROT-004) saem do documento gravado.

@@ -25,10 +25,11 @@ internal sealed class Folder
     public string? Color { get; private set; }
     public string? ConfirmCommands { get; private set; }
     public bool ReadOnly { get; private set; }
+    public bool UseInternalDescriptions { get; private set; }
     public DateTime CreatedAt { get; }
     public DateTime UpdatedAt { get; private set; }
 
-    private Folder(Guid id, Guid? parentID, string name, string? environmentName, string? environmentColor, string? color, string? confirmCommands, bool readOnly, DateTime createdAt, DateTime updatedAt)
+    private Folder(Guid id, Guid? parentID, string name, string? environmentName, string? environmentColor, string? color, string? confirmCommands, bool readOnly, DateTime createdAt, DateTime updatedAt, bool useInternalDescriptions = false)
     {
         ID = id;
         ParentID = parentID;
@@ -38,20 +39,21 @@ internal sealed class Folder
         Color = color;
         ConfirmCommands = confirmCommands;
         ReadOnly = readOnly;
+        UseInternalDescriptions = useInternalDescriptions;
         CreatedAt = createdAt;
         UpdatedAt = updatedAt;
     }
 
     /// <summary>RN-PROT-003: criar uma pasta já somente leitura não pede a senha do usuário (nada do que existe muda).</summary>
-    public static Folder Create(string name, Guid? parentID, string? environmentName, string? environmentColor, string? color, string? confirmCommands, bool readOnly, DateTime createdAt)
-        => new(Guid.CreateVersion7(), parentID, name.NormalizeName(), EnvironmentRules.NormalizeName(environmentName), EnvironmentRules.NormalizeColor(environmentColor), EnvironmentRules.NormalizeColor(color), ProtectionRules.NormalizeConfirmation(confirmCommands), readOnly, createdAt, createdAt);
+    public static Folder Create(string name, Guid? parentID, string? environmentName, string? environmentColor, string? color, string? confirmCommands, bool readOnly, DateTime createdAt, bool useInternalDescriptions = false)
+        => new(Guid.CreateVersion7(), parentID, name.NormalizeName(), EnvironmentRules.NormalizeName(environmentName), EnvironmentRules.NormalizeColor(environmentColor), EnvironmentRules.NormalizeColor(color), ProtectionRules.NormalizeConfirmation(confirmCommands), readOnly, createdAt, createdAt, useInternalDescriptions);
 
     /// <summary>
     /// A pasta como o cofre a guarda, para o repository: o cofre não tem SQL que materialize o construtor
     /// privado. Nada é normalizado nem carimbado, porque o que está gravado já passou pelo `Create`.
     /// </summary>
-    public static Folder Restore(Guid id, Guid? parentID, string name, string? environmentName, string? environmentColor, string? color, string? confirmCommands, bool readOnly, DateTime createdAt, DateTime updatedAt)
-        => new(id, parentID, name, environmentName, environmentColor, color, confirmCommands, readOnly, createdAt, updatedAt);
+    public static Folder Restore(Guid id, Guid? parentID, string name, string? environmentName, string? environmentColor, string? color, string? confirmCommands, bool readOnly, DateTime createdAt, DateTime updatedAt, bool useInternalDescriptions = false)
+        => new(id, parentID, name, environmentName, environmentColor, color, confirmCommands, readOnly, createdAt, updatedAt, useInternalDescriptions);
 
     public void Rename(string name, DateTime updatedAt)
     {
@@ -82,6 +84,12 @@ internal sealed class Folder
     {
         ConfirmCommands = ProtectionRules.NormalizeConfirmation(confirmCommands);
         ReadOnly = readOnly;
+        UpdatedAt = updatedAt;
+    }
+
+    public void ChangeInternalDescriptions(bool useInternalDescriptions, DateTime updatedAt)
+    {
+        UseInternalDescriptions = useInternalDescriptions;
         UpdatedAt = updatedAt;
     }
 
