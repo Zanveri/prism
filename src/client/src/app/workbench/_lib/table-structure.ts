@@ -49,7 +49,7 @@ export function structureIndexes(indexes: TableIndex[]): StructureIndex[] {
 export type LevelView = { kind: "loading" } | { kind: "error"; message: string; sessionLost: boolean } | { kind: "empty" } | { kind: "ready" };
 
 /** A parte de uma consulta (`UseQueryResult`) de que o estado de uma seção depende. */
-type LevelQuery = { data: readonly unknown[] | undefined; error: unknown; isError: boolean; isFetching: boolean };
+type LevelQuery = { data: readonly unknown[] | { tables: readonly unknown[] } | undefined; error: unknown; isError: boolean; isFetching: boolean };
 
 /**
  * O erro da última busca vence o dado que veio antes dela: um "Atualizar" que falha (a sessão caiu, o banco
@@ -60,7 +60,7 @@ type LevelQuery = { data: readonly unknown[] | undefined; error: unknown; isErro
 export function levelView(query: LevelQuery): LevelView {
   if (query.isError) return query.isFetching ? { kind: "loading" } : errorView(query.error);
   if (query.data === undefined) return { kind: "loading" };
-  return query.data.length === 0 ? { kind: "empty" } : { kind: "ready" };
+  return ("tables" in query.data ? query.data.tables.length : query.data.length) === 0 ? { kind: "empty" } : { kind: "ready" };
 }
 
 function errorView(error: unknown): LevelView {

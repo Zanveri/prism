@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEve
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
-import { CheckIcon, ChevronIcon, CloseIcon, ContextMenu, DocumentIcon, TableIcon, type ContextMenuItem } from "@/components/ui";
+import { CheckIcon, ChevronIcon, CloseIcon, ContextMenu, DatabaseIcon, DocumentIcon, FolderIcon, TableIcon, type ContextMenuItem } from "@/components/ui";
 import { listOtherWindows } from "@/lib/api/bridge";
 import { cn } from "@/lib/utils/cn";
 
@@ -459,7 +459,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
                 onKeyDown={(event) => handleKeyDown(event, entry, index)}
                 className="flex cursor-pointer items-center gap-1.5 pr-1 pl-2.5"
               >
-                {tab.table ? <TableIcon className={stripIcon} /> : script !== undefined ? <ScriptIconView icon={scriptIconOf(script)} color={script.color} className={stripIcon} /> : <DocumentIcon className={stripIcon} />}
+                {tab.table ? <TableIcon className={stripIcon} /> : tab.schemaTarget ? <FolderIcon className={stripIcon} /> : tab.databaseTarget ? <DatabaseIcon className={stripIcon} /> : script !== undefined ? <ScriptIconView icon={scriptIconOf(script)} color={script.color} className={stripIcon} /> : <DocumentIcon className={stripIcon} />}
                 <span className="max-w-[200px] truncate">{titles.get(tab.id) ?? tab.title}</span>
                 {/* RN-SCRIPT-001: o ponto da mudança não salva é desenho; o leitor de tela ouve o texto. */}
                 {label.unsaved ? (

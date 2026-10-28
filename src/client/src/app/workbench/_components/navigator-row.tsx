@@ -14,7 +14,7 @@ import { checkView, type CheckState } from "../_lib/connection-checks";
 import { connectionChecksCopy } from "../_lib/connection-checks.copy";
 import { credentialsHint } from "../_lib/credentials-missing";
 import { actionsWidth as actionsWidthOf, navigatorMetrics, rowIndent } from "../_lib/navigator-density";
-import { clickEffect, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
+import { clickEffect, databaseTargetOf, schemaTargetOf, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
 import type { MatchRange } from "../_lib/navigator-search";
 import { isRefreshable } from "../_lib/navigator-toolbar";
 import { navigatorCopy } from "../_lib/navigator.copy";
@@ -104,6 +104,8 @@ export type NavigatorRowProps = {
   onDisconnect: (node: NavNode) => void;
   /** Duplo clique numa tabela ou visão: abre a aba dela (RN-TABELA-001). Nas demais linhas não é chamado. */
   onOpenTable: (node: NavNode) => void;
+  onOpenSchema?: (node: NavNode) => void;
+  onOpenDatabase?: (node: NavNode) => void;
   /** O trecho do nome que a busca achou, para o destaque; só na árvore filtrada. */
   match?: MatchRange;
   /**
@@ -120,7 +122,7 @@ export type NavigatorRowProps = {
  * filhos do React, nunca como HTML (RN-SHELL-002). As ações do nó aparecem ao passar o mouse ou
  * receber o foco, sobre o fim da linha; o ponto de estado da conexão fica sob elas.
  */
-export function NavigatorRow({ node, density = "comfortable", index, open, tabbable, selected, connection, environment, folderColor = null, readOnly = null, status, check = null, onCheckFailure, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
+export function NavigatorRow({ node, density = "comfortable", index, open, tabbable, selected, connection, environment, folderColor = null, readOnly = null, status, check = null, onCheckFailure, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onOpenSchema, onOpenDatabase, onContextMenu, onKeyDown }: NavigatorRowProps) {
   const metrics = navigatorMetrics[density];
   const paddingLeft = rowIndent(metrics, node.depth);
 
@@ -170,7 +172,9 @@ export function NavigatorRow({ node, density = "comfortable", index, open, tabba
   // Com o mouse ou o foco na linha, o fim dela é das ações; o conteúdo se afasta delas em vez de ficar escondido.
   const actionsWidth = actionsWidthOf(metrics, Number(isConnection && connection !== undefined) + Number(canRefresh) + Number(isConnection && connected) + Number(failed));
   const opensTab = tableTargetOf(node) !== null;
-  const hint = opensTab ? (node.kind === "view" ? copy.openHint.view : copy.openHint.table) : null;
+  const opensSchema = schemaTargetOf(node) !== null && onOpenSchema !== undefined;
+  const opensDatabase = databaseTargetOf(node) !== null && onOpenDatabase !== undefined;
+  const hint = opensTab ? (node.kind === "view" ? copy.openHint.view : copy.openHint.table) : opensSchema ? copy.openHint.schema : opensDatabase ? copy.openHint.database : null;
   // A conexão mostra na dica o que a lista da tela de Conexões trazia embaixo do nome e a árvore não mostra: o banco e o endereço (RN-NAV-003), e a última
   // verificação (RN-VERIF-003).
   // RN-TRANSF-015: a conexão que chegou sem usuário e senha diz isso no fim da linha do endereço, sem marca na árvore.
@@ -195,7 +199,7 @@ export function NavigatorRow({ node, density = "comfortable", index, open, tabba
           onSelect(node);
           if (clickEffect(node, { detail: event.detail, onChevron: hitsChevron(event.target) }) === "toggle") onToggle(node);
         }}
-        onDoubleClick={opensTab ? () => onOpenTable(node) : undefined}
+        onDoubleClick={opensTab ? () => onOpenTable(node) : opensSchema && onOpenSchema ? () => onOpenSchema(node) : opensDatabase && onOpenDatabase ? () => onOpenDatabase(node) : undefined}
         onFocus={() => onSelect(node)}
         onKeyDown={(event) => onKeyDown(event, node, index)}
         style={{ paddingLeft, "--actions-width": `${actionsWidth}px` } as CSSProperties}

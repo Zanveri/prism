@@ -106,16 +106,21 @@ describe("menuFor: conexão (RN-MENU-001)", () => {
 });
 
 describe("menuFor: esquema, banco e grupo", () => {
-  it("esquema: Nova consulta, Atualizar e Copiar nome", () => {
+  it("esquema: Abrir esquema, Ver diagrama do esquema, Nova consulta, Atualizar e Copiar nome", () => {
     const groups = menuFor(schemaNode, idle);
 
-    expect(ids(groups)).toEqual([["newQuery", "refresh"], ["copyName"]]);
+    expect(ids(groups)).toEqual([["openSchema", "openSchemaDiagram"], ["newQuery", "refresh"], ["copyName"]]);
+    expect(byId(groups, "openSchema")?.action).toEqual({ type: "openSchema", view: "tables" });
+    expect(byId(groups, "openSchemaDiagram")?.action).toEqual({ type: "openSchema", view: "diagram" });
     expect(byId(groups, "copyName")?.action).toEqual({ type: "copy", text: "vendas" });
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
   });
 
   it("banco: Nova consulta, Atualizar e Copiar nome", () => {
-    expect(ids(menuFor(databaseNode, idle))).toEqual([["newQuery", "refresh"], ["copyName"]]);
+    const groups = menuFor(databaseNode, idle);
+    expect(ids(groups)).toEqual([["openDatabase", "openDatabaseDiagram"], ["newQuery", "refresh"], ["copyName"]]);
+    expect(byId(groups, "openDatabase")?.action).toEqual({ type: "openDatabase", view: "schemas" });
+    expect(byId(groups, "openDatabaseDiagram")?.action).toEqual({ type: "openDatabase", view: "diagram" });
   });
 
   it("grupo (Tabelas, Colunas…): só Atualizar; copiar o nome de um rótulo fixo não serve a ninguém", () => {

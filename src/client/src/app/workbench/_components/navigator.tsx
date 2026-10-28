@@ -15,7 +15,7 @@ import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { userEnvironments } from "@/app/connections/_lib/user-environments";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DownloadIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, UploadIcon, useToast, type ContextMenuItem } from "@/components/ui";
+import { Button, ColumnsIcon, ContextMenu, DatabaseIcon, DiagramIcon, DocumentIcon, DownloadIcon, DuplicateIcon, FolderIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, UploadIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { dbeaverAvailable } from "@/lib/api/bridge";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
@@ -26,7 +26,7 @@ import { openExportWizard } from "../_lib/data-export/data-exports";
 import { openImportWizard } from "../_lib/data-import/data-imports";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, objectNamesKey, objectNamesQuery, openSessionForSearch, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
-import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { childrenKey, databaseRefOf, databaseTargetOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaTargetOf, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { filterConnected } from "../_lib/navigator-connected";
 import { collapsedAllInFilter, collapsedInFilter, filterFoldersFor, filterViewOf, folderIdOfKey, folderIdsOfKeys, folderKeyOf, noFilterFolders, openTreeKeys, openedInFilter, toggledInFilter } from "../_lib/navigator-folders";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
@@ -112,6 +112,10 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   openRecords: <TableIcon />,
   openStructure: <ColumnsIcon />,
   openDiagram: <DiagramIcon />,
+  openSchema: <FolderIcon />,
+  openSchemaDiagram: <DiagramIcon />,
+  openDatabase: <DatabaseIcon />,
+  openDatabaseDiagram: <DiagramIcon />,
   generateSelect: <DocumentIcon />,
   // RN-EXPORT-001: a seta de baixar que o app já tem (a do "Exportar CSV").
   exportData: <DownloadIcon />,
@@ -184,7 +188,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   const toast = useToast();
   const folders = useQuery(foldersQuery);
   const connections = useQuery(connectionsQuery);
-  const { tabs, expanded, setNodeOpen, openQueryTab, openTableTab, disconnect, disconnecting } = useWorkbench();
+  const { tabs, expanded, setNodeOpen, openQueryTab, openTableTab, openSchemaTab, openDatabaseTab, disconnect, disconnecting } = useWorkbench();
   // RN-NAV-011: a densidade da árvore, que muda ao vivo com a escolha em Configurações › Aparência.
   const density = usePreferences().preferences.ui.navigatorDensity;
   // RN-NAV-014: as pastas abertas são as lembradas (por usuário, nas preferências desta instalação); sem nada lembrado, todas fechadas. Quem escreve é um
@@ -635,6 +639,16 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
         if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name, view: action.view, ...inDatabase(target.database) });
         return;
       // O SELECT vai para uma consulta nova, no editor, sem executar; a citação dos nomes por banco é do `selectAllSql`.
+      case "openSchema": {
+        const schemaTarget = schemaTargetOf(node);
+        if (schemaTarget !== null) openSchemaTab(schemaTarget.connectionId, { schema: schemaTarget.schema, view: action.view, ...inDatabase(schemaTarget.database) });
+        return;
+      }
+      case "openDatabase": {
+        const dbTarget = databaseTargetOf(node);
+        if (dbTarget !== null) openDatabaseTab(dbTarget.connectionId, { name: dbTarget.name, view: action.view, ...inDatabase(dbTarget.database) });
+        return;
+      }
       case "generateSelect": {
         const engine = target === null ? undefined : connectionById.get(target.connectionId)?.engine;
         if (target !== null && engine !== undefined) openQueryTab(target.connectionId, selectAllSql(engine, target.schema, target.name), target.database);
@@ -901,6 +915,14 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
             const target = tableTargetOf(node);
             if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name, ...inDatabase(target.database) });
           }}
+          onOpenSchema={(node) => {
+            const target = schemaTargetOf(node);
+            if (target !== null) openSchemaTab(target.connectionId, { schema: target.schema, ...inDatabase(target.database) });
+          }}
+          onOpenDatabase={(node) => {
+            const target = databaseTargetOf(node);
+            if (target !== null) openDatabaseTab(target.connectionId, { name: target.name, ...inDatabase(target.database) });
+          }}
           onDisconnect={(node) => {
             const connectionId = ownerConnectionId(node);
             if (connectionId !== null) disconnect(connectionId);
@@ -971,6 +993,8 @@ type NavigatorListProps = {
   onRefresh: (node: NavNode) => void;
   onNewQuery: (node: NavNode) => void;
   onOpenTable: (node: NavNode) => void;
+  onOpenSchema?: (node: NavNode) => void;
+  onOpenDatabase?: (node: NavNode) => void;
   onDisconnect: (node: NavNode) => void;
   /** A ação do menu que uma tecla na linha pede (`keyActionFor`: o F2 do Renomear, RN-NAV-009), executada como se viesse do menu. */
   onKeyAction: (node: NavNode, action: MenuAction) => void;
@@ -996,7 +1020,7 @@ type NavigatorListProps = {
  * nome leva a escolha e o foco ao item visível que começa por elas (RN-ARVORE-009); só uma linha entra na ordem do Tab. Exportada para o teste do teclado, que
  * a monta com os ganchos simulados.
  */
-export function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, checks, onCheckFailure, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+export function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, checks, onCheckFailure, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onOpenSchema, onOpenDatabase, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -1209,6 +1233,8 @@ export function NavigatorList({ rows, density, open, connectionById, environment
                   onNewQuery={onNewQuery}
                   onDisconnect={onDisconnect}
                   onOpenTable={onOpenTable}
+                  onOpenSchema={onOpenSchema}
+                  onOpenDatabase={onOpenDatabase}
                   onContextMenu={(target, point) => onContextMenu(target, point, "menu")}
                   onKeyDown={handleKeyDown}
                 />

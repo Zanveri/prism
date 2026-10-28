@@ -32,6 +32,10 @@ export type DiagramColumn = { name: string; type: string; primaryKey: boolean; f
 export type DiagramBox = {
   key: string;
   ref: TableRef;
+  /** Rótulo exibido no cabeçalho quando difere de `ref.name` (por exemplo `esquema.tabela` no diagrama do banco). */
+  title?: string;
+  /** Tabela referenciada fora do esquema/banco atual (stub sem colunas). */
+  external?: boolean;
   center: boolean;
   x: number;
   y: number;
@@ -51,9 +55,33 @@ export type DiagramEdge = {
   to: Point;
   /** O caminho de `from` a `to`: só segmentos horizontais e verticais, com o primeiro e o último na horizontal. */
   points: Point[];
+  /** Chave da caixa de origem (`tableKey`), para destaque e exportação Mermaid. */
+  fromTable?: string;
+  /** Chave da caixa de destino (`tableKey`), para destaque e exportação Mermaid. */
+  toTable?: string;
+  fromColumn?: string;
+  toColumn?: string;
 };
 
 export type DiagramLayout = { boxes: DiagramBox[]; edges: DiagramEdge[]; width: number; height: number };
+
+/**
+ * Medidas tipográficas do diagrama derivadas do tamanho da fonte do usuário (`preferences.editor.fontSize`, padrão 13 px).
+ * Mantém a geometria padrão exata (264 px de largura, 24 px de linha, 29 caracteres) quando `fontSize === 13`.
+ */
+export function diagramMetrics(fontSize = 13): { fontSize: number; titleFontSize: number; markFontSize: number; rowHeight: number; boxWidth: number; rowChars: number } {
+  const clamped = Math.min(20, Math.max(11, Math.round(fontSize)));
+  const charWidth = clamped * 0.6;
+  const computedRowChars = Math.max(20, Math.floor((boxWidth - 32) / charWidth));
+  return {
+    fontSize: clamped,
+    titleFontSize: clamped,
+    markFontSize: Math.max(10, clamped - 2),
+    rowHeight,
+    boxWidth,
+    rowChars: clamped === 13 ? rowChars : computedRowChars,
+  };
+}
 
 /**
  * As tabelas que as chaves estrangeiras da tabela apontam (e só elas: a API não devolve as que apontam
@@ -282,6 +310,10 @@ export function layoutDiagram({ center, foreignKeys, neighbors }: DiagramInput):
         from,
         to,
         points: lane < 0 ? [from, to] : simplify([from, { x: laneX(lane), y: from.y }, { x: laneX(lane), y: to.y }, to]),
+        fromTable: centerKey,
+        toTable: route.target.key,
+        fromColumn: route.foreignKey.columns[0],
+        toColumn: route.foreignKey.referencedColumns[0],
       });
     }
   }
@@ -311,8 +343,8 @@ const ellipsize = (text: string, room: number) => (text.length <= room ? text : 
  * tipo primeiro (guarda ao menos o começo) e depois o nome. `cut` diz se algo foi cortado: a linha
  * então leva o texto inteiro na dica.
  */
-export function fitText(name: string, type: string, mark: string | null): { name: string; type: string; cut: boolean } {
-  const budget = rowChars - (mark === null ? 0 : mark.length + 1) - 1;
+export function fitText(name: string, type: string, mark: string | null, maxChars = rowChars): { name: string; type: string; cut: boolean } {
+  const budget = maxChars - (mark === null ? 0 : mark.length + 1) - 1;
   if (name.length + type.length <= budget) return { name, type, cut: false };
 
   const typeRoom = Math.max(4, budget - name.length);

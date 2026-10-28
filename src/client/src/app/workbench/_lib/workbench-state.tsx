@@ -34,7 +34,7 @@ import { createQueryRunner, isPersonBusy, type QueryRunner } from "./use-query-r
 import { connectExports, exportTracker } from "./data-export/data-exports";
 import { connectLoads, loadTracker } from "./data-import/data-imports";
 import { createLockHandles } from "./workbench-lock";
-import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type ResultPlace, type TableView } from "./workbench-model";
+import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type DatabaseView, type QueryTab, type ResultPlace, type SchemaView, type TableView } from "./workbench-model";
 import { resultPlaceCopy } from "./result-place.copy";
 import { workbenchCopy } from "./workbench.copy";
 import { getWorkspace } from "./workspace.service";
@@ -50,6 +50,12 @@ type WorkbenchState = {
   /** Abre a aba de uma tabela, ou volta para a que já está aberta; com `view`, já na vista pedida (RN-TABELA-001); com `database`, a tabela é desse outro banco do servidor. */
   openTableTab: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
   setTableView: (tabId: string, view: TableView) => void;
+  /** Abre a aba de um esquema, ou volta para a que já está aberta; com `view`, já na vista pedida (RN-ESQUEMA-001); com `database`, o esquema é desse outro banco do servidor. */
+  openSchemaTab: (connectionId: string, target: { schema: string; view?: SchemaView; database?: string }) => void;
+  setSchemaView: (tabId: string, view: SchemaView) => void;
+  /** Abre a aba de um banco, ou volta para a que já está aberta; com `view`, já na vista pedida (RN-BANCO-001). */
+  openDatabaseTab: (connectionId: string, target: { name: string; view?: DatabaseView; database?: string }) => void;
+  setDatabaseView: (tabId: string, view: DatabaseView) => void;
   /** Fecha a aba e a sessão dela (RN-SESSAO-004). */
   closeTab: (tabId: string) => void;
   /** A aba fica ativa, na vista da consulta (a aba do resultado dela, se tem, deixa de ser a ativa). */
@@ -496,6 +502,34 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [tabs, addTab, setTableView, askFocus],
   );
 
+  const setSchemaView = useCallback((tabId: string, view: SchemaView) => setTabs((current) => current.map((tab) => (tab.id === tabId && tab.schemaTarget ? { ...tab, schemaTarget: { ...tab.schemaTarget, view } } : tab))), []);
+
+  const openSchemaTab = useCallback(
+    (connectionId: string, { schema, view, database }: { schema: string; view?: SchemaView; database?: string }) => {
+      const open = tabs.find((tab) => tab.connectionId === connectionId && tab.database === database && tab.schemaTarget?.schema === schema);
+      if (open === undefined) return addTab({ id: crypto.randomUUID(), title: database === undefined ? schema : `${database}.${schema}`, connectionId, ...inDatabase(database), sessionId: null, sql: "", schemaTarget: { schema, view: view ?? "tables" } });
+
+      if (view !== undefined) setSchemaView(open.id, view);
+      setActiveTabId(open.id);
+      askFocus(open.id);
+    },
+    [tabs, addTab, setSchemaView, askFocus],
+  );
+
+  const setDatabaseView = useCallback((tabId: string, view: DatabaseView) => setTabs((current) => current.map((tab) => (tab.id === tabId && tab.databaseTarget ? { ...tab, databaseTarget: { ...tab.databaseTarget, view } } : tab))), []);
+
+  const openDatabaseTab = useCallback(
+    (connectionId: string, { name, view, database }: { name: string; view?: DatabaseView; database?: string }) => {
+      const open = tabs.find((tab) => tab.connectionId === connectionId && tab.database === database && tab.databaseTarget?.name === name);
+      if (open === undefined) return addTab({ id: crypto.randomUUID(), title: name, connectionId, ...inDatabase(database), sessionId: null, sql: "", databaseTarget: { name, view: view ?? "schemas" } });
+
+      if (view !== undefined) setDatabaseView(open.id, view);
+      setActiveTabId(open.id);
+      askFocus(open.id);
+    },
+    [tabs, addTab, setDatabaseView, askFocus],
+  );
+
   // "Abrir registros" do aviso da importação e da cópia (RN-IMPORT-020): a aba dos Registros da tabela nesta janela.
   useEffect(() => {
     openRecordsRef.current = (table) => openTableTab(table.connectionId, { schema: table.schema, name: table.name, view: "data", ...inDatabase(table.database) });
@@ -716,8 +750,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const { mutate: disconnect } = disconnectMutation;
 
   const value = useMemo<WorkbenchState>(
-    () => ({ tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose }),
-    [tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose],
+    () => ({ tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openSchemaTab, openDatabaseTab, openScriptTab, setTableView, setSchemaView, setDatabaseView, closeTab, setActiveTab, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose }),
+    [tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openSchemaTab, openDatabaseTab, openScriptTab, setTableView, setSchemaView, setDatabaseView, closeTab, setActiveTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose],
   );
 
   return (

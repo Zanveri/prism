@@ -124,6 +124,15 @@ describe("a linha de uma tabela ou visão (RN-TABELA-001)", () => {
     expect(toggleButton(table).title).toBe("pedido\nDuplo clique abre a aba da tabela");
     expect(toggleButton(view).title).toBe("v_pedido\nDuplo clique abre a aba da visão");
     expect(toggleButton(schema).title).toBe("public");
+    expect(toggleButton(schema, { onOpenSchema: noop }).title).toBe("public\nDuplo clique abre a aba do esquema");
+    const database: NavNode = { key: navKey({ type: "database", connectionId: "c1", database: "erp" }), kind: "database", label: "erp", depth: 1, hasChildren: true };
+    const onOpenSchema = vi.fn();
+    const onOpenDatabase = vi.fn();
+    toggleButton(schema, { onOpenSchema }).onDoubleClick?.();
+    expect(onOpenSchema).toHaveBeenCalledExactlyOnceWith(schema);
+    toggleButton(database, { onOpenDatabase }).onDoubleClick?.();
+    expect(onOpenDatabase).toHaveBeenCalledExactlyOnceWith(database);
+    expect(toggleButton(database, { onOpenDatabase }).title).toBe("erp\nDuplo clique abre a aba do banco");
   });
 });
 

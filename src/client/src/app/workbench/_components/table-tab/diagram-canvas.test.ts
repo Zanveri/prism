@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { defaultPreferences } from "@/app/settings/_lib/preferences";
 import type { Column, ForeignKey } from "../../_lib/database-sessions.schema";
 import { layoutDiagram, referencedTables, type DiagramLayout } from "../../_lib/table-diagram";
 import { DiagramCanvas } from "./diagram-canvas";
@@ -151,5 +152,42 @@ describe("o diagrama (RN-TABELA-004)", () => {
 
   it("'Atualizar' fica desabilitado enquanto busca", () => {
     expect(render(build(withKeys, ["ordem_producao", "maquina"]), { fetching: true })).toMatch(/<button[^>]*disabled=""[^>]*>[^]*Atualizar/);
+  });
+
+  it("oferece os botões de exportar PNG, exportar Mermaid (.md) e copiar Mermaid na barra do diagrama", () => {
+    const markup = render(build(withKeys, ["ordem_producao", "maquina"]));
+
+    expect(markup).toContain(">Exportar PNG<");
+    expect(markup).toContain(">Exportar Mermaid (.md)<");
+    expect(markup).toContain(">Copiar Mermaid<");
+  });
+
+  it("aplica a família e o tamanho da fonte das preferências do usuário ao SVG do diagrama", () => {
+    const layout = build(withKeys, ["ordem_producao", "maquina"]);
+    const markup = renderToStaticMarkup(
+      createElement(DiagramCanvas, {
+        layout,
+        schema: "producao",
+        tableCount: layout.boxes.length,
+        foreignKeyCount: layout.edges.length,
+        omitted: 0,
+        fetching: false,
+        onOpenTable: noop,
+        onRefresh: noop,
+        preferences: {
+          ...defaultPreferences,
+          theme: "dracula",
+          ui: { ...defaultPreferences.ui, fontFamily: "Inter" },
+          editor: { ...defaultPreferences.editor, fontFamily: "JetBrains Mono", fontSize: 16 },
+
+
+
+
+        },
+      }),
+    );
+
+    expect(markup).toContain("JetBrains Mono");
+    expect(markup).toContain("font-size:16px");
   });
 });

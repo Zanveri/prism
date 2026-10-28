@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { Button } from "@/components/ui";
 
 import { layoutDiagram, referencedTables, type TableRef } from "../../_lib/table-diagram";
@@ -39,6 +40,7 @@ type DiagramViewProps = {
  */
 export function DiagramView({ connectionId, database, schema, name, visible, onOpenTable, memoryKey, refreshSlot }: DiagramViewProps) {
   const queryClient = useQueryClient();
+  const { preferences } = usePreferences();
   const { refresh } = useStructureActions(connectionId, database);
   const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible, database));
   const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible, database));
@@ -91,6 +93,7 @@ export function DiagramView({ connectionId, database, schema, name, visible, onO
     <DiagramCanvas
       layout={layout}
       schema={schema}
+      subject={`${schema}.${name}`}
       tableCount={layout.boxes.length}
       foreignKeyCount={foreignKeys.data?.length ?? 0}
       omitted={neighbors?.omitted ?? 0}
@@ -99,6 +102,7 @@ export function DiagramView({ connectionId, database, schema, name, visible, onO
       onRefresh={() => void refresh(everyone)}
       initial={recall(memoryKey, "diagram")}
       onViewChange={rememberView}
+      preferences={preferences}
     />
   );
 }

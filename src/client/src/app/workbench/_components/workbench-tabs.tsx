@@ -33,7 +33,7 @@ import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
 import { isBusyState } from "../_lib/use-query-runner";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { useWorkbench } from "../_lib/workbench-state";
-import { isTableTab, type ResultPlace, type TableView } from "../_lib/workbench-model";
+import { isDatabaseTab, isSchemaTab, isTableTab, type ResultPlace, type SchemaView, type TableView } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { QueryTabPanel } from "./query-tab";
 import { focusResultIn, releaseFocusIn, resultHostOf } from "./result-host";
@@ -42,6 +42,8 @@ import { UnsavedScriptsDialog } from "./script-dialogs";
 import { ScriptWaitingMark } from "./script-tabs";
 import { TabDragVeil } from "./tab-drag-veil";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
+import { DatabaseTabPanel } from "./database-tab/database-tab";
+import { SchemaTabPanel } from "./schema-tab/schema-tab";
 import { TableTabPanel } from "./table-tab/table-tab";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
 import { useScriptSaving, type SaveMode } from "./use-script-saving";
@@ -78,7 +80,7 @@ function ResultTabPanel({ tabId, label, hidden }: { tabId: string; label: string
  * janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, resultActive, showEntry, setResultPlace, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, disconnectLog, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, resultActive, showEntry, setResultPlace, setActiveTab, closeTab, updateTab, setTableView, openTableTab, setSchemaView, openSchemaTab, setDatabaseView, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, disconnectLog, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   // RN-ABAS-008: o nome curto das abas (o do painel da aba do resultado também).
   const shortTitles = useMemo(() => stripTitles(tabs), [tabs]);
@@ -113,6 +115,7 @@ export function WorkbenchTabs() {
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
   // O mesmo com a troca do banco (RN-ARVORE-007) e da conexão (RN-ARVORE-008) da aba de consulta, que também consultam a lista de abas.
   const latestOpenTable = useRef(openTableTab);
+  const latestOpenSchema = useRef(openSchemaTab);
   const latestOpenQuery = useRef(openQueryTab);
   const latestSwitchDatabase = useRef(switchDatabase);
   const latestSwitchConnection = useRef(switchConnection);
@@ -120,12 +123,14 @@ export function WorkbenchTabs() {
   const latestTabs = useRef(tabs);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
+    latestOpenSchema.current = openSchemaTab;
     latestOpenQuery.current = openQueryTab;
     latestSwitchDatabase.current = switchDatabase;
     latestSwitchConnection.current = switchConnection;
     latestTabs.current = tabs;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
+  const handleOpenSchema = useCallback((connectionId: string, target: { schema: string; view?: SchemaView; database?: string }) => latestOpenSchema.current(connectionId, target), []);
   // RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL", nos Registros e no resultado.
   const handleOpenQuery = useCallback((connectionId: string, sql: string, database?: string) => latestOpenQuery.current(connectionId, sql, database), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
@@ -677,6 +682,10 @@ export function WorkbenchTabs() {
                 <div role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!queryShown} data-tab-content="" className={queryShown ? "flex min-h-0 flex-1 flex-col" : undefined}>
                   {isTableTab(tab) ? (
                     <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} />
+                  ) : isSchemaTab(tab) ? (
+                    <SchemaTabPanel tab={tab} schemaTarget={tab.schemaTarget} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setSchemaView} onOpenTable={handleOpenTable} />
+                  ) : isDatabaseTab(tab) ? (
+                    <DatabaseTabPanel tab={tab} databaseTarget={tab.databaseTarget} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setDatabaseView} onOpenSchema={handleOpenSchema} onOpenTable={handleOpenTable} />
                   ) : (
                     <QueryTabPanel
                       tab={tab}
