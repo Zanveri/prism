@@ -1025,9 +1025,6 @@ export function tableChanges(engine: BuildEngine, table: ModelTable): TableChang
   for (const col of table.columns) {
     if (!col.originName) {
       addedColumns.push(col.name);
-      if (col.identity !== null) {
-        identityChanged = true;
-      }
       continue;
     }
     presentOriginNames.add(col.originName);

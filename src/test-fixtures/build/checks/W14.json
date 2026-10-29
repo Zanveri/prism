@@ -1,0 +1,76 @@
+{
+  "scope": "full",
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "clientes",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": "id",
+            "type": "integer",
+            "nullable": false,
+            "default": "nextval('clientes_id_seq'::regclass)",
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "clientes_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "public",
+          "name": "clientes",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            {
+              "name": "id",
+              "exactName": false,
+              "originName": "id",
+              "type": "integer",
+              "nullable": false,
+              "default": "nextval('clientes_id_seq'::regclass)",
+              "identity": null,
+              "comment": null
+            }
+          ],
+          "primaryKey": { "name": "clientes_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "full",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "W14",
+      "severity": "warning",
+      "table": "public.clientes",
+      "column": "id"
+    }
+  ]
+}
