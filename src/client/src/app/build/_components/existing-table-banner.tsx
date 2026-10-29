@@ -16,7 +16,7 @@ export function ExistingTableBanner({
   const isDropped = changes.kind === "dropped";
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-dashed border-ink-faint px-3 py-2.5">
+    <div className="flex flex-col gap-2 rounded-md border border-dashed border-subtle px-3 py-2.5">
       <div className="flex items-center gap-2">
         <svg
           width="16"
@@ -28,7 +28,7 @@ export function ExistingTableBanner({
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
-          className="shrink-0 text-ink-muted"
+          className="shrink-0 text-muted"
         >
           <ellipse cx="8" cy="4" rx="5" ry="2" />
           <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4" />
@@ -36,7 +36,7 @@ export function ExistingTableBanner({
         </svg>
         <span className="font-semibold">Existe em {baseLabel}</span>
         {isChanged ? (
-          <span className="inline-flex h-4 items-center rounded border border-warning px-1.5 text-[10px] font-semibold leading-[14px] text-warning">
+          <span className="inline-flex h-4 items-center rounded border border-accent px-1.5 text-[10px] font-semibold leading-[14px] text-accent">
             {buildCopy.changedTableBadge}
           </span>
         ) : null}
@@ -46,7 +46,7 @@ export function ExistingTableBanner({
           </span>
         ) : null}
       </div>
-      <p className="m-0 text-xs leading-[18px] text-ink-muted">
+      <p className="m-0 text-xs leading-[18px] text-muted">
         O que você mudar aqui vira ALTER no DDL de diferenças. A tabela não muda de esquema.
       </p>
       {isChanged || isDropped ? (
@@ -54,7 +54,7 @@ export function ExistingTableBanner({
           <button
             type="button"
             onClick={onRevertTable}
-            className="h-7 cursor-pointer rounded-md border border-line-strong bg-transparent px-2.5 text-xs text-ink"
+            className="h-7 cursor-pointer rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink"
           >
             Desfazer as mudanças desta tabela
           </button>

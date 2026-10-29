@@ -60,17 +60,17 @@ export function ForeignKeysSection({
   return (
     <section
       aria-labelledby="h-fks"
-      className="flex flex-col gap-1.5 border-t border-line pt-3"
+      className="flex flex-col gap-1.5 border-t border-border pt-3"
     >
       <div className="flex h-7 items-center gap-2">
         <h2 id="h-fks" className="m-0 text-[13px] font-semibold">
           Chaves estrangeiras
         </h2>
-        <span className="text-xs text-ink-faint">{table.foreignKeys.length}</span>
+        <span className="text-xs text-subtle">{table.foreignKeys.length}</span>
         <button
           type="button"
           onClick={handleAdd}
-          className="ml-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-line-strong bg-transparent px-2.5 text-xs text-ink"
+          className="ml-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink"
         >
           <svg
             width="16"
@@ -117,11 +117,11 @@ export function ForeignKeysSection({
         return (
           <div
             key={`${colsLabel}-${idx}`}
-            className="grid grid-cols-[minmax(0,1fr)_128px_28px] items-center gap-x-2 gap-y-1.5 rounded-md border border-line bg-surface-raised px-2.5 py-2 font-mono text-xs"
+            className="grid grid-cols-[minmax(0,1fr)_156px_28px] items-center gap-x-2 gap-y-1.5 rounded-md border border-border bg-raised px-2.5 py-2 font-mono text-xs"
           >
             <span className="min-w-0 truncate">
               {colsLabel} <span className="text-accent">→</span> {targetDisplay}
-              <span className="text-ink-faint">
+              <span className="text-subtle">
                 {" "}
                 ({fk.target.columns.join(", ")})
               </span>
@@ -136,7 +136,7 @@ export function ForeignKeysSection({
                   onDelete: e.target.value as FkAction,
                 })
               }
-              className="h-7 rounded border border-line bg-canvas px-1.5 font-sans text-xs text-ink"
+              className="h-7 rounded border border-border bg-background px-1.5 font-sans text-xs text-ink [&>option]:bg-raised [&>option]:text-ink"
             >
               {options.map((action) => (
                 <option key={action} value={action}>
@@ -149,7 +149,7 @@ export function ForeignKeysSection({
               type="button"
               aria-label={`Remover a FK de ${colsLabel}`}
               onClick={() => onRemoveForeignKey(idx)}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-ink-muted"
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-muted"
             >
               <svg
                 width="16"
@@ -167,7 +167,7 @@ export function ForeignKeysSection({
             </button>
 
             {!targetInModel ? (
-              <span className="col-span-full font-sans text-xs leading-[18px] text-ink-muted">
+              <span className="col-span-full font-sans text-xs leading-[18px] text-muted">
                 {fk.target.schema}.{fk.target.table} não está no modelo; a FK
                 continua como está no banco.
               </span>
@@ -177,7 +177,7 @@ export function ForeignKeysSection({
       })}
 
       {!table.origin ? (
-        <p className="m-0 text-xs leading-[18px] text-ink-muted">
+        <p className="m-0 text-xs leading-[18px] text-muted">
           Ou arraste uma coluna até a tabela de destino no diagrama. A FK pode
           apontar para uma tabela existente.
         </p>

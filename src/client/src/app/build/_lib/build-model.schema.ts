@@ -130,7 +130,28 @@ export function parseModelBody(body: string): BuildModel | null {
   try {
     const parsed: unknown = JSON.parse(body);
     const result = buildModelSchema.safeParse(parsed);
-    return result.success ? result.data : null;
+    if (!result.success) return null;
+    const model = result.data;
+    if (model.engine !== "informix") return model;
+    return {
+      ...model,
+      tables: model.tables.map((table) => {
+        if (table.origin === null) return table;
+        const fixFk = (fk: ModelForeignKey): ModelForeignKey => ({
+          ...fk,
+          onDelete: fk.onDelete === "restrict" ? "noAction" : fk.onDelete,
+          onUpdate: fk.onUpdate === "restrict" ? "noAction" : fk.onUpdate,
+        });
+        return {
+          ...table,
+          foreignKeys: table.foreignKeys.map(fixFk),
+          origin: {
+            ...table.origin,
+            foreignKeys: table.origin.foreignKeys.map(fixFk),
+          },
+        };
+      }),
+    };
   } catch {
     return null;
   }

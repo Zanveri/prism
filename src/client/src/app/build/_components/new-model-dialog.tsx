@@ -122,6 +122,9 @@ export function NewModelDialog({
   const [database, setDatabase] = useState<string>(
     initialDatabase ?? availableDatabases[0] ?? "",
   );
+  const effectiveDatabase = availableDatabases.includes(database)
+    ? database
+    : (availableDatabases[0] ?? "");
   const [defaultSchema, setDefaultSchema] = useState(initialDefaultSchema);
   const [customCreateSchema, setCustomCreateSchema] = useState<boolean | null>(
     null,
@@ -182,7 +185,7 @@ export function NewModelDialog({
       name: trimmedName,
       engine: effectiveEngine,
       connectionId: selectedConnection.id,
-      database: database || selectedConnection.database,
+      database: effectiveDatabase || selectedConnection.database,
       selection: summary.selection,
       defaultSchema: defaultSchema.trim(),
       createSchema,
@@ -190,12 +193,12 @@ export function NewModelDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-canvas/75 px-4 pt-10 pb-14">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim px-4 pt-10 pb-14">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="novo-modelo-titulo"
-        className=" flex w-full max-w-[680px] flex-col rounded-lg border border-border-strong bg-surface text-ink shadow-lg"
+        className="flex w-full max-w-[680px] flex-col rounded-lg border border-border-strong bg-panel text-ink shadow-2xl"
       >
         <div className="flex items-center gap-3 border-b border-border px-5 py-4">
           <span className="flex-none text-muted">
@@ -222,7 +225,7 @@ export function NewModelDialog({
               value={name}
               disabled={isReading}
               onChange={(e) => setName(e.target.value)}
-              className="h-9 rounded-sm border border-border-strong bg-canvas px-3 font-mono text-[13px] font-normal text-ink"
+              className="h-9 rounded-sm border border-border-strong bg-background px-3 font-mono text-[13px] font-normal text-ink"
             />
           </label>
 
@@ -240,7 +243,7 @@ export function NewModelDialog({
                   "flex cursor-pointer flex-col gap-1 rounded-md border px-3.5 py-3 text-left",
                   mode === "zero"
                     ? "border-accent bg-selected text-ink"
-                    : "border-border-strong bg-transparent text-ink hover:bg-elevated",
+                    : "border-border-strong bg-transparent text-ink hover:bg-selected",
                 )}
               >
                 <span className="flex items-center gap-2 font-semibold">
@@ -259,7 +262,7 @@ export function NewModelDialog({
                   "flex cursor-pointer flex-col gap-1 rounded-md border px-3.5 py-3 text-left",
                   mode === "database"
                     ? "border-accent bg-selected text-ink"
-                    : "border-border-strong bg-transparent text-ink hover:bg-elevated",
+                    : "border-border-strong bg-transparent text-ink hover:bg-selected",
                 )}
               >
                 <span className="flex items-center gap-2 font-semibold">
@@ -291,7 +294,7 @@ export function NewModelDialog({
                         "flex h-11 cursor-pointer items-center gap-2.5 rounded-sm border px-3",
                         active
                           ? "border-accent bg-selected text-ink"
-                          : "border-border-strong bg-transparent text-ink hover:bg-elevated",
+                          : "border-border-strong bg-transparent text-ink hover:bg-selected",
                       )}
                     >
                       <EngineTag engine={connectionEngineNumber(item)} />
@@ -323,9 +326,14 @@ export function NewModelDialog({
                     onChange={(e) => {
                       const nextId = e.target.value;
                       setConnectionId(nextId);
+                      const nextConn = validConnections.find((c) => c.id === nextId);
+                      if (nextConn) {
+                        setDatabase(nextConn.database);
+                      }
+                      setChecked(new Set());
                       onSelectConnection?.(nextId);
                     }}
-                    className="h-9 rounded-sm border border-border-strong bg-elevated px-2.5 text-[13px] font-normal text-ink"
+                    className="h-9 rounded-sm border border-border-strong bg-raised px-2.5 text-[13px] font-normal text-ink [&>option]:bg-raised [&>option]:text-ink"
                   >
                     {validConnections.map((conn) => (
                       <option key={conn.id} value={conn.id}>
@@ -338,14 +346,15 @@ export function NewModelDialog({
                 <label className="flex flex-col gap-1.5 font-medium">
                   {buildCopy.databaseLabel}
                   <select
-                    value={database}
+                    value={effectiveDatabase}
                     disabled={isReading}
                     onChange={(e) => {
                       const nextDb = e.target.value;
                       setDatabase(nextDb);
+                      setChecked(new Set());
                       onSelectDatabase?.(nextDb);
                     }}
-                    className="h-9 rounded-sm border border-border-strong bg-elevated px-2 font-mono text-[13px] font-normal text-ink"
+                    className="h-9 rounded-sm border border-border-strong bg-raised px-2 font-mono text-[13px] font-normal text-ink [&>option]:bg-raised [&>option]:text-ink"
                   >
                     {availableDatabases.map((db) => (
                       <option key={db} value={db}>
@@ -388,7 +397,7 @@ export function NewModelDialog({
                 <div
                   role="group"
                   aria-labelledby="tabelas-legenda"
-                  className="flex max-h-60 flex-col overflow-auto rounded-sm border border-border bg-canvas py-1.5"
+                  className="flex max-h-60 flex-col overflow-auto rounded-sm border border-border bg-background py-1.5"
                 >
                   {schemas.map((group) => {
                     const isCollapsed = collapsedSchemas.has(group.schema);
@@ -501,7 +510,7 @@ export function NewModelDialog({
                   setDefaultSchema(e.target.value);
                   setCustomCreateSchema(null);
                 }}
-                className="h-9 rounded-sm border border-border-strong bg-canvas px-3 font-mono text-[13px] font-normal text-ink"
+                className="h-9 rounded-sm border border-border-strong bg-background px-3 font-mono text-[13px] font-normal text-ink"
               />
             </label>
             <label className="flex h-9 cursor-pointer items-center gap-2">
@@ -525,7 +534,7 @@ export function NewModelDialog({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-b-lg border-t border-border bg-elevated px-5 py-3.5">
+        <div className="flex flex-wrap items-center gap-2 rounded-b-lg border-t border-border bg-raised px-5 py-3.5">
           <span className="flex items-center gap-1.5 text-xs text-muted">
             <InfoIcon />
             <span>

@@ -80,7 +80,7 @@ export function BuildSidebar({
     return (
       <aside
         aria-label={buildCopy.sidebarTitle}
-        className="flex min-w-0 flex-[1_1_272px] flex-col border-r border-border bg-panel"
+        className="flex min-h-0 min-w-0 flex-[1_1_272px] flex-col overflow-hidden border-r border-border bg-panel"
       >
         <div className="flex min-h-8 items-center py-2 pr-2 pl-3">
           <span className="text-xs font-semibold tracking-wider text-muted uppercase">
@@ -91,7 +91,7 @@ export function BuildSidebar({
           <span className="text-subtle">
             <BuildIcon />
           </span>
-          <p className="m-0 text-ink-soft">{buildCopy.emptyModels}</p>
+          <p className="m-0 text-body">{buildCopy.emptyModels}</p>
           <p className="m-0 text-xs leading-[18px] text-muted">{buildCopy.emptyModelsHint}</p>
         </div>
       </aside>
@@ -110,7 +110,7 @@ export function BuildSidebar({
   return (
     <aside
       aria-label={buildCopy.sidebarTitle}
-      className="flex min-w-0 flex-[1_1_272px] flex-col border-r border-border bg-panel"
+      className="flex min-h-0 min-w-0 flex-[1_1_272px] flex-col overflow-hidden border-r border-border bg-panel"
     >
       <div className="flex items-center gap-1 py-2 pr-2 pl-3">
         <span className="text-xs font-semibold tracking-wider text-muted uppercase">
@@ -136,7 +136,7 @@ export function BuildSidebar({
         </button>
       </div>
 
-      <label className="mx-2 mb-2 flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-subtle">
+      <label className="mx-2 mb-2 flex h-8 shrink-0 items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-subtle">
         <SearchIcon />
         <input
           type="text"
@@ -148,7 +148,7 @@ export function BuildSidebar({
         />
       </label>
 
-      <div className="flex flex-col pb-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-3">
         {groups.map((group, idx) => {
           const isExpanded = !collapsedSchemas[group.schema];
           return (
@@ -159,21 +159,23 @@ export function BuildSidebar({
                 onClick={() => toggleSchema(group.schema)}
                 className="flex h-[30px] w-full cursor-pointer items-center gap-1.5 pr-3 pl-2.5 text-left font-semibold text-ink hover:bg-selected"
               >
-                <span className="text-subtle">
+                <span className="shrink-0 text-subtle">
                   <ChevronIcon direction={isExpanded ? "down" : "right"} />
                 </span>
-                <FolderIcon />
-                <span className="font-mono">{group.schema}</span>
+                <span className="shrink-0">
+                  <FolderIcon />
+                </span>
+                <span className="min-w-0 flex-1 truncate font-mono">{group.schema}</span>
                 {group.isExistingSchema ? (
-                  <span className="inline-flex h-[18px] items-center rounded border border-dashed border-subtle px-1.5 text-[11px] font-medium text-muted">
+                  <span className="inline-flex h-[18px] shrink-0 items-center rounded border border-dashed border-subtle px-1.5 text-[11px] font-medium text-muted">
                     {buildCopy.existingSchemaBadge}
                   </span>
                 ) : (
-                  <span className="inline-flex h-[18px] items-center rounded border border-border-strong px-1.5 text-[11px] font-medium text-muted">
+                  <span className="inline-flex h-[18px] shrink-0 items-center rounded border border-border-strong px-1.5 text-[11px] font-medium text-muted">
                     {buildCopy.newSchemaBadge}
                   </span>
                 )}
-                <span className="ml-auto text-xs font-normal text-subtle">
+                <span className="ml-auto shrink-0 text-xs font-normal text-subtle">
                   {group.tables.length}
                 </span>
               </button>
@@ -196,31 +198,31 @@ export function BuildSidebar({
                       aria-current={isSelected ? "true" : undefined}
                       onClick={() => onSelectTable?.(tKey)}
                       className={cn(
-                        "flex h-[30px] w-full cursor-pointer items-center gap-1.5 pr-3 pl-8 text-left",
+                        "flex h-[30px] w-full shrink-0 cursor-pointer items-center gap-1.5 pr-3 pl-8 text-left",
                         isSelected
                           ? "bg-selected text-ink"
                           : isExisting
                             ? "text-muted hover:bg-selected"
-                            : "text-ink-soft hover:bg-selected",
+                            : "text-body hover:bg-selected",
                       )}
                     >
-                      <span className={cn(isExisting && "text-subtle")}>
+                      <span className={cn("shrink-0", isExisting && "text-subtle")}>
                         <TableIcon />
                       </span>
                       <span
                         className={cn(
-                          "truncate font-mono",
+                          "min-w-0 flex-1 truncate font-mono",
                           table.dropInDatabase && "line-through opacity-70",
                         )}
                       >
                         {table.name}
                       </span>
                       {table.dropInDatabase ? (
-                        <span className="inline-flex h-4 items-center rounded border border-danger px-1.5 text-[10px] font-semibold text-danger">
+                        <span className="inline-flex h-4 shrink-0 items-center rounded border border-danger px-1.5 text-[10px] font-semibold text-danger">
                           {buildCopy.droppedTableBadge}
                         </span>
                       ) : changed ? (
-                        <span className="inline-flex h-4 items-center rounded border border-accent px-1.5 text-[10px] font-semibold text-accent">
+                        <span className="inline-flex h-4 shrink-0 items-center rounded border border-accent px-1.5 text-[10px] font-semibold text-accent">
                           {buildCopy.changedTableBadge}
                         </span>
                       ) : null}
@@ -239,7 +241,7 @@ export function BuildSidebar({
                       )}
                       <span
                         className={cn(
-                          "text-xs text-subtle",
+                          "shrink-0 text-xs text-subtle",
                           !hasError && !hasWarning && "ml-auto",
                         )}
                       >
@@ -256,7 +258,7 @@ export function BuildSidebar({
           type="button"
           aria-expanded={relationsExpanded}
           onClick={() => setRelationsExpanded((v) => !v)}
-          className="mt-1 flex h-[30px] w-full cursor-pointer items-center gap-1.5 pr-3 pl-2.5 text-left text-ink-soft hover:bg-selected"
+          className="mt-1 flex h-[30px] w-full shrink-0 cursor-pointer items-center gap-1.5 pr-3 pl-2.5 text-left text-body hover:bg-selected"
         >
           <span className="text-subtle">
             <ChevronIcon direction={relationsExpanded ? "down" : "right"} />
@@ -270,7 +272,7 @@ export function BuildSidebar({
           type="button"
           aria-expanded={indexesExpanded}
           onClick={() => setIndexesExpanded((v) => !v)}
-          className="flex h-[30px] w-full cursor-pointer items-center gap-1.5 pr-3 pl-2.5 text-left text-ink-soft hover:bg-selected"
+          className="flex h-[30px] w-full shrink-0 cursor-pointer items-center gap-1.5 pr-3 pl-2.5 text-left text-body hover:bg-selected"
         >
           <span className="text-subtle">
             <ChevronIcon direction={indexesExpanded ? "down" : "right"} />
@@ -285,7 +287,7 @@ export function BuildSidebar({
         <button
           type="button"
           onClick={onOpenDdlView}
-          className="mx-2 mt-auto mb-3 flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-left text-xs leading-[18px] text-ink hover:bg-selected"
+          className="mx-2 mt-auto mb-3 flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border bg-raised px-2.5 py-2 text-left text-xs leading-[18px] text-ink hover:bg-selected"
         >
           <span
             className={cn(

@@ -107,7 +107,7 @@ export function ModelsList({
         </button>
       </div>
 
-      <label className="flex h-8 max-w-[360px] items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-subtle">
+      <label className="flex h-8 max-w-[360px] items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-subtle">
         <SearchIcon />
         <input
           type="text"
@@ -125,37 +125,37 @@ export function ModelsList({
             <tr>
               <th
                 scope="col"
-                className="h-9 border-b border-border bg-surface px-4 text-left text-xs font-medium text-muted"
+                className="h-9 border-b border-border bg-raised px-4 text-left text-xs font-medium text-muted"
               >
                 {buildCopy.colModel}
               </th>
               <th
                 scope="col"
-                className="h-9 border-b border-border bg-surface px-4 text-left text-xs font-medium text-muted"
+                className="h-9 border-b border-border bg-raised px-4 text-left text-xs font-medium text-muted"
               >
                 {buildCopy.colEngine}
               </th>
               <th
                 scope="col"
-                className="h-9 border-b border-border bg-surface px-4 text-left text-xs font-medium text-muted"
+                className="h-9 border-b border-border bg-raised px-4 text-left text-xs font-medium text-muted"
               >
                 {buildCopy.colStart}
               </th>
               <th
                 scope="col"
-                className="h-9 border-b border-border bg-surface px-4 text-left text-xs font-medium text-muted"
+                className="h-9 border-b border-border bg-raised px-4 text-left text-xs font-medium text-muted"
               >
                 {buildCopy.colTables}
               </th>
               <th
                 scope="col"
-                className="h-9 border-b border-border bg-surface px-4 text-left text-xs font-medium text-muted"
+                className="h-9 border-b border-border bg-raised px-4 text-left text-xs font-medium text-muted"
               >
                 {buildCopy.colUpdated}
               </th>
               <th
                 scope="col"
-                className="h-9 w-[120px] border-b border-border bg-surface px-4"
+                className="h-9 w-[120px] border-b border-border bg-raised px-4"
               >
                 <span className="sr-only">{buildCopy.colActions}</span>
               </th>
@@ -186,7 +186,7 @@ export function ModelsList({
                           if (e.key === "Enter") submitRename(entry);
                           if (e.key === "Escape") setRenamingId(null);
                         }}
-                        className="h-7 rounded border border-accent bg-canvas px-2 font-mono text-ink outline-none"
+                        className="h-7 rounded border border-accent bg-background px-2 font-mono text-ink outline-none"
                       />
                     ) : (
                       <button
@@ -214,7 +214,7 @@ export function ModelsList({
                   </td>
                   <td
                     className={cn(
-                      "px-4 text-ink-soft",
+                      "px-4 text-body",
                       !isLast && "border-b border-selected",
                     )}
                   >
@@ -222,7 +222,7 @@ export function ModelsList({
                   </td>
                   <td
                     className={cn(
-                      "px-4 text-ink-soft",
+                      "px-4 text-body",
                       !isLast && "border-b border-selected",
                     )}
                   >
@@ -230,7 +230,7 @@ export function ModelsList({
                   </td>
                   <td
                     className={cn(
-                      "px-4 text-ink-soft",
+                      "px-4 text-body",
                       !isLast && "border-b border-selected",
                     )}
                   >

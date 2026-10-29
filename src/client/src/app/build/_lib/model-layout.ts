@@ -1,5 +1,5 @@
 import type { SchemaDiagram } from "@/app/workbench/_lib/database-sessions.schema";
-import { layoutDatabaseDiagram, layoutSchemaDiagram } from "@/app/workbench/_lib/schema-diagram";
+import { layoutDatabaseDiagram } from "@/app/workbench/_lib/schema-diagram";
 import {
   rowHeight,
   type DiagramBox,
@@ -37,15 +37,31 @@ function computeAutoLayout(model: BuildModel): DiagramLayout {
   for (const table of model.tables) {
     const existing = bySchema.get(table.schema) ?? { tables: [], foreignKeys: [] };
     const pkCols = new Set(table.primaryKey?.columns ?? []);
+    const changes = tableChanges(model.engine, table);
+    const cols = table.columns.map((c, idx) => ({
+      name: c.name,
+      type: c.type,
+      isNullable: c.nullable,
+      isPrimaryKey: pkCols.has(c.name),
+      position: idx + 1,
+    }));
+    if (table.origin !== null && changes.removedColumns.length > 0) {
+      for (const removedName of changes.removedColumns) {
+        const originCol = table.origin.columns.find((c) => c.name === removedName);
+        if (originCol) {
+          cols.push({
+            name: originCol.name,
+            type: originCol.type,
+            isNullable: originCol.nullable,
+            isPrimaryKey: false,
+            position: cols.length + 1,
+          });
+        }
+      }
+    }
     existing.tables.push({
       name: table.name,
-      columns: table.columns.map((c, idx) => ({
-        name: c.name,
-        type: c.type,
-        isNullable: c.nullable,
-        isPrimaryKey: pkCols.has(c.name),
-        position: idx + 1,
-      })),
+      columns: cols,
     });
     for (const fk of table.foreignKeys) {
       const targetKey = `${fk.target.schema}.${fk.target.table}`;
@@ -63,9 +79,6 @@ function computeAutoLayout(model: BuildModel): DiagramLayout {
   }
 
   const entries = [...bySchema.entries()].map(([schema, diagram]) => ({ schema, diagram }));
-  if (entries.length === 1) {
-    return layoutSchemaDiagram(entries[0].schema, entries[0].diagram, { qualifyNames: false });
-  }
   return layoutDatabaseDiagram(entries, { qualifyNames: true });
 }
 
@@ -142,40 +155,82 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
   });
 
   const boxByKey = new Map(boxes.map((b) => [b.key, b]));
+  const autoEdgeQueue = new Map<string, DiagramEdge[]>();
+  for (const edge of auto.edges) {
+    const sig = `${edge.fromTable}->${edge.toTable}:${edge.fromColumn ?? ""}->${edge.toColumn ?? ""}:${edge.name}`;
+    const list = autoEdgeQueue.get(sig) ?? [];
+    list.push(edge);
+    autoEdgeQueue.set(sig, list);
+  }
+
   const edges: DiagramEdge[] = [];
   let edgeOrder = 0;
 
   for (const table of model.tables) {
     const fromKey = tableKey(table);
     const sourceBox = boxByKey.get(fromKey);
+    const autoSource = autoBoxByKey.get(fromKey);
     if (!sourceBox) continue;
 
     for (const fk of table.foreignKeys) {
       const toKey = `${fk.target.schema}.${fk.target.table}`;
       const targetBox = boxByKey.get(toKey);
+      const autoTarget = autoBoxByKey.get(toKey);
       if (!targetBox) continue;
 
       const fromCol = fk.columns[0];
       const toCol = fk.target.columns[0];
-      const fromY = rowCenterY(sourceBox, fromCol);
-      const toY = rowCenterY(targetBox, toCol);
-
-      const goingRight = sourceBox.x + sourceBox.width / 2 <= targetBox.x + targetBox.width / 2;
-      const from: Point = {
-        x: goingRight ? sourceBox.x + sourceBox.width : sourceBox.x,
-        y: fromY,
-      };
-      const to: Point = {
-        x: goingRight ? targetBox.x : targetBox.x + targetBox.width,
-        y: toY,
-      };
-      const midX = Math.round((from.x + to.x) / 2);
-      const points: Point[] =
-        from.y === to.y
-          ? [from, to]
-          : [from, { x: midX, y: from.y }, { x: midX, y: to.y }, to];
-
       const fkName = fk.name ?? `fk_${table.name}_${fk.target.table}`;
+      const sig = `${fromKey}->${toKey}:${fromCol ?? ""}->${toCol ?? ""}:${fkName}`;
+      const queued = autoEdgeQueue.get(sig)?.shift();
+
+      const atAutoPosition =
+        Boolean(
+          queued &&
+            autoSource &&
+            autoTarget &&
+            sourceBox.x === autoSource.x &&
+            sourceBox.y === autoSource.y &&
+            targetBox.x === autoTarget.x &&
+            targetBox.y === autoTarget.y,
+        );
+
+      let from: Point;
+      let to: Point;
+      let points: Point[];
+
+      if (atAutoPosition && queued) {
+        from = queued.from;
+        to = queued.to;
+        points = queued.points;
+      } else {
+        const fromY = rowCenterY(sourceBox, fromCol);
+        const toY = rowCenterY(targetBox, toCol);
+
+        if (sourceBox.x + sourceBox.width <= targetBox.x) {
+          from = { x: sourceBox.x + sourceBox.width, y: fromY };
+          to = { x: targetBox.x, y: toY };
+          const midX = Math.round((from.x + to.x) / 2);
+          points =
+            from.y === to.y
+              ? [from, to]
+              : [from, { x: midX, y: from.y }, { x: midX, y: to.y }, to];
+        } else if (targetBox.x + targetBox.width <= sourceBox.x) {
+          from = { x: sourceBox.x, y: fromY };
+          to = { x: targetBox.x + targetBox.width, y: toY };
+          const midX = Math.round((from.x + to.x) / 2);
+          points =
+            from.y === to.y
+              ? [from, to]
+              : [from, { x: midX, y: from.y }, { x: midX, y: to.y }, to];
+        } else {
+          from = { x: sourceBox.x + sourceBox.width, y: fromY };
+          to = { x: targetBox.x + targetBox.width, y: toY };
+          const loopX = Math.max(sourceBox.x + sourceBox.width, targetBox.x + targetBox.width) + 32;
+          points = [from, { x: loopX, y: from.y }, { x: loopX, y: to.y }, to];
+        }
+      }
+
       edges.push({
         key: `${edgeOrder++}:${fromKey}:${fkName}:${fromCol ?? ""}`,
         name: fkName,
@@ -191,14 +246,18 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
     }
   }
 
-  const rightmost = boxes.length > 0 ? Math.max(...boxes.map((b) => b.x + b.width)) : margin;
-  const bottommost = boxes.length > 0 ? Math.max(...boxes.map((b) => b.y + b.height)) : margin;
+  const maxBoxRight = boxes.length > 0 ? Math.max(...boxes.map((b) => b.x + b.width)) : margin;
+  const maxBoxBottom = boxes.length > 0 ? Math.max(...boxes.map((b) => b.y + b.height)) : margin;
+  const maxEdgeX =
+    edges.length > 0 ? Math.max(...edges.flatMap((e) => e.points.map((p) => p.x))) : 0;
+  const maxEdgeY =
+    edges.length > 0 ? Math.max(...edges.flatMap((e) => e.points.map((p) => p.y))) : 0;
 
   return {
     boxes,
     edges,
-    width: rightmost + margin,
-    height: bottommost + margin,
+    width: Math.max(maxBoxRight, maxEdgeX) + margin,
+    height: Math.max(maxBoxBottom, maxEdgeY) + margin,
   };
 }
 
@@ -249,6 +308,7 @@ export function connectColumn(
     return { model };
   }
 
+  const defaultOnDelete = model.engine === "informix" ? "noAction" : "restrict";
   const pkCols = targetTable.primaryKey?.columns ?? [];
   if (pkCols.length === 1) {
     const fk: ModelForeignKey = {
@@ -259,7 +319,7 @@ export function connectColumn(
         table: targetTable.name,
         columns: [pkCols[0]],
       },
-      onDelete: "restrict",
+      onDelete: defaultOnDelete,
       onUpdate: "noAction",
     };
     return { model: addForeignKey(model, fromKey, fk) };
@@ -274,7 +334,7 @@ export function connectColumn(
         table: targetTable.name,
         columns: [...pkCols],
       },
-      onDelete: "restrict",
+      onDelete: defaultOnDelete,
       onUpdate: "noAction",
     },
   };

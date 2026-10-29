@@ -73,10 +73,10 @@ export function ConnectionChoiceDialog({
               });
             }}
             className={cn(
-              "flex h-8 items-center justify-center rounded-md border border-accent bg-accent px-3 font-medium text-accent-ink",
+              "flex h-8 items-center justify-center rounded-md border border-accent bg-accent px-3 font-medium text-background",
               !selectedConnection
                 ? "cursor-not-allowed opacity-60"
-                : "cursor-pointer hover:bg-accent-hover",
+                : "cursor-pointer hover:opacity-95",
             )}
           >
             {buildCopy.connectionChoiceConfirm}
@@ -111,7 +111,7 @@ export function ConnectionChoiceDialog({
                     "flex h-9 cursor-pointer items-center justify-between rounded-md border px-2.5 text-left text-ink",
                     active
                       ? "border-accent bg-selected"
-                      : "border-border bg-surface hover:bg-hover",
+                      : "border-border bg-raised hover:bg-selected",
                   )}
                 >
                   <span className="flex items-center gap-2">
@@ -139,7 +139,7 @@ export function ConnectionChoiceDialog({
             aria-label={buildCopy.databaseLabel}
             value={selectedDatabase}
             onChange={(e) => setSelectedDatabase(e.target.value)}
-            className="h-8 rounded-md border border-border bg-surface px-2.5 font-mono text-xs text-ink"
+            className="h-8 rounded-md border border-border bg-raised px-2.5 font-mono text-xs text-ink [&>option]:bg-raised [&>option]:text-ink"
           >
             {availableDatabases.map((db) => (
               <option key={db} value={db}>

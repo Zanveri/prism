@@ -34,17 +34,17 @@ export function IndexesSection({
   return (
     <section
       aria-labelledby="h-indices"
-      className="flex flex-col gap-1.5 border-t border-line pt-3"
+      className="flex flex-col gap-1.5 border-t border-border pt-3"
     >
       <div className="flex h-7 items-center gap-2">
         <h2 id="h-indices" className="m-0 text-[13px] font-semibold">
           Índices
         </h2>
-        <span className="text-xs text-ink-faint">{countLabel}</span>
+        <span className="text-xs text-subtle">{countLabel}</span>
         <button
           type="button"
           onClick={handleAdd}
-          className="ml-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-line-strong bg-transparent px-2.5 text-xs text-ink"
+          className="ml-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink"
         >
           <svg
             width="16"
@@ -74,8 +74,8 @@ export function IndexesSection({
         return (
           <div
             key={`${ix.name}-${idx}`}
-            className={`grid grid-cols-[minmax(0,1fr)_26px_28px] items-center gap-x-2 gap-y-1.5 rounded-md border bg-surface-raised px-2.5 py-2 ${
-              isNewInExisting ? "border-success" : "border-line"
+            className={`grid grid-cols-[minmax(0,1fr)_26px_28px] items-center gap-x-2 gap-y-1.5 rounded-md border bg-raised px-2.5 py-2 ${
+              isNewInExisting ? "border-success" : "border-border"
             }`}
           >
             <div className="flex min-w-0 items-center gap-2">
@@ -86,7 +86,7 @@ export function IndexesSection({
                 onChange={(e) =>
                   onUpdateIndex(idx, { ...ix, name: e.target.value })
                 }
-                className="box-border h-7 min-w-0 flex-1 rounded border border-line bg-canvas px-2 font-mono text-xs text-ink"
+                className="box-border h-7 min-w-0 flex-1 rounded border border-border bg-background px-2 font-mono text-xs text-ink"
               />
               {isNewInExisting ? (
                 <span className="font-mono text-[10px] font-semibold text-success">
@@ -102,8 +102,8 @@ export function IndexesSection({
               onClick={() => onUpdateIndex(idx, { ...ix, unique: !ix.unique })}
               className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
                 ix.unique
-                  ? "border-ink-faint bg-surface-hover text-ink"
-                  : "border-line bg-transparent text-ink-faint"
+                  ? "border-subtle bg-selected text-ink"
+                  : "border-border bg-transparent text-subtle"
               }`}
             >
               UQ
@@ -113,7 +113,7 @@ export function IndexesSection({
               type="button"
               aria-label={`Remover o índice ${ix.name}`}
               onClick={() => onRemoveIndex(idx)}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-ink-muted"
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-muted"
             >
               <svg
                 width="16"
@@ -134,7 +134,7 @@ export function IndexesSection({
               {ix.columns.map((col) => (
                 <span
                   key={col}
-                  className="inline-flex h-6 items-center gap-1.5 rounded border border-line-strong pr-1 pl-2 font-mono text-xs"
+                  className="inline-flex h-6 items-center gap-1.5 rounded border border-border-strong pr-1 pl-2 font-mono text-xs"
                 >
                   {col}
                   <button
@@ -148,7 +148,7 @@ export function IndexesSection({
                         onUpdateIndex(idx, { ...ix, columns: nextCols });
                       }
                     }}
-                    className="flex h-[18px] w-[18px] cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-ink-muted"
+                    className="flex h-[18px] w-[18px] cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-muted"
                   >
                     <svg
                       width="12"
@@ -179,7 +179,7 @@ export function IndexesSection({
                       });
                     }
                   }}
-                  className="h-6 rounded border border-dashed border-line-strong bg-transparent px-1.5 text-xs text-ink-muted"
+                  className="h-6 rounded border border-dashed border-border-strong bg-transparent px-1.5 text-xs text-muted [&>option]:bg-raised [&>option]:text-ink"
                 >
                   <option value="">+ coluna</option>
                   {availableCols.map((col) => (

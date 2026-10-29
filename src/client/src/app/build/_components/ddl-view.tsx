@@ -135,7 +135,7 @@ export function DdlView({
   };
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col bg-canvas text-ink">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-ink">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-2">
         <button
           type="button"
@@ -157,7 +157,7 @@ export function DdlView({
           <div
             role="radiogroup"
             aria-label={buildCopy.ddlScopeGroupLabel}
-            className="ml-2 flex gap-0.5 rounded-md border border-border bg-canvas p-0.5"
+            className="ml-2 flex gap-0.5 rounded-md border border-border bg-background p-0.5"
           >
             <button
               type="button"
@@ -230,10 +230,10 @@ export function DdlView({
           title={disabledReason ?? buildCopy.ddlOpenInWorkbenchHint}
           onClick={() => onOpenInWorkbench?.(ddl.text)}
           className={cn(
-            "flex h-8 items-center gap-2 rounded-md border-0 bg-accent px-3 font-semibold text-accent-ink",
+            "flex h-8 items-center gap-2 rounded-md border-0 bg-accent px-3 font-semibold text-background",
             actionsDisabled
               ? "cursor-not-allowed opacity-50"
-              : "cursor-pointer hover:bg-accent-hover",
+              : "cursor-pointer hover:opacity-95",
           )}
         >
           <WorkbenchIcon />
@@ -315,10 +315,10 @@ export function DdlView({
         </label>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-wrap">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           aria-label={buildCopy.ddlReadOnlyLabel}
-          className="min-w-0 flex-[999_1_560px] overflow-x-auto bg-canvas py-3 pr-4 font-mono text-xs leading-5 whitespace-pre text-ink"
+          className="min-h-0 min-w-0 flex-[999_1_560px] overflow-auto bg-background py-3 pr-4 font-mono text-xs leading-5 whitespace-pre text-ink"
         >
           {lines.map((line, index) => {
             const lineNumber = index + 1;

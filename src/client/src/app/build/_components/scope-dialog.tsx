@@ -49,13 +49,13 @@ export function ScopeDialog({
   const fullSummary = summarizeDdlCommands(fullDdl.text);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-canvas/75 px-4 pt-24 pb-14">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim px-4 pt-24 pb-14">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="escopo-titulo"
         aria-describedby="escopo-texto"
-        className="flex w-full max-w-[640px] flex-col rounded-lg border border-border-strong bg-surface text-ink shadow-lg"
+        className="flex w-full max-w-[640px] flex-col rounded-lg border border-border-strong bg-panel text-ink shadow-lg"
       >
         <div className="flex items-center gap-3 border-b border-border px-5 py-4">
           <span className="flex-none text-muted">
@@ -93,7 +93,7 @@ export function ScopeDialog({
                 "flex cursor-pointer items-start gap-3 rounded-md border px-4 py-3.5 text-left text-ink",
                 scope === "changes"
                   ? "border-accent bg-selected"
-                  : "border-border-strong bg-transparent hover:bg-elevated",
+                  : "border-border-strong bg-transparent hover:bg-selected",
               )}
             >
               <span
@@ -128,7 +128,7 @@ export function ScopeDialog({
                 "flex cursor-pointer items-start gap-3 rounded-md border px-4 py-3.5 text-left text-ink",
                 scope === "full"
                   ? "border-accent bg-selected"
-                  : "border-border-strong bg-transparent hover:bg-elevated",
+                  : "border-border-strong bg-transparent hover:bg-selected",
               )}
             >
               <span
@@ -161,7 +161,7 @@ export function ScopeDialog({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 rounded-b-lg border-t border-border bg-elevated px-5 py-3.5">
+        <div className="flex flex-wrap items-center justify-end gap-2 rounded-b-lg border-t border-border bg-raised px-5 py-3.5">
           <button
             type="button"
             onClick={onCancel}
@@ -172,7 +172,7 @@ export function ScopeDialog({
           <button
             type="button"
             onClick={() => onConfirm(scope)}
-            className="flex h-9 cursor-pointer items-center rounded-md bg-accent px-3.5 font-semibold text-accent-ink hover:bg-accent-hover"
+            className="flex h-9 cursor-pointer items-center rounded-md bg-accent px-3.5 font-semibold text-background hover:opacity-95"
           >
             {buildCopy.toolbarGenerateDdl}
           </button>

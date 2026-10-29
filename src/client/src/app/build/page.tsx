@@ -49,6 +49,7 @@ import {
   rereadModel,
   type CatalogSelection,
 } from "@/app/build/_lib/catalog-import";
+import { supportedConnections } from "@/app/build/_lib/catalog-tree";
 import { writeDbml } from "@/app/build/_lib/dbml";
 import { checkModel, type Problem } from "@/app/build/_lib/model-check";
 import { modelDiagram } from "@/app/build/_lib/model-layout";
@@ -61,6 +62,7 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import {
   closeDatabaseSession,
+  getDatabases,
   getObjectNames,
   openDatabaseSession,
 } from "@/app/workbench/_lib/database-sessions.service";
@@ -212,10 +214,10 @@ export function BuildPageView({
     });
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas text-ink">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-ink">
       {topBar}
 
-      <div className="flex flex-1 flex-wrap">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {!sidebarHidden && (
           <BuildSidebar
             model={activeModel}
@@ -229,7 +231,7 @@ export function BuildPageView({
         )}
 
         {activeModel === null ? (
-          <div className="flex min-w-0 flex-[999_1_720px] flex-col">
+          <div className="flex min-h-0 min-w-0 flex-[999_1_720px] flex-col overflow-y-auto">
             {tabItems.length > 0 && (
               <ModelTabs
                 tabs={tabItems}
@@ -253,7 +255,7 @@ export function BuildPageView({
             />
           </div>
         ) : (
-          <div className="flex min-w-0 flex-[999_1_720px] flex-col">
+          <div className="flex min-h-0 min-w-0 flex-[999_1_720px] flex-col overflow-hidden">
             <ModelTabs
               tabs={tabItems}
               activeModelId={activeModelId}
@@ -287,10 +289,10 @@ export function BuildPageView({
             />
 
             {ddlOverlay ?? (
-              <div className="flex flex-1 flex-wrap">
+              <div className="flex min-h-0 flex-1 overflow-hidden">
                 <section
                   aria-label="Editor do modelo"
-                  className="flex min-w-0 flex-[1_1_448px] flex-col border-r border-border bg-panel"
+                  className="flex min-h-0 min-w-0 flex-[1_1_448px] flex-col overflow-hidden border-r border-border bg-panel"
                 >
                   <div
                     role="group"
@@ -332,7 +334,7 @@ export function BuildPageView({
 
                 <section
                   aria-label="Diagrama do modelo"
-                  className="flex min-w-0 flex-[999_1_560px] flex-col bg-canvas"
+                  className="flex min-h-0 min-w-0 flex-[999_1_560px] flex-col overflow-hidden bg-background"
                 >
                   {diagramContent}
                 </section>
@@ -394,6 +396,8 @@ export function BuildPage() {
   const [catalogSchemas, setCatalogSchemas] = useState<
     { schema: string; tables: string[] }[]
   >([]);
+  const [catalogDatabases, setCatalogDatabases] = useState<string[]>([]);
+  const [selectedCatalogConnId, setSelectedCatalogConnId] = useState<string | null>(null);
   const [readingProgress, setReadingProgress] = useState<{
     done: number;
     total: number;
@@ -522,6 +526,7 @@ export function BuildPage() {
   }
 
   async function loadCatalogPreview(connectionId: string, database?: string) {
+    setSelectedCatalogConnId(connectionId);
     setCatalogError(null);
     const sessionRes = await openDatabaseSession(connectionId, database);
     if (!sessionRes.ok) {
@@ -540,6 +545,12 @@ export function BuildPage() {
           .filter((s) => !s.isSystem)
           .map((s) => ({ schema: s.name, tables: [...s.tables] })),
       );
+      if (database === undefined) {
+        const dbsRes = await getDatabases(sessionId);
+        if (dbsRes.ok && dbsRes.data.length > 0) {
+          setCatalogDatabases(dbsRes.data.map((d) => d.name));
+        }
+      }
     } finally {
       await closeDatabaseSession(sessionId);
     }
@@ -832,7 +843,13 @@ export function BuildPage() {
         onCloseTab={handleCloseTab}
         onNewModel={() => {
           setCatalogError(null);
+          setCatalogSchemas([]);
+          setCatalogDatabases([]);
           setNewModelOpen(true);
+          const firstConn = supportedConnections(connectionsList)[0];
+          if (firstConn) {
+            void loadCatalogPreview(firstConn.id);
+          }
         }}
         onOpenFile={() => fileInputRef.current?.click()}
         onShowModelsList={() => updateTabs({ ...tabsState, active: null })}
@@ -840,7 +857,16 @@ export function BuildPage() {
         onAddTable={handleAddTable}
         onImportTables={() => {
           setCatalogError(null);
+          setCatalogSchemas([]);
+          setCatalogDatabases([]);
           setImportTablesOpen(true);
+          const firstConnId =
+            activeModel?.base?.connectionId ??
+            supportedConnections(connectionsList, activeModel?.engine)[0]?.id;
+          const initialDb = activeModel?.base?.database ?? undefined;
+          if (firstConnId) {
+            void loadCatalogPreview(firstConnId, initialDb);
+          }
         }}
         onChangePane={setEditorPane}
         onUndo={doc.undo}
@@ -942,13 +968,23 @@ export function BuildPage() {
             {newModelOpen && (
               <NewModelDialog
                 connections={connectionsList}
+                databases={catalogDatabases.length > 0 ? catalogDatabases : undefined}
                 schemas={catalogSchemas}
                 readingProgress={readingProgress}
                 errorMessage={catalogError}
-                onSelectConnection={(connId) => void loadCatalogPreview(connId)}
+                onSelectConnection={(connId) => {
+                  setCatalogDatabases([]);
+                  setCatalogSchemas([]);
+                  void loadCatalogPreview(connId);
+                }}
                 onSelectDatabase={(db) => {
-                  const firstConn = connectionsList[0]?.id;
-                  if (firstConn) void loadCatalogPreview(firstConn, db);
+                  const connId =
+                    selectedCatalogConnId ??
+                    supportedConnections(connectionsList)[0]?.id;
+                  if (connId) {
+                    setCatalogSchemas([]);
+                    void loadCatalogPreview(connId, db);
+                  }
                 }}
                 onCancel={() => setNewModelOpen(false)}
                 onCancelReading={() => readingAbortRef.current?.abort()}
@@ -959,10 +995,25 @@ export function BuildPage() {
               <ImportTablesDialog
                 model={activeModel}
                 connections={connectionsList}
+                databases={catalogDatabases.length > 0 ? catalogDatabases : undefined}
                 schemas={catalogSchemas}
                 readingProgress={readingProgress}
                 errorMessage={catalogError}
-                onSelectConnection={(connId) => void loadCatalogPreview(connId)}
+                onSelectConnection={(connId) => {
+                  setCatalogDatabases([]);
+                  setCatalogSchemas([]);
+                  void loadCatalogPreview(connId);
+                }}
+                onSelectDatabase={(db) => {
+                  const connId =
+                    selectedCatalogConnId ??
+                    activeModel.base?.connectionId ??
+                    supportedConnections(connectionsList, activeModel.engine)[0]?.id;
+                  if (connId) {
+                    setCatalogSchemas([]);
+                    void loadCatalogPreview(connId, db);
+                  }
+                }}
                 onCancel={() => setImportTablesOpen(false)}
                 onCancelReading={() => readingAbortRef.current?.abort()}
                 onSubmit={(payload) => void handleImportTablesSubmit(payload)}

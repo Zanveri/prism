@@ -60,7 +60,7 @@ export function SimpleEditor({
 
   if (!table) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6 text-xs text-ink-muted">
+      <div className="flex flex-1 items-center justify-center p-6 text-xs text-muted">
         Selecione ou crie uma tabela para editar.
       </div>
     );
@@ -113,7 +113,7 @@ export function SimpleEditor({
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
       {isExisting ? (
         <ExistingTableBanner
           baseLabel={
@@ -128,7 +128,7 @@ export function SimpleEditor({
       ) : null}
 
       <div className="grid grid-cols-[minmax(0,1fr)_140px_32px] items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-ink-muted">
+        <label className="flex flex-col gap-1 text-xs text-muted">
           Tabela
           <input
             type="text"
@@ -138,11 +138,11 @@ export function SimpleEditor({
               const nextModel = renameTable(model, currentKey, nextName);
               onChange(nextModel, `${table.schema}.${nextName.trim()}`);
             }}
-            className="box-border h-8 rounded-md border border-line-strong bg-canvas px-2.5 font-mono text-[13px] font-semibold text-ink-strong"
+            className="box-border h-8 rounded-md border border-border-strong bg-background px-2.5 font-mono text-[13px] font-semibold text-ink"
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-xs text-ink-muted">
+        <label className="flex flex-col gap-1 text-xs text-muted">
           Esquema
           <select
             value={table.schema}
@@ -161,10 +161,10 @@ export function SimpleEditor({
               );
               onChange(nextModel, `${nextSchema}.${table.name}`);
             }}
-            className={`h-8 rounded-md border px-2 font-mono text-[13px] ${
+            className={`h-8 rounded-md border px-2 font-mono text-[13px] [&>option]:bg-raised [&>option]:text-ink ${
               isExisting
-                ? "border-line bg-surface text-ink-muted"
-                : "border-line-strong bg-surface-raised text-ink"
+                ? "border-border bg-panel text-muted"
+                : "border-border-strong bg-raised text-ink"
             }`}
           >
             {schemaNames.map((schemaName) => (
@@ -181,8 +181,8 @@ export function SimpleEditor({
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((prev) => !prev)}
-          className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-line-strong text-ink ${
-            menuOpen ? "bg-surface-hover" : "bg-transparent"
+          className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-border-strong text-ink ${
+            menuOpen ? "bg-selected" : "bg-transparent"
           }`}
         >
           <svg
@@ -203,7 +203,7 @@ export function SimpleEditor({
         <div
           role="menu"
           aria-label={`Ações de ${table.name}`}
-          className="-mt-2.5 box-border w-[260px] self-end rounded-md border border-line-strong bg-surface-raised p-1 shadow-2xl"
+          className="-mt-2.5 box-border w-[260px] self-end rounded-md border border-border-strong bg-raised p-1 shadow-2xl"
         >
           <button
             type="button"
@@ -212,12 +212,12 @@ export function SimpleEditor({
               setMenuOpen(false);
               onChange(copyAsNewTable(model, currentKey, model.defaultSchema));
             }}
-            className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-ink-soft"
+            className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-body hover:bg-selected"
           >
             <span>
               {isExisting ? "Copiar como tabela nova" : "Duplicar tabela"}
             </span>
-            <span className="text-xs leading-[18px] text-ink-muted">
+            <span className="text-xs leading-[18px] text-muted">
               Uma tabela nova com as mesmas colunas
             </span>
           </button>
@@ -229,17 +229,17 @@ export function SimpleEditor({
               setMenuOpen(false);
               onChange(removeTable(model, currentKey), null);
             }}
-            className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-ink-soft"
+            className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-body hover:bg-selected"
           >
             <span>{isExisting ? "Tirar do modelo" : "Excluir tabela"}</span>
-            <span className="text-xs leading-[18px] text-ink-muted">
+            <span className="text-xs leading-[18px] text-muted">
               Some daqui; nada vai para o DDL
             </span>
           </button>
 
           {isExisting ? (
             <>
-              <div role="separator" className="my-1 h-px bg-line" />
+              <div role="separator" className="my-1 h-px bg-border" />
               <button
                 type="button"
                 role="menuitem"
@@ -251,14 +251,14 @@ export function SimpleEditor({
                     setConfirmDropOpen(true);
                   }
                 }}
-                className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-danger"
+                className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-danger hover:bg-selected"
               >
                 <span>
                   {table.dropInDatabase
                     ? "Cancelar exclusão no banco"
                     : "Excluir no banco…"}
                 </span>
-                <span className="text-xs leading-[18px] text-ink-muted">
+                <span className="text-xs leading-[18px] text-muted">
                   Vira DROP TABLE no DDL de diferenças
                 </span>
               </button>
@@ -272,14 +272,14 @@ export function SimpleEditor({
           <h2 id="h-colunas" className="m-0 text-[13px] font-semibold">
             Colunas
           </h2>
-          <span className="text-xs text-ink-faint">
+          <span className="text-xs text-subtle">
             {columnCountParts.join(" · ")}
           </span>
         </div>
 
         <div
           aria-hidden="true"
-          className="grid h-5 grid-cols-[12px_minmax(0,1fr)_112px_repeat(4,26px)_24px] items-center gap-1 text-[11px] font-medium text-ink-faint"
+          className="grid h-5 grid-cols-[12px_minmax(0,1fr)_112px_repeat(4,26px)_24px] items-center gap-1 text-[11px] font-medium text-subtle"
         >
           <span />
           <span>Nome</span>
@@ -395,7 +395,7 @@ export function SimpleEditor({
         <button
           type="button"
           onClick={() => onChange(addColumn(model, currentKey))}
-          className="mt-1 flex h-8 cursor-pointer items-center gap-1.5 self-start rounded-md border border-dashed border-line-strong bg-transparent px-3 text-ink"
+          className="mt-1 flex h-8 cursor-pointer items-center gap-1.5 self-start rounded-md border border-dashed border-border-strong bg-transparent px-3 text-ink"
         >
           <svg
             width="16"
@@ -413,7 +413,7 @@ export function SimpleEditor({
           </svg>
           <span>Adicionar coluna</span>
           {!isExisting ? (
-            <span className="font-mono text-[11px] text-ink-muted">
+            <span className="font-mono text-[11px] text-muted">
               Enter na última
             </span>
           ) : null}
@@ -458,7 +458,7 @@ export function SimpleEditor({
       ) : (
         <section
           aria-labelledby="h-comentario"
-          className="flex flex-col gap-1.5 border-t border-line pt-3"
+          className="flex flex-col gap-1.5 border-t border-border pt-3"
         >
           <h2 id="h-comentario" className="m-0 text-[13px] font-semibold">
             Comentário da tabela
@@ -478,7 +478,7 @@ export function SimpleEditor({
                 ),
               });
             }}
-            className="box-border resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-ink"
+            className="box-border resize-y rounded-md border border-border bg-background px-2.5 py-2 text-ink"
           />
         </section>
       )}

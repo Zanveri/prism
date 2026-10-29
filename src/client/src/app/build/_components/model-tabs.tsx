@@ -29,7 +29,7 @@ export function ModelTabs({
   return (
     <nav
       aria-label={buildCopy.openModelsNavLabel}
-      className="flex flex-wrap items-stretch gap-0.5 border-b border-border bg-canvas px-2"
+      className="flex flex-wrap items-stretch gap-0.5 border-b border-border bg-background px-2"
     >
       {tabs.map((tab) => {
         const isActive = tab.id === activeModelId;

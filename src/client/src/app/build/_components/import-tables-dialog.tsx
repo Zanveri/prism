@@ -92,6 +92,9 @@ export function ImportTablesDialog({
   const [database, setDatabase] = useState<string>(
     model.base?.database ?? availableDatabases[0] ?? "",
   );
+  const effectiveDatabase = availableDatabases.includes(database)
+    ? database
+    : (availableDatabases[0] ?? "");
   const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(
     () => new Set(),
   );
@@ -137,18 +140,18 @@ export function ImportTablesDialog({
     }
     onSubmit?.({
       connectionId: selectedConnection.id,
-      database: database || selectedConnection.database,
+      database: effectiveDatabase || selectedConnection.database,
       selection: summary.selection,
     });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-canvas/75 px-4 pt-10 pb-14">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim px-4 pt-10 pb-14">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="importar-tabelas-titulo"
-        className="flex w-full max-w-[680px] flex-col rounded-lg border border-border-strong bg-surface text-ink shadow-lg"
+        className="flex w-full max-w-[680px] flex-col rounded-lg border border-border-strong bg-panel text-ink shadow-2xl"
       >
         <div className="flex items-center gap-3 border-b border-border px-5 py-4">
           <span className="flex-none text-muted">
@@ -186,9 +189,14 @@ export function ImportTablesDialog({
                 onChange={(e) => {
                   const nextId = e.target.value;
                   setConnectionId(nextId);
+                  const nextConn = validConnections.find((c) => c.id === nextId);
+                  if (nextConn) {
+                    setDatabase(nextConn.database);
+                  }
+                  setChecked(new Set());
                   onSelectConnection?.(nextId);
                 }}
-                className="h-9 rounded-sm border border-border-strong bg-elevated px-2.5 text-[13px] font-normal text-ink disabled:opacity-70"
+                className="h-9 rounded-sm border border-border-strong bg-raised px-2.5 text-[13px] font-normal text-ink disabled:opacity-70 [&>option]:bg-raised [&>option]:text-ink"
               >
                 {validConnections.map((conn) => (
                   <option key={conn.id} value={conn.id}>
@@ -201,14 +209,15 @@ export function ImportTablesDialog({
             <label className="flex flex-col gap-1.5 font-medium">
               {buildCopy.databaseLabel}
               <select
-                value={database}
+                value={effectiveDatabase}
                 disabled={lockedToBase || isReading}
                 onChange={(e) => {
                   const nextDb = e.target.value;
                   setDatabase(nextDb);
+                  setChecked(new Set());
                   onSelectDatabase?.(nextDb);
                 }}
-                className="h-9 rounded-sm border border-border-strong bg-elevated px-2 font-mono text-[13px] font-normal text-ink disabled:opacity-70"
+                className="h-9 rounded-sm border border-border-strong bg-raised px-2 font-mono text-[13px] font-normal text-ink disabled:opacity-70 [&>option]:bg-raised [&>option]:text-ink"
               >
                 {availableDatabases.map((db) => (
                   <option key={db} value={db}>
@@ -251,7 +260,7 @@ export function ImportTablesDialog({
             <div
               role="group"
               aria-labelledby="importar-legenda"
-              className="flex max-h-60 flex-col overflow-auto rounded-sm border border-border bg-canvas py-1.5"
+              className="flex max-h-60 flex-col overflow-auto rounded-sm border border-border bg-background py-1.5"
             >
               {schemas.map((group) => {
                 const isCollapsed = collapsedSchemas.has(group.schema);
@@ -347,7 +356,7 @@ export function ImportTablesDialog({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-b-lg border-t border-border bg-elevated px-5 py-3.5">
+        <div className="flex flex-wrap items-center gap-2 rounded-b-lg border-t border-border bg-raised px-5 py-3.5">
           <span className="flex items-center gap-1.5 text-xs text-muted">
             <InfoIcon />
             <span>

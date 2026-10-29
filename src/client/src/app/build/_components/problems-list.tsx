@@ -107,7 +107,7 @@ export function ProblemsList({
   return (
     <aside
       aria-labelledby="problemas-titulo"
-      className="flex min-w-0 flex-1 basis-[340px] flex-col gap-2.5 border-l border-border bg-panel p-4"
+      className="flex min-h-0 min-w-0 flex-1 basis-[340px] flex-col gap-2.5 overflow-y-auto border-l border-border bg-panel p-4"
     >
       <div className="flex items-center gap-2">
         <h2 id="problemas-titulo" className="m-0 text-sm font-semibold text-ink">
@@ -133,9 +133,9 @@ export function ProblemsList({
             className={cn(
               "flex flex-col gap-2 rounded-md border p-3",
               isError
-                ? "border-danger bg-surface"
+                ? "border-danger bg-raised"
                 : isWarning
-                  ? "border-border bg-surface"
+                  ? "border-border bg-raised"
                   : "border-border bg-transparent",
             )}
           >
@@ -182,7 +182,7 @@ export function ProblemsList({
                         onApplyFix?.(problem.fix);
                       }
                     }}
-                    className="h-7 cursor-pointer rounded-md border-0 bg-selected px-2.5 text-xs text-ink hover:bg-hover"
+                    className="h-7 cursor-pointer rounded-md border-0 bg-selected px-2.5 text-xs text-ink hover:opacity-95"
                   >
                     {fixButtonLabel(problem.fix)}
                   </button>

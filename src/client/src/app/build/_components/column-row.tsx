@@ -51,16 +51,16 @@ export function ColumnRow({
 
   const borderClass =
     rowState.marker === "changed"
-      ? "border-warning"
+      ? "border-accent"
       : rowState.marker === "new"
         ? "border-success"
-        : "border-line";
+        : "border-border";
 
   return (
     <div
       className={
         expanded
-          ? "flex flex-col rounded-md border border-line-strong bg-surface-raised"
+          ? "flex flex-col rounded-md border border-border-strong bg-raised"
           : "flex flex-col"
       }
     >
@@ -73,7 +73,7 @@ export function ColumnRow({
           rowState.marker === "changed" ? (
             <span
               title="Alterada"
-              className="h-2 w-2 rounded-full bg-warning"
+              className="h-2 w-2 rounded-full bg-accent"
             />
           ) : rowState.marker === "new" ? (
             <span
@@ -92,7 +92,7 @@ export function ColumnRow({
             viewBox="0 0 12 16"
             fill="currentColor"
             aria-hidden="true"
-            className="text-ink-faint"
+            className="text-subtle"
           >
             <circle cx="4" cy="5" r="1" />
             <circle cx="8" cy="5" r="1" />
@@ -110,7 +110,7 @@ export function ColumnRow({
             aria-label={nameAriaLabel}
             aria-describedby={beforeId}
             onChange={(e) => onUpdateColumn({ name: e.target.value })}
-            className={`box-border h-7 w-full min-w-0 rounded border bg-canvas font-mono text-xs text-ink ${borderClass} ${
+            className={`box-border h-7 w-full min-w-0 rounded border bg-background font-mono text-xs text-ink ${borderClass} ${
               fkTargetDisplay
                 ? "pr-[30px] pl-2"
                 : rowState.marker === "new"
@@ -145,8 +145,8 @@ export function ColumnRow({
               onAddNextColumn();
             }
           }}
-          className={`box-border h-7 w-full min-w-0 rounded border bg-canvas px-2 font-mono text-xs text-ink-soft ${
-            rowState.marker === "changed" ? "border-warning" : "border-line"
+          className={`box-border h-7 w-full min-w-0 rounded border bg-background px-2 font-mono text-xs text-body ${
+            rowState.marker === "changed" ? "border-accent" : "border-border"
           }`}
         />
 
@@ -163,8 +163,8 @@ export function ColumnRow({
           onClick={onTogglePk}
           className={`h-6 rounded border p-0 font-mono text-[10px] font-semibold ${
             isPk
-              ? "border-warning bg-warning/16 text-warning"
-              : "border-line bg-transparent text-ink-faint"
+              ? "border-accent bg-accent/16 text-accent"
+              : "border-border bg-transparent text-subtle"
           } ${rowState.locks.primaryKey ? "cursor-not-allowed" : "cursor-pointer"}`}
         >
           PK
@@ -177,8 +177,8 @@ export function ColumnRow({
           onClick={() => onUpdateColumn({ nullable: !column.nullable })}
           className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
             !column.nullable
-              ? "border-ink-faint bg-surface-hover text-ink"
-              : "border-line bg-transparent text-ink-faint"
+              ? "border-subtle bg-selected text-ink"
+              : "border-border bg-transparent text-subtle"
           }`}
         >
           NN
@@ -191,8 +191,8 @@ export function ColumnRow({
           onClick={onToggleUnique}
           className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
             isUnique
-              ? "border-ink-faint bg-surface-hover text-ink"
-              : "border-line bg-transparent text-ink-faint"
+              ? "border-subtle bg-selected text-ink"
+              : "border-border bg-transparent text-subtle"
           }`}
         >
           UQ
@@ -210,8 +210,8 @@ export function ColumnRow({
           }
           className={`h-6 rounded border p-0 font-mono text-[10px] font-semibold ${
             column.identity !== null
-              ? "border-ink-faint bg-surface-hover text-ink"
-              : "border-line bg-transparent text-ink-faint"
+              ? "border-subtle bg-selected text-ink"
+              : "border-border bg-transparent text-subtle"
           } ${rowState.locks.identity ? "cursor-not-allowed" : "cursor-pointer"}`}
         >
           AI
@@ -227,7 +227,7 @@ export function ColumnRow({
           aria-expanded={expanded}
           onClick={() => setExpanded((prev) => !prev)}
           className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded border-0 p-0 ${
-            expanded ? "bg-surface-hover text-ink" : "bg-transparent text-ink-muted"
+            expanded ? "bg-selected text-ink" : "bg-transparent text-muted"
           }`}
         >
           <svg
@@ -249,15 +249,15 @@ export function ColumnRow({
       {rowState.marker === "changed" && rowState.before ? (
         <div
           id={beforeId}
-          className="flex items-center gap-2 pb-1 pl-4 text-xs leading-[18px] text-ink-muted"
+          className="flex items-center gap-2 pb-1 pl-4 text-xs leading-[18px] text-muted"
         >
           <span>
-            Era <span className="font-mono text-ink-soft">{rowState.before}</span>
+            Era <span className="font-mono text-body">{rowState.before}</span>
           </span>
           <button
             type="button"
             onClick={onRevert}
-            className="ml-auto h-6 cursor-pointer rounded border-0 bg-transparent px-2 text-xs text-ink-muted underline"
+            className="ml-auto h-6 cursor-pointer rounded border-0 bg-transparent px-2 text-xs text-muted underline"
           >
             Voltar como era
           </button>
@@ -265,7 +265,7 @@ export function ColumnRow({
       ) : null}
 
       {expanded ? (
-        <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 border-t border-line pt-2 pr-3 pb-3 pl-[19px] text-xs text-ink-muted">
+        <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 border-t border-border pt-2 pr-3 pb-3 pl-[19px] text-xs text-muted">
           <label htmlFor={`col-${index}-padrao`}>Padrão</label>
           <input
             id={`col-${index}-padrao`}
@@ -274,7 +274,7 @@ export function ColumnRow({
             onChange={(e) =>
               onUpdateColumn({ default: e.target.value ? e.target.value : null })
             }
-            className="box-border h-7 rounded border border-line bg-canvas px-2 font-mono text-xs text-success"
+            className="box-border h-7 rounded border border-border bg-background px-2 font-mono text-xs text-success"
           />
 
           <label htmlFor={`col-${index}-check`}>Check</label>
@@ -283,7 +283,7 @@ export function ColumnRow({
             type="text"
             value={checkExpression}
             onChange={(e) => onUpdateCheck(e.target.value)}
-            className="box-border h-7 rounded border border-line bg-canvas px-2 font-mono text-xs text-ink-soft"
+            className="box-border h-7 rounded border border-border bg-background px-2 font-mono text-xs text-body"
           />
 
           <label htmlFor={`col-${index}-comentario`}>Comentário</label>
@@ -294,7 +294,7 @@ export function ColumnRow({
             onChange={(e) =>
               onUpdateColumn({ comment: e.target.value ? e.target.value : null })
             }
-            className="box-border h-7 rounded border border-line bg-canvas px-2 text-xs text-ink"
+            className="box-border h-7 rounded border border-border bg-background px-2 text-xs text-ink"
           />
 
           <span />
@@ -302,14 +302,14 @@ export function ColumnRow({
             <button
               type="button"
               onClick={onDuplicate}
-              className="h-7 cursor-pointer rounded-md border border-line-strong bg-transparent px-2.5 text-xs text-ink"
+              className="h-7 cursor-pointer rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink"
             >
               Duplicar coluna
             </button>
             <button
               type="button"
               onClick={onRemove}
-              className="h-7 cursor-pointer rounded-md border border-line-strong bg-transparent px-2.5 text-xs text-danger"
+              className="h-7 cursor-pointer rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-danger"
             >
               Excluir coluna
             </button>
@@ -327,14 +327,14 @@ export type RemovedColumnRowProps = {
 
 export function RemovedColumnRow({ column, onRestore }: RemovedColumnRowProps) {
   return (
-    <div className="grid h-8 grid-cols-[12px_minmax(0,1fr)_112px_minmax(0,128px)] items-center gap-1 text-ink-faint">
+    <div className="grid h-8 grid-cols-[12px_minmax(0,1fr)_112px_minmax(0,128px)] items-center gap-1 text-subtle">
       <span title="A remover" className="h-0.5 w-2 bg-danger" />
       <span className="px-2 font-mono text-xs line-through">{column.name}</span>
       <span className="px-2 font-mono text-xs line-through">{column.type}</span>
       <button
         type="button"
         onClick={onRestore}
-        className="h-6 cursor-pointer justify-self-end rounded border border-line-strong bg-transparent px-2 text-xs text-ink"
+        className="h-6 cursor-pointer justify-self-end rounded border border-border-strong bg-transparent px-2 text-xs text-ink"
       >
         Restaurar
       </button>

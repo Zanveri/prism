@@ -78,7 +78,7 @@ export function ModelToolbar({
             type="button"
             aria-label={buildCopy.toolbarBaseAria}
             onClick={onChangeBase}
-            className="flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-ink hover:bg-selected"
+            className="flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-ink hover:bg-selected"
           >
             <span className="text-muted">{buildCopy.toolbarBase}</span>
             <span>{baseLabel ?? `${model.base.connectionId} / ${model.base.database}`}</span>
@@ -167,7 +167,7 @@ export function ModelToolbar({
             <button
               type="button"
               onClick={onReloadConflict}
-              className="h-7 cursor-pointer rounded border border-border-strong bg-surface px-2 text-ink hover:bg-selected"
+              className="h-7 cursor-pointer rounded border border-border-strong bg-raised px-2 text-ink hover:bg-selected"
             >
               {buildCopy.reloadModel}
             </button>
@@ -190,7 +190,7 @@ export function ModelToolbar({
           <span>{buildCopy.savePending}</span>
         ) : (
           <span className="flex items-center gap-1.5">
-            <span className="text-ok">
+            <span className="text-success">
               <CheckIcon />
             </span>
             {buildCopy.saveSaved}

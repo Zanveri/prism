@@ -103,7 +103,17 @@ describe("catalog-import", () => {
           generated: null,
         },
       ],
-      foreignKeys: [],
+      foreignKeys: [
+        {
+          name: "fk_ordem_cliente",
+          columns: ["id"],
+          referencedSchema: "informix",
+          referencedTable: "cliente",
+          referencedColumns: ["id"],
+          onDelete: "RESTRICT",
+          onUpdate: "NO ACTION",
+        },
+      ],
       indexes: [],
       checks: [],
     };
@@ -112,6 +122,10 @@ describe("catalog-import", () => {
       type: "integer",
       identity: "byDefault",
       default: null,
+    });
+    expect(informixTable.foreignKeys[0]).toMatchObject({
+      onDelete: "noAction",
+      onUpdate: "noAction",
     });
 
     const db2Catalog: CatalogTable = {

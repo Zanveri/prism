@@ -17,24 +17,24 @@ export function TableCommands({ ddl, removedColumnNames }: TableCommandsProps) {
   return (
     <section
       aria-labelledby="h-mudancas"
-      className="flex flex-col gap-2 border-t border-line pt-3"
+      className="flex flex-col gap-2 border-t border-border pt-3"
     >
       <div className="flex h-7 items-center gap-2">
         <h2 id="h-mudancas" className="m-0 text-[13px] font-semibold">
           O que esta tabela vai gerar
         </h2>
-        <span className="text-xs text-ink-faint">
+        <span className="text-xs text-subtle">
           {commandCount} {commandCount === 1 ? "comando" : "comandos"}, no DDL
           de diferenças
         </span>
       </div>
 
-      <pre className="m-0 box-border overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2.5 font-mono text-xs leading-5 whitespace-pre text-ink-soft">
+      <pre className="m-0 box-border overflow-x-auto rounded-md border border-border bg-background px-3 py-2.5 font-mono text-xs leading-5 whitespace-pre text-body">
         {trimmed}
       </pre>
 
       {removedColumnNames.length > 0 ? (
-        <p className="m-0 flex items-start gap-2 text-xs leading-[18px] text-ink-soft">
+        <p className="m-0 flex items-start gap-2 text-xs leading-[18px] text-body">
           <svg
             width="16"
             height="16"
@@ -45,7 +45,7 @@ export function TableCommands({ ddl, removedColumnNames }: TableCommandsProps) {
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
-            className="mt-px shrink-0 text-warning"
+            className="mt-px shrink-0 text-accent"
           >
             <path d="M8 2.5l6 10.5H2z" />
             <path d="M8 7v2.5M8 11.25v.01" />

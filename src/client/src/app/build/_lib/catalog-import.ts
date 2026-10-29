@@ -72,13 +72,16 @@ function sameColumnList(engine: BuildEngine, a: string[], b: string[]): boolean 
   return a.length === b.length && a.every((col, i) => sameIdentifier(engine, col, b[i]));
 }
 
-function normalizeFkAction(action: string | null | undefined): FkAction {
+function normalizeFkAction(
+  engine: BuildEngine,
+  action: string | null | undefined,
+): FkAction {
   if (!action) return "noAction";
-  const upper = action.trim().toUpperCase().replace(/_/g, " ");
-  if (upper === "CASCADE") return "cascade";
-  if (upper === "SET NULL") return "setNull";
-  if (upper === "RESTRICT") return "restrict";
-  if (upper === "NO ACTION") return "noAction";
+  const compact = action.trim().replace(/[\s_]+/g, "").toUpperCase();
+  if (compact === "CASCADE") return "cascade";
+  if (compact === "SETNULL") return "setNull";
+  if (compact === "RESTRICT") return engine === "informix" ? "noAction" : "restrict";
+  if (compact === "NOACTION" || compact === "SETDEFAULT") return "noAction";
   return "noAction";
 }
 
@@ -178,8 +181,8 @@ export function tableFromCatalog(engine: BuildEngine, table: CatalogTable): Mode
       table: fk.referencedTable,
       columns: [...fk.referencedColumns],
     },
-    onDelete: normalizeFkAction(fk.onDelete),
-    onUpdate: normalizeFkAction(fk.onUpdate),
+    onDelete: normalizeFkAction(engine, fk.onDelete),
+    onUpdate: normalizeFkAction(engine, fk.onUpdate),
   }));
 
   const snapshot: TableShape = {
