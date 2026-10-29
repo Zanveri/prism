@@ -1,0 +1,343 @@
+import { useState } from "react";
+
+import type { ModelColumn } from "../_lib/build-model.schema";
+import type { RowState } from "../_lib/editor-rows";
+
+export type ColumnRowProps = {
+  index: number;
+  column: ModelColumn;
+  isExistingTable: boolean;
+  isPk: boolean;
+  isUnique: boolean;
+  fkTargetDisplay: string | null;
+  rowState: RowState;
+  typesListId: string;
+  checkExpression: string;
+  onUpdateColumn: (patch: Partial<ModelColumn>) => void;
+  onTogglePk: () => void;
+  onToggleUnique: () => void;
+  onUpdateCheck: (expression: string) => void;
+  onDuplicate: () => void;
+  onRemove: () => void;
+  onRevert: () => void;
+  onAddNextColumn?: () => void;
+};
+
+export function ColumnRow({
+  index,
+  column,
+  isExistingTable,
+  isPk,
+  isUnique,
+  fkTargetDisplay,
+  rowState,
+  typesListId,
+  checkExpression,
+  onUpdateColumn,
+  onTogglePk,
+  onToggleUnique,
+  onUpdateCheck,
+  onDuplicate,
+  onRemove,
+  onRevert,
+  onAddNextColumn,
+}: ColumnRowProps) {
+  const [expanded, setExpanded] = useState(false);
+  const beforeId = rowState.marker === "changed" ? `col${index + 1}-antes` : undefined;
+  const nameAriaLabel =
+    rowState.marker === "new"
+      ? `Nome da coluna ${index + 1}, nova`
+      : `Nome da coluna ${index + 1}`;
+
+  const borderClass =
+    rowState.marker === "changed"
+      ? "border-warning"
+      : rowState.marker === "new"
+        ? "border-success"
+        : "border-line";
+
+  return (
+    <div
+      className={
+        expanded
+          ? "flex flex-col rounded-md border border-line-strong bg-surface-raised"
+          : "flex flex-col"
+      }
+    >
+      <div
+        className={`grid h-8 grid-cols-[12px_minmax(0,1fr)_112px_repeat(4,26px)_24px] items-center gap-1 ${
+          expanded ? "px-[3px]" : ""
+        }`}
+      >
+        {isExistingTable ? (
+          rowState.marker === "changed" ? (
+            <span
+              title="Alterada"
+              className="h-2 w-2 rounded-full bg-warning"
+            />
+          ) : rowState.marker === "new" ? (
+            <span
+              title="Nova"
+              className="text-center font-mono font-semibold text-success"
+            >
+              +
+            </span>
+          ) : (
+            <span />
+          )
+        ) : (
+          <svg
+            width="12"
+            height="16"
+            viewBox="0 0 12 16"
+            fill="currentColor"
+            aria-hidden="true"
+            className="text-ink-faint"
+          >
+            <circle cx="4" cy="5" r="1" />
+            <circle cx="8" cy="5" r="1" />
+            <circle cx="4" cy="8" r="1" />
+            <circle cx="8" cy="8" r="1" />
+            <circle cx="4" cy="11" r="1" />
+            <circle cx="8" cy="11" r="1" />
+          </svg>
+        )}
+
+        <div className="relative min-w-0">
+          <input
+            type="text"
+            value={column.name}
+            aria-label={nameAriaLabel}
+            aria-describedby={beforeId}
+            onChange={(e) => onUpdateColumn({ name: e.target.value })}
+            className={`box-border h-7 w-full min-w-0 rounded border bg-canvas font-mono text-xs text-ink ${borderClass} ${
+              fkTargetDisplay
+                ? "pr-[30px] pl-2"
+                : rowState.marker === "new"
+                  ? "pr-[36px] pl-2"
+                  : "px-2"
+            }`}
+          />
+          {fkTargetDisplay ? (
+            <span
+              title={`Chave estrangeira para ${fkTargetDisplay}`}
+              className="absolute top-[5px] right-[7px] font-mono text-[10px] font-semibold text-accent"
+            >
+              FK
+            </span>
+          ) : rowState.marker === "new" ? (
+            <span className="absolute top-[5px] right-[7px] font-mono text-[10px] font-semibold text-success">
+              NOVA
+            </span>
+          ) : null}
+        </div>
+
+        <input
+          type="text"
+          value={column.type}
+          list={typesListId}
+          aria-label={`Tipo de ${column.name}`}
+          aria-describedby={beforeId}
+          onChange={(e) => onUpdateColumn({ type: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && onAddNextColumn) {
+              e.preventDefault();
+              onAddNextColumn();
+            }
+          }}
+          className={`box-border h-7 w-full min-w-0 rounded border bg-canvas px-2 font-mono text-xs text-ink-soft ${
+            rowState.marker === "changed" ? "border-warning" : "border-line"
+          }`}
+        />
+
+        <button
+          type="button"
+          aria-pressed={isPk}
+          disabled={rowState.locks.primaryKey}
+          title={
+            rowState.locks.primaryKey
+              ? "Trocar a chave primária de uma tabela existente não é suportado nesta versão"
+              : undefined
+          }
+          aria-label={`${column.name}: chave primária`}
+          onClick={onTogglePk}
+          className={`h-6 rounded border p-0 font-mono text-[10px] font-semibold ${
+            isPk
+              ? "border-warning bg-warning/16 text-warning"
+              : "border-line bg-transparent text-ink-faint"
+          } ${rowState.locks.primaryKey ? "cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          PK
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={!column.nullable}
+          aria-label={`${column.name}: não aceita nulo`}
+          onClick={() => onUpdateColumn({ nullable: !column.nullable })}
+          className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
+            !column.nullable
+              ? "border-ink-faint bg-surface-hover text-ink"
+              : "border-line bg-transparent text-ink-faint"
+          }`}
+        >
+          NN
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={isUnique}
+          aria-label={`${column.name}: valor único`}
+          onClick={onToggleUnique}
+          className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
+            isUnique
+              ? "border-ink-faint bg-surface-hover text-ink"
+              : "border-line bg-transparent text-ink-faint"
+          }`}
+        >
+          UQ
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={column.identity !== null}
+          disabled={rowState.locks.identity}
+          aria-label={`${column.name}: gerado pelo banco`}
+          onClick={() =>
+            onUpdateColumn({
+              identity: column.identity === null ? "always" : null,
+            })
+          }
+          className={`h-6 rounded border p-0 font-mono text-[10px] font-semibold ${
+            column.identity !== null
+              ? "border-ink-faint bg-surface-hover text-ink"
+              : "border-line bg-transparent text-ink-faint"
+          } ${rowState.locks.identity ? "cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          AI
+        </button>
+
+        <button
+          type="button"
+          aria-label={
+            expanded
+              ? `Menos opções de ${column.name}`
+              : `Mais opções de ${column.name}`
+          }
+          aria-expanded={expanded}
+          onClick={() => setExpanded((prev) => !prev)}
+          className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded border-0 p-0 ${
+            expanded ? "bg-surface-hover text-ink" : "bg-transparent text-ink-muted"
+          }`}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d={expanded ? "M4 6l4 4 4-4" : "M6 4l4 4-4 4"} />
+          </svg>
+        </button>
+      </div>
+
+      {rowState.marker === "changed" && rowState.before ? (
+        <div
+          id={beforeId}
+          className="flex items-center gap-2 pb-1 pl-4 text-xs leading-[18px] text-ink-muted"
+        >
+          <span>
+            Era <span className="font-mono text-ink-soft">{rowState.before}</span>
+          </span>
+          <button
+            type="button"
+            onClick={onRevert}
+            className="ml-auto h-6 cursor-pointer rounded border-0 bg-transparent px-2 text-xs text-ink-muted underline"
+          >
+            Voltar como era
+          </button>
+        </div>
+      ) : null}
+
+      {expanded ? (
+        <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 border-t border-line pt-2 pr-3 pb-3 pl-[19px] text-xs text-ink-muted">
+          <label htmlFor={`col-${index}-padrao`}>Padrão</label>
+          <input
+            id={`col-${index}-padrao`}
+            type="text"
+            value={column.default ?? ""}
+            onChange={(e) =>
+              onUpdateColumn({ default: e.target.value ? e.target.value : null })
+            }
+            className="box-border h-7 rounded border border-line bg-canvas px-2 font-mono text-xs text-success"
+          />
+
+          <label htmlFor={`col-${index}-check`}>Check</label>
+          <input
+            id={`col-${index}-check`}
+            type="text"
+            value={checkExpression}
+            onChange={(e) => onUpdateCheck(e.target.value)}
+            className="box-border h-7 rounded border border-line bg-canvas px-2 font-mono text-xs text-ink-soft"
+          />
+
+          <label htmlFor={`col-${index}-comentario`}>Comentário</label>
+          <input
+            id={`col-${index}-comentario`}
+            type="text"
+            value={column.comment ?? ""}
+            onChange={(e) =>
+              onUpdateColumn({ comment: e.target.value ? e.target.value : null })
+            }
+            className="box-border h-7 rounded border border-line bg-canvas px-2 text-xs text-ink"
+          />
+
+          <span />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onDuplicate}
+              className="h-7 cursor-pointer rounded-md border border-line-strong bg-transparent px-2.5 text-xs text-ink"
+            >
+              Duplicar coluna
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="h-7 cursor-pointer rounded-md border border-line-strong bg-transparent px-2.5 text-xs text-danger"
+            >
+              Excluir coluna
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export type RemovedColumnRowProps = {
+  column: ModelColumn;
+  onRestore: () => void;
+};
+
+export function RemovedColumnRow({ column, onRestore }: RemovedColumnRowProps) {
+  return (
+    <div className="grid h-8 grid-cols-[12px_minmax(0,1fr)_112px_minmax(0,128px)] items-center gap-1 text-ink-faint">
+      <span title="A remover" className="h-0.5 w-2 bg-danger" />
+      <span className="px-2 font-mono text-xs line-through">{column.name}</span>
+      <span className="px-2 font-mono text-xs line-through">{column.type}</span>
+      <button
+        type="button"
+        onClick={onRestore}
+        className="h-6 cursor-pointer justify-self-end rounded border border-line-strong bg-transparent px-2 text-xs text-ink"
+      >
+        Restaurar
+      </button>
+    </div>
+  );
+}
