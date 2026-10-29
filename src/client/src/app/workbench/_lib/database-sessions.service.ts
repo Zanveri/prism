@@ -5,6 +5,7 @@ import { apiRequest, ApiRequestError, unwrap, type ApiResult } from "@/lib/api/p
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
 import {
+  checksSchema,
   columnsSchema,
   databaseObjectsSchema,
   databasePropertiesSchema,
@@ -27,6 +28,7 @@ import {
   type ReferencingForeignKey,
   type SchemaDiagram,
   type ServerDatabase,
+  type TableCheck,
   type TableIndex,
   type TransactionEnded,
 } from "./database-sessions.schema";
@@ -75,13 +77,13 @@ export function getDatabaseProperties(sessionId: string): Promise<ApiResult<Data
   return apiRequest(prismEndpoints.userDatabaseSessionProperties(sessionId), { schema: databasePropertiesSchema });
 }
 
-export function getObjects(sessionId: string, schema: string, kind: ObjectsKind): Promise<ApiResult<DatabaseObject[]>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionObjects(sessionId, schema, kind), { schema: databaseObjectsSchema });
+export function getObjects(sessionId: string, schema: string, kind: ObjectsKind, signal?: AbortSignal): Promise<ApiResult<DatabaseObject[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionObjects(sessionId, schema, kind), { schema: databaseObjectsSchema, signal });
 }
 
 /** RN-ESQUEMA-003 e RN-CAT-008: todas as tabelas, colunas e chaves estrangeiras do esquema de uma vez. */
-export function getSchemaDiagram(sessionId: string, schema: string): Promise<ApiResult<SchemaDiagram>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionSchemaDiagram(sessionId, schema), { schema: schemaDiagramSchema });
+export function getSchemaDiagram(sessionId: string, schema: string, signal?: AbortSignal): Promise<ApiResult<SchemaDiagram>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionSchemaDiagram(sessionId, schema), { schema: schemaDiagramSchema, signal });
 }
 
 /**
@@ -92,16 +94,20 @@ export function getObjectNames(sessionId: string): Promise<ApiResult<ObjectNames
   return apiRequest(prismEndpoints.userDatabaseSessionObjectNames(sessionId), { schema: objectNamesSchema });
 }
 
-export function getColumns(sessionId: string, schema: string, table: string): Promise<ApiResult<Column[]>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionColumns(sessionId, schema, table), { schema: columnsSchema });
+export function getColumns(sessionId: string, schema: string, table: string, signal?: AbortSignal): Promise<ApiResult<Column[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionColumns(sessionId, schema, table), { schema: columnsSchema, signal });
 }
 
-export function getIndexes(sessionId: string, schema: string, table: string): Promise<ApiResult<TableIndex[]>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionIndexes(sessionId, schema, table), { schema: indexesSchema });
+export function getIndexes(sessionId: string, schema: string, table: string, signal?: AbortSignal): Promise<ApiResult<TableIndex[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionIndexes(sessionId, schema, table), { schema: indexesSchema, signal });
 }
 
-export function getForeignKeys(sessionId: string, schema: string, table: string): Promise<ApiResult<ForeignKey[]>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionForeignKeys(sessionId, schema, table), { schema: foreignKeysSchema });
+export function getForeignKeys(sessionId: string, schema: string, table: string, signal?: AbortSignal): Promise<ApiResult<ForeignKey[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionForeignKeys(sessionId, schema, table), { schema: foreignKeysSchema, signal });
+}
+
+export function getTableChecks(sessionId: string, schema: string, table: string, signal?: AbortSignal): Promise<ApiResult<TableCheck[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionChecks(sessionId, schema, table), { schema: checksSchema, signal });
 }
 
 /** RN-CAT-004: as chaves estrangeiras que apontam para a tabela. */

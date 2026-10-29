@@ -1,0 +1,64 @@
+{
+  "scope": "full",
+  "model": {
+    "version": 1,
+    "engine": "informix",
+    "defaultSchema": "producao",
+    "schemas": [{ "name": "producao", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "clientes",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "observacao",
+            "exactName": false,
+            "originName": null,
+            "type": "varchar(400)",
+            "nullable": true,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "E12",
+      "severity": "error",
+      "table": "producao.clientes",
+      "column": "observacao"
+    }
+  ]
+}

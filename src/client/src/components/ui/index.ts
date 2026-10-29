@@ -1,6 +1,6 @@
 export { Button, buttonVariants, type ButtonProps } from "./button";
 export { ConfirmDialog, type ConfirmDialogProps } from "./confirm-dialog";
-export { ContextMenu, type ContextMenuGroup, type ContextMenuItem, type ContextMenuProps } from "./context-menu";
+export { ContextMenu, ContextMenuItems, type ContextMenuGroup, type ContextMenuItem, type ContextMenuProps } from "./context-menu";
 export { Dialog, type DialogDismissal, type DialogProps, type DialogSize } from "./dialog";
 export { EngineTag, type Engine } from "./engine-tag";
 export { EnvironmentPill, environmentTextColor } from "./environment-pill";
@@ -14,6 +14,7 @@ export {
   ArrowsUpDownIcon,
   ArrowUpIcon,
   BugIcon,
+  BuildIcon,
   ChartIcon,
   CheckIcon,
   ChevronIcon,

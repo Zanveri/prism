@@ -7,6 +7,7 @@ import { signOut } from "@/app/sign-in/_lib/sign-in.service";
 import { onPeerEvent, sharePeerEvent } from "@/lib/api/bridge";
 import type { ApiResult } from "@/lib/api/prism-api";
 import { vaultLock } from "@/lib/api/vault-lock";
+import { buildModelSync } from "@/app/build/_lib/model-save";
 import { workspaceSync } from "@/lib/api/workspace-sync";
 import { resultHostRegistry } from "@/lib/host/host";
 
@@ -82,7 +83,7 @@ export function VaultLock({ isBusy, discard, discardedExports }: VaultLockProps)
     // primeiro passo, antes de qualquer espera: quando as outras janelas sabem do bloqueio, esta já não deixa pedido passar.
     // RN-ABAS-006: as abas são gravadas antes de o cofre fechar, por quem o fecha; a janela que acompanha o bloqueio de outra não grava (a outra já grava as
     // de todas as janelas).
-    void lockVault(createLockVaultDeps({ lock: vaultLock, root: document, extraRoots: () => resultHostRegistry.list().map((host) => host.document), signOut: followed ? closedByAnotherWindow : signOut, discard, saveWorkspace: followed ? undefined : () => workspaceSync.flush(), report: setCloseState, onError: reportError })).catch(reportError);
+    void lockVault(createLockVaultDeps({ lock: vaultLock, root: document, extraRoots: () => resultHostRegistry.list().map((host) => host.document), signOut: followed ? closedByAnotherWindow : signOut, discard, saveWorkspace: followed ? undefined : () => Promise.all([workspaceSync.flush(), buildModelSync.flush()]).then(() => undefined), report: setCloseState, onError: reportError })).catch(reportError);
     if (!followed) sharePeerEvent("lock");
   }
 

@@ -1,0 +1,72 @@
+{
+  "context": {
+    "modelName": "estoque",
+    "prismVersion": "0.6.0",
+    "generatedAt": "29/10/2026 14:32",
+    "baseLabel": null
+  },
+  "model": {
+    "version": 1,
+    "engine": "informix",
+    "defaultSchema": "informix",
+    "schemas": [{ "name": "informix", "create": true }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "informix",
+        "name": "lote",
+        "exactName": false,
+        "comment": "Lote de produção",
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "sequencia",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "byDefault",
+            "comment": null
+          },
+          {
+            "name": "observacao",
+            "exactName": false,
+            "originName": null,
+            "type": "lvarchar(500)",
+            "nullable": true,
+            "default": null,
+            "identity": null,
+            "comment": "Observação livre do operador"
+          }
+        ],
+        "primaryKey": { "name": "pk_lote", "columns": ["id"] },
+        "uniques": [{ "name": "uq_lote_sequencia", "columns": ["sequencia"] }],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "expected": "-- Modelo estoque · Informix · gerado pelo Prism 0.6.0 em 29/10/2026 14:32\n-- Tudo: o esquema inteiro, do zero.\n\n-- Lote de produção\nCREATE TABLE informix.lote (\n  id         SERIAL,\n  sequencia  BIGSERIAL,\n  -- Observação livre do operador\n  observacao lvarchar(500),\n  PRIMARY KEY (id) CONSTRAINT pk_lote,\n  UNIQUE (sequencia) CONSTRAINT uq_lote_sequencia\n);"
+}

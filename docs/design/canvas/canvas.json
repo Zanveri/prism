@@ -17,7 +17,14 @@
     "ConfirmarComando.dc.html": { "x": 7600, "y": 1320, "w": 1440, "h": 900, "title": "Confirmação antes de comando irreversível", "expand": "fill", "is_interactive": true },
     "Configuracoes.dc.html": { "x": 9120, "y": 1320, "w": 1440, "h": 1000, "title": "Configurações do usuário — conta, tema e preferências", "expand": "fill", "is_interactive": true },
     "Splash.dc.html": { "x": 0, "y": 3140, "w": 640, "h": 400, "title": "Splash de inicialização", "is_interactive": false },
-    "IconeApp.dc.html": { "x": 720, "y": 3140, "w": 1120, "h": 640, "title": "Ícone do aplicativo", "is_interactive": false }
+    "IconeApp.dc.html": { "x": 720, "y": 3140, "w": 1120, "h": 640, "title": "Ícone do aplicativo", "is_interactive": false },
+    "ConstruirSeletor.dc.html": { "x": 0, "y": 4200, "w": 1440, "h": 640, "title": "Seletor de modo — Área de trabalho ou Construir", "expand": "fill", "is_interactive": true },
+    "ConstruirModelos.dc.html": { "x": 1520, "y": 4200, "w": 1440, "h": 900, "title": "Construir — modelos salvos, nenhum aberto", "expand": "fill", "is_interactive": true },
+    "ConstruirNovoModelo.dc.html": { "x": 3040, "y": 4200, "w": 1440, "h": 1040, "title": "Novo modelo — do zero ou a partir de um banco", "expand": "fill", "is_interactive": true },
+    "Construir.dc.html": { "x": 4560, "y": 4200, "w": 1440, "h": 1240, "title": "Construir — tabelas, diagrama e editor Simplificado · SQL · DBML", "expand": "fill", "is_interactive": true },
+    "ConstruirDDL.dc.html": { "x": 6080, "y": 4200, "w": 1440, "h": 1640, "title": "DDL gerado — só as diferenças ou tudo — e problemas", "expand": "fill", "is_interactive": true },
+    "ConstruirEscopo.dc.html": { "x": 7600, "y": 4200, "w": 1440, "h": 900, "title": "Gerar DDL pela primeira vez — tudo ou só as diferenças", "expand": "fill", "is_interactive": true },
+    "ConstruirExistente.dc.html": { "x": 9120, "y": 4200, "w": 480, "h": 1240, "title": "Editar uma tabela existente — o que muda vira ALTER", "is_interactive": false }
   },
   "order": [
     "Main.dc.html",
@@ -32,12 +39,20 @@
     "ConfirmarComando.dc.html",
     "Configuracoes.dc.html",
     "Splash.dc.html",
-    "IconeApp.dc.html"
+    "IconeApp.dc.html",
+    "ConstruirSeletor.dc.html",
+    "ConstruirModelos.dc.html",
+    "ConstruirNovoModelo.dc.html",
+    "Construir.dc.html",
+    "ConstruirDDL.dc.html",
+    "ConstruirEscopo.dc.html",
+    "ConstruirExistente.dc.html"
   ],
   "notes": {
     "titulo-acesso": { "x": 0, "y": -300, "text": "1 · Acesso e cofre de conexões", "kind": "title1", "maxW": 6000 },
     "titulo-trabalho": { "x": 0, "y": 1020, "text": "2 · Área de trabalho", "kind": "title1", "maxW": 10560 },
-    "titulo-marca": { "x": 0, "y": 2840, "text": "3 · Marca e inicialização", "kind": "title1", "maxW": 1840 }
+    "titulo-marca": { "x": 0, "y": 2840, "text": "3 · Marca e inicialização", "kind": "title1", "maxW": 1840 },
+    "titulo-construir": { "x": 0, "y": 3900, "text": "4 · Construir — modelar tabelas e gerar o DDL", "kind": "title1", "maxW": 9600 }
   },
   "designSystems": []
 }

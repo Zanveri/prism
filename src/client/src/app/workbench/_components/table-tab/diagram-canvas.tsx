@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 import { fontStack } from "@/app/settings/_lib/fonts";
 import { defaultPreferences, type Preferences } from "@/app/settings/_lib/preferences";
@@ -80,28 +80,57 @@ export function applyDiagramPan(
 const iconButton = "flex size-7 cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-selected hover:text-ink disabled:cursor-not-allowed disabled:opacity-50";
 
 /** Uma linha de coluna da caixa: nome, tipo e as marcas de chave. O que não cabe encurta, e a dica traz o texto inteiro. */
-function ColumnRow({ column, y, maxChars }: { column: DiagramColumn; y: number; maxChars?: number }) {
+function ColumnRow({
+  column,
+  y,
+  rowHeight,
+  boxWidth,
+  maxChars,
+  onStartConnect,
+}: {
+  column: DiagramColumn;
+  y: number;
+  rowHeight?: number;
+  boxWidth?: number;
+  maxChars?: number;
+  onStartConnect?: (columnName: string, event: ReactPointerEvent<SVGTextElement>) => void;
+}) {
   const marks = [column.primaryKey ? "PK" : null, column.foreignKey ? "FK" : null].filter((mark) => mark !== null);
   const fitted = fitText(column.name, column.type, marks.length === 0 ? null : marks.join(" "), maxChars);
+  const isAdded = column.state === "added";
+  const isRemoved = column.state === "removed";
 
   return (
-    <text x={textX} y={y} dominantBaseline="central" className="fill-body font-mono text-[13px]" style={{ fontSize: "inherit", fontFamily: "inherit" }}>
-      {fitted.cut ? <title>{`${column.name} ${column.type}`}</title> : null}
-      <tspan>{fitted.name}</tspan>
-      <tspan dx="8" className="fill-subtle">
-        {fitted.type}
-      </tspan>
-      {column.primaryKey ? (
-        <tspan dx="8" className="fill-accent font-semibold">
-          PK
-        </tspan>
+    <>
+      {isAdded && boxWidth !== undefined && rowHeight !== undefined ? (
+        <rect x={2} y={y - rowHeight / 2} width={boxWidth - 4} height={rowHeight} className="fill-success/10" />
       ) : null}
-      {column.foreignKey ? (
-        <tspan dx="8" className="fill-postgres font-semibold">
-          FK
+      <text
+        x={textX}
+        y={y}
+        dominantBaseline="central"
+        onPointerDown={onStartConnect ? (event) => onStartConnect(column.name, event) : undefined}
+        className={cn("fill-body font-mono text-[13px]", isRemoved && "line-through opacity-60", onStartConnect && "cursor-crosshair")}
+        style={{ fontSize: "inherit", fontFamily: "inherit" }}
+      >
+        {fitted.cut ? <title>{`${column.name} ${column.type}`}</title> : null}
+        {isAdded ? <tspan className="fill-success font-semibold">+ </tspan> : null}
+        <tspan>{fitted.name}</tspan>
+        <tspan dx="8" className="fill-subtle">
+          {fitted.type}
         </tspan>
-      ) : null}
-    </text>
+        {column.primaryKey ? (
+          <tspan dx="8" className="fill-accent font-semibold">
+            PK
+          </tspan>
+        ) : null}
+        {column.foreignKey ? (
+          <tspan dx="8" className="fill-postgres font-semibold">
+            FK
+          </tspan>
+        ) : null}
+      </text>
+    </>
   );
 }
 
@@ -112,6 +141,9 @@ type TableBoxProps = {
   dimmed?: boolean;
   selected?: boolean;
   onSelect?: (key: string) => void;
+  onStartMove?: (box: DiagramBox, event: ReactPointerEvent<SVGElement>) => void;
+  onStartConnect?: (box: DiagramBox, columnName: string, event: ReactPointerEvent<SVGTextElement>) => void;
+  onDropConnect?: (targetKey: string) => void;
   onOpen: (ref: TableRef) => void;
 };
 
@@ -120,26 +152,57 @@ type TableBoxProps = {
  * vizinhas abrem a aba delas com duplo clique, Enter ou Espaço (como um botão). O foco por teclado usa o anel do app
  * (`:focus-visible` em `globals.css`) e, além dele, o contorno da caixa no acento.
  */
-function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, onSelect, onOpen }: TableBoxProps) {
+function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, onSelect, onStartMove, onStartConnect, onDropConnect, onOpen }: TableBoxProps) {
   const title = box.title ?? box.ref.name;
   const highlighted = box.center || selected;
   const boxMaxChars = box.width === 264 ? maxChars : Math.max(maxChars, Math.floor((maxChars * (box.width - 40)) / (264 - 32)));
   const fittedTitle = fitTitle(title, boxMaxChars - 1);
+  const dashed = box.external || box.variant === "existing";
   const body = (
     <>
       <rect
         width={box.width}
         height={box.height}
         rx="6"
-        strokeDasharray={box.external ? "4 3" : undefined}
+        strokeDasharray={dashed ? "4 3" : undefined}
         className={cn("fill-panel", highlighted ? "stroke-accent" : "stroke-border-strong group-hover:stroke-subtle group-focus-visible:stroke-accent")}
         strokeWidth="1"
       />
-      <text x={textX} y={boxPaddingY + rowHeight / 2} dominantBaseline="central" className="fill-ink font-mono text-[13px] font-semibold" style={{ fontSize: "inherit", fontFamily: "inherit" }}>
+      <text
+        x={textX}
+        y={boxPaddingY + rowHeight / 2}
+        dominantBaseline="central"
+        onPointerDown={onStartMove ? (event) => onStartMove(box, event) : undefined}
+        className={cn("fill-ink font-mono text-[13px] font-semibold", box.dropped && "line-through", onStartMove && "cursor-move")}
+        style={{ fontSize: "inherit", fontFamily: "inherit" }}
+      >
         {fittedTitle.cut ? <title>{title}</title> : null}
         {fittedTitle.text}
+        {box.badge ? (
+          <tspan dx="6" className="fill-warning text-[11px] font-normal">
+            {box.badge}
+          </tspan>
+        ) : null}
       </text>
-      {box.columns?.map((column, index) => <ColumnRow key={column.name} column={column} y={boxPaddingY + rowHeight * (index + 1) + rowHeight / 2} maxChars={boxMaxChars} />)}
+      {box.warning ? (
+        <circle
+          cx={box.width - 14}
+          cy={boxPaddingY + rowHeight / 2}
+          r="4"
+          className={box.warning === "error" ? "fill-danger" : "fill-warning"}
+        />
+      ) : null}
+      {box.columns?.map((column, index) => (
+        <ColumnRow
+          key={column.name}
+          column={column}
+          y={boxPaddingY + rowHeight * (index + 1) + rowHeight / 2}
+          rowHeight={rowHeight}
+          boxWidth={box.width}
+          maxChars={boxMaxChars}
+          onStartConnect={onStartConnect ? (colName, event) => onStartConnect(box, colName, event) : undefined}
+        />
+      ))}
     </>
   );
 
@@ -166,9 +229,10 @@ function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, 
       aria-label={copy.open(title)}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onSelect ? () => onSelect(box.key) : undefined}
+      onPointerUp={onDropConnect ? () => onDropConnect(box.key) : undefined}
       onDoubleClick={() => onOpen(box.ref)}
       onKeyDown={handleKeyDown}
-      className={cn("group cursor-pointer", dimmed && "opacity-30 transition-opacity")}
+      className={cn("group cursor-pointer", dimmed && "opacity-30 transition-opacity", box.dropped && "opacity-50")}
     >
       <title>{copy.openHint}</title>
       {body}
@@ -218,6 +282,14 @@ type DiagramCanvasProps = {
   showIncomingNotice?: boolean;
   /** Habilita o campo de filtro de tabelas e o destaque de vizinhança ao clicar numa tabela. */
   enableTableFilter?: boolean;
+  /** Chave da caixa selecionada externamente (ex.: no Construir). */
+  selectedKey?: string | null;
+  /** Callback ao selecionar uma caixa no diagrama. */
+  onSelect?: (key: string) => void;
+  /** Callback ao arrastar uma caixa para uma nova posição `(x, y)`. */
+  onMoveTable?: (key: string, x: number, y: number) => void;
+  /** Callback ao arrastar uma coluna de `fromKey` e soltar sobre a caixa `toKey`. */
+  onConnect?: (fromKey: string, column: string, toKey: string) => void;
 };
 
 /**
@@ -245,6 +317,10 @@ export function DiagramCanvas({
   onColumnsModeChange,
   showIncomingNotice = true,
   enableTableFilter = false,
+  selectedKey: controlledSelectedKey,
+  onSelect: onSelectBox,
+  onMoveTable,
+  onConnect,
 }: DiagramCanvasProps) {
   const marker = useId();
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -252,11 +328,14 @@ export function DiagramCanvas({
   const [start] = useState(initial);
   const [zoom, setZoom] = useState(start?.zoom ?? 1);
   const [tableFilter, setTableFilter] = useState("");
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [internalSelectedKey, setInternalSelectedKey] = useState<string | null>(null);
+  const selectedKey = controlledSelectedKey !== undefined ? controlledSelectedKey : internalSelectedKey;
   const [copiedMermaid, setCopiedMermaid] = useState(false);
   const [panLocked, setPanLocked] = useState(false);
   const [panning, setPanning] = useState(false);
   const panSession = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number; moved: boolean } | null>(null);
+  const moveSession = useRef<{ key: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const connectSession = useRef<{ fromKey: string; column: string } | null>(null);
   const suppressClick = useRef(false);
   const zoomRef = useRef(zoom);
   const fitted = useRef(start !== undefined);
@@ -398,6 +477,37 @@ export function DiagramCanvas({
     };
   }, [panning]);
 
+  useEffect(() => {
+    if (!onMoveTable && !onConnect) return;
+
+    function handlePointerMove(event: PointerEvent) {
+      const moving = moveSession.current;
+      if (!moving || !onMoveTable) return;
+      const dx = (event.clientX - moving.startX) / zoomRef.current;
+      const dy = (event.clientY - moving.startY) / zoomRef.current;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        suppressClick.current = true;
+        onMoveTable(
+          moving.key,
+          Math.max(16, Math.round(moving.originX + dx)),
+          Math.max(16, Math.round(moving.originY + dy)),
+        );
+      }
+    }
+
+    function handlePointerUp() {
+      moveSession.current = null;
+      connectSession.current = null;
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [onMoveTable, onConnect]);
+
   function handleMouseDown(event: ReactMouseEvent<HTMLDivElement>) {
     if (!shouldStartDiagramPan(event.button, panLocked)) return;
     const element = scroller.current;
@@ -527,7 +637,7 @@ export function DiagramCanvas({
             return;
           }
           if (enableTableFilter && (event.target === event.currentTarget || (event.target instanceof SVGElement && event.target.tagName.toLowerCase() === "svg"))) {
-            setSelectedKey(null);
+            setInternalSelectedKey(null);
           }
         }}
         className={cn(
@@ -559,13 +669,59 @@ export function DiagramCanvas({
               dimmed={neighborhood !== null && !neighborhood.tables.has(box.key)}
               selected={selectedKey === box.key}
               onSelect={
-                enableTableFilter
+                onSelectBox
                   ? (key) => {
                       if (suppressClick.current) {
                         suppressClick.current = false;
                         return;
                       }
-                      setSelectedKey((current) => (current === key ? null : key));
+                      onSelectBox(key);
+                    }
+                  : enableTableFilter
+                    ? (key) => {
+                        if (suppressClick.current) {
+                          suppressClick.current = false;
+                          return;
+                        }
+                        setInternalSelectedKey((current) => (current === key ? null : key));
+                      }
+                    : undefined
+              }
+              onStartMove={
+                onMoveTable
+                  ? (targetBox, event) => {
+                      if (event.button !== 0) return;
+                      event.stopPropagation();
+                      moveSession.current = {
+                        key: targetBox.key,
+                        startX: event.clientX,
+                        startY: event.clientY,
+                        originX: targetBox.x,
+                        originY: targetBox.y,
+                      };
+                    }
+                  : undefined
+              }
+              onStartConnect={
+                onConnect
+                  ? (targetBox, columnName, event) => {
+                      if (event.button !== 0) return;
+                      event.stopPropagation();
+                      connectSession.current = {
+                        fromKey: targetBox.key,
+                        column: columnName,
+                      };
+                    }
+                  : undefined
+              }
+              onDropConnect={
+                onConnect
+                  ? (targetKey) => {
+                      const session = connectSession.current;
+                      connectSession.current = null;
+                      if (session && session.fromKey !== targetKey) {
+                        onConnect(session.fromKey, session.column, targetKey);
+                      }
                     }
                   : undefined
               }

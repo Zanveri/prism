@@ -1,0 +1,134 @@
+{
+  "readAt": "29/10/2026 15:00",
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "producao",
+    "schemas": [{ "name": "producao", "create": false }],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 14:10",
+      "knownSchemas": ["producao"],
+      "knownTables": ["producao.maquina"]
+    },
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "modelo", "exactName": false, "originName": "modelo", "type": "varchar(60)", "nullable": true, "default": null, "identity": null, "comment": null },
+          { "name": "ultima_revisao_em", "exactName": false, "originName": null, "type": "date", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "maquina",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+            { "name": "modelo", "exactName": false, "originName": "modelo", "type": "varchar(60)", "nullable": true, "default": null, "identity": null, "comment": null }
+          ],
+          "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "catalog": {
+    "schemas": ["producao"],
+    "knownTables": ["producao.maquina"],
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "comment": null,
+        "columns": [
+          { "name": "id", "type": "bigint", "isNullable": false, "isPrimaryKey": true, "defaultValue": null, "generated": "always" },
+          { "name": "modelo", "type": "varchar(100)", "isNullable": true, "isPrimaryKey": false, "defaultValue": null, "generated": null }
+        ],
+        "foreignKeys": [],
+        "indexes": [{ "name": "maquina_pkey", "columns": ["id"], "isUnique": true }],
+        "checks": []
+      }
+    ]
+  },
+  "expected": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "producao",
+    "schemas": [{ "name": "producao", "create": false }],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 15:00",
+      "knownSchemas": ["producao"],
+      "knownTables": ["producao.maquina"]
+    },
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "modelo", "exactName": false, "originName": "modelo", "type": "varchar(100)", "nullable": true, "default": null, "identity": null, "comment": null },
+          { "name": "ultima_revisao_em", "exactName": false, "originName": null, "type": "date", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "maquina",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+            { "name": "modelo", "exactName": false, "originName": "modelo", "type": "varchar(100)", "nullable": true, "default": null, "identity": null, "comment": null }
+          ],
+          "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "notes": ["producao.maquina.modelo mudou no banco (varchar(60) → varchar(100))."]
+}

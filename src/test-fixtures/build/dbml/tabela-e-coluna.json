@@ -1,0 +1,78 @@
+{
+  "dbml": "Table public.lancamento {\n  id bigint [pk, increment]\n  empresa_id integer [not null]\n  numero integer [not null]\n  valor numeric(12,2) [not null, default: 0]\n\n  Indexes {\n    (empresa_id, numero) [unique]\n  }\n  checks {\n    `valor >= 0` [name: 'ck_lancamento_valor_positivo']\n  }\n}",
+  "before": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "lancamento",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "byDefault", "comment": null },
+          { "name": "empresa_id", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "numero", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "valor", "exactName": false, "originName": null, "type": "numeric(12,2)", "nullable": false, "default": "0", "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [{ "name": "uq_lancamento_emp_num", "columns": ["empresa_id", "numero"] }],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "lancamento",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "byDefault", "comment": null },
+          { "name": "empresa_id", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "numero", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "valor", "exactName": false, "originName": null, "type": "numeric(12,2)", "nullable": false, "default": "0", "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [{ "name": "uq_lancamento_emp_num", "columns": ["empresa_id", "numero"] }],
+        "checks": [{ "name": "ck_lancamento_valor_positivo", "expression": "valor >= 0" }],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "warnings": []
+}

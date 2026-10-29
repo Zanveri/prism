@@ -1,0 +1,460 @@
+{
+  "dbml": "// as tabelas novas e, no fim, as existentes: o que mudar nelas vira ALTER\n\nTable manutencao.ordem_manutencao {\n  id bigint [pk, increment]\n  maquina_id bigint [not null, ref: > producao.maquina.id]\n  plano_id bigint\n  aberta_por bigint [not null, ref: > producao.operador.id]\n  tipo varchar(12) [not null, default: 'corretiva', check: `tipo IN ('corretiva', 'preventiva')`, note: 'Corretiva quando a máquina parou; preventiva quando veio do plano']\n  status varchar(12) [not null, default: 'aberta']\n  aberta_em timestamptz [not null, default: `now()`]\n  fechada_em timestamptz\n\n  Indexes {\n    (maquina_id, aberta_em) [name: 'ix_ordem_manutencao_maquina']\n    status [name: 'ix_ordem_manutencao_status']\n  }\n  Note: 'Ordem de serviço de manutenção de uma máquina'\n}\n\nTable manutencao.plano_manutencao {\n  id bigint [pk, increment]\n  maquina_id bigint [not null, ref: > producao.maquina.id]\n  descricao varchar(120) [not null]\n  periodicidade_dias integer [not null]\n  ativo boolean [not null, default: true]\n}\n\nTable manutencao.peca_trocada {\n  id bigint [pk, increment]\n  ordem_id bigint [not null]\n  produto_id integer [not null, ref: > producao.produto.id]\n  quantidade numeric(12,3) [not null]\n  custo numeric(12,2)\n}\n\nRef: manutencao.ordem_manutencao.plano_id > manutencao.plano_manutencao.id [delete: set null]\nRef: manutencao.peca_trocada.ordem_id > manutencao.ordem_manutencao.id [delete: cascade]\n\n// existentes em mes\nTable producao.maquina {\n  id bigint [pk, increment]\n  linha_id bigint [not null, ref: > producao.linha.id]\n  tag varchar(12) [not null]\n  modelo varchar(60)\n  instalada_em date\n  ultima_revisao_em date\n}\n\nTable producao.operador {\n  id bigint [pk, increment]\n  matricula varchar(12) [not null]\n  nome varchar(80) [not null]\n  turno char(1)\n}\n\nTable producao.produto {\n  id bigint [pk, increment]\n  codigo varchar(20) [not null]\n  descricao varchar(120) [not null]\n  unidade char(2) [not null]\n  ativo boolean [not null, default: true]\n}",
+  "before": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [
+      { "name": "manutencao", "create": true },
+      { "name": "producao", "create": false }
+    ],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 14:10",
+      "knownSchemas": ["producao"],
+      "knownTables": [
+        "producao.maquina",
+        "producao.operador",
+        "producao.produto",
+        "producao.linha"
+      ]
+    },
+    "tables": [
+      {
+        "schema": "manutencao",
+        "name": "ordem_manutencao",
+        "exactName": false,
+        "comment": "Ordem de serviço de manutenção de uma máquina",
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "maquina_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "plano_id", "exactName": false, "originName": null, "type": "bigint", "nullable": true, "default": null, "identity": null, "comment": null },
+          { "name": "aberta_por", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "tipo", "exactName": false, "originName": null, "type": "varchar(12)", "nullable": false, "default": "'corretiva'", "identity": null, "comment": "Corretiva quando a máquina parou; preventiva quando veio do plano" },
+          { "name": "status", "exactName": false, "originName": null, "type": "varchar(12)", "nullable": false, "default": "'aberta'", "identity": null, "comment": null },
+          { "name": "aberta_em", "exactName": false, "originName": null, "type": "timestamptz", "nullable": false, "default": "now()", "identity": null, "comment": null },
+          { "name": "fechada_em", "exactName": false, "originName": null, "type": "timestamptz", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [{ "name": null, "expression": "tipo IN ('corretiva', 'preventiva')" }],
+        "indexes": [
+          { "name": "ix_ordem_manutencao_maquina", "columns": ["maquina_id", "aberta_em"], "unique": false },
+          { "name": "ix_ordem_manutencao_status", "columns": ["status"], "unique": false }
+        ],
+        "foreignKeys": [
+          { "name": null, "columns": ["maquina_id"], "target": { "schema": "producao", "table": "maquina", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" },
+          { "name": null, "columns": ["plano_id"], "target": { "schema": "manutencao", "table": "plano_manutencao", "columns": ["id"] }, "onDelete": "setNull", "onUpdate": "noAction" },
+          { "name": null, "columns": ["aberta_por"], "target": { "schema": "producao", "table": "operador", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "manutencao",
+        "name": "plano_manutencao",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "maquina_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "descricao", "exactName": false, "originName": null, "type": "varchar(120)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "periodicidade_dias", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "ativo", "exactName": false, "originName": null, "type": "boolean", "nullable": false, "default": "true", "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          { "name": null, "columns": ["maquina_id"], "target": { "schema": "producao", "table": "maquina", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "manutencao",
+        "name": "peca_trocada",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "ordem_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "produto_id", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "quantidade", "exactName": false, "originName": null, "type": "numeric(12,3)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "custo", "exactName": false, "originName": null, "type": "numeric(12,2)", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          { "name": null, "columns": ["ordem_id"], "target": { "schema": "manutencao", "table": "ordem_manutencao", "columns": ["id"] }, "onDelete": "cascade", "onUpdate": "noAction" },
+          { "name": null, "columns": ["produto_id"], "target": { "schema": "producao", "table": "produto", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "linha_id", "exactName": false, "originName": "linha_id", "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "tag", "exactName": false, "originName": "tag", "type": "varchar(12)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "modelo", "exactName": false, "originName": "modelo", "type": "varchar(60)", "nullable": true, "default": null, "identity": null, "comment": null },
+          { "name": "instalada_em", "exactName": false, "originName": "instalada_em", "type": "date", "nullable": true, "default": null, "identity": null, "comment": null },
+          { "name": "ultima_revisao_em", "exactName": false, "originName": null, "type": "date", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          { "name": "maquina_linha_id_fkey", "columns": ["linha_id"], "target": { "schema": "producao", "table": "linha", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": {
+          "schema": "producao",
+          "name": "maquina",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+            { "name": "linha_id", "exactName": false, "originName": "linha_id", "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "tag", "exactName": false, "originName": "tag", "type": "varchar(12)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "modelo", "exactName": false, "originName": "modelo", "type": "varchar(60)", "nullable": true, "default": null, "identity": null, "comment": null },
+            { "name": "instalada_em", "exactName": false, "originName": "instalada_em", "type": "date", "nullable": true, "default": null, "identity": null, "comment": null }
+          ],
+          "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": [
+            { "name": "maquina_linha_id_fkey", "columns": ["linha_id"], "target": { "schema": "producao", "table": "linha", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+          ]
+        },
+        "dropInDatabase": false
+      },
+      {
+        "schema": "producao",
+        "name": "operador",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "matricula", "exactName": false, "originName": "matricula", "type": "varchar(12)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "nome", "exactName": false, "originName": "nome", "type": "varchar(80)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "turno", "exactName": false, "originName": "turno", "type": "char(1)", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": "operador_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "operador",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+            { "name": "matricula", "exactName": false, "originName": "matricula", "type": "varchar(12)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "nome", "exactName": false, "originName": "nome", "type": "varchar(80)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "turno", "exactName": false, "originName": "turno", "type": "char(1)", "nullable": true, "default": null, "identity": null, "comment": null }
+          ],
+          "primaryKey": { "name": "operador_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      },
+      {
+        "schema": "producao",
+        "name": "produto",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "codigo", "exactName": false, "originName": "codigo", "type": "varchar(20)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "descricao", "exactName": false, "originName": "descricao", "type": "varchar(120)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "unidade", "exactName": false, "originName": "unidade", "type": "char(2)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "ativo", "exactName": false, "originName": "ativo", "type": "boolean", "nullable": false, "default": "true", "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": "produto_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "produto",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+            { "name": "codigo", "exactName": false, "originName": "codigo", "type": "varchar(20)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "descricao", "exactName": false, "originName": "descricao", "type": "varchar(120)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "unidade", "exactName": false, "originName": "unidade", "type": "char(2)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "ativo", "exactName": false, "originName": "ativo", "type": "boolean", "nullable": false, "default": "true", "identity": null, "comment": null }
+          ],
+          "primaryKey": { "name": "produto_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {
+      "producao.maquina": { "x": 12, "y": 24, "pinned": false },
+      "producao.operador": { "x": 12, "y": 330, "pinned": false },
+      "producao.produto": { "x": 248, "y": 420, "pinned": false },
+      "manutencao.ordem_manutencao": { "x": 248, "y": 128, "pinned": false },
+      "manutencao.plano_manutencao": { "x": 484, "y": 24, "pinned": false },
+      "manutencao.peca_trocada": { "x": 484, "y": 300, "pinned": false }
+    },
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [
+      { "name": "manutencao", "create": true },
+      { "name": "producao", "create": false }
+    ],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 14:10",
+      "knownSchemas": ["producao"],
+      "knownTables": [
+        "producao.maquina",
+        "producao.operador",
+        "producao.produto",
+        "producao.linha"
+      ]
+    },
+    "tables": [
+      {
+        "schema": "manutencao",
+        "name": "ordem_manutencao",
+        "exactName": false,
+        "comment": "Ordem de serviço de manutenção de uma máquina",
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "maquina_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "plano_id", "exactName": false, "originName": null, "type": "bigint", "nullable": true, "default": null, "identity": null, "comment": null },
+          { "name": "aberta_por", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "tipo", "exactName": false, "originName": null, "type": "varchar(12)", "nullable": false, "default": "'corretiva'", "identity": null, "comment": "Corretiva quando a máquina parou; preventiva quando veio do plano" },
+          { "name": "status", "exactName": false, "originName": null, "type": "varchar(12)", "nullable": false, "default": "'aberta'", "identity": null, "comment": null },
+          { "name": "aberta_em", "exactName": false, "originName": null, "type": "timestamptz", "nullable": false, "default": "now()", "identity": null, "comment": null },
+          { "name": "fechada_em", "exactName": false, "originName": null, "type": "timestamptz", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [{ "name": null, "expression": "tipo IN ('corretiva', 'preventiva')" }],
+        "indexes": [
+          { "name": "ix_ordem_manutencao_maquina", "columns": ["maquina_id", "aberta_em"], "unique": false },
+          { "name": "ix_ordem_manutencao_status", "columns": ["status"], "unique": false }
+        ],
+        "foreignKeys": [
+          { "name": null, "columns": ["maquina_id"], "target": { "schema": "producao", "table": "maquina", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" },
+          { "name": null, "columns": ["plano_id"], "target": { "schema": "manutencao", "table": "plano_manutencao", "columns": ["id"] }, "onDelete": "setNull", "onUpdate": "noAction" },
+          { "name": null, "columns": ["aberta_por"], "target": { "schema": "producao", "table": "operador", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "manutencao",
+        "name": "plano_manutencao",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "maquina_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "descricao", "exactName": false, "originName": null, "type": "varchar(120)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "periodicidade_dias", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "ativo", "exactName": false, "originName": null, "type": "boolean", "nullable": false, "default": "true", "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          { "name": null, "columns": ["maquina_id"], "target": { "schema": "producao", "table": "maquina", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "manutencao",
+        "name": "peca_trocada",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "ordem_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "produto_id", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "quantidade", "exactName": false, "originName": null, "type": "numeric(12,3)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "custo", "exactName": false, "originName": null, "type": "numeric(12,2)", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          { "name": null, "columns": ["ordem_id"], "target": { "schema": "manutencao", "table": "ordem_manutencao", "columns": ["id"] }, "onDelete": "cascade", "onUpdate": "noAction" },
+          { "name": null, "columns": ["produto_id"], "target": { "schema": "producao", "table": "produto", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "linha_id", "exactName": false, "originName": "linha_id", "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "tag", "exactName": false, "originName": "tag", "type": "varchar(12)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "modelo", "exactName": false, "originName": "modelo", "type": "varchar(60)", "nullable": true, "default": null, "identity": null, "comment": null },
+          { "name": "instalada_em", "exactName": false, "originName": "instalada_em", "type": "date", "nullable": true, "default": null, "identity": null, "comment": null },
+          { "name": "ultima_revisao_em", "exactName": false, "originName": null, "type": "date", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          { "name": "maquina_linha_id_fkey", "columns": ["linha_id"], "target": { "schema": "producao", "table": "linha", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": {
+          "schema": "producao",
+          "name": "maquina",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+            { "name": "linha_id", "exactName": false, "originName": "linha_id", "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "tag", "exactName": false, "originName": "tag", "type": "varchar(12)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "modelo", "exactName": false, "originName": "modelo", "type": "varchar(60)", "nullable": true, "default": null, "identity": null, "comment": null },
+            { "name": "instalada_em", "exactName": false, "originName": "instalada_em", "type": "date", "nullable": true, "default": null, "identity": null, "comment": null }
+          ],
+          "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": [
+            { "name": "maquina_linha_id_fkey", "columns": ["linha_id"], "target": { "schema": "producao", "table": "linha", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+          ]
+        },
+        "dropInDatabase": false
+      },
+      {
+        "schema": "producao",
+        "name": "operador",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "matricula", "exactName": false, "originName": "matricula", "type": "varchar(12)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "nome", "exactName": false, "originName": "nome", "type": "varchar(80)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "turno", "exactName": false, "originName": "turno", "type": "char(1)", "nullable": true, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": "operador_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "operador",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+            { "name": "matricula", "exactName": false, "originName": "matricula", "type": "varchar(12)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "nome", "exactName": false, "originName": "nome", "type": "varchar(80)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "turno", "exactName": false, "originName": "turno", "type": "char(1)", "nullable": true, "default": null, "identity": null, "comment": null }
+          ],
+          "primaryKey": { "name": "operador_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      },
+      {
+        "schema": "producao",
+        "name": "produto",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "codigo", "exactName": false, "originName": "codigo", "type": "varchar(20)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "descricao", "exactName": false, "originName": "descricao", "type": "varchar(120)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "unidade", "exactName": false, "originName": "unidade", "type": "char(2)", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "ativo", "exactName": false, "originName": "ativo", "type": "boolean", "nullable": false, "default": "true", "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": "produto_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "produto",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            { "name": "id", "exactName": false, "originName": "id", "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+            { "name": "codigo", "exactName": false, "originName": "codigo", "type": "varchar(20)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "descricao", "exactName": false, "originName": "descricao", "type": "varchar(120)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "unidade", "exactName": false, "originName": "unidade", "type": "char(2)", "nullable": false, "default": null, "identity": null, "comment": null },
+            { "name": "ativo", "exactName": false, "originName": "ativo", "type": "boolean", "nullable": false, "default": "true", "identity": null, "comment": null }
+          ],
+          "primaryKey": { "name": "produto_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {
+      "producao.maquina": { "x": 12, "y": 24, "pinned": false },
+      "producao.operador": { "x": 12, "y": 330, "pinned": false },
+      "producao.produto": { "x": 248, "y": 420, "pinned": false },
+      "manutencao.ordem_manutencao": { "x": 248, "y": 128, "pinned": false },
+      "manutencao.plano_manutencao": { "x": 484, "y": 24, "pinned": false },
+      "manutencao.peca_trocada": { "x": 484, "y": 300, "pinned": false }
+    },
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "warnings": []
+}

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Seletor de modo</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; box-sizing: border-box; padding: 4px 12px; background: #14181D; border-bottom: 1px solid #2A313B">
+<div style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 4px; font-size: 15px; font-weight: 600; letter-spacing: 0.01em"><svg width="106" height="40" viewBox="0 40 700 264" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><defs><filter id="prism-mark-glow-seletor" filterUnits="userSpaceOnUse" x="0" y="0" width="720" height="360"><feGaussianBlur stdDeviation="14"></feGaussianBlur></filter><linearGradient id="prism-mark-ifx-seletor" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#F591B6"></stop><stop offset="1" stop-color="#F591B6" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-db2-seletor" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#5ED3A3"></stop><stop offset="1" stop-color="#5ED3A3" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-pg-seletor" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#7DB2FF"></stop><stop offset="1" stop-color="#7DB2FF" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-face-seletor" gradientUnits="userSpaceOnUse" x1="300" y1="44" x2="200" y2="300"><stop offset="0" stop-color="#3D4856"></stop><stop offset="1" stop-color="#1E242C"></stop></linearGradient></defs><g filter="url(#prism-mark-glow-seletor)" opacity="0.6"><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="26"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="#F591B6"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="#5ED3A3"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="#7DB2FF"></path></g><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="14"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="url(#prism-mark-ifx-seletor)"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="url(#prism-mark-db2-seletor)"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="url(#prism-mark-pg-seletor)"></path><path d="M300 50 L440 298 H160 Z" fill="#1A2028"></path><path d="M300 50 L160 298 L292 226 Z" fill="url(#prism-mark-face-seletor)"></path><path d="M160 298 L292 226 L440 298 Z" fill="#11151A"></path><path d="M220 186 L369.8 168 L378.8 184 Z" fill="#F3F5F8" fill-opacity="0.16"></path><path d="M300 50 L440 298 H160 Z" stroke="#E6EAF0" stroke-width="13"></path><circle cx="220" cy="186" r="15" fill="#FFFFFF"></circle><path d="M656 69 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#F591B6" stroke-width="10"></path><ellipse cx="676" cy="69" rx="20" ry="8" fill="#1B2027" stroke="#F591B6" stroke-width="10"></ellipse><path d="M656 145 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#5ED3A3" stroke-width="10"></path><ellipse cx="676" cy="145" rx="20" ry="8" fill="#1B2027" stroke="#5ED3A3" stroke-width="10"></ellipse><path d="M656 221 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#7DB2FF" stroke-width="10"></path><ellipse cx="676" cy="221" rx="20" ry="8" fill="#1B2027" stroke="#7DB2FF" stroke-width="10"></ellipse></svg><span>Prism</span><span style="margin-left: 4px; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; font-weight: 400; letter-spacing: 0; color: #B4BCC8">versão 0.6.0</span><button type="button" style="padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: #B4BCC8; font: inherit; font-size: 12px; font-weight: 400; letter-spacing: 0; cursor: pointer">Verificar atualizações</button></div>
+<button type="button" aria-label="Ocultar navegador" aria-pressed="true" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0; border-radius: 6px; background: #232A33; color: #E6EAF0; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"></rect><path d="M6 3v10"></path></svg></button>
+<nav aria-label="Principal" style="margin-left: auto; display: flex; align-items: center; gap: 8px">
+<div style="position: relative">
+<button type="button" aria-haspopup="menu" aria-expanded="{{ menuOpen }}" onClick="{{ toggleMenu }}" style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px 0 12px; border: 0; border-radius: 6px; background: #232A33; color: #E6EAF0; font: inherit; cursor: pointer; outline: {{ ring }}; outline-offset: 0"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="2" y="3" width="12" height="10" rx="1.5"></rect><path d="M6 3v10"></path></svg><span>Área de trabalho</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #8E99A8"><path d="M4 6l4 4 4-4"></path></svg></button>
+<sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ true }}">
+<div role="menu" aria-label="Modo" style="position: absolute; z-index: 20; top: 40px; left: 0; width: 320px; box-sizing: border-box; padding: 4px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; box-shadow: 0 24px 48px rgb(0 0 0 / 0.45)">
+<button type="button" role="menuitemradio" aria-checked="true" onClick="{{ toggleMenu }}" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: #E6EAF0; font: inherit; text-align: left; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #B4BCC8"><rect x="2" y="3" width="12" height="10" rx="1.5"></rect><path d="M6 3v10"></path></svg><span style="flex: 1; display: flex; flex-direction: column"><span>Área de trabalho</span><span style="font-size: 12px; line-height: 18px; color: #B4BCC8">Navegar nos bancos, rodar SQL e editar dados</span></span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #F2B644"><path d="M3.5 8.5l3 3 6-7"></path></svg></button>
+<a href="Construir.dc.html" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; gap: 10px; min-height: 28px; padding: 4px 8px; border-radius: 4px; background: #232A33; color: #E6EAF0; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #B4BCC8"><path d="M7.5 2.5l3.5 3.5 1.25-1.25-3.5-3.5z"></path><path d="M9.25 4.25L4.75 8.75"></path><path d="M2 10h10.5v1.25c-1.3 0-2.25.6-2.25 1.5H11V14H5.5v-1.25h.75c0-.9-.95-1.5-2.25-1.5-1 0-1.7-.45-2-1.25z"></path></svg><span style="flex: 1; display: flex; flex-direction: column"><span>Construir</span><span style="font-size: 12px; line-height: 18px; color: #B4BCC8">Desenhar tabelas, relações e índices e gerar o DDL</span></span></a>
+</div>
+</sc-if>
+</div>
+<a href="#configuracoes" style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M3 5h6M12 5h1M3 11h1M7 11h6"></path><circle cx="10.5" cy="5" r="1.5"></circle><circle cx="5.5" cy="11" r="1.5"></circle></svg><span>Configurações</span></a>
+</nav>
+<span style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 4.8-1"></path></svg><span>marina.costa</span></span>
+<button type="button" style="display: flex; align-items: center; height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: #B4BCC8; font: inherit; cursor: pointer">Sair</button>
+<span style="display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 12px; color: #8E99A8">powered by <b style="font-weight: 600; letter-spacing: 0.01em; color: #B4BCC8">Zanveri</b></span>
+</header>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap">
+<aside aria-label="Navegador de bancos" style="flex: 1 1 300px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; background: #14181D; border-right: 1px solid #2A313B">
+<div style="display: flex; align-items: center; height: 48px; padding: 0 12px"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #B4BCC8">Navegador</span></div>
+<div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; color: #E6EAF0; font-weight: 600"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #8E99A8"><path d="M4 6l4 4 4-4"></path></svg><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span><span>MES Produção</span><span style="margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #5ED3A3"></span></div>
+<div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 26px; color: #C9D1DC"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #8E99A8"><path d="M6 4l4 4-4 4"></path></svg><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">mes</span></div>
+<div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; color: #E6EAF0; font-weight: 600"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #8E99A8"><path d="M6 4l4 4-4 4"></path></svg><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #F591B6; border-radius: 4px; color: #F591B6; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">IFX</span><span>ERP Corporativo</span></div>
+</aside>
+<div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+<nav aria-label="Abas abertas" style="display: flex; align-items: stretch; gap: 2px; padding: 0 8px; border-bottom: 1px solid #2A313B">
+<span style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; background: #14181D; border-bottom: 2px solid #F2B644"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 2h5.5L12 4.5V14H4z"></path><path d="M9.5 2v2.5H12"></path></svg>consulta-1.sql</span>
+</nav>
+<div aria-label="Editor SQL" style="flex: 1; padding: 12px 16px 12px 0; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 22px; white-space: pre; color: #C9D1DC">
+<div style="display: flex; gap: 16px"><span style="flex: none; width: 40px; text-align: right; color: #8E99A8">1</span><span><span style="color: #7DB2FF">SELECT</span> m.tag, count(*) <span style="color: #7DB2FF">AS</span> paradas</span></div>
+<div style="display: flex; gap: 16px"><span style="flex: none; width: 40px; text-align: right; color: #8E99A8">2</span><span><span style="color: #7DB2FF">FROM</span> producao.maquina m</span></div>
+<div style="display: flex; gap: 16px"><span style="flex: none; width: 40px; text-align: right; color: #8E99A8">3</span><span><span style="color: #7DB2FF">GROUP BY</span> m.tag;</span></div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":640}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { menuOpen: true };
+}
+renderVals() {
+return {
+menuOpen: this.state.menuOpen,
+ring: this.state.menuOpen ? '1px solid #F2B644' : 'none',
+toggleMenu: () => this.setState({ menuOpen: !this.state.menuOpen }),
+};
+}
+}
+</script>
+</body>
+</html>

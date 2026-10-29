@@ -14,6 +14,7 @@ Prism é um cliente de banco de dados para desktop, no lugar do DBeaver, para qu
 | `src/client/` | A interface: Electron, React e Vite. |
 | `src/test-fixtures/export/` | As fixtures de ouro da exportação de dados (RN-EXPORT-024): JSON escritos à mão com a entrada e a saída esperada de cada caso, lidos pelos testes da tela e da API. Mudar uma regra é mudar a fixture; nunca se regera a partir do código. |
 | `src/test-fixtures/variables/` | A fixture dos marcadores de parâmetro (`markers.json`, RN-VAR-017): o texto de um comando, o banco e quantos marcadores ele já tem (`$n` no PostgreSQL, `?` no Db2 e no Informix, fora de texto, comentário, nome entre aspas e `$tag$`). Escrita à mão, lida pelos testes da tela e da API, que têm de contar igual. Mudar uma regra é mudar a fixture; nunca se regera a partir do código. |
+| `src/test-fixtures/build/` | As fixtures de ouro do modo Construir (RN-CONSTRUIR-074): modelo de referência, verificações (`E1`–`E12`, `W1`–`W14`), geração de DDL completo e de alterações, leitura e escrita de DBML e SQL e releitura do banco (`reread/`). Escritas à mão e lidas pelos testes de `src/client`; mudar uma regra é mudar a fixture, e nunca se regera a partir do código. |
 
 ## Projeto de referência
 
