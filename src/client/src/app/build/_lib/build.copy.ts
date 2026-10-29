@@ -70,6 +70,14 @@ export const buildCopy = {
   diagramLabel: "Diagrama do modelo",
   diagramTableRemoved: (table: string) => `Tabela "${table}" removida.`,
   undoAction: "Desfazer",
+  textApplied: "Aplicado ao modelo.",
+  textDbmlRebuildNote:
+    "Ao trocar de aba, o texto é refeito a partir do modelo: comentários soltos e a ordem que você deu não ficam.",
+  textErrorLine: (line: number, message: string) => `Linha ${line}: ${message}`,
+  textErrorDiagramFollows: "O diagrama segue com a última versão válida.",
+  textGoToLine: "Ir para a linha",
+  textEditorSqlLabel: "Editor SQL do modelo",
+  textEditorDbmlLabel: "Editor DBML do modelo",
   problems: {
     e1: (target: string) =>
       `Nome de ${target} vazio ou com caractere de controle. O banco rejeita identificadores assim.`,
