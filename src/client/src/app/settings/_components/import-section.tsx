@@ -31,7 +31,7 @@ export function ImportSection({ anchor }: { anchor: string }) {
 
   return (
     <SettingsCard anchor={anchor} title={copy.title}>
-      <p className="max-w-[68ch] text-muted">{copy.description}</p>
+      <p className="text-muted">{copy.description}</p>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" variant="secondary" onClick={() => open({ type: "dbeaver", targetFolderID: null, start: { type: "find" } })} disabled={!available} aria-describedby={available ? undefined : `${anchor}-outside`}>
           {copy.dbeaver}

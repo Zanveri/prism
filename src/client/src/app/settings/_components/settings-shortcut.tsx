@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 
 import { pathsConfig } from "@/config/paths.config";
 
+import { isSettingsPath } from "../_lib/settings-route";
 import { isOpenSettingsShortcut } from "../_lib/shortcut";
 
 /**
@@ -11,10 +12,10 @@ import { isOpenSettingsShortcut } from "../_lib/shortcut";
  */
 export function SettingsShortcut() {
   const navigate = useNavigate();
-  const onSettings = useLocation().pathname === pathsConfig.settings;
+  const onSettings = isSettingsPath(useLocation().pathname);
 
   useEffect(() => {
-    // Já estando lá, não empilha a mesma tela no histórico.
+    // Já estando lá, em qualquer seção, não empilha a tela no histórico nem tira a pessoa da página em que está.
     if (onSettings) return;
 
     function onKeyDown(event: KeyboardEvent) {

@@ -127,6 +127,16 @@ describe("useTabHistory: ligado à área de trabalho (RN-ABAS-018)", () => {
     expect(world.setActiveTab).not.toHaveBeenCalled();
   });
 
+  it("em qualquer página das Configurações (cada seção é uma), o 'voltar' também vai à área de trabalho", () => {
+    show(["a", "b"], "a");
+    show(["a", "b"], "b", "/settings/editor");
+
+    fake.fire("mouseup", { button: 3 });
+
+    expect(world.navigate).toHaveBeenCalledExactlyOnceWith("/workbench");
+    expect(world.setActiveTab).not.toHaveBeenCalled();
+  });
+
   it("fora da área de trabalho e das Configurações o botão não faz nada", () => {
     show(["a", "b"], "a");
     show(["a", "b"], "b", "/sign-in");
