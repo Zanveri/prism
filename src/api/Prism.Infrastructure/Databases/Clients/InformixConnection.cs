@@ -34,11 +34,10 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     private const int FunctionReturnedMoreThanOneRow = -686;
 
     /// <summary>
-    /// O tamanho que o Informix dá ao retorno `LVARCHAR` sem parâmetro de uma rotina (como `sysadmin:task`), e o teto do tipo: pela porta
-    /// DRDA, o `EXECUTE FUNCTION` corta o valor nos 2.048 bytes declarados no catálogo, e o `CAST` para o teto entrega o texto inteiro.
+    /// O tamanho que o Informix dá ao retorno `LVARCHAR` sem parâmetro de uma rotina (como `sysadmin:task`): pela porta DRDA, o
+    /// `EXECUTE FUNCTION` corta o valor nos 2.048 bytes declarados no catálogo, e o `CAST` para `CLOB` entrega o texto inteiro.
     /// </summary>
     private const int DefaultLvarcharBytes = 2_048;
-    private const int MaxLvarcharBytes = 32_739;
 
     /// <summary>"Statement interrupted by user": o número nativo com que o Informix diz que interrompeu o comando a pedido (RN-SQL-010).</summary>
     private const int StatementInterrupted = -213;
@@ -379,7 +378,7 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     /// RN-SQL-004 e 011: pela porta DRDA, o Informix descreve como `LVARCHAR(2048)` o retorno de uma rotina declarada `RETURNS LVARCHAR`
     /// sem tamanho (como `sysadmin:task`) num `EXECUTE FUNCTION` ou `EXECUTE PROCEDURE`, e corta o texto em 2.048 bytes antes de enviá-lo.
     /// Quando a preparação como consulta (`CommandBehavior.SchemaOnly`, que não executa a rotina) mostra uma coluna `LVARCHAR` de 2.048
-    /// bytes, a chamada roda envolvida em `SELECT CAST(... AS LVARCHAR(32739)) FROM TABLE(SET{1})`, já lida até a primeira linha: se a
+    /// bytes, a chamada roda envolvida em `SELECT CAST(... AS CLOB) FROM TABLE(SET{1})`, já lida até a primeira linha: se a
     /// rotina for SPL com gravação (-675) ou com mais de uma linha (-686), o banco recusa sem ter gravado nada e o comando segue como
     /// `EXECUTE`.
     /// </summary>
@@ -388,7 +387,7 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
         if (SqlText.InformixRoutineCall(SqlText.RewriteDoubleQuotedLiterals(SqlText.Statement(sql, Dialect), Dialect)) is { } call && await TryDescribeUserCommandAsync($"SELECT {call} FROM TABLE(SET{{1}})", parameters, cancellationToken) is (1, "LVARCHAR", DefaultLvarcharBytes))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (await TryStartUserSelectAsync($"SELECT CAST({call} AS LVARCHAR({MaxLvarcharBytes})) FROM TABLE(SET{{1}})", parameters, cancellationToken) is { } reader)
+            if (await TryStartUserSelectAsync($"SELECT CAST({call} AS CLOB) FROM TABLE(SET{{1}})", parameters, cancellationToken) is { } reader)
                 return reader;
 
             cancellationToken.ThrowIfCancellationRequested();
