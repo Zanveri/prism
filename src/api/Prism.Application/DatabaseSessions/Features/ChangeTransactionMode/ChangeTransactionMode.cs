@@ -9,8 +9,8 @@ using Prism.Infrastructure.Databases.Services;
 namespace Prism.Application.DatabaseSessions.Features.ChangeTransactionMode;
 
 /// <summary>
-/// RN-TX-001 e 005 (`PATCH api/user/database-sessions`): o modo de transação da aba, que a sessão dela segue. Sem `transactionMode`, o modo fica como
-/// está, e a resposta é a sessão com o estado da transação. `isolationLevel` só aceita `default`: o seletor de nível (RN-ISOL-*) ainda não existe.
+/// RN-TX-001, 005 e RN-ISOL-002, 003 (`PATCH api/user/database-sessions`): o modo de transação e o nível de isolamento da aba, que a sessão dela segue.
+/// Sem `transactionMode` ou `isolationLevel`, o que não veio fica como está, e a resposta é a sessão com o estado da transação.
 /// </summary>
 public sealed record ChangeTransactionModeCommand : IRequest<Result<DatabaseSessionDto, ApiErrorDto>>
 {
@@ -29,6 +29,15 @@ internal sealed class ChangeTransactionModeHandler(IDatabaseSessionService datab
         if (request.TransactionMode is { } mode)
         {
             var changed = await databaseSessionService.SetTransactionModeAsync(request.ID, mode == "manual" ? ETransactionMode.Manual : ETransactionMode.AutoCommit, cancellationToken);
+            if (changed.IsFailure)
+                return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(changed.Error));
+
+            transaction = changed.Value;
+        }
+
+        if (request.IsolationLevel is { } isolationLevel)
+        {
+            var changed = await databaseSessionService.SetIsolationLevelAsync(request.ID, isolationLevel, cancellationToken);
             if (changed.IsFailure)
                 return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(changed.Error));
 

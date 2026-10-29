@@ -23,7 +23,7 @@ import { sqlErrorDetails, type FilterApplied, type QueryColumn, type QueryPage, 
 import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage, type QueryParam } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
 import { bindItem, planItem, planScript, scopeBefore, usesVariables, type Plan, type ScriptDoc } from "./variable-execution";
-import { closedTransaction, createTransactionStore, fromWire, transactionOf, withUncommitted, type TransactionMode, type TransactionStore } from "./transaction";
+import { closedTransaction, createTransactionStore, fromWire, transactionOf, withUncommitted, type IsolationLevel, type TabTransaction, type TransactionMode, type TransactionStore } from "./transaction";
 import { transactionCopy } from "./transaction.copy";
 import { variableRunCopy } from "./variable-run.copy";
 import type { BoundCommand } from "./variables/bind";
@@ -349,7 +349,7 @@ export type QueryRunner = {
    * `end` é o "Commit" (`true`) e o "Rollback" (`false`) da barra do editor, e diz se a transação acabou. `note` recebe o `transaction` de uma resposta que não
    * passa pelo executor (o "Salvar" da grade, RN-EDIT-005).
    */
-  transaction: Pick<TransactionStore, "subscribe" | "getState"> & { setMode: (mode: TransactionMode) => Promise<boolean>; end: (commit: boolean) => Promise<boolean>; note: (wire: unknown) => void };
+  transaction: Pick<TransactionStore, "subscribe" | "getState"> & { setMode: (mode: TransactionMode) => Promise<boolean>; setIsolationLevel: (isolationLevel: IsolationLevel) => Promise<boolean>; end: (commit: boolean) => Promise<boolean>; note: (wire: unknown) => void };
   /** Executa de novo o comando das linhas que estão na tela, e nunca outro: é o que o aviso de cursor fechado oferece. */
   rerun: () => Promise<void>;
   cancel: () => Promise<void>;
@@ -412,7 +412,7 @@ type QueryRunnerOptions = {
    * RN-ABAS-002: a aba chegou de outra janela, com o resultado que estava na tela (parado: a aba ocupada não muda de janela) e a sessão que já tinha,
    * com o cursor aberto nela. Nada é executado: "Carregar mais" continua de onde parou.
    */
-  initial?: { state: RunnerState; sessionId: string | null; /** RN-VAR-023: os valores das variáveis que vieram com a aba. */ values?: TabValuesSnapshot };
+  initial?: { state?: RunnerState; sessionId?: string | null; /** RN-VAR-023: os valores das variáveis que vieram com a aba. */ values?: TabValuesSnapshot; transaction?: Partial<Pick<TabTransaction, "mode" | "isolationLevel">> };
   /** RN-VAR-014: quem avalia as declarações (o Worker). Sem ele, o hospedeiro do pacote, aberto no primeiro uso; os testes passam um que avalia no mesmo processo. */
   evaluator?: Evaluator;
   /** O nome da aba agora (ela pode ter sido renomeada ou salva como script): o aviso do fim do script o diz (RN-SQL-020). Sem ele, o aviso não diz a aba. */
@@ -448,7 +448,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   const listeners = new Set<() => void>();
   const values = createTabValuesStore(initial?.values);
   const reveal = createRevealStore();
-  const transaction = createTransactionStore();
+  const transaction = createTransactionStore(initial?.transaction);
   /** O hospedeiro do Worker, aberto no primeiro uso (RN-VAR-014). */
   let host: Evaluator | null = evaluator ?? null;
   const evaluatorHost = () => (host ??= createEvaluatorHost());
@@ -628,7 +628,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
 
       if (id === null) {
         // RN-TX-001: a sessão começa no modo da aba; sem o Commit manual, o pedido vai como sempre foi.
-        const opened = await call(() => openDatabaseSession(connection, database, transaction.getState().mode === "manual" ? "manual" : undefined));
+        const opened = await call(() => openDatabaseSession(connection, database, transaction.getState().mode === "manual" ? "manual" : undefined, transaction.getState().isolationLevel !== "default" ? transaction.getState().isolationLevel : undefined));
         if (started !== epoch) {
           // A aba foi solta enquanto a sessão abria: ninguém mais a usaria nem a fecharia.
           if (opened.ok) void call(() => closeDatabaseSession(opened.data.id), codes("DATABASE_SESSION_NOT_FOUND")).catch(() => undefined);
@@ -636,7 +636,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         }
         if (!opened.ok) {
           // RN-TX-013: o banco sem log de transação não tem Commit manual. O comando não foi executado; a aba passa a Auto-commit (o aviso central diz por quê).
-          if (opened.error.code === "TRANSACTIONS_NOT_AVAILABLE") transaction.set({ mode: "autoCommit", available: false });
+          if (opened.error.code === "TRANSACTIONS_NOT_AVAILABLE") transaction.set({ mode: "autoCommit", isolationLevel: "default", available: false });
           // A sessão que caiu não reabriu: a aba segue sem ela.
           if (reopened) autoRefresh.lost();
           // RN-TRANSF-016: a conexão sem usuário ou sem senha não chega ao driver. A aba fica com o resultado de antes e o comando sem executar (o erro de
@@ -1694,7 +1694,36 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         answer?.(choice);
       },
     },
-    transaction: { subscribe: transaction.subscribe, getState: transaction.getState, setMode, end, note: noteWire },
+    transaction: {
+      subscribe: transaction.subscribe,
+      getState: transaction.getState,
+      setMode,
+      setIsolationLevel: async (isolationLevel: IsolationLevel): Promise<boolean> => {
+        const current = transaction.getState();
+        if (current.isolationLevel === isolationLevel) return true;
+        if (retired || current.pending || isBusy()) return false;
+        const id = sessionId;
+        if (id === null) {
+          transaction.set({ isolationLevel });
+          return true;
+        }
+        const started = epoch;
+        transaction.set({ pending: true });
+        const changed = await call(() => changeTransactionMode(id, current.mode, isolationLevel), codes("DATABASE_SESSION_NOT_FOUND"));
+        if (started !== epoch) return false;
+        transaction.set({ pending: false });
+        if (changed.ok) return true;
+        if (changed.error.code === "DATABASE_SESSION_NOT_FOUND") {
+          sessionLost();
+          transaction.set({ isolationLevel });
+          return true;
+        }
+        if (changed.error.code === "TRANSACTIONS_NOT_AVAILABLE") transaction.set({ isolationLevel: "default", available: false });
+        return false;
+      },
+      end,
+      note: noteWire,
+    },
     rerun: () => {
       // Com a execução automática em andamento, o resultado na tela é o de antes dela, e o comando dele é o que se executa de novo.
       const shownTarget = () => {

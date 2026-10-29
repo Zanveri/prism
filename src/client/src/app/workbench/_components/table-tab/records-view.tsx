@@ -35,6 +35,7 @@ import type { TableView } from "../../_lib/workbench-model";
 import { useRecordEdits, type GridFilterSource, type GridFollowSource, type GridSortSource, type SavedEdits } from "../../_lib/use-record-edits";
 import { AutoRefreshControl, AutoRefreshDialog } from "../auto-refresh-control";
 import { ConfirmCommandDialog } from "../confirm-command-dialog";
+import { TransactionControl } from "../transaction-control";
 import { EditsBanner } from "../edits-banner";
 import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
@@ -393,6 +394,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         engine={engine}
         columns={gridColumns ?? seenColumns}
         autocomplete={preferences.editor.autocomplete}
+        transaction={<TransactionControl transaction={runner.transaction} engine={engine} busy={isPersonBusy(state)} />}
       />
       <TableDescriptionBanner connectionId={connectionId} database={database} table={name} visible={visible && !disconnected} />
       <ResultPanel

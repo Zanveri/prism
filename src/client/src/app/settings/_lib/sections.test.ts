@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import { settingsSections } from "./sections";
 
 describe("as seções da tela de Configurações", () => {
-  it("as que funcionam vêm primeiro (a Conta, como no canvas), e as que dependem de uma API que ainda não existe, marcadas como em breve, no fim", () => {
+  it("todas as seções funcionam, e a Conta vem primeiro, como no canvas", () => {
     const soon = settingsSections.map((section) => section.soon);
 
     expect(soon).toEqual([...soon].sort((a, b) => Number(a) - Number(b)));
-    expect(settingsSections.filter((section) => section.soon).map((section) => section.id)).toEqual(["transactions"]);
+    expect(settingsSections.filter((section) => section.soon).map((section) => section.id)).toEqual([]);
     expect(settingsSections[0].id).toBe("account");
   });
 

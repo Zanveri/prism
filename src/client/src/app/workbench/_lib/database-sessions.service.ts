@@ -31,7 +31,7 @@ import {
   type TransactionEnded,
 } from "./database-sessions.schema";
 import { columnNodes, databaseNodes, foreignKeyNodes, inDatabase, indexNodes, objectNodes, schemaNodes, type DatabaseRef, type NavNode, type NavPath, type ObjectsKind } from "./navigator-model";
-import type { TransactionMode } from "./transaction";
+import type { IsolationLevel, TransactionMode } from "./transaction";
 
 /**
  * Uma função por rota de `api/user/database-sessions`. Devolvem `ApiResult`; quem as chama numa
@@ -43,13 +43,13 @@ import type { TransactionMode } from "./transaction";
  * Abre a sessão com o banco da conexão (RN-SESSAO-001) ou, com `database`, com outro banco do mesmo servidor, pelas credenciais da
  * conexão (RN-ARVORE-006). Falha: 422 `DATABASE_CONNECTION_FAILED` com a mensagem do banco.
  */
-export function openDatabaseSession(connectionId: string, database?: string, transactionMode?: TransactionMode): Promise<ApiResult<DatabaseSession>> {
-  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "POST", body: { connectionID: connectionId, ...inDatabase(database), ...(transactionMode === undefined ? {} : { transactionMode }) }, schema: databaseSessionSchema });
+export function openDatabaseSession(connectionId: string, database?: string, transactionMode?: TransactionMode, isolationLevel?: IsolationLevel): Promise<ApiResult<DatabaseSession>> {
+  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "POST", body: { connectionID: connectionId, ...inDatabase(database), ...(transactionMode === undefined ? {} : { transactionMode }), ...(isolationLevel === undefined || isolationLevel === "default" ? {} : { isolationLevel }) }, schema: databaseSessionSchema });
 }
 
 /** RN-TX-001 e 005: o modo de transação da aba. Recusas: 409 `TRANSACTION_OPEN` (saindo do Commit manual com a transação aberta), 422 `TRANSACTIONS_NOT_AVAILABLE`. */
-export function changeTransactionMode(sessionId: string, transactionMode: TransactionMode): Promise<ApiResult<DatabaseSession>> {
-  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "PATCH", body: { id: sessionId, transactionMode }, schema: databaseSessionSchema });
+export function changeTransactionMode(sessionId: string, transactionMode: TransactionMode, isolationLevel?: IsolationLevel): Promise<ApiResult<DatabaseSession>> {
+  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "PATCH", body: { id: sessionId, transactionMode, ...(isolationLevel === undefined ? {} : { isolationLevel }) }, schema: databaseSessionSchema });
 }
 
 /** RN-TX-002: o "Commit" e o "Rollback" da barra do editor. Recusas: 409 `NO_OPEN_TRANSACTION`, `TRANSACTION_FAILED` (o Commit); 422 `SQL_EXECUTION_FAILED`, com `transactionUndone`. */

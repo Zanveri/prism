@@ -29,6 +29,7 @@ import { withConnection } from "./tab-connection";
 import { withDatabase } from "./tab-database";
 import { newTabPlace, placeOf, withResultPlace } from "./result-place";
 import { readTransfer } from "./tab-transfer";
+import { normalizeIsolationLevel } from "./transaction";
 import { unsavedEdits } from "./unsaved-edits";
 import { createQueryRunner, isPersonBusy, type QueryRunner } from "./use-query-runner";
 import { connectExports, exportTracker } from "./data-export/data-exports";
@@ -376,7 +377,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         queryClient,
         toast,
         onSession: (sessionId) => updateTab(tab.id, { sessionId }),
-        initial,
+        initial: {
+          ...initial,
+          transaction: initial?.transaction ?? defaultTabTransaction(queryClient, tab.connectionId),
+        },
         title: () => titles.get(tab.id) ?? null,
       }),
     [queryClient, toast, updateTab, titles],
@@ -769,6 +773,14 @@ export function useWorkbench(): WorkbenchState {
 }
 
 /** RN-CONFIG-010: o lugar do resultado das abas novas, nas preferências do usuário do cofre aberto (a sessão que o guard já buscou), lido na hora. */
+function defaultTabTransaction(queryClient: QueryClient, connectionId: string | null) {
+  const userName = queryClient.getQueryData(sessionQuery.queryKey)?.userName;
+  const prefs = (userName === undefined || userName === null ? defaultPreferences : preferencesStore.get(userName)).transactions;
+  const connections = connectionId === null ? undefined : queryClient.getQueryData(connectionsQuery.queryKey);
+  const engine = Array.isArray(connections) ? connections.find((c) => c.id === connectionId)?.engine : undefined;
+  return { mode: prefs.mode, isolationLevel: normalizeIsolationLevel(prefs.isolationLevel, engine) };
+}
+
 function resultPlacePreference(queryClient: QueryClient): ResultPlace {
   const userName = queryClient.getQueryData(sessionQuery.queryKey)?.userName;
   return (userName === undefined || userName === null ? defaultPreferences : preferencesStore.get(userName)).results.resultPlace;

@@ -240,6 +240,8 @@ export const settingsCopy = {
   // As seções "em breve": dizem o que virá. Nenhuma tem campo nem botão (RN-CONFIG-001): o que depende da API não finge funcionar.
   transactions: {
     title: "Transações",
-    description: "Aqui você vai escolher o modo padrão das novas abas (commit manual ou auto-commit) e o nível de isolamento padrão.",
+    defaultMode: "Modo padrão nas novas abas",
+    defaultIsolation: "Nível de isolamento padrão",
+    note: "Vale para cada aba nova de consulta ou de registros. As abas já abertas continuam como estão; quando o nível escolhido não existe no banco da aba, ela abre em Padrão do banco.",
   },
 } as const;

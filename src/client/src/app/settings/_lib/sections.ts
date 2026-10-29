@@ -12,9 +12,8 @@ export type SettingsSection = {
 };
 
 /**
- * As seções, cada uma uma página, na ordem da navegação: primeiro as que funcionam, depois as "em breve". O canvas as põe na ordem
- * Conta, Aparência, Editor SQL, Resultados, Transações e Segurança, com Importar depois de Conta (RN-CONFIG-011); aqui é a mesma, com o que ainda não tem efeito (as Transações)
- * no fim, para o que se vê primeiro ser uma seção que funciona. Atualizações, Drivers, Sobre e Plugins vêm depois das do canvas.
+ * As seções, cada uma uma página, na ordem da navegação: Conta, Importar (RN-CONFIG-011), Aparência, Editor SQL, Resultados, Transações e Segurança,
+ * seguidas por Atualizações, Drivers, Sobre e Plugins.
  */
 export const settingsSections: readonly SettingsSection[] = [
   { id: "account", anchor: "cfg-conta", label: settingsCopy.sections.account, soon: false },
@@ -22,10 +21,10 @@ export const settingsSections: readonly SettingsSection[] = [
   { id: "appearance", anchor: "cfg-aparencia", label: settingsCopy.sections.appearance, soon: false },
   { id: "editor", anchor: "cfg-editor", label: settingsCopy.sections.editor, soon: false },
   { id: "results", anchor: "cfg-resultados", label: settingsCopy.sections.results, soon: false },
+  { id: "transactions", anchor: "cfg-transacoes", label: settingsCopy.sections.transactions, soon: false },
   { id: "security", anchor: "cfg-seguranca", label: settingsCopy.sections.security, soon: false },
   { id: "updates", anchor: "cfg-atualizacoes", label: settingsCopy.sections.updates, soon: false },
   { id: "drivers", anchor: "cfg-drivers", label: settingsCopy.sections.drivers, soon: false },
   { id: "about", anchor: "cfg-sobre", label: settingsCopy.sections.about, soon: false },
   { id: "plugins", anchor: "cfg-plugins", label: settingsCopy.sections.plugins, soon: false },
-  { id: "transactions", anchor: "cfg-transacoes", label: settingsCopy.sections.transactions, soon: true },
 ];

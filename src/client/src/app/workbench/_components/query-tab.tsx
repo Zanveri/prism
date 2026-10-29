@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { HostProvider, type Engine } from "@/components/ui";
+import { Button, Dialog, HostProvider, type Engine } from "@/components/ui";
 import { focusedHost, hostFocus, mainHost } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
@@ -31,6 +31,8 @@ import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScri
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { tabEntries } from "../_lib/tab-focus";
+import { useTabTransaction } from "../_lib/transaction";
+import { transactionCopy } from "../_lib/transaction.copy";
 import { recall, remember } from "../_lib/tab-memory";
 import { isPersonBusy, useQueryRunner, useScriptRun, type DocRange, type QueryRunner, type RunHooks, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
 import { conditionOf, sortOf, withOrder } from "../_lib/table-sql";
@@ -619,11 +621,21 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
 
   // RN-ARVORE-007: trocar o banco, com alterações não salvas na grade, pergunta antes, como executar outro comando (RN-EDIT-007). O resultado na tela é do
   // banco de antes e sai com o executor dele; o texto fica. (A aba de consulta ainda não tem o Commit manual, RN-TX-001: não há transação aberta a perguntar.)
-  const handleChooseDatabase = useCallback((database: string | undefined) => guard(() => onSwitchDatabase(tab.id, database)), [guard, onSwitchDatabase, tab.id]);
+  const txState = useTabTransaction(runner.transaction);
+  const [pendingSwitch, setPendingSwitch] = useState<(() => void) | null>(null);
+  const guardSwitch = useCallback(
+    (proceed: () => void) =>
+      guard(() => {
+        if (runner.transaction.getState().open) setPendingSwitch(() => proceed);
+        else proceed();
+      }),
+    [guard, runner],
+  );
+  const handleChooseDatabase = useCallback((database: string | undefined) => guardSwitch(() => onSwitchDatabase(tab.id, database)), [guardSwitch, onSwitchDatabase, tab.id]);
 
   // RN-ARVORE-008: trocar a conexão pergunta o mesmo antes; o resultado sai com o executor de antes, e a aba vai ao banco padrão da conexão nova.
   const [pickingConnection, setPickingConnection] = useState(false);
-  const handleChooseConnection = useCallback((connectionId: string) => guard(() => onSwitchConnection(tab.id, connectionId)), [guard, onSwitchConnection, tab.id]);
+  const handleChooseConnection = useCallback((connectionId: string) => guardSwitch(() => onSwitchConnection(tab.id, connectionId)), [guardSwitch, onSwitchConnection, tab.id]);
 
   // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -721,7 +733,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           onCancel={handleCancel}
           connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
           database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
-          transaction={connectionId === null ? null : <TransactionControl transaction={runner.transaction} busy={busy} />}
+          transaction={connectionId === null ? null : <TransactionControl transaction={runner.transaction} engine={engine} busy={busy} />}
         />
   
         <div ref={area} className="flex min-h-0 flex-1 flex-col">
@@ -829,6 +841,52 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         {/* RN-VAR-018: o "SQL enviado" do comando que levou variáveis, no resultado, nas Estatísticas e na pergunta de erro. */}
         {sentView?.sent === undefined ? null : <SentSqlDialog command={sentView.sent} engine={sentView.engine} onClose={() => setSentView(null)} />}
         {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
+        {pendingSwitch === null ? null : (
+          <Dialog
+            open
+            role="alertdialog"
+            title={transactionCopy.switching.title}
+            description={txState.failed ? transactionCopy.switching.failedDescription : transactionCopy.switching.description(txState.commands)}
+            pending={txState.pending}
+            onClose={() => setPendingSwitch(null)}
+            footer={
+              <>
+                <Button autoFocus type="button" variant="secondary" onClick={() => setPendingSwitch(null)} disabled={txState.pending}>
+                  {transactionCopy.switching.cancel}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={txState.pending}
+                  onClick={() =>
+                    void runner.transaction.end(false).then((ok) => {
+                      const proceed = pendingSwitch;
+                      setPendingSwitch(null);
+                      if (ok) proceed();
+                    })
+                  }
+                >
+                  {transactionCopy.switching.rollback}
+                </Button>
+                {txState.failed ? null : (
+                  <Button
+                    type="button"
+                    disabled={txState.pending}
+                    onClick={() =>
+                      void runner.transaction.end(true).then((ok) => {
+                        const proceed = pendingSwitch;
+                        setPendingSwitch(null);
+                        if (ok) proceed();
+                      })
+                    }
+                  >
+                    {transactionCopy.switching.commit}
+                  </Button>
+                )}
+              </>
+            }
+          />
+        )}
         {/* RN-PROT-001: o aviso antes de executar; no Salvar, com o "Ver SQL", que abre os comandos por cima dele. */}
         {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" || confirmation.open.question.kind === "wholeColumn" ? edits.banner.onViewSql : undefined} />}
       </ActiveHostProvider>

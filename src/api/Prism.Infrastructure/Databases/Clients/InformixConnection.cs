@@ -82,6 +82,9 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     /// <summary>RN-TX-013: o banco sem log de transação (`is_logging` zero) não tem transação, e o Commit manual não existe nele.</summary>
     protected override string TransactionsAvailableSql => "SELECT is_logging FROM sysmaster:sysdatabases WHERE name = DBINFO('dbname')";
 
+    protected override string? LoggingModeSql =>
+        "SELECT TRIM(CASE WHEN is_ansi = 1 THEN 'ansi' WHEN is_buff_log = 1 THEN 'bufferedLogging' WHEN is_logging = 1 THEN 'unbufferedLogging' ELSE 'noLogging' END) FROM sysmaster:sysdatabases WHERE name = DBINFO('dbname')";
+
     /// <summary>
     /// RN-EDIT-005 e RN-TX-011: o driver da IBM não tem os pontos de salvamento do ADO.NET. A volta vai sem `WORK`: por este driver, `ROLLBACK WORK TO
     /// SAVEPOINT` desfaz a transação inteira (<see cref="AdoDatabaseConnection.RollbackWorkEndsTheTransaction"/>).

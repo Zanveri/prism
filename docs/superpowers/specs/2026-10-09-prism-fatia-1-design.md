@@ -449,16 +449,19 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   nem reescrito. Se o banco não aceita mais de um comando por envio, a recusa é a dele. A
   exceção são os comandos de controle de transação (`BEGIN`, `START TRANSACTION`, `COMMIT`,
   `END`, `ROLLBACK`, `ABORT`, `SAVEPOINT`, `RELEASE`, `PREPARE TRANSACTION`), que seguem a
-  RN-TX-004: em Auto-commit são recusados com 422 `TRANSACTION_CONTROL_NOT_SUPPORTED`, porque a
-  sessão é auto-commit (RN-SESSAO-005); no Commit manual são tratados na forma de cada banco, e
-  no PostgreSQL o comando que o banco não aceita dentro de transação é recusado sem ir ao banco
-  (422 `COMMAND_NOT_ALLOWED_IN_TRANSACTION`). No Commit manual do PostgreSQL a leitura é
-  paginada por um cursor do servidor: o comando vai dentro de uma declaração de cursor, e o que
+  RN-TX-004: quando escritos explicitamente pelo usuário, abrem, encerram ou marcam pontos na
+  transação da sessão independentemente do modo de commit da aba (em Auto-commit ou no Commit
+  manual), na forma de cada banco; só as formas que nunca valem (como `PREPARE TRANSACTION`,
+  `AND CHAIN` e `ROLLBACK WORK TO SAVEPOINT` no driver IBM) são recusadas com 422
+  `TRANSACTION_CONTROL_NOT_SUPPORTED`. Com transação aberta no PostgreSQL, o comando que o banco
+  não aceita dentro de transação é recusado sem ir ao banco (422 `COMMAND_NOT_ALLOWED_IN_TRANSACTION`),
+  e a leitura é paginada por um cursor do servidor: o comando vai dentro de uma declaração de cursor, e o que
   o banco recusa ali é executado de novo como está, de modo que a mensagem e a posição do erro
   são as do comando digitado.
   Com variáveis (seção 41), a tela troca os `@nome` pelos marcadores do banco antes de enviar e manda os valores em
   `params` (RN-VAR-017); a API não reescreve nada, e o texto que ela recebe é o que vai ao banco. *Alterada a pedido
-  do dono em 2026-10-20 (seção 41).*
+  do dono em 2026-10-20 (seção 41). Alterada a pedido do dono em 2026-10-29: o controle de transação explícito vale
+  em qualquer modo de commit.*
 - **RN-SQL-004.** Comando de leitura que devolve linhas: a API lê as **200 primeiras** e mantém
   o cursor aberto. A tela mostra "Primeiras 200 linhas" e o tempo.
 - **RN-SQL-013.** Comando que grava e devolve linhas (`UPDATE ... RETURNING`, por exemplo) é
@@ -2355,25 +2358,30 @@ até lá, o que depende delas está a provar.
   Rollback", no tom de erro, com "Commit" desabilitado (a dica diz por quê) e "Rollback" habilitado. Cada execução e cada
   alteração salva contam um comando. Passados 10 minutos com a transação aberta, o texto passa ao tom de atenção, porque as
   travas dela seguram outras sessões. Abrir, fechar e estragar a transação é anunciado a leitor de tela.
-- **RN-TX-004.** Comandos de controle de transação digitados. **Em Auto-commit** continuam recusados (422
-  `TRANSACTION_CONTROL_NOT_SUPPORTED`), e a mensagem passa a dizer que eles valem no Commit manual. **No Commit manual**, na
-  forma de cada banco:
+- **RN-TX-004.** Comandos de controle de transação digitados. Quando o usuário escreve explicitamente comandos de
+  controle de transação, o Prism os aceita independentemente do modo de commit da aba (em Auto-commit ou no Commit
+  manual), na forma de cada banco (em banco sem suporte a transações, como o Informix sem log, respondem 422
+  `TRANSACTIONS_NOT_AVAILABLE`):
+  - `BEGIN`, `START TRANSACTION` e `BEGIN WORK` (`BEGIN TRANSACTION` também) abrem a transação na sessão (se já estava
+    aberta, mantêm-na aberta sem contar comando novo), respondendo como um comando sem linhas (`rowsAffected: 0`) com o
+    estado da transação aberta (`transaction.open: true`). Em Auto-commit, enquanto essa transação explícita estiver
+    aberta, os comandos seguintes rodam dentro dela, os botões "Commit" e "Rollback" ficam habilitados e a barra de
+    status mostra os comandos pendentes até que a transação seja encerrada;
   - `COMMIT` e `ROLLBACK` (com `WORK` opcional; no PostgreSQL também `TRANSACTION`, `END` e `ABORT`) fazem exatamente o que os
-    botões fazem; a resposta é a de um comando sem linhas, com o estado da transação. Numa transação com erro, o `COMMIT`
+    botões fazem (se não houver transação aberta, respondem com `rowsAffected: 0` sem erro); a resposta é a de um comando sem linhas, com o estado da transação. Numa transação com erro, o `COMMIT`
     digitado é recusado como o botão (RN-TX-009);
-  - os pontos de salvamento digitados vão ao banco e valem dentro da transação: no PostgreSQL `SAVEPOINT`, `ROLLBACK TO` e
+  - os pontos de salvamento digitados vão ao banco e valem dentro da transação (abrindo-a se ainda não estava aberta): no PostgreSQL `SAVEPOINT`, `ROLLBACK TO` e
     `RELEASE`; no Db2 `SAVEPOINT ... ON ROLLBACK RETAIN CURSORS`, `ROLLBACK TO SAVEPOINT` e `RELEASE SAVEPOINT`; no Informix
-    `SAVEPOINT`, `ROLLBACK WORK TO SAVEPOINT` e `RELEASE SAVEPOINT`. No PostgreSQL, o `ROLLBACK TO` digitado tira a transação do
+    `SAVEPOINT`, `ROLLBACK TO SAVEPOINT` e `RELEASE SAVEPOINT` (`ROLLBACK WORK TO SAVEPOINT` continua recusado porque o driver da IBM o intercepta e desfaz a transação inteira). No PostgreSQL, o `ROLLBACK TO` digitado tira a transação do
     estado de erro, como o banco faz, e a barra volta ao normal;
-  - `BEGIN`, `START TRANSACTION` e `BEGIN WORK` são recusados com a explicação de que o Prism já abre a transação no primeiro
-    comando;
   - `COMMIT AND CHAIN`, `ROLLBACK AND CHAIN`, `PREPARE TRANSACTION`, `COMMIT PREPARED` e `ROLLBACK PREPARED` continuam recusados
-    nos dois modos;
-  - o comando que o banco não aceita dentro de transação: no PostgreSQL (`VACUUM`, `CREATE DATABASE`, `DROP DATABASE`, `CREATE`
+    nos dois modos (422 `TRANSACTION_CONTROL_NOT_SUPPORTED`);
+  - o comando que o banco não aceita dentro de transação (no Commit manual ou com transação explícita aberta): no PostgreSQL (`VACUUM`, `CREATE DATABASE`, `DROP DATABASE`, `CREATE`
     e `DROP TABLESPACE`, `ALTER SYSTEM`, `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, `REINDEX ... CONCURRENTLY`), o
-    Prism recusa sem enviar (422 `COMMAND_NOT_ALLOWED_IN_TRANSACTION`), com a dica de executá-lo numa aba em Auto-commit, porque
+    Prism recusa sem enviar (422 `COMMAND_NOT_ALLOWED_IN_TRANSACTION`), com a dica de executá-lo numa aba em Auto-commit sem transação aberta, porque
     a recusa do banco estragaria a transação (RN-TX-009); o que a lista não conhecer chega ao banco e segue a RN-TX-009. No
-    Informix (`DATABASE`, `CREATE DATABASE`) a recusa é do banco, e a transação continua.
+    Informix (`DATABASE`, `CREATE DATABASE`) a recusa é do banco, e a transação continua. *Alterada a pedido do dono em 2026-10-29:
+    `BEGIN`, `COMMIT`, `ROLLBACK` e pontos de salvamento explícitos são aceitos independentemente do modo de commit da aplicação.*
 - **RN-TX-005.** Trocar de Auto-commit para Commit manual vale a qualquer momento sem comando em andamento. Trocar de Commit
   manual para Auto-commit, com transação aberta, pergunta antes: Commit, Rollback ou Cancelar (com transação com erro, só
   Rollback ou Cancelar); sem transação, troca direto.
@@ -2762,8 +2770,7 @@ Notas:
 - `transactionMode`: `autoCommit` ou `manual`. `isolationLevel`: `default` ou o código do nível do banco da sessão
   (PostgreSQL `readCommitted`, `repeatableRead`, `serializable`; Db2 `uncommittedRead`, `cursorStability`, `readStability`,
   `repeatableRead`; Informix, os da S-IFX-2).
-- `TRANSACTION_CONTROL_NOT_SUPPORTED` passa a valer para: controle de transação em Auto-commit; `BEGIN` no Commit manual; e as
-  formas que nunca valem (RN-TX-004).
+- `TRANSACTION_CONTROL_NOT_SUPPORTED` passa a valer só para as formas que nunca valem (`PREPARE TRANSACTION`, `COMMIT PREPARED`, `ROLLBACK PREPARED`, `AND CHAIN`, `COMMIT COMMENT`, `ROLLBACK WORK TO SAVEPOINT` no driver IBM) e para a rede de segurança quando uma rotina deixa transação aberta em Auto-commit (RN-TX-004).
 
 ### O que muda nas regras existentes
 

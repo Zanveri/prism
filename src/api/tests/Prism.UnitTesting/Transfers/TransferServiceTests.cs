@@ -710,10 +710,15 @@ public sealed partial class TransferServiceTests : IAsyncDisposable
 
         public bool ManualCommit { get; set; }
 
+        public string IsolationLevel => IsolationLevels.Default;
+
         public ETransactionState Transaction => ETransactionState.None;
 
         public Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken)
             => Task.FromResult(Result.Success<bool, DatabaseFailure>(true));
+
+        public Task<UnitResult<DatabaseFailure>> SetIsolationLevelAsync(string isolationLevel, CancellationToken cancellationToken)
+            => Task.FromResult(UnitResult.Success<DatabaseFailure>());
 
         public Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken)
             => Task.FromResult(UnitResult.Success<DatabaseFailure>());
