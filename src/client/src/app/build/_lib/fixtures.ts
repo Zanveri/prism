@@ -4,6 +4,11 @@ import { type BuildModel, parseModelBody } from "./build-model.schema";
 
 const repositoryRoot = new URL("../../../../../../", import.meta.url);
 
+export function fixture<T = unknown>(relativePath: string): T {
+  const raw = readFileSync(new URL(`src/test-fixtures/${relativePath}`, repositoryRoot), "utf8");
+  return JSON.parse(raw) as T;
+}
+
 export function readFixtures<T = unknown>(relativeDir: string): [string, T][] {
   const dirUrl = new URL(`src/test-fixtures/${relativeDir}/`, repositoryRoot);
   const files = readdirSync(dirUrl)
