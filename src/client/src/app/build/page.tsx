@@ -214,7 +214,7 @@ export function BuildPageView({
     });
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-ink">
+    <div className="flex h-full flex-col overflow-hidden bg-background text-sm text-ink">
       {topBar}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">

@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { supportedConnections } from "@/app/build/_lib/catalog-tree";
 import { unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 import { stripTags } from "@/lib/testing/text";
 import { NewModelDialog } from "./new-model-dialog";
@@ -112,9 +113,11 @@ describe("NewModelDialog", () => {
     );
     const text = stripTags(html);
 
+    const supportedNames = supportedConnections(sampleConnections).map((c) => c.name);
+    expect(supportedNames).toEqual(["MES Produção", "DB2 Corporativo"]);
+
     expect(text).toContain("Conexão");
     expect(text).toContain("MES Produção");
-    expect(text).toContain("DB2 Corporativo");
     expect(text).not.toContain("MySQL Legado");
     expect(text).not.toContain("Oracle Financeiro");
     expect(text).toContain("Banco");

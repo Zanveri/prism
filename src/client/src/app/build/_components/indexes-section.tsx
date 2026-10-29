@@ -1,3 +1,4 @@
+import { Button, CloseIcon, Input, PlusIcon, Select } from "@/components/ui";
 import type { TableChanges } from "../_lib/build-model";
 import type { ModelIndex, ModelTable } from "../_lib/build-model.schema";
 
@@ -41,27 +42,16 @@ export function IndexesSection({
           Índices
         </h2>
         <span className="text-xs text-subtle">{countLabel}</span>
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="compact"
           onClick={handleAdd}
-          className="ml-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink"
+          className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className="shrink-0"
-          >
-            <path d="M8 3v10M3 8h10" />
-          </svg>
+          <PlusIcon />
           <span>Novo índice</span>
-        </button>
+        </Button>
       </div>
 
       {table.indexes.map((ix, idx) => {
@@ -79,14 +69,14 @@ export function IndexesSection({
             }`}
           >
             <div className="flex min-w-0 items-center gap-2">
-              <input
+              <Input
                 type="text"
                 value={ix.name}
                 aria-label={`Nome do índice ${idx + 1}`}
                 onChange={(e) =>
                   onUpdateIndex(idx, { ...ix, name: e.target.value })
                 }
-                className="box-border h-7 min-w-0 flex-1 rounded border border-border bg-background px-2 font-mono text-xs text-ink"
+                className="h-7 min-w-0 flex-1 rounded border-border bg-background px-2 font-mono text-xs"
               />
               {isNewInExisting ? (
                 <span className="font-mono text-[10px] font-semibold text-success">
@@ -109,26 +99,16 @@ export function IndexesSection({
               UQ
             </button>
 
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="compact"
               aria-label={`Remover o índice ${ix.name}`}
               onClick={() => onRemoveIndex(idx)}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-muted"
+              className="h-7 w-7 p-0"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M4 4l8 8M12 4l-8 8" />
-              </svg>
-            </button>
+              <CloseIcon />
+            </Button>
 
             <div className="col-span-full flex flex-wrap items-center gap-1.5">
               {ix.columns.map((col) => (
@@ -148,30 +128,19 @@ export function IndexesSection({
                         onUpdateIndex(idx, { ...ix, columns: nextCols });
                       }
                     }}
-                    className="flex h-[18px] w-[18px] cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-muted"
+                    className="flex h-[18px] w-[18px] cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-muted hover:text-ink"
                   >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M4 4l8 8M12 4l-8 8" />
-                    </svg>
+                    <CloseIcon />
                   </button>
                 </span>
               ))}
 
               {availableCols.length > 0 ? (
-                <select
+                <Select
                   aria-label="Adicionar coluna ao índice"
                   value=""
-                  onChange={(e) => {
-                    const selected = e.target.value;
+                  placeholder="+ coluna"
+                  onChange={(selected) => {
                     if (selected) {
                       onUpdateIndex(idx, {
                         ...ix,
@@ -179,15 +148,13 @@ export function IndexesSection({
                       });
                     }
                   }}
-                  className="h-6 rounded border border-dashed border-border-strong bg-transparent px-1.5 text-xs text-muted [&>option]:bg-raised [&>option]:text-ink"
-                >
-                  <option value="">+ coluna</option>
-                  {availableCols.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
+                  options={availableCols.map((col) => ({
+                    value: col,
+                    label: col,
+                  }))}
+                  wideList
+                  className="min-h-6 border-dashed bg-transparent px-2 py-0.5 font-mono text-xs"
+                />
               ) : null}
             </div>
           </div>

@@ -1,4 +1,5 @@
 import {
+  Button,
   ChevronIcon,
   DownloadIcon,
   DuplicateIcon,
@@ -137,14 +138,16 @@ export function DdlView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-ink">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-2">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="compact"
           onClick={onBackToDiagram}
-          className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-2 text-ink hover:bg-selected"
+          className="gap-1.5 px-2 text-ink"
         >
           <ChevronIcon direction="left" />
           <span>{buildCopy.ddlBackToDiagram}</span>
-        </button>
+        </Button>
 
         <h1 className="m-0 mx-1 text-sm font-semibold">
           {buildCopy.ddlTitlePrefix}{" "}
@@ -192,53 +195,44 @@ export function DdlView({
 
         <span className="text-xs text-muted">{summaryText}</span>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="compact"
           disabled={actionsDisabled}
           title={disabledReason ?? undefined}
           onClick={() => onCopy?.(ddl.text)}
-          className={cn(
-            "ml-auto flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-transparent px-3 text-ink",
-            actionsDisabled
-              ? "cursor-not-allowed opacity-50"
-              : "cursor-pointer hover:bg-selected",
-          )}
+          className="ml-auto gap-1.5 px-3"
         >
           <DuplicateIcon />
           <span>{buildCopy.ddlCopyButton}</span>
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="compact"
           disabled={actionsDisabled}
           title={disabledReason ?? undefined}
           onClick={() => onSaveSql?.(ddl.text)}
-          className={cn(
-            "flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-transparent px-3 text-ink",
-            actionsDisabled
-              ? "cursor-not-allowed opacity-50"
-              : "cursor-pointer hover:bg-selected",
-          )}
+          className="gap-1.5 px-3"
         >
           <DownloadIcon />
           <span>{buildCopy.ddlSaveSqlButton}</span>
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="compact"
           disabled={actionsDisabled}
           title={disabledReason ?? buildCopy.ddlOpenInWorkbenchHint}
           onClick={() => onOpenInWorkbench?.(ddl.text)}
-          className={cn(
-            "flex h-8 items-center gap-2 rounded-md border-0 bg-accent px-3 font-semibold text-background",
-            actionsDisabled
-              ? "cursor-not-allowed opacity-50"
-              : "cursor-pointer hover:opacity-95",
-          )}
+          className="gap-2 px-3"
         >
           <WorkbenchIcon />
           <span>{buildCopy.ddlOpenInWorkbenchButton}</span>
-        </button>
+        </Button>
       </div>
 
       <div

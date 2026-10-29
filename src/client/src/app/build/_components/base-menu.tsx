@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import {
+  Button,
   ChevronIcon,
   ContextMenu,
   Dialog,
   EngineTag,
   EnvironmentPill,
+  Field,
+  FieldLabel,
+  Select,
+  type SelectOption,
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import type { BuildModel } from "../_lib/build-model.schema";
@@ -36,13 +41,15 @@ export function BaseMenu({
 
   return (
     <div className="relative">
-      <button
+      <Button
         type="button"
+        variant="secondary"
+        size="compact"
         aria-label={buildCopy.toolbarBaseAria}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen((prev) => !prev)}
-        className="flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-ink hover:bg-selected"
+        className="bg-raised px-2.5 font-normal"
       >
         <span className="text-muted">{buildCopy.toolbarBase}</span>
         <span>{baseLabel ?? `${model.base.connectionId} / ${model.base.database ?? ""}`}</span>
@@ -50,7 +57,7 @@ export function BaseMenu({
         <span className="text-subtle">
           <ChevronIcon direction="down" />
         </span>
-      </button>
+      </Button>
 
       {menuOpen && (
         <ContextMenu
@@ -104,6 +111,7 @@ export function ChangeBaseDialog({
   onCancel,
   onConfirm,
 }: ChangeBaseDialogProps) {
+  const dbSelectId = useId();
   const validConnections = supportedConnections(connections, model.engine);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>(
     model.base?.connectionId ?? validConnections[0]?.id ?? "",
@@ -117,11 +125,18 @@ export function ChangeBaseDialog({
     model.base?.database ?? selectedConnection?.database ?? "",
   );
 
+  const databaseOptions: SelectOption[] = availableDatabases.map((db) => ({
+    value: db,
+    label: db,
+    content: <span className="font-mono text-xs">{db}</span>,
+  }));
+
   return (
     <Dialog
       open={true}
       title={buildCopy.changeBaseTitle}
       size="sm"
+      pending={Boolean(loadingProgress)}
       onClose={onCancel}
       footer={
         <>
@@ -130,15 +145,13 @@ export function ChangeBaseDialog({
               ? buildCopy.readingTablesProgress(loadingProgress.current, loadingProgress.total)
               : buildCopy.readOnlyCatalogNotice}
           </span>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-border-strong bg-transparent px-3 text-ink hover:bg-selected"
-          >
+          <Button type="button" variant="secondary" size="compact" onClick={onCancel}>
             {buildCopy.cancelButton}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="primary"
+            size="compact"
             disabled={!selectedConnection || Boolean(loadingProgress)}
             onClick={() => {
               if (!selectedConnection) return;
@@ -147,19 +160,13 @@ export function ChangeBaseDialog({
                 database: selectedDatabase || selectedConnection.database || null,
               });
             }}
-            className={cn(
-              "flex h-8 items-center justify-center rounded-md border border-accent bg-accent px-3 font-medium text-background",
-              !selectedConnection || loadingProgress
-                ? "cursor-not-allowed opacity-60"
-                : "cursor-pointer hover:opacity-95",
-            )}
           >
             {buildCopy.changeBaseConfirm}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5 px-4 py-4">
+      <div className="flex flex-col gap-3.5">
         <div className="flex flex-col gap-1.5">
           <span className="text-xs text-muted">{buildCopy.connectionLabel}</span>
           <div className="flex flex-col gap-1.5" role="radiogroup" aria-label={buildCopy.connectionLabel}>
@@ -191,21 +198,19 @@ export function ChangeBaseDialog({
           </div>
         </div>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted">{buildCopy.databaseLabel}</span>
-          <select
+        <Field>
+          <FieldLabel htmlFor={dbSelectId} className="text-xs">
+            {buildCopy.databaseLabel}
+          </FieldLabel>
+          <Select
+            id={dbSelectId}
             aria-label={buildCopy.databaseLabel}
             value={selectedDatabase}
-            onChange={(e) => setSelectedDatabase(e.target.value)}
-            className="h-8 rounded-md border border-border bg-raised px-2.5 font-mono text-xs text-ink [&>option]:bg-raised [&>option]:text-ink"
-          >
-            {availableDatabases.map((db) => (
-              <option key={db} value={db}>
-                {db}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={databaseOptions}
+            onChange={(nextDb) => setSelectedDatabase(nextDb)}
+            className="min-h-8 py-1 font-mono text-xs"
+          />
+        </Field>
       </div>
     </Dialog>
   );

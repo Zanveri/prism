@@ -1,3 +1,4 @@
+import { Button, CloseIcon, PlusIcon, Select } from "@/components/ui";
 import { sameName } from "../_lib/build-engines";
 import type {
   BuildModel,
@@ -67,27 +68,16 @@ export function ForeignKeysSection({
           Chaves estrangeiras
         </h2>
         <span className="text-xs text-subtle">{table.foreignKeys.length}</span>
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="compact"
           onClick={handleAdd}
-          className="ml-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink"
+          className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className="shrink-0"
-          >
-            <path d="M8 3v10M3 8h10" />
-          </svg>
+          <PlusIcon />
           <span>Nova FK</span>
-        </button>
+        </Button>
       </div>
 
       {table.foreignKeys.map((fk, idx) => {
@@ -117,7 +107,7 @@ export function ForeignKeysSection({
         return (
           <div
             key={`${colsLabel}-${idx}`}
-            className="grid grid-cols-[minmax(0,1fr)_156px_28px] items-center gap-x-2 gap-y-1.5 rounded-md border border-border bg-raised px-2.5 py-2 font-mono text-xs"
+            className="grid grid-cols-[minmax(0,1fr)_164px_28px] items-center gap-x-2 gap-y-1.5 rounded-md border border-border bg-raised px-2.5 py-2 font-mono text-xs"
           >
             <span className="min-w-0 truncate">
               {colsLabel} <span className="text-accent">→</span> {targetDisplay}
@@ -127,44 +117,33 @@ export function ForeignKeysSection({
               </span>
             </span>
 
-            <select
+            <Select
               aria-label={`Ao excluir em ${colsLabel}`}
               value={fk.onDelete}
-              onChange={(e) =>
+              onChange={(nextAction) =>
                 onUpdateForeignKey(idx, {
                   ...fk,
-                  onDelete: e.target.value as FkAction,
+                  onDelete: nextAction as FkAction,
                 })
               }
-              className="h-7 rounded border border-border bg-background px-1.5 font-sans text-xs text-ink [&>option]:bg-raised [&>option]:text-ink"
-            >
-              {options.map((action) => (
-                <option key={action} value={action}>
-                  {deleteActionLabels[action]}
-                </option>
-              ))}
-            </select>
+              options={options.map((action) => ({
+                value: action,
+                label: deleteActionLabels[action],
+              }))}
+              wideList
+              className="min-h-7 bg-background px-2 py-1 font-sans text-xs"
+            />
 
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="compact"
               aria-label={`Remover a FK de ${colsLabel}`}
               onClick={() => onRemoveForeignKey(idx)}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-muted"
+              className="h-7 w-7 p-0"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M4 4l8 8M12 4l-8 8" />
-              </svg>
-            </button>
+              <CloseIcon />
+            </Button>
 
             {!targetInModel ? (
               <span className="col-span-full font-sans text-xs leading-[18px] text-muted">

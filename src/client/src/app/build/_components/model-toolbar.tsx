@@ -5,6 +5,7 @@ import { buildCopy } from "@/app/build/_lib/build.copy";
 import type { SaveState } from "@/app/build/_lib/model-save";
 import {
   AlertIcon,
+  Button,
   CheckIcon,
   ChevronIcon,
   CodeIcon,
@@ -13,7 +14,6 @@ import {
   EnvironmentPill,
   RefreshIcon,
 } from "@/components/ui";
-import { cn } from "@/lib/utils/cn";
 
 const engineToNumber: Record<BuildEngine, 1 | 2 | 3> = {
   postgresql: 1,
@@ -74,11 +74,13 @@ export function ModelToolbar({
 
       {baseMenuSlot ??
         (model.base !== null ? (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="compact"
             aria-label={buildCopy.toolbarBaseAria}
             onClick={onChangeBase}
-            className="flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-ink hover:bg-selected"
+            className="gap-2 border-border bg-raised px-2.5 font-normal"
           >
             <span className="text-muted">{buildCopy.toolbarBase}</span>
             <span>{baseLabel ?? `${model.base.connectionId} / ${model.base.database}`}</span>
@@ -86,33 +88,32 @@ export function ModelToolbar({
             <span className="text-subtle">
               <ChevronIcon direction="down" />
             </span>
-          </button>
+          </Button>
         ) : null)}
 
       {model.base !== null && (
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="compact"
           title={buildCopy.toolbarRereadHint}
           onClick={onReread}
-          className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-border-strong bg-transparent px-3 text-ink hover:bg-selected"
+          className="gap-1.5 px-3"
         >
           <RefreshIcon />
           <span>{buildCopy.toolbarReread}</span>
-        </button>
+        </Button>
       )}
 
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="compact"
         aria-label={buildCopy.toolbarUndo}
         title={buildCopy.toolbarUndo}
         disabled={!canUndo}
         onClick={onUndo}
-        className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent",
-          canUndo
-            ? "cursor-pointer text-ink hover:bg-selected"
-            : "cursor-not-allowed text-subtle",
-        )}
+        className="h-8 w-8 p-0 text-ink"
       >
         <svg
           width="16"
@@ -128,20 +129,17 @@ export function ModelToolbar({
           <path d="M5.5 4L2.5 7l3 3" />
           <path d="M2.5 7H10a3.5 3.5 0 0 1 0 7H8" />
         </svg>
-      </button>
+      </Button>
 
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="compact"
         aria-label={buildCopy.toolbarRedo}
         title={buildCopy.toolbarRedo}
         disabled={!canRedo}
         onClick={onRedo}
-        className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent",
-          canRedo
-            ? "cursor-pointer text-ink hover:bg-selected"
-            : "cursor-not-allowed text-subtle",
-        )}
+        className="h-8 w-8 p-0 text-ink"
       >
         <svg
           width="16"
@@ -157,27 +155,31 @@ export function ModelToolbar({
           <path d="M10.5 4l3 3-3 3" />
           <path d="M13.5 7H6a3.5 3.5 0 0 0 0 7h2" />
         </svg>
-      </button>
+      </Button>
 
       <div className="ml-auto flex items-center gap-2 text-xs text-muted">
         {saveState.status === "conflict" ? (
           <div className="flex items-center gap-2 text-danger">
             <AlertIcon />
             <span>{buildCopy.saveConflict}</span>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="compact"
               onClick={onReloadConflict}
-              className="h-7 cursor-pointer rounded border border-border-strong bg-raised px-2 text-ink hover:bg-selected"
+              className="h-7 bg-raised px-2 text-xs"
             >
               {buildCopy.reloadModel}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
+              size="compact"
               onClick={onKeepMineConflict}
-              className="h-7 cursor-pointer rounded border border-accent bg-transparent px-2 text-accent hover:bg-selected"
+              className="h-7 border-accent px-2 text-xs text-accent"
             >
               {buildCopy.keepMineModel}
-            </button>
+            </Button>
           </div>
         ) : saveState.status === "failed" ? (
           <span className="flex items-center gap-1.5 text-danger" title={saveState.message ?? undefined}>
@@ -199,18 +201,20 @@ export function ModelToolbar({
       </div>
 
       <div className="relative">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="compact"
           aria-haspopup="menu"
           aria-expanded={exportOpen}
           onClick={() => setExportOpen((v) => !v)}
-          className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-border-strong bg-transparent pr-2.5 pl-3 text-ink hover:bg-selected"
+          className="gap-1.5 pr-2.5 pl-3"
         >
           <span>{buildCopy.toolbarExport}</span>
           <span className="text-subtle">
             <ChevronIcon direction="down" />
           </span>
-        </button>
+        </Button>
         {exportOpen && (
           <ContextMenu
             label={buildCopy.toolbarExport}
@@ -251,14 +255,16 @@ export function ModelToolbar({
         )}
       </div>
 
-      <button
+      <Button
         type="button"
+        variant="primary"
+        size="compact"
         onClick={onGenerateDdl}
-        className="flex h-8 cursor-pointer items-center gap-2 rounded-md border-0 bg-accent px-3 font-semibold text-panel hover:opacity-95"
+        className="gap-2 px-3"
       >
         <CodeIcon />
         <span>{buildCopy.toolbarGenerateDdl}</span>
-      </button>
+      </Button>
     </div>
   );
 }

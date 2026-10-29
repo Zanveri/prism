@@ -165,7 +165,12 @@ function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, 
         height={box.height}
         rx="6"
         strokeDasharray={dashed ? "4 3" : undefined}
-        className={cn("fill-panel", highlighted ? "stroke-accent" : "stroke-border-strong group-hover:stroke-subtle group-focus-visible:stroke-accent")}
+        onPointerDown={onStartMove ? (event) => onStartMove(box, event) : undefined}
+        className={cn(
+          "fill-panel",
+          highlighted ? "stroke-accent" : "stroke-border-strong group-hover:stroke-subtle group-focus-visible:stroke-accent",
+          onStartMove && "cursor-move",
+        )}
         strokeWidth="1"
       />
       <text
@@ -333,7 +338,16 @@ export function DiagramCanvas({
   const [copiedMermaid, setCopiedMermaid] = useState(false);
   const [panLocked, setPanLocked] = useState(false);
   const [panning, setPanning] = useState(false);
-  const panSession = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number; moved: boolean } | null>(null);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panSession = useRef<{
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+    offsetX: number;
+    offsetY: number;
+    moved: boolean;
+  } | null>(null);
   const moveSession = useRef<{ key: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const connectSession = useRef<{ fromKey: string; column: string } | null>(null);
   const suppressClick = useRef(false);
@@ -453,10 +467,19 @@ export function DiagramCanvas({
       const element = scroller.current;
       if (session === null || element === null) return;
 
+      const dx = event.clientX - session.startX;
+      const dy = event.clientY - session.startY;
       const next = applyDiagramPan(session, { clientX: event.clientX, clientY: event.clientY });
       if (next.moved) session.moved = true;
       element.scrollLeft = next.scrollLeft;
       element.scrollTop = next.scrollTop;
+
+      const actualDx = session.scrollLeft - element.scrollLeft;
+      const actualDy = session.scrollTop - element.scrollTop;
+      setPanOffset({
+        x: session.offsetX + (dx - actualDx),
+        y: session.offsetY + (dy - actualDy),
+      });
     }
 
     function stopPanning() {
@@ -509,7 +532,9 @@ export function DiagramCanvas({
   }, [onMoveTable, onConnect]);
 
   function handleMouseDown(event: ReactMouseEvent<HTMLDivElement>) {
-    if (!shouldStartDiagramPan(event.button, panLocked)) return;
+    if (moveSession.current !== null || connectSession.current !== null) return;
+    const canLeftPan = event.button === 0;
+    if (!shouldStartDiagramPan(event.button, panLocked) && !canLeftPan) return;
     const element = scroller.current;
     if (element === null) return;
 
@@ -519,6 +544,8 @@ export function DiagramCanvas({
       startY: event.clientY,
       scrollLeft: element.scrollLeft,
       scrollTop: element.scrollTop,
+      offsetX: panOffset.x,
+      offsetY: panOffset.y,
       moved: false,
     };
     setPanning(true);
@@ -526,7 +553,12 @@ export function DiagramCanvas({
 
   function fit() {
     const element = scroller.current;
-    if (element !== null) setZoom(fitZoom(activeLayout, { width: element.clientWidth, height: element.clientHeight }));
+    setPanOffset({ x: 0, y: 0 });
+    if (element !== null) {
+      element.scrollLeft = 0;
+      element.scrollTop = 0;
+      setZoom(fitZoom(activeLayout, { width: element.clientWidth, height: element.clientHeight }));
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -641,7 +673,7 @@ export function DiagramCanvas({
           }
         }}
         className={cn(
-          "min-h-0 flex-1 overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2 select-none",
+          "min-h-0 flex-1 cursor-grab overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2 select-none",
           panning ? "cursor-grabbing [&_*]:cursor-grabbing" : panLocked ? "cursor-grab [&_*]:cursor-grab" : undefined,
         )}
       >
@@ -649,7 +681,11 @@ export function DiagramCanvas({
           width={activeLayout.width * zoom}
           height={activeLayout.height * zoom}
           viewBox={`0 0 ${activeLayout.width} ${activeLayout.height}`}
-          style={{ fontFamily: editorFont, fontSize: `${metrics.fontSize}px` }}
+          style={{
+            fontFamily: editorFont,
+            fontSize: `${metrics.fontSize}px`,
+            transform: panOffset.x !== 0 || panOffset.y !== 0 ? `translate(${panOffset.x}px, ${panOffset.y}px)` : undefined,
+          }}
           className="block max-w-none"
         >
           <defs>

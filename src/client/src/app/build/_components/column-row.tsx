@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { Button, ChevronIcon, Input } from "@/components/ui";
 import type { ModelColumn } from "../_lib/build-model.schema";
 import type { RowState } from "../_lib/editor-rows";
 
@@ -104,13 +105,13 @@ export function ColumnRow({
         )}
 
         <div className="relative min-w-0">
-          <input
+          <Input
             type="text"
             value={column.name}
             aria-label={nameAriaLabel}
             aria-describedby={beforeId}
             onChange={(e) => onUpdateColumn({ name: e.target.value })}
-            className={`box-border h-7 w-full min-w-0 rounded border bg-background font-mono text-xs text-ink ${borderClass} ${
+            className={`h-7 min-w-0 rounded bg-background font-mono text-xs ${borderClass} ${
               fkTargetDisplay
                 ? "pr-[30px] pl-2"
                 : rowState.marker === "new"
@@ -132,7 +133,7 @@ export function ColumnRow({
           ) : null}
         </div>
 
-        <input
+        <Input
           type="text"
           value={column.type}
           list={typesListId}
@@ -145,7 +146,7 @@ export function ColumnRow({
               onAddNextColumn();
             }
           }}
-          className={`box-border h-7 w-full min-w-0 rounded border bg-background px-2 font-mono text-xs text-body ${
+          className={`h-7 min-w-0 rounded bg-background px-2 font-mono text-xs text-body ${
             rowState.marker === "changed" ? "border-accent" : "border-border"
           }`}
         />
@@ -217,8 +218,10 @@ export function ColumnRow({
           AI
         </button>
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="compact"
           aria-label={
             expanded
               ? `Menos opções de ${column.name}`
@@ -226,24 +229,12 @@ export function ColumnRow({
           }
           aria-expanded={expanded}
           onClick={() => setExpanded((prev) => !prev)}
-          className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded border-0 p-0 ${
-            expanded ? "bg-selected text-ink" : "bg-transparent text-muted"
+          className={`h-6 w-6 rounded p-0 ${
+            expanded ? "bg-selected text-ink" : ""
           }`}
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d={expanded ? "M4 6l4 4 4-4" : "M6 4l4 4-4 4"} />
-          </svg>
-        </button>
+          <ChevronIcon direction={expanded ? "down" : "right"} />
+        </Button>
       </div>
 
       {rowState.marker === "changed" && rowState.before ? (
@@ -254,65 +245,71 @@ export function ColumnRow({
           <span>
             Era <span className="font-mono text-body">{rowState.before}</span>
           </span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="compact"
             onClick={onRevert}
-            className="ml-auto h-6 cursor-pointer rounded border-0 bg-transparent px-2 text-xs text-muted underline"
+            className="ml-auto h-6 px-2 text-xs underline"
           >
             Voltar como era
-          </button>
+          </Button>
         </div>
       ) : null}
 
       {expanded ? (
         <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 border-t border-border pt-2 pr-3 pb-3 pl-[19px] text-xs text-muted">
           <label htmlFor={`col-${index}-padrao`}>Padrão</label>
-          <input
+          <Input
             id={`col-${index}-padrao`}
             type="text"
             value={column.default ?? ""}
             onChange={(e) =>
               onUpdateColumn({ default: e.target.value ? e.target.value : null })
             }
-            className="box-border h-7 rounded border border-border bg-background px-2 font-mono text-xs text-success"
+            className="h-7 rounded border-border bg-background px-2 font-mono text-xs text-success"
           />
 
           <label htmlFor={`col-${index}-check`}>Check</label>
-          <input
+          <Input
             id={`col-${index}-check`}
             type="text"
             value={checkExpression}
             onChange={(e) => onUpdateCheck(e.target.value)}
-            className="box-border h-7 rounded border border-border bg-background px-2 font-mono text-xs text-body"
+            className="h-7 rounded border-border bg-background px-2 font-mono text-xs text-body"
           />
 
           <label htmlFor={`col-${index}-comentario`}>Comentário</label>
-          <input
+          <Input
             id={`col-${index}-comentario`}
             type="text"
             value={column.comment ?? ""}
             onChange={(e) =>
               onUpdateColumn({ comment: e.target.value ? e.target.value : null })
             }
-            className="box-border h-7 rounded border border-border bg-background px-2 text-xs text-ink"
+            className="h-7 rounded border-border bg-background px-2 text-xs text-ink"
           />
 
           <span />
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="compact"
               onClick={onDuplicate}
-              className="h-7 cursor-pointer rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink"
+              className="h-7 px-2.5 text-xs"
             >
               Duplicar coluna
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="danger"
+              size="compact"
               onClick={onRemove}
-              className="h-7 cursor-pointer rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-danger"
+              className="h-7 px-2.5 text-xs"
             >
               Excluir coluna
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -331,13 +328,15 @@ export function RemovedColumnRow({ column, onRestore }: RemovedColumnRowProps) {
       <span title="A remover" className="h-0.5 w-2 bg-danger" />
       <span className="px-2 font-mono text-xs line-through">{column.name}</span>
       <span className="px-2 font-mono text-xs line-through">{column.type}</span>
-      <button
+      <Button
         type="button"
+        variant="secondary"
+        size="compact"
         onClick={onRestore}
-        className="h-6 cursor-pointer justify-self-end rounded border border-border-strong bg-transparent px-2 text-xs text-ink"
+        className="h-6 justify-self-end px-2 text-xs"
       >
         Restaurar
-      </button>
+      </Button>
     </div>
   );
 }

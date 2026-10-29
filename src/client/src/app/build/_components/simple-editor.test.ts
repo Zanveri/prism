@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { stripTags } from "@/lib/testing/text";
 import { addIndex, removeColumn, updateColumn } from "../_lib/build-model";
 import { tableChangesDdl } from "../_lib/ddl-changes";
+import { fkActionOptions } from "../_lib/editor-rows";
 import { readCanvasModel } from "../_lib/fixtures";
 import { SimpleEditor } from "./simple-editor";
 
@@ -38,7 +39,7 @@ describe("SimpleEditor", () => {
     expect(html).toContain('title="Chave estrangeira para producao.maquina"');
     expect(html).toContain('title="Chave estrangeira para plano_manutencao"');
     expect(html).toContain('title="Chave estrangeira para producao.operador"');
-    expect(html).toMatch(/<option[^>]*selected=""[^>]*>Ao excluir: anular<\/option>/);
+    expect(html).toContain("Ao excluir: anular");
   });
 
   it("renderiza tabela existente producao.maquina com aviso de base, coluna alterada, removida, nova e DDL da tabela", () => {
@@ -88,8 +89,8 @@ describe("SimpleEditor", () => {
       }),
     );
 
+    expect(fkActionOptions("informix").onDelete).toEqual(["noAction", "cascade"]);
     expect(html).toContain("Ao excluir: impedir");
-    expect(html).toContain("Ao excluir: cascata");
     expect(html).not.toContain("Ao excluir: anular");
   });
 });

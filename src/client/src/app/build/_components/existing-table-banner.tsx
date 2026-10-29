@@ -1,3 +1,4 @@
+import { Button, DatabaseIcon } from "@/components/ui";
 import type { TableChanges } from "../_lib/build-model";
 import { buildCopy } from "../_lib/build.copy";
 
@@ -18,22 +19,9 @@ export function ExistingTableBanner({
   return (
     <div className="flex flex-col gap-2 rounded-md border border-dashed border-subtle px-3 py-2.5">
       <div className="flex items-center gap-2">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          className="shrink-0 text-muted"
-        >
-          <ellipse cx="8" cy="4" rx="5" ry="2" />
-          <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4" />
-          <path d="M3 8c0 1.1 2.2 2 5 2s5-.9 5-2" />
-        </svg>
+        <span className="shrink-0 text-muted">
+          <DatabaseIcon />
+        </span>
         <span className="font-semibold">Existe em {baseLabel}</span>
         {isChanged ? (
           <span className="inline-flex h-4 items-center rounded border border-accent px-1.5 text-[10px] font-semibold leading-[14px] text-accent">
@@ -51,13 +39,15 @@ export function ExistingTableBanner({
       </p>
       {isChanged || isDropped ? (
         <div className="flex flex-wrap gap-1.5">
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="compact"
             onClick={onRevertTable}
-            className="h-7 cursor-pointer rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink"
+            className="h-7 px-2.5 text-xs"
           >
             Desfazer as mudanças desta tabela
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>

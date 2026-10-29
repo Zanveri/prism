@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import {
+  Button,
   Dialog,
   EngineTag,
   EnvironmentPill,
+  Field,
+  FieldLabel,
+  Select,
+  type SelectOption,
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import type { BuildEngine } from "../_lib/build-model.schema";
@@ -27,6 +32,7 @@ export function ConnectionChoiceDialog({
   onCancel,
   onConfirm,
 }: ConnectionChoiceDialogProps) {
+  const dbSelectId = useId();
   const validConnections = supportedConnections(connections, engine);
   const defaultConn =
     validConnections.find((c) => c.id !== baseConnectionId) ??
@@ -47,6 +53,12 @@ export function ConnectionChoiceDialog({
     selectedConnection?.database ?? "",
   );
 
+  const databaseOptions: SelectOption[] = availableDatabases.map((db) => ({
+    value: db,
+    label: db,
+    content: <span className="font-mono text-xs">{db}</span>,
+  }));
+
   return (
     <Dialog
       open={true}
@@ -55,15 +67,13 @@ export function ConnectionChoiceDialog({
       onClose={onCancel}
       footer={
         <>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-border-strong bg-transparent px-3 text-ink hover:bg-selected"
-          >
+          <Button type="button" variant="secondary" size="compact" onClick={onCancel}>
             {buildCopy.cancelButton}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="primary"
+            size="compact"
             disabled={!selectedConnection}
             onClick={() => {
               if (!selectedConnection) return;
@@ -72,19 +82,13 @@ export function ConnectionChoiceDialog({
                 database: selectedDatabase || selectedConnection.database || null,
               });
             }}
-            className={cn(
-              "flex h-8 items-center justify-center rounded-md border border-accent bg-accent px-3 font-medium text-background",
-              !selectedConnection
-                ? "cursor-not-allowed opacity-60"
-                : "cursor-pointer hover:opacity-95",
-            )}
           >
             {buildCopy.connectionChoiceConfirm}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5 px-4 py-4">
+      <div className="flex flex-col gap-3.5">
         <p className="m-0 text-xs text-muted">{buildCopy.connectionChoiceIntro}</p>
 
         <div className="flex flex-col gap-1.5">
@@ -133,21 +137,19 @@ export function ConnectionChoiceDialog({
           </div>
         </div>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted">{buildCopy.databaseLabel}</span>
-          <select
+        <Field>
+          <FieldLabel htmlFor={dbSelectId} className="text-xs">
+            {buildCopy.databaseLabel}
+          </FieldLabel>
+          <Select
+            id={dbSelectId}
             aria-label={buildCopy.databaseLabel}
             value={selectedDatabase}
-            onChange={(e) => setSelectedDatabase(e.target.value)}
-            className="h-8 rounded-md border border-border bg-raised px-2.5 font-mono text-xs text-ink [&>option]:bg-raised [&>option]:text-ink"
-          >
-            {availableDatabases.map((db) => (
-              <option key={db} value={db}>
-                {db}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={databaseOptions}
+            onChange={(nextDb) => setSelectedDatabase(nextDb)}
+            className="min-h-8 py-1 font-mono text-xs"
+          />
+        </Field>
       </div>
     </Dialog>
   );

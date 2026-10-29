@@ -1,4 +1,4 @@
-import { AlertIcon, InfoIcon, RefreshIcon } from "@/components/ui";
+import { AlertIcon, Button, InfoIcon, RefreshIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import { buildCopy } from "../_lib/build.copy";
 import type { Problem, ProblemFix } from "../_lib/model-check";
@@ -173,8 +173,10 @@ export function ProblemsList({
             {(problem.fix || isWarning || problem.column) && (
               <div className="flex flex-wrap gap-1.5">
                 {problem.fix && (
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="compact"
                     onClick={() => {
                       if (problem.fix?.kind === "reread") {
                         onReread?.();
@@ -182,30 +184,34 @@ export function ProblemsList({
                         onApplyFix?.(problem.fix);
                       }
                     }}
-                    className="h-7 cursor-pointer rounded-md border-0 bg-selected px-2.5 text-xs text-ink hover:opacity-95"
+                    className="h-7 border-0 bg-selected px-2.5 text-xs"
                   >
                     {fixButtonLabel(problem.fix)}
-                  </button>
+                  </Button>
                 )}
 
                 {problem.table && problem.column && (
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="compact"
                     onClick={() => onGoToColumn?.(problem.table!, problem.column)}
-                    className="flex h-7 cursor-pointer items-center rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink hover:bg-selected"
+                    className="h-7 px-2.5 text-xs"
                   >
                     {buildCopy.ddlGoToColumn}
-                  </button>
+                  </Button>
                 )}
 
                 {isWarning && (
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="compact"
                     onClick={() => onIgnoreWarning?.(problem.key)}
-                    className="h-7 cursor-pointer rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-muted hover:bg-selected hover:text-ink"
+                    className="h-7 px-2.5 text-xs text-muted hover:text-ink"
                   >
                     {buildCopy.ddlIgnoreWarning}
-                  </button>
+                  </Button>
                 )}
               </div>
             )}

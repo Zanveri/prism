@@ -1,13 +1,22 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Button,
+  ConfirmDialog,
+  Field,
+  FieldLabel,
+  Input,
+  PlusIcon,
+  Select,
+} from "@/components/ui";
 import { engineRules, sameName } from "../_lib/build-engines";
 import {
   addColumn,
   addForeignKey,
   addIndex,
   copyAsNewTable,
-   removeColumn,
+  moveTableToSchema,
+  removeColumn,
   removeForeignKey,
   removeIndex,
   removeTable,
@@ -23,7 +32,6 @@ import {
   updateColumn,
   updateForeignKey,
   updateIndex,
-  moveTableToSchema,
 } from "../_lib/build-model";
 import type { BuildModel, ModelColumn } from "../_lib/build-model.schema";
 import { tableChangesDdl } from "../_lib/ddl-changes";
@@ -50,6 +58,9 @@ export function SimpleEditor({
   ddlContext,
   onChange,
 }: SimpleEditorProps) {
+  const uid = useId();
+  const tableInputId = `${uid}-table-name`;
+  const schemaSelectId = `${uid}-table-schema`;
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDropOpen, setConfirmDropOpen] = useState(false);
 
@@ -113,7 +124,7 @@ export function SimpleEditor({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pb-10">
       {isExisting ? (
         <ExistingTableBanner
           baseLabel={
@@ -128,9 +139,12 @@ export function SimpleEditor({
       ) : null}
 
       <div className="grid grid-cols-[minmax(0,1fr)_140px_32px] items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-muted">
-          Tabela
-          <input
+        <Field className="gap-1">
+          <FieldLabel htmlFor={tableInputId} className="text-xs">
+            Tabela
+          </FieldLabel>
+          <Input
+            id={tableInputId}
             type="text"
             value={table.name}
             onChange={(e) => {
@@ -138,22 +152,26 @@ export function SimpleEditor({
               const nextModel = renameTable(model, currentKey, nextName);
               onChange(nextModel, `${table.schema}.${nextName.trim()}`);
             }}
-            className="box-border h-8 rounded-md border border-border-strong bg-background px-2.5 font-mono text-[13px] font-semibold text-ink"
+            className="h-8 bg-background px-2.5 font-mono text-[13px] font-semibold"
           />
-        </label>
+        </Field>
 
-        <label className="flex flex-col gap-1 text-xs text-muted">
-          Esquema
-          <select
+        <Field
+          className="gap-1"
+          title={
+            isExisting
+              ? "Uma tabela existente não muda de esquema"
+              : undefined
+          }
+        >
+          <FieldLabel htmlFor={schemaSelectId} className="text-xs">
+            Esquema
+          </FieldLabel>
+          <Select
+            id={schemaSelectId}
             value={table.schema}
             disabled={isExisting}
-            title={
-              isExisting
-                ? "Uma tabela existente não muda de esquema"
-                : undefined
-            }
-            onChange={(e) => {
-              const nextSchema = e.target.value;
+            onChange={(nextSchema) => {
               const nextModel = moveTableToSchema(
                 model,
                 currentKey,
@@ -161,29 +179,24 @@ export function SimpleEditor({
               );
               onChange(nextModel, `${nextSchema}.${table.name}`);
             }}
-            className={`h-8 rounded-md border px-2 font-mono text-[13px] [&>option]:bg-raised [&>option]:text-ink ${
-              isExisting
-                ? "border-border bg-panel text-muted"
-                : "border-border-strong bg-raised text-ink"
-            }`}
-          >
-            {schemaNames.map((schemaName) => (
-              <option key={schemaName} value={schemaName}>
-                {schemaName}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={schemaNames.map((schemaName) => ({
+              value: schemaName,
+              label: schemaName,
+            }))}
+            wideList
+            className="min-h-8 px-2 py-1 font-mono text-[13px]"
+          />
+        </Field>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="compact"
           aria-label="Mais ações da tabela"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((prev) => !prev)}
-          className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-border-strong text-ink ${
-            menuOpen ? "bg-selected" : "bg-transparent"
-          }`}
+          className={`h-8 w-8 p-0 ${menuOpen ? "bg-selected" : ""}`}
         >
           <svg
             width="16"
@@ -196,7 +209,7 @@ export function SimpleEditor({
             <circle cx="8" cy="8" r="1.25" />
             <circle cx="12.5" cy="8" r="1.25" />
           </svg>
-        </button>
+        </Button>
       </div>
 
       {menuOpen ? (
@@ -392,32 +405,21 @@ export function SimpleEditor({
           />
         ))}
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="compact"
           onClick={() => onChange(addColumn(model, currentKey))}
-          className="mt-1 flex h-8 cursor-pointer items-center gap-1.5 self-start rounded-md border border-dashed border-border-strong bg-transparent px-3 text-ink"
+          className="mt-1 gap-1.5 self-start border-dashed px-3 text-xs"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className="shrink-0"
-          >
-            <path d="M8 3v10M3 8h10" />
-          </svg>
+          <PlusIcon />
           <span>Adicionar coluna</span>
           {!isExisting ? (
             <span className="font-mono text-[11px] text-muted">
               Enter na última
             </span>
           ) : null}
-        </button>
+        </Button>
 
         <datalist id={typesListId}>
           {catalogTypes.map((typeName) => (
@@ -478,7 +480,7 @@ export function SimpleEditor({
                 ),
               });
             }}
-            className="box-border resize-y rounded-md border border-border bg-background px-2.5 py-2 text-ink"
+            className="box-border resize-y rounded-md border border-border-strong bg-raised px-2.5 py-2 text-ink outline-none focus-visible:border-accent focus-visible:ring-1 focus-visible:ring-accent"
           />
         </section>
       )}

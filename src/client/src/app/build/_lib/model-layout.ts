@@ -256,8 +256,8 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
   return {
     boxes,
     edges,
-    width: Math.max(maxBoxRight, maxEdgeX) + margin,
-    height: Math.max(maxBoxBottom, maxEdgeY) + margin,
+    width: Math.max(maxBoxRight, maxEdgeX) + margin * 4,
+    height: Math.max(maxBoxBottom, maxEdgeY) + margin * 4,
   };
 }
 

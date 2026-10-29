@@ -5,9 +5,11 @@ import { buildCopy } from "@/app/build/_lib/build.copy";
 import { modelSummary } from "@/app/build/_lib/model-summary";
 import {
   BuildIcon,
+  Button,
   ConfirmDialog,
   ContextMenu,
   EngineTag,
+  Input,
   PlusIcon,
   SearchIcon,
   UploadIcon,
@@ -79,7 +81,7 @@ export function ModelsList({
   }
 
   return (
-    <main className="flex min-w-0 flex-[999_1_720px] flex-col gap-5 px-10 pt-8 pb-12">
+    <main className="flex min-h-0 min-w-0 flex-[999_1_720px] flex-col gap-5 overflow-y-auto px-10 pt-8 pb-12">
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-[1_1_360px] flex-col gap-1">
           <h1 className="m-0 text-2xl leading-8 font-semibold text-ink">
@@ -88,23 +90,25 @@ export function ModelsList({
           <p className="m-0 text-muted">{buildCopy.modelsSubtitle}</p>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           onClick={onOpenFile}
-          className="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-border-strong bg-transparent px-3.5 text-ink hover:bg-selected"
         >
           <UploadIcon />
           <span>{buildCopy.openFileButton}</span>
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           onClick={onNewModel}
-          className="flex h-9 cursor-pointer items-center gap-2 rounded-md border-0 bg-accent px-3.5 font-semibold text-panel hover:opacity-95"
         >
           <PlusIcon />
           <span>{buildCopy.newModelButton}</span>
-        </button>
+        </Button>
       </div>
 
       <label className="flex h-8 max-w-[360px] items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-subtle">
@@ -176,7 +180,7 @@ export function ModelsList({
                     )}
                   >
                     {renamingId === entry.id ? (
-                      <input
+                      <Input
                         type="text"
                         value={renameValue}
                         aria-label={`Novo nome para ${entry.name}`}
@@ -186,7 +190,7 @@ export function ModelsList({
                           if (e.key === "Enter") submitRename(entry);
                           if (e.key === "Escape") setRenamingId(null);
                         }}
-                        className="h-7 rounded border border-accent bg-background px-2 font-mono text-ink outline-none"
+                        className="h-7 border-accent bg-background px-2 font-mono"
                       />
                     ) : (
                       <button
@@ -243,15 +247,19 @@ export function ModelsList({
                     )}
                   >
                     <div className="relative flex justify-end gap-1">
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
+                        size="compact"
                         onClick={() => onOpenModel?.(entry.id)}
-                        className="flex h-7 cursor-pointer items-center rounded-md border border-border-strong bg-transparent px-2.5 text-xs text-ink hover:bg-selected"
+                        className="h-7 px-2.5 text-xs"
                       >
                         {buildCopy.openAction}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="compact"
                         aria-label={`Mais ações de ${entry.name}`}
                         aria-haspopup="menu"
                         aria-expanded={isMenuOpen}
@@ -259,8 +267,8 @@ export function ModelsList({
                           setMenuOpenForId((prev) => (prev === entry.id ? null : entry.id))
                         }
                         className={cn(
-                          "flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border-0 text-ink hover:bg-selected",
-                          isMenuOpen ? "bg-selected" : "bg-transparent",
+                          "h-7 w-7 p-0 text-ink",
+                          isMenuOpen && "bg-selected",
                         )}
                       >
                         <svg
@@ -274,7 +282,7 @@ export function ModelsList({
                           <circle cx="8" cy="8" r="1.25" />
                           <circle cx="12.5" cy="8" r="1.25" />
                         </svg>
-                      </button>
+                      </Button>
 
                       {isMenuOpen && (
                         <ContextMenu
