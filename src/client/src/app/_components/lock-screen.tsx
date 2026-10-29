@@ -59,6 +59,8 @@ export function LockScreenView({ userName, titleId, refusal, errors, failure, cl
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-6 p-6">
+      {/* RN-JANELA-001: o bloqueio cobre a barra superior; a faixa do alto continua arrastando a janela. */}
+      <div aria-hidden="true" className="window-drag" />
       <div className="flex items-center gap-3 text-lg font-semibold tracking-[0.01em]">
         <PrismMark height={56} />
         <span>Prism</span>

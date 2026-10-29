@@ -52,7 +52,10 @@ describe("a tela de Configurações", () => {
     expect(markup).toMatch(/<h1[^>]*>Configurações<\/h1>/);
     // O foco vai ao título ao abrir a tela (o efeito não roda aqui, mas o título tem de poder recebê-lo).
     expect(markup).toMatch(/<h1 tabindex="-1"[^>]*>Configurações<\/h1>/);
-    expect(markup).toContain(`<span>${userName}</span>`);
+    // RN-JANELA-001: o cabeçalho é a barra da janela, numa linha só: o nome longo encolhe com reticências, e a dica tem o nome inteiro.
+    expect(markup).toMatch(/<header class="window-bar [^"]*"/);
+    expect(markup).not.toMatch(/<header[^>]*\bflex-wrap\b/);
+    expect(markup).toContain(`<span title="${userName}" class="truncate">${userName}</span>`);
     expect(markup).toMatch(/<a [^>]*href="\/workbench"[^>]*>.*<span>Fechar<\/span><kbd[^>]*>Esc<\/kbd><\/a>/);
   });
 
