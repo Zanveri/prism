@@ -82,7 +82,8 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
   }
 
   return (
-    <header className="flex min-h-12 items-center gap-2 border-b border-border bg-panel px-3 py-1.5 text-sm">
+    // RN-JANELA-001: a barra superior é a barra da janela (`window-bar`): arrasta, maximiza no duplo clique e deixa à direita o lugar dos botões do sistema.
+    <header className="window-bar flex min-h-12 items-center gap-2 border-b border-border bg-panel py-1.5 pl-3 text-sm">
       {/* A marca com 40 px de altura (RN-MARCA-007, Ruling 137: abaixo disso o traço fino quase some). A caixa dela cresce junto, e a barra,
           que só tem altura mínima, cresce o que precisar; os outros itens continuam com 36 px. */}
       <div className="flex h-10 flex-none items-center gap-2 pr-2 pl-1 text-[15px] font-semibold tracking-[0.01em]">

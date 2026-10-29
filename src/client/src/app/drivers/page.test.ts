@@ -22,10 +22,10 @@ function redirectAt(search: string) {
 
 describe("o endereço de Drivers (RN-NAV-006: a tela de Drivers passou a ser Configurações › Drivers)", () => {
   it("leva a Configurações › Drivers, trocando a entrada do histórico (voltar não cai num endereço que só redireciona)", () => {
-    expect(redirectAt("")).toEqual({ to: { pathname: "/settings", search: "?section=drivers" }, replace: true });
+    expect(redirectAt("")).toEqual({ to: { pathname: "/settings/drivers", search: "" }, replace: true });
   });
 
   it("o 'Instalar driver' com o `driverID` do 422 continua apontando a linha do driver que falta", () => {
-    expect(redirectAt("?driver=ibm-data-server")).toEqual({ to: { pathname: "/settings", search: "?section=drivers&driver=ibm-data-server" }, replace: true });
+    expect(redirectAt("?driver=ibm-data-server")).toEqual({ to: { pathname: "/settings/drivers", search: "?driver=ibm-data-server" }, replace: true });
   });
 });

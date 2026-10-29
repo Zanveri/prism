@@ -1044,4 +1044,32 @@ public sealed class SqlTextTests
         Assert.Equal("select * from items where items.description = 'FRIGIDEIRA ACO INOX 30CM ALCA GRANO' and items.code IN ('A', 'B''C')", rewritten);
         Assert.Equal("select t.\"Col Name\" as \"Meu Alias\", LENGTH(\"texto\") from \"usr_schema\".\"items\" t where t.\"Col Name\" = 'Valor ''X'''", rewrittenQualified);
     }
+
+    [Trait("SqlText", "InformixRoutineCall")]
+    [Fact(DisplayName = "OK chamada de EXECUTE FUNCTION ou EXECUTE PROCEDURE isolada é extraída sem comentários nem ponto e vírgula final")]
+    public void InformixRoutineCall_ShouldExtractRoutineExpressionFromExecuteFunctionOrProcedure()
+    {
+        //Arrange
+        var calls = new[]
+        {
+            "execute function sysadmin:task ('cdr list replicate', '')",
+            "  /* nota */ EXECUTE PROCEDURE loja.minha_rotina(1, 'a;b') ; -- fim\n",
+            "{ cabeçalho }\n;; execute function informix.f(); ; { rodapé }"
+        };
+        var nonCalls = new[]
+        {
+            "SELECT sysadmin:task('onstat', '-g cfg') FROM TABLE(SET{1})",
+            "EXECUTE IMMEDIATE 'SELECT 1'",
+            "EXECUTE FUNCTION",
+            "EXECUTE PROCEDURE ; -- vazia"
+        };
+
+        //Act
+        var extracted = calls.Select(SqlText.InformixRoutineCall).ToArray();
+        var ignored = nonCalls.Select(SqlText.InformixRoutineCall).Where(call => call is not null).ToArray();
+
+        //Assert
+        Assert.Equal(new[] { "sysadmin:task ('cdr list replicate', '')", "loja.minha_rotina(1, 'a;b')", "informix.f()" }, extracted);
+        Assert.Empty(ignored);
+    }
 }

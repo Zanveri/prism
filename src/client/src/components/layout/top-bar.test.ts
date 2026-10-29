@@ -66,6 +66,10 @@ describe("a barra superior", () => {
     expect(markup).toMatch(/<span title="ana" class="truncate">ana<\/span>/);
   });
 
+  it("é a barra da janela (RN-JANELA-001): arrasta a janela e deixa à direita o lugar dos botões do sistema (`window-bar`, em globals.css)", () => {
+    expect(render()).toMatch(/<header class="window-bar /);
+  });
+
   it("o lembrete de reinício pendente (RN-DRIVER-005) mora aqui, à vista em qualquer tela, e leva a Configurações › Drivers (o endereço de Drivers)", () => {
     const markup = render([{ ...ibm, restartRequired: true }]);
     const reminder = /<a [^>]*href="\/drivers"[^>]*>.*?<\/a>/.exec(markup)?.[0] ?? "";

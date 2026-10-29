@@ -14,7 +14,7 @@ const copy = settingsCopy.drivers;
 export function DriversSection({ anchor, highlightedId = null }: { anchor: string; highlightedId?: string | null }) {
   return (
     <SettingsCard anchor={anchor} title={copy.title}>
-      <p className="max-w-[68ch] text-muted">{driversCopy.subtitle}</p>
+      <p className="text-muted">{driversCopy.subtitle}</p>
       <DriverManager highlightedId={highlightedId} />
     </SettingsCard>
   );

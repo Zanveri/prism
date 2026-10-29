@@ -1464,7 +1464,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         if (paged)
             await BeginReadOnlyAsync(cancellationToken);
 
-        var reader = await StartAsync(sql, [], userCommand: true, cancellationToken, query: parameters);
+        var reader = await StartUserCommandAsync(sql, parameters, cancellationToken);
         var requested = cancellationToken;
 
         // RN-SQL-010: no driver que não lança quando o cancelamento chega durante a leitura, o comando executado até o fim já rodou
@@ -2045,6 +2045,77 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         command.CommandText = sql;
         command.Transaction = _editTransaction;
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>Abre o leitor do comando do usuário (<see cref="ExecuteCommandAsync"/>). O Informix alarga aqui a rotina que devolve `LVARCHAR` sem tamanho.</summary>
+    protected virtual Task<DbDataReader> StartUserCommandAsync(string sql, IReadOnlyList<QueryParameter>? parameters, CancellationToken cancellationToken)
+        => StartAsync(sql, [], userCommand: true, cancellationToken, query: parameters);
+
+    /// <summary>
+    /// Descreve a primeira coluna que um comando do usuário devolveria (`CommandBehavior.SchemaOnly`), sem executá-lo, pelo único `try`
+    /// da integração. Nulo quando o banco recusa a preparação (rotina sem retorno, comando que não é consulta).
+    /// </summary>
+    protected async Task<(int FieldCount, string DataTypeName, int? ColumnSize)?> TryDescribeUserCommandAsync(string sql, IReadOnlyList<QueryParameter>? parameters, CancellationToken cancellationToken)
+    {
+        (int FieldCount, string DataTypeName, int? ColumnSize)? shape = null;
+        await TryAsync(nameof(TryDescribeUserCommandAsync), async () =>
+        {
+            var command = _connection!.CreateCommand();
+            command.CommandText = sql;
+            command.CommandTimeout = 0;
+            ConfigureUserCommand(command);
+            BindQueryParameters(command, parameters);
+            PrepareCommand(command);
+
+            _command = command;
+            await using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SchemaOnly, cancellationToken))
+                shape = reader.FieldCount > 0 ? (reader.FieldCount, reader.GetDataTypeName(0), reader.GetColumnSchema()[0].ColumnSize) : (0, string.Empty, null);
+
+            _command = null;
+            await command.DisposeAsync();
+        });
+
+        if (_command is { } refused)
+        {
+            _command = null;
+            await refused.DisposeAsync();
+        }
+
+        return shape;
+    }
+
+    /// <summary>
+    /// Tenta abrir o leitor do comando do usuário com outro texto (no Informix, a chamada de rotina envolvida num `SELECT CAST`), já na
+    /// primeira linha (<see cref="_rowPending"/>): no `SELECT`, o banco só executa a rotina e acusa a recusa dela (-675, -686) ao ler a
+    /// linha. Se o banco recusar ou não devolver linha, o leitor e o comando da tentativa saem descartados.
+    /// </summary>
+    protected async Task<DbDataReader?> TryStartUserSelectAsync(string sql, IReadOnlyList<QueryParameter>? parameters, CancellationToken cancellationToken)
+    {
+        var started = await TryAsync(nameof(StartUserCommandAsync), async () =>
+        {
+            var reader = await StartAsync(sql, [], userCommand: true, cancellationToken, query: parameters);
+            _rowPending = await reader.ReadAsync(cancellationToken);
+        });
+        if (started && _rowPending)
+            return _reader;
+
+        await TryAsync(nameof(StartUserCommandAsync), async () =>
+        {
+            if (_reader is { } reader)
+            {
+                _reader = null;
+                await reader.DisposeAsync();
+            }
+
+            if (_command is { } command)
+            {
+                _command = null;
+                await command.DisposeAsync();
+            }
+        });
+        _rowPending = false;
+
+        return null;
     }
 
     /// <summary>

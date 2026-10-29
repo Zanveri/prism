@@ -71,7 +71,7 @@ export function AppearanceSection({ anchor }: { anchor: string }) {
 
   return (
     <SettingsCard anchor={anchor} title={copy.title}>
-      <div role="group" aria-label={copy.themeGroup} className="grid grid-cols-[repeat(auto-fill,minmax(min(200px,100%),232px))] gap-3">
+      <div role="group" aria-label={copy.themeGroup} className="grid grid-cols-[repeat(auto-fill,minmax(min(200px,100%),1fr))] gap-3">
         {themeOptions.map((option) => {
           const isSelected = activeOption.mode === option.mode;
           const previewMode = isSelected && activeVariant ? activeVariant.mode : option.mode;
@@ -118,7 +118,7 @@ export function AppearanceSection({ anchor }: { anchor: string }) {
       </label>
       <p className="text-xs text-muted">{copy.note}</p>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-4">
+      <div className="grid max-w-[900px] grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-4">
         <Field>
           <FieldLabel htmlFor="cfg-fonte-interface">{fontCopy.ui}</FieldLabel>
           <FontPicker id="cfg-fonte-interface" label={fontCopy.ui} role="ui" value={preferences.ui.fontFamily} onChange={(fontFamily) => update({ ui: { fontFamily } })} hintId="cfg-fonte-interface-dica" />
@@ -136,7 +136,7 @@ export function AppearanceSection({ anchor }: { anchor: string }) {
         </Field>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-4">
+      <div className="grid max-w-[900px] grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-4">
         <AppZoomControl />
         <fieldset aria-describedby="cfg-densidade-dica" className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
           <legend className="mb-1.5 p-0 text-sm text-muted">{densityCopy.label}</legend>

@@ -1407,3 +1407,45 @@
     stop-opacity: 0.95;
   }
 }
+
+/*
+ * RN-JANELA-001: a barra da janela. No Windows os botões do sistema ficam sobre a ponta direita dela, e o processo principal diz onde pelas variáveis
+ * `titlebar-area-*`, já em pixels da página (no zoom do programa): a barra tem a altura deles e reserva à direita o lugar deles, mais os 12 px de sempre. Ela
+ * arrasta a janela, e o duplo clique nela maximiza e restaura (o sistema faz os dois). Sem os botões sobrepostos (as outras plataformas, a tela fora do
+ * Electron) as variáveis faltam e fica o que era: a altura do conteúdo, 12 px à direita, e quem arrasta é a barra nativa.
+ */
+@utility window-bar {
+  position: relative;
+  height: env(titlebar-area-height, auto);
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 0.75rem);
+  app-region: drag;
+
+  /* O que não cabe na barra (num zoom alto) é cortado antes dos botões, e não passa por baixo deles. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+    background: inherit;
+  }
+}
+
+/*
+ * A faixa que arrasta a janela nas telas sem barra superior (a abertura, o login, o bloqueio): por cima do alto da tela, na altura dos botões do sistema, e
+ * sem eles, de altura nenhuma. Vem antes do conteúdo da tela, porque o Chromium junta as áreas de arrastar na ordem do documento: o que é clicável depois
+ * dela (a regra abaixo) é recortado da faixa.
+ */
+@utility window-drag {
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(titlebar-area-height, 0px);
+  app-region: drag;
+}
+
+/*
+ * Na barra e na tela da faixa, o que se clica, se digita ou mostra uma dica ao passar o mouse não arrasta a janela: sobre a área de arrastar o mouse é do
+ * sistema, e a página não o recebe. Fica só aí: a área de trabalho tem milhares de controles, e cada um entraria na conta das áreas a cada mudança de layout.
+ */
+:is(.window-bar, .window-drag ~ *) :is(a, button, input, select, textarea, summary, label, [role="button"], [tabindex]:not([tabindex="-1"]), [title]) {
+  app-region: no-drag;
+}

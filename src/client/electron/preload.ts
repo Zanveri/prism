@@ -14,7 +14,7 @@ import type { WorkspaceReport } from "./workspace-messages";
  * da API, o aviso de que ela saiu, o pedido para reiniciá-la, a versão do app (RN-VERSAO-004) e a
  * pasta de dados em uso (só leitura). É tudo o que a tela recebe do processo principal, mais as
  * atualizações (`updates`), as janelas (`windows`), o que as outras janelas contam do cofre (`session`), as abas que voltam na próxima entrada
- * (`workspace`), o zoom do programa (`zoom`), o destino e a entrega das exportações de dados e o arquivo das importações (`transfers`).
+ * (`workspace`), o zoom do programa (`zoom`), a cor dos botões da janela (`windowBar`), o destino e a entrega das exportações de dados e o arquivo das importações (`transfers`).
  */
 export type PrismBridge = {
   getApiConfig(): Promise<{ baseUrl: string; token: string }>;
@@ -34,6 +34,7 @@ export type PrismBridge = {
   verification: PrismVerification;
   workspace: PrismWorkspace;
   zoom: PrismZoom;
+  windowBar: PrismWindowBar;
   transfers: PrismTransfers;
   dbeaver: PrismDbeaver;
   /** Abre o valor de uma célula num editor de texto externo do sistema (`prism:open-external-editor`), sem devolver caminho (RN-SHELL-002). */
@@ -82,6 +83,14 @@ export type PrismDbeaver = {
   source(request: DbeaverSourceRequest): Promise<unknown>;
   /** Apaga a cópia (a de outra janela, ou um identificador que não se conhece, não faz nada). */
   release(request: DbeaverReleaseRequest): Promise<void>;
+};
+
+/**
+ * RN-JANELA-001: a cor dos símbolos dos botões do sistema sobre a barra superior (`#rrggbb`, a do tema em uso). O processo principal confere a forma e pinta
+ * só os da janela que pediu.
+ */
+export type PrismWindowBar = {
+  paint(symbolColor: string): Promise<void>;
 };
 
 /**
@@ -320,6 +329,9 @@ const bridge: PrismBridge = {
       ipcRenderer.on("prism:zoom-changed", handler);
       return () => ipcRenderer.removeListener("prism:zoom-changed", handler);
     },
+  },
+  windowBar: {
+    paint: (symbolColor) => ipcRenderer.invoke("prism:window-bar", symbolColor),
   },
   session: {
     share: (event) => ipcRenderer.invoke("prism:session-share", event),

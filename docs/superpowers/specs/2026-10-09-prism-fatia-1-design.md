@@ -1453,6 +1453,8 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   mostra e ainda depende da API (proteções) aparece como "em breve", sem controle que finja
   funcionar. Transações deixa
   de ser "em breve" (RN-CONFIG-007). *Alterada a pedido do dono em 2026-10-20 (seção 40): entrou a seção Importar.*
+  *Alterada a pedido do dono em 2026-10-29: cada seção é uma página própria (`/settings/<seção>`), escolhida na navegação
+  à esquerda e na largura e na altura toda da janela; antes, as seções vinham uma embaixo da outra numa página só, que rolava.*
 - **RN-CONFIG-007.** Configurações › Transações tem "Modo padrão das novas abas" (Auto-commit ou
   Commit manual; vem Auto-commit) e "Nível de isolamento padrão" (RN-ISOL-006), guardados por
   usuário; valem para as abas abertas depois.

@@ -68,7 +68,7 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   `app://prism` no app construído. No app empacotado essa variável é ignorada: a origem que ela
   aponta receberia o token. `app.isPackaged` decide também o comando da API e o menu.
 - O app empacotado não tem o menu padrão do Electron (o Ctrl+R dele recarrega a janela e perde o
-  texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
+  texto das abas de SQL). Em desenvolvimento o menu fica (no Windows ele existe, mas não aparece: a barra da janela é a do app, RN-JANELA-001; para inspecionar a tela, `--remoteDebuggingPort`). No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
 - **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela; **o Ctrl+W nunca a fecha** (RN-ABAS-019). O Chromium do Electron não
@@ -103,6 +103,23 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   passa pelo `before-input-event`): o login abriu em 125% com o `zoom.json` já gravado, o splash em 800×500 com a página em 640×400, Ctrl+- e Ctrl+=,
   Ctrl++ e o + numérico andaram um passo cada com o foco no editor (o texto dele não mudou), Ctrl+0 voltou a 100%, o controle de Configurações
   acompanhou o atalho, e a janela nova de "Mover para nova janela" nasceu no zoom de então e mudou junto com a primeira.
+- **A barra da janela** (RN-JANELA-001; `windowBarOptions`, `windowBarOverlayHeight` e `isSymbolColor` em `platform.ts`, com teste). Só no Windows: a janela
+  do app nasce com `titleBarStyle: "hidden"` e os botões do sistema sobrepostos (`titleBarOverlay`) com o fundo **transparente**, conferido no Electron 44: o
+  sistema desenha só os símbolos e o realce do mouse (o cinza do minimizar e do maximizar, o vermelho do fechar), e o que fica atrás deles é a tela, em
+  qualquer tema e em qualquer tela. O Snap Layouts do Windows 11 continua no maximizar, porque o botão é o do sistema. No Linux (os botões sobrepostos seriam
+  do Electron) e no macOS (nunca aberto) a barra nativa fica, como a regra permite; as janelas do resultado também, que a seção 39 deixou para depois.
+  **A altura** é a da barra superior, 53 px, vezes o zoom do programa (`changeZoom` chama `setTitleBarOverlay({ height })` em todas as janelas), e a tela a lê
+  de volta em `env(titlebar-area-height)`, que já vem no zoom (conferido no app: 53 px a 100%, 110% e 200%, e 54 a 67%, em que a sobreposição arredonda para 36). **A cor dos
+  símbolos** é o `muted` do tema em uso: `syncWindowBar` (`components/layout/window-bar.ts`, chamado em `main.tsx`) a calcula num elemento escondido, converte
+  para `#rrggbb` (`hexOf`, com teste) e manda por `prism:window-bar` ao abrir a tela, antes de a janela aparecer, e quando o `<html>` muda de atributo (o
+  tema) ou o sistema troca entre claro e escuro (o tema do sistema). O processo principal só aceita `#rrggbb` e pinta só a janela que pediu. **Na tela**,
+  dois utilitários em `globals.css`: `window-bar` (a altura dos botões, o lugar deles à direita, por `env(titlebar-area-x/width)`, mais 12 px, e
+  `app-region: drag`) vai na barra superior e no cabeçalho de Configurações, que esconde a área de trabalho e por isso também é a barra da janela (numa
+  linha só, da mesma altura: quem encolhe é o nome do usuário); `window-drag` (uma faixa fixa no alto, da altura dos botões) vai antes do conteúdo da
+  abertura (`ApiGate`), da consulta do cofre (`VaultGuard`), do login e do bloqueio. O Chromium junta as áreas de arrastar na ordem do documento: o que é
+  clicável, se digita ou tem dica (`title`) dentro da barra, ou depois da faixa, é recortado dela (`app-region: no-drag`), e só aí: a regra global
+  poria os milhares de controles da área de trabalho na conta das áreas a cada mudança de layout. Fora do Windows as variáveis `titlebar-area-*` faltam,
+  e os dois utilitários ficam com a altura do conteúdo e 12 px à direita (a barra) e altura nenhuma (a faixa). Duplo clique na barra maximiza e restaura, e quem o faz é o sistema. O título continua "Prism" (a barra de tarefas e o Alt+Tab).
 - Sair do app, pela última janela fechada ou por `app.quit()`, passa por `before-quit`: grava as abas de todas as janelas (`workspaceHub.flush`, RN-ABAS-006,
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
@@ -115,7 +132,7 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   próxima entrada"), `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima) e `transfers` (o destino e a entrega das
   exportações de dados e o arquivo das importações, abaixo) e `dbeaver` (a procura e a cópia do DBeaver, abaixo). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
-  os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
+  os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; o da barra da janela, `prism:window-bar` (a cor dos símbolos, RN-JANELA-001); os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
   passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`; os das exportações de dados, `prism:transfer-destination`, `prism:transfer-deliver`,
   `prism:transfer-copy`, `prism:transfer-reveal` e `prism:transfer-release`; os do arquivo das importações de dados, `prism:transfer-source`,
   `prism:transfer-source-status` e `prism:transfer-source-release`; os da cópia do DBeaver, `prism:dbeaver-source` e `prism:dbeaver-source-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).

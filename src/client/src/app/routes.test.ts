@@ -1,5 +1,5 @@
 import { isValidElement, type ReactNode } from "react";
-import type { RouteObject } from "react-router";
+import { Navigate, type RouteObject } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import { TabHistory } from "@/app/_components/tab-history";
@@ -68,6 +68,13 @@ describe("rotas: onde o estado da área de trabalho é montado", () => {
     const paths = (providers[0].route.children ?? []).map((route) => route.path);
 
     expect(paths).toContain(pathsConfig.settings);
+    expect(paths).toContain(pathsConfig.settingsSection);
+  });
+
+  it("cada seção das Configurações é uma página, e o endereço sem seção leva à primeira, trocando a entrada do histórico", () => {
+    const bare = (providers[0].route.children ?? []).find((route) => route.path === pathsConfig.settings);
+
+    expect(isValidElement<{ to: unknown; replace?: boolean }>(bare?.element) && bare.element.type === Navigate ? bare.element.props : null).toEqual({ to: { pathname: "/settings/account", search: "" }, replace: true });
   });
 
   it("o tema e as fontes do usuário (RN-CONFIG-008), o atalho Ctrl+, e o Voltar e Avançar das abas (RN-ABAS-018) são montados dentro do provedor, portanto do guard: sem o cofre aberto não há usuário nem cofre", () => {
