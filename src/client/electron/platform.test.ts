@@ -1,7 +1,7 @@
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, expect, it } from "vitest";
 
-import { applicationMenuTemplate, isWaylandSession, menuShortcutIgnored, windowIconFile } from "./platform";
+import { applicationMenuTemplate, isSymbolColor, isWaylandSession, menuShortcutIgnored, windowBarOptions, windowBarOverlayHeight, windowIconFile } from "./platform";
 
 describe("windowIconFile (RN-MARCA-001)", () => {
   it(".ico no Windows, PNG no Linux e nenhum no macOS, onde o ícone é o do pacote", () => {
@@ -90,5 +90,25 @@ describe("isWaylandSession: o app no Wayland nativo, onde o ponteiro lido pelo p
   it("fora do Linux, nunca", () => {
     expect(session({ platform: "win32", env: wayland })).toBe(false);
     expect(session({ platform: "darwin", ozonePlatform: "wayland" })).toBe(false);
+  });
+});
+
+describe("a barra da janela (RN-JANELA-001)", () => {
+  it("no Windows a barra do sistema sai e os botões dele ficam sobre a barra do app, transparentes, na altura dela vezes o zoom", () => {
+    expect(windowBarOptions("win32", 1)).toEqual({ titleBarStyle: "hidden", titleBarOverlay: { color: "rgba(0, 0, 0, 0)", symbolColor: "#b4bcc8", height: 53 } });
+    expect(windowBarOptions("win32", 2).titleBarOverlay).toMatchObject({ height: 106 });
+    expect(windowBarOverlayHeight(1.1)).toBe(58);
+    expect(windowBarOverlayHeight(0.67)).toBe(36);
+  });
+
+  it("no Linux e no macOS a janela mantém a barra nativa", () => {
+    expect(windowBarOptions("linux", 1)).toEqual({});
+    expect(windowBarOptions("darwin", 1)).toEqual({});
+  });
+
+  it("a cor dos símbolos só passa como #rrggbb", () => {
+    expect(isSymbolColor("#b4bcc8")).toBe(true);
+    expect(isSymbolColor("#B4BCC8")).toBe(true);
+    for (const value of ["b4bcc8", "#b4bcc", "rgb(180, 188, 200)", "red", "#b4bcc8; x", 0xb4bcc8, null]) expect(isSymbolColor(value)).toBe(false);
   });
 });

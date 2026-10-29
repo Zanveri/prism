@@ -4,6 +4,7 @@ import type { Engine } from "@/components/ui";
 
 import type { AutoRefreshBlocker, AutoRefreshState } from "./auto-refresh";
 import type { QueryRunner, RowsState, RunnerState } from "./use-query-runner";
+import { initialTransaction } from "./transaction";
 
 // A edição de várias células e a coluna inteira (seção 38: RN-EDIT-017 a 022) pelo gancho da edição, com os ganchos do React simulados (`createHookRuntime`):
 // o que se confere é o que ele entrega à grade e à faixa, o que pede à API e o que faz com as pendências e com o executor. As decisões puras têm teste
@@ -65,6 +66,8 @@ function fakeRunner(initial: RunnerState) {
     getState: (): RunnerState => runner.state,
     sessionOf: () => "s1",
     script: { getState: () => null },
+    // RN-TX-001: em Auto-commit, sem transação; o "Salvar" entrega o estado que a API mandou.
+    transaction: { getState: () => initialTransaction, note: vi.fn() },
     loadMore: vi.fn(async () => ({ kind: "end" as const })),
     keepSaved: vi.fn(),
     rerun: vi.fn(async () => {}),

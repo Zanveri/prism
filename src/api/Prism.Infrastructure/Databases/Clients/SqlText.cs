@@ -219,6 +219,58 @@ internal static class SqlText
     }
 
     /// <summary>
+    /// RN-TX-004: o que o controle de transação digitado faz no Commit manual, na forma de cada banco. `COMMIT` e `ROLLBACK` (com `WORK` ou
+    /// `TRANSACTION`, e no PostgreSQL também `END` e `ABORT`) são os botões; os pontos de salvamento vão ao banco, dentro da transação; o `BEGIN`
+    /// não, porque o Prism já abre a transação no primeiro comando; e a confirmação em duas fases e o `AND CHAIN` nunca valem. O que vem depois
+    /// da forma conhecida (`COMMIT COMMENT 'x'`, do Informix) também não vale: o Prism não sabe o que o banco faria com a transação.
+    /// </summary>
+    public static ETransactionControl TransactionControlOf(string sql, ESqlDialect dialect)
+    {
+        if (!IsTransactionControl(sql, dialect))
+            return ETransactionControl.None;
+
+        var words = Tokens(sql, dialect).Select(token => token.Token).Where(token => token != ";").Take(4).ToList();
+        var verb = words[0];
+        if (verb is "BEGIN" or "START")
+            return ETransactionControl.Begin;
+
+        if (verb is "SAVEPOINT" or "RELEASE")
+            return ETransactionControl.Savepoint;
+
+        if (verb is not ("COMMIT" or "END" or "ROLLBACK" or "ABORT"))
+            return ETransactionControl.Never;
+
+        var rest = words.Skip(words.Count > 1 && words[1] is "WORK" or "TRANSACTION" ? 2 : 1).ToList();
+        if (rest.Count == 0 || rest is ["AND", "NO", ..])
+            return verb is "COMMIT" or "END" ? ETransactionControl.Commit : ETransactionControl.Rollback;
+
+        return verb == "ROLLBACK" && rest[0] == "TO" ? ETransactionControl.RollbackToSavepoint : ETransactionControl.Never;
+    }
+
+    /// <summary>RN-TX-004: o comando começa por `ROLLBACK WORK` (a forma que o driver da IBM toma pelo `ROLLBACK` da transação inteira).</summary>
+    public static bool IsRollbackWork(string sql, ESqlDialect dialect)
+        => Tokens(sql, dialect).Select(token => token.Token).Where(token => token != ";").Take(2).SequenceEqual(["ROLLBACK", "WORK"]);
+
+    /// <summary>
+    /// RN-TX-004: no PostgreSQL, o comando que o banco não aceita dentro de transação. A recusa dele estragaria a transação manual inteira
+    /// (RN-TX-009), então o Prism o recusa sem enviar, e ele roda numa aba em Auto-commit. O que a lista não conhece chega ao banco.
+    /// </summary>
+    public static bool RunsOnlyOutsideTransaction(string sql)
+    {
+        var words = Tokens(sql, ESqlDialect.PostgreSql).Select(token => token.Token).Where(token => token != ";").Take(8).ToList();
+
+        return words switch
+        {
+            ["VACUUM", ..] => true,
+            ["CREATE" or "DROP", "DATABASE" or "TABLESPACE", ..] => true,
+            ["ALTER", "SYSTEM", ..] => true,
+            ["CREATE", "INDEX", "CONCURRENTLY", ..] or ["CREATE", "UNIQUE", "INDEX", "CONCURRENTLY", ..] or ["DROP", "INDEX", "CONCURRENTLY", ..] => true,
+            ["REINDEX", ..] => words.Contains("CONCURRENTLY") || words.Contains("DATABASE") || words.Contains("SYSTEM"),
+            _ => false
+        };
+    }
+
+    /// <summary>
     /// RN-SQL-013: o comando começa por `WITH`, com ou sem parênteses na frente, e tem `INSERT`, `UPDATE`, `DELETE` ou `MERGE` como
     /// palavra inteira, fora de texto entre aspas simples, de `$marca$ ... $marca$`, de identificador entre aspas duplas e de comentário.
     /// É um comando que grava, mesmo começando como leitura. `updated_at`, `is_deleted` e `"update"` são nomes, e não contam.
@@ -423,6 +475,46 @@ internal static class SqlText
         }
 
         return started ? sql[start..end] : sql;
+    }
+
+    /// <summary>
+    /// A chamada `<c>rotina(...)</c>` de um `<c>EXECUTE FUNCTION</c>` ou `<c>EXECUTE PROCEDURE</c>` isolado do Informix, como foi
+    /// escrita; nulo quando o texto é outro comando, não tem lista de argumentos ou traz mais alguma coisa além dos parênteses.
+    /// </summary>
+    public static string? InformixRoutineCall(string sql)
+    {
+        var tokens = Tokens(sql, ESqlDialect.Informix).SkipWhile(token => token.Token == ";").ToArray();
+        var end = tokens.Length;
+        while (end > 0 && tokens[end - 1].Token == ";")
+            end--;
+
+        if (end < 5 || tokens[0].Token != "EXECUTE" || tokens[1].Token is not ("FUNCTION" or "PROCEDURE"))
+            return null;
+
+        var depth = 0;
+        var opened = false;
+
+        for (var index = 2; index < end; index++)
+        {
+            var token = tokens[index].Token;
+            if (token == "(")
+            {
+                if (index == 2)
+                    return null;
+
+                opened = true;
+                depth++;
+            }
+            else if (token == ")")
+            {
+                if (--depth <= 0 && index < end - 1)
+                    return null;
+            }
+            else if (!opened && token == ";")
+                return null;
+        }
+
+        return opened && depth == 0 ? sql[tokens[2].Start..tokens[end - 1].End] : null;
     }
 
     /// <summary>

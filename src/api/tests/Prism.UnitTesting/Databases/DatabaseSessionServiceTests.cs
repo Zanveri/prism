@@ -743,6 +743,34 @@ public sealed partial class DatabaseSessionServiceTests
         /// </summary>
         public bool HasOpenCursor { get; set; }
 
+        /// <summary>RN-TX-002: o Commit manual de mentira: o comando que chega à conexão com ele ligado abre a transação, e o Commit e o Rollback a encerram.</summary>
+        public bool ManualCommit { get; set; }
+
+        public ETransactionState Transaction { get; set; }
+
+        /// <summary>RN-TX-013: o que a conexão responde sobre o banco ter transação.</summary>
+        public bool TransactionsAvailable { get; set; } = true;
+
+        /// <summary>RN-TX-002: os fins de transação que chegaram (`commit`, `rollback`), na ordem.</summary>
+        public List<string> Ended { get; } = [];
+
+        public Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken)
+            => Task.FromResult(Result.Success<bool, DatabaseFailure>(TransactionsAvailable));
+
+        public Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken)
+            => End("commit");
+
+        public Task<UnitResult<DatabaseFailure>> RollbackAsync(CancellationToken cancellationToken)
+            => End("rollback");
+
+        private Task<UnitResult<DatabaseFailure>> End(string how)
+        {
+            Ended.Add(how);
+            Transaction = ETransactionState.None;
+
+            return Task.FromResult(UnitResult.Success<DatabaseFailure>());
+        }
+
         /// <summary>RN-VERIF-002: as consultas de verificação que chegaram (nula é a do banco), na ordem.</summary>
         public List<string?> Verified { get; } = [];
 
@@ -766,6 +794,9 @@ public sealed partial class DatabaseSessionServiceTests
             Executed.Add(sql);
             ExecutedParameters.Add(parameters);
             HasOpenCursor = false;
+            if (ManualCommit && Transaction == ETransactionState.None)
+                Transaction = ETransactionState.Open;
+
             if (Failure is { } failure)
                 return Task.FromResult(Result.Failure<QueryOutcome, DatabaseFailure>(failure));
 

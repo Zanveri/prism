@@ -23,6 +23,24 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// </summary>
     bool HasOpenCursor { get; }
 
+    /// <summary>
+    /// RN-TX-001 e 002: a sessão está no Commit manual. Ligado, o primeiro comando (ou "Salvar") abre a transação, e os seguintes rodam nela até o
+    /// <see cref="CommitAsync"/> ou o <see cref="RollbackAsync"/>. Quem desliga com a transação aberta é o registro de sessões, depois de encerrá-la.
+    /// </summary>
+    bool ManualCommit { get; set; }
+
+    /// <summary>RN-TX-002 e 009: a transação manual, depois da última operação. Some sem Commit nem Rollback quando o banco a desfez (RN-TX-009).</summary>
+    ETransactionState Transaction { get; }
+
+    /// <summary>RN-TX-013: o banco da sessão tem transação? O Informix sem log de transação não tem.</summary>
+    Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken);
+
+    /// <summary>RN-TX-002: confirma a transação manual. Sem ela, não faz nada. A falha é a do banco, e a transação já não existe (RN-TX-014).</summary>
+    Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken);
+
+    /// <summary>RN-TX-002: desfaz a transação manual. Sem ela, não faz nada.</summary>
+    Task<UnitResult<DatabaseFailure>> RollbackAsync(CancellationToken cancellationToken);
+
     /// <summary>RN-CONN-013: a consulta de verificação do banco. Falha `ConnectionFailed`.</summary>
     Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken);
 
@@ -39,6 +57,9 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// (RN-SQL-004 e 016). Um comando que grava é executado até o fim e está confirmado quando a resposta sai (RN-SESSAO-005): devolve
     /// as linhas afetadas (RN-SQL-008) ou, se devolve linhas, as primeiras `pageSize` e o total, sem cursor (RN-SQL-013). O cursor de
     /// um comando anterior fecha antes (RN-SQL-007), como antes de qualquer outra operação que fale com o banco.
+    ///
+    /// No Commit manual (<see cref="ManualCommit"/>), o comando roda na transação da sessão, que ele abre quando não há uma, e fica pendente; o
+    /// controle de transação digitado segue a RN-TX-004.
     /// </summary>
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" deste cursor. Quem valida a faixa é a rota.</param>
     /// <param name="parameters">RN-VAR-032: os valores dos marcadores do comando (`$n` ou `?`), na ordem; a conexão os liga com o tipo do banco. O registro de sessões já conferiu que eles batem com o texto. Ausente ou vazio, o comando vai como está.</param>

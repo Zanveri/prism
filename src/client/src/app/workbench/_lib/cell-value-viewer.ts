@@ -3,6 +3,15 @@ import type { QueryColumn } from "./query.schema";
 /** Os 5 formatos do painel "Valor" do DBeaver. */
 export type CellValueFormat = "binary" | "html" | "json" | "text" | "xml";
 
+/** Categorias de token para syntax highlighting no leitor de valores (mapeadas para `--color-syntax-*` do tema). */
+export type CellHighlightKind = "plain" | "keyword" | "string" | "number" | "comment" | "variable";
+
+/** Um fragmento colorido do texto exibido no leitor de célula. */
+export type CellHighlightToken = {
+  kind: CellHighlightKind;
+  text: string;
+};
+
 /** As opções do seletor de formato do painel "Valor", na mesma ordem do DBeaver. */
 export const CELL_VALUE_FORMATS: readonly { value: CellValueFormat; label: string }[] = [
   { value: "binary", label: "Binary" },
@@ -47,32 +56,81 @@ const HTML_VOID_ELEMENTS = new Set([
 ]);
 
 /**
- * Mapeia o tipo da coluna do banco (PostgreSQL, Db2 e Informix) para o formato inicial do visualizador de valor:
+ * Inspeciona o conteúdo textual de uma célula (como `CLOB`, `TEXT` ou `VARCHAR`) para identificar se é JSON, HTML ou XML estruturado.
+ */
+function detectStructuredTextFormat(raw: string): "json" | "xml" | "html" | null {
+  const trimmed = raw.trim();
+  if (trimmed.length < 2) return null;
+
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (typeof parsed === "object" && parsed !== null) {
+        return "json";
+      }
+    } catch {
+      // Não é JSON válido; segue como texto comum
+    }
+  }
+
+  if (trimmed.startsWith("<") && trimmed.endsWith(">")) {
+    if (
+      /^<!doctype\s+html\b/i.test(trimmed) ||
+      /^<(?:html|head|body|div|span|p|table|thead|tbody|tr|td|th|ul|ol|li|section|article|main|header|footer|form|a|img|br|hr|h[1-6])\b/i.test(trimmed)
+    ) {
+      return "html";
+    }
+    if (
+      /^<\?xml\b/i.test(trimmed) ||
+      /^<([A-Za-z_][\w:.-]*)(?:\s[^>]*)?>[\s\S]*<\/\1>$/.test(trimmed) ||
+      /^<([A-Za-z_][\w:.-]*)(?:\s[^>]*)?\/>$/.test(trimmed)
+    ) {
+      return "xml";
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Mapeia o tipo da coluna do banco (PostgreSQL, Db2 e Informix) e, opcionalmente, o conteúdo textual da célula para o formato inicial do visualizador de valor:
  * - `json`, `jsonb`, `bson` -> `"json"`
  * - `xml` -> `"xml"`
  * - `html` -> `"html"`
  * - `bytea`, `blob`, `binary`, `varbinary`, `byte`, `for bit data` ou `kind === "binary"` -> `"binary"`
- * - `text`, `varchar`, `clob`, `lvarchar`, números, datas, booleanos e demais tipos -> `"text"` (padrão).
+ * - `text`, `varchar`, `clob`, `lvarchar` e demais tipos -> detecta `"json"`, `"html"` ou `"xml"` pelo conteúdo quando aplicável, ou `"text"` (padrão).
  */
-export function detectCellValueFormat(column: Pick<QueryColumn, "name" | "type" | "kind"> | null | undefined): CellValueFormat {
-  if (!column) return "text";
-  const normalized = column.type.trim().toLowerCase();
+export function detectCellValueFormat(
+  column: Pick<QueryColumn, "name" | "type" | "kind"> | null | undefined,
+  value?: string | null,
+): CellValueFormat {
+  if (column) {
+    const normalized = column.type.trim().toLowerCase();
 
-  if (normalized.includes("json") || normalized.includes("bson")) return "json";
-  if (normalized.includes("xml")) return "xml";
-  if (normalized === "html" || normalized.includes("html")) return "html";
-  if (
-    column.kind === "binary" ||
-    normalized === "bytea" ||
-    normalized === "blob" ||
-    normalized === "binary" ||
-    normalized === "varbinary" ||
-    normalized === "long varbinary" ||
-    normalized === "byte" ||
-    normalized === "raw" ||
-    normalized.includes("for bit data")
-  ) {
-    return "binary";
+    if (normalized.includes("json") || normalized.includes("bson")) return "json";
+    if (normalized.includes("xml")) return "xml";
+    if (normalized === "html" || normalized.includes("html")) return "html";
+    if (
+      column.kind === "binary" ||
+      normalized === "bytea" ||
+      normalized === "blob" ||
+      normalized === "binary" ||
+      normalized === "varbinary" ||
+      normalized === "long varbinary" ||
+      normalized === "byte" ||
+      normalized === "raw" ||
+      normalized.includes("for bit data")
+    ) {
+      return "binary";
+    }
+  }
+
+  if (typeof value === "string" && value.length > 0) {
+    const detected = detectStructuredTextFormat(value);
+    if (detected !== null) return detected;
   }
 
   return "text";
@@ -546,4 +604,144 @@ export function cellFilePayload(
     mime: mimeByFormat[format],
     filename,
   };
+}
+
+function pushHighlightToken(tokens: CellHighlightToken[], kind: CellHighlightKind, text: string): void {
+  if (text.length === 0) return;
+  const last = tokens[tokens.length - 1];
+  if (last !== undefined && last.kind === kind) {
+    last.text += text;
+    return;
+  }
+  tokens.push({ kind, text });
+}
+
+function tokenizeJsonHighlight(text: string): CellHighlightToken[] {
+  const tokens: CellHighlightToken[] = [];
+  const pattern = /(\/\/[^\r\n]*|\/\*[\s\S]*?(?:\*\/|$))|("(?:\\.|[^"\\])*")(\s*:)?|(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)\b|\b(true|false|null)\b/g;
+  let cursor = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > cursor) {
+      pushHighlightToken(tokens, "plain", text.slice(cursor, index));
+    }
+
+    if (match[1] !== undefined) {
+      pushHighlightToken(tokens, "comment", match[1]);
+    } else if (match[2] !== undefined) {
+      if (match[3] !== undefined) {
+        pushHighlightToken(tokens, "variable", match[2]);
+        pushHighlightToken(tokens, "plain", match[3]);
+      } else {
+        pushHighlightToken(tokens, "string", match[2]);
+      }
+    } else if (match[4] !== undefined) {
+      pushHighlightToken(tokens, "number", match[4]);
+    } else if (match[5] !== undefined) {
+      pushHighlightToken(tokens, "keyword", match[5]);
+    }
+
+    cursor = index + match[0].length;
+  }
+
+  if (cursor < text.length) {
+    pushHighlightToken(tokens, "plain", text.slice(cursor));
+  }
+
+  return tokens;
+}
+
+function tokenizeMarkupTag(tagText: string, tokens: CellHighlightToken[]): void {
+  const closeMatch = /(\/?>|\?>)$/.exec(tagText);
+  const closeText = closeMatch ? closeMatch[1] : "";
+  const bodyEnd = tagText.length - closeText.length;
+  const openMatch = /^(<\?[A-Za-z_][\w:.-]*|<\/?[A-Za-z_][\w:.-]*|<\?|<\/?)/.exec(tagText.slice(0, bodyEnd));
+  const openText = openMatch ? openMatch[1] : "";
+
+  if (openText.length > 0) {
+    pushHighlightToken(tokens, "keyword", openText);
+  }
+
+  const middle = tagText.slice(openText.length, bodyEnd);
+  if (middle.length > 0) {
+    const attrPattern = /("[^"]*"|'[^']*')|([A-Za-z_:][\w:.-]*)/g;
+    let cursor = 0;
+    for (const match of middle.matchAll(attrPattern)) {
+      const index = match.index ?? 0;
+      if (index > cursor) {
+        pushHighlightToken(tokens, "plain", middle.slice(cursor, index));
+      }
+      if (match[1] !== undefined) {
+        pushHighlightToken(tokens, "string", match[1]);
+      } else if (match[2] !== undefined) {
+        pushHighlightToken(tokens, "variable", match[2]);
+      }
+      cursor = index + match[0].length;
+    }
+    if (cursor < middle.length) {
+      pushHighlightToken(tokens, "plain", middle.slice(cursor));
+    }
+  }
+
+  if (closeText.length > 0) {
+    pushHighlightToken(tokens, "keyword", closeText);
+  }
+}
+
+function tokenizeMarkupHighlight(text: string): CellHighlightToken[] {
+  const tokens: CellHighlightToken[] = [];
+  const pattern =
+    /(<!--[\s\S]*?(?:-->|$))|(<!\[CDATA\[[\s\S]*?(?:\]\]>|$))|(<!\s*[A-Za-z][\s\S]*?(?:>|$))|(<\?[\s\S]*?(?:\?>|$)|<\/?[A-Za-z_][\w:.-]*(?:"[^"]*"|'[^']*'|[^>"'])*>)|(&(?:#\d+|#x[0-9a-fA-F]+|[A-Za-z][\w.-]*);)/g;
+  let cursor = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > cursor) {
+      pushHighlightToken(tokens, "plain", text.slice(cursor, index));
+    }
+
+    if (match[1] !== undefined) {
+      pushHighlightToken(tokens, "comment", match[1]);
+    } else if (match[2] !== undefined) {
+      pushHighlightToken(tokens, "string", match[2]);
+    } else if (match[3] !== undefined) {
+      pushHighlightToken(tokens, "keyword", match[3]);
+    } else if (match[4] !== undefined) {
+      tokenizeMarkupTag(match[4], tokens);
+    } else if (match[5] !== undefined) {
+      pushHighlightToken(tokens, "number", match[5]);
+    }
+
+    cursor = index + match[0].length;
+  }
+
+  if (cursor < text.length) {
+    pushHighlightToken(tokens, "plain", text.slice(cursor));
+  }
+
+  return tokens;
+}
+
+/**
+ * Tokeniza o texto do leitor de valores para aplicar syntax highlighting com as cores do tema do usuário (`--color-syntax-*`) quando o conteúdo é JSON, XML ou HTML.
+ */
+export function highlightCellValue(text: string, format: CellValueFormat): CellHighlightToken[] {
+  if (text.length === 0) return [];
+
+  const effectiveFormat: "json" | "xml" | "html" | null =
+    format === "json" || format === "xml" || format === "html"
+      ? format
+      : format === "text"
+        ? detectStructuredTextFormat(text)
+        : null;
+
+  if (effectiveFormat === "json") {
+    return tokenizeJsonHighlight(text);
+  }
+  if (effectiveFormat === "xml" || effectiveFormat === "html") {
+    return tokenizeMarkupHighlight(text);
+  }
+
+  return [{ kind: "plain", text }];
 }

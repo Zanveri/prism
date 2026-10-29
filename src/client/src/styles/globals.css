@@ -274,6 +274,897 @@
     --color-link: #7e9cd8;
   }
 
+  :root[data-theme="anuppuccin"] {
+    color-scheme: dark;
+    --color-background: #1e1e2e;
+    --color-panel: #181825;
+    --color-raised: #11111b;
+    --color-selected: #313244;
+    --color-border: #313244;
+    --color-border-strong: #45475a;
+    --color-selection: #3b3d54;
+    --color-ink: #cdd6f4;
+    --color-body: #bac2de;
+    --color-muted: #a9b0ca;
+    --color-subtle: #a5aabf;
+    --color-accent: #cba6f7;
+    --color-postgres: #89b4fa;
+    --color-db2: #a6e3a1;
+    --color-informix: #fab387;
+    --color-danger: #f38ba8;
+    --color-success: #a6e3a1;
+    --color-syntax-keyword: #cba6f7;
+    --color-syntax-string: #a6e3a1;
+    --color-syntax-number: #fab387;
+    --color-syntax-comment: #a5aabf;
+    --color-syntax-variable: #89b4fa;
+    --color-link: #89b4fa;
+  }
+
+  :root[data-theme="anuppuccin-frappe"] {
+    color-scheme: dark;
+    --color-background: #282b3a;
+    --color-panel: #292c3c;
+    --color-raised: #232634;
+    --color-selected: #3e4255;
+    --color-border: #414559;
+    --color-border-strong: #51576d;
+    --color-selection: #3e4255;
+    --color-ink: #c6d0f5;
+    --color-body: #b7c1e3;
+    --color-muted: #b5bbd7;
+    --color-subtle: #afb5cc;
+    --color-accent: #cea6e8;
+    --color-postgres: #99b4f0;
+    --color-db2: #a6d189;
+    --color-informix: #f0a27b;
+    --color-danger: #eda0a1;
+    --color-success: #a6d189;
+    --color-syntax-keyword: #d6b4ec;
+    --color-syntax-string: #a6d189;
+    --color-syntax-number: #f2b291;
+    --color-syntax-comment: #afb5cc;
+    --color-syntax-variable: #abc1f3;
+    --color-link: #abc1f3;
+  }
+
+  :root[data-theme="anuppuccin-macchiato"] {
+    color-scheme: dark;
+    --color-background: #24273a;
+    --color-panel: #1e2030;
+    --color-raised: #181926;
+    --color-selected: #363a4f;
+    --color-border: #363a4f;
+    --color-border-strong: #494d64;
+    --color-selection: #40455e;
+    --color-ink: #cad3f5;
+    --color-body: #b8c0e0;
+    --color-muted: #b3bad3;
+    --color-subtle: #afb4ca;
+    --color-accent: #c6a0f6;
+    --color-postgres: #8aadf4;
+    --color-db2: #a6da95;
+    --color-informix: #f5a97f;
+    --color-danger: #f09eaa;
+    --color-success: #a6da95;
+    --color-syntax-keyword: #c9a5f6;
+    --color-syntax-string: #a6da95;
+    --color-syntax-number: #f5a97f;
+    --color-syntax-comment: #afb4ca;
+    --color-syntax-variable: #96b5f5;
+    --color-link: #96b5f5;
+  }
+
+  :root[data-theme="anuppuccin-latte"] {
+    color-scheme: light;
+    --color-background: #fafbfc;
+    --color-panel: #e6e9ef;
+    --color-raised: #f4f5f8;
+    --color-selected: #e8eaee;
+    --color-border: #ccd0da;
+    --color-border-strong: #bcc0cc;
+    --color-selection: #c4c9d6;
+    --color-ink: #1e2030;
+    --color-body: #373a50;
+    --color-muted: #474962;
+    --color-subtle: #505368;
+    --color-accent: #7013ea;
+    --color-postgres: #094cd2;
+    --color-db2: #28641b;
+    --color-informix: #9b3901;
+    --color-danger: #a90c2e;
+    --color-success: #28641b;
+    --color-syntax-keyword: #6a12de;
+    --color-syntax-string: #26601a;
+    --color-syntax-number: #933601;
+    --color-syntax-comment: #505368;
+    --color-syntax-variable: #0948c5;
+    --color-link: #0948c5;
+  }
+
+  :root[data-theme="anuppuccin-rosepine-light"] {
+    color-scheme: light;
+    --color-background: #fdfaf7;
+    --color-panel: #f2e9de;
+    --color-raised: #f8f5f0;
+    --color-selected: #ece9e9;
+    --color-border: #dfdad9;
+    --color-border-strong: #cecacd;
+    --color-selection: #d6cecc;
+    --color-ink: #282538;
+    --color-body: #403c58;
+    --color-muted: #534e73;
+    --color-subtle: #595472;
+    --color-accent: #6c5685;
+    --color-postgres: #27667f;
+    --color-db2: #3b666d;
+    --color-informix: #a73934;
+    --color-danger: #894256;
+    --color-success: #27667f;
+    --color-syntax-keyword: #634f7b;
+    --color-syntax-string: #245e75;
+    --color-syntax-number: #9b3530;
+    --color-syntax-comment: #595472;
+    --color-syntax-variable: #375e65;
+    --color-link: #245e75;
+  }
+
+  :root[data-theme="blue-topaz"] {
+    color-scheme: dark;
+    --color-background: #181c24;
+    --color-panel: #13171e;
+    --color-raised: #1f2430;
+    --color-selected: #283040;
+    --color-border: #2a3242;
+    --color-border-strong: #3a465e;
+    --color-selection: #2d3a50;
+    --color-ink: #e6eef8;
+    --color-body: #c6d2e3;
+    --color-muted: #9fb0c7;
+    --color-subtle: #93a5bb;
+    --color-accent: #42a5f5;
+    --color-postgres: #42a5f5;
+    --color-db2: #4dd0a1;
+    --color-informix: #ffb74d;
+    --color-danger: #f48380;
+    --color-success: #66bb6a;
+    --color-syntax-keyword: #64b5f6;
+    --color-syntax-string: #81c784;
+    --color-syntax-number: #ffb74d;
+    --color-syntax-comment: #93a5bb;
+    --color-syntax-variable: #4dd0e1;
+    --color-link: #64b5f6;
+  }
+
+  :root[data-theme="blue-topaz-light"] {
+    color-scheme: light;
+    --color-background: #f9fbfd;
+    --color-panel: #edf2f8;
+    --color-raised: #e4ebf5;
+    --color-selected: #e2ebf6;
+    --color-border: #cfdbe8;
+    --color-border-strong: #b0c4db;
+    --color-selection: #cce0fa;
+    --color-ink: #0a111b;
+    --color-body: #223247;
+    --color-muted: #3b4f69;
+    --color-subtle: #4f637f;
+    --color-accent: #0256d4;
+    --color-postgres: #1d5bbf;
+    --color-db2: #157146;
+    --color-informix: #a94400;
+    --color-danger: #b52525;
+    --color-success: #146e45;
+    --color-syntax-keyword: #0b5bd0;
+    --color-syntax-string: #146f44;
+    --color-syntax-number: #a64300;
+    --color-syntax-comment: #4f637f;
+    --color-syntax-variable: #076b7f;
+    --color-link: #0b5bd0;
+  }
+
+  :root[data-theme="obsidianite"] {
+    color-scheme: dark;
+    --color-background: #100e17;
+    --color-panel: #0d0b12;
+    --color-raised: #191621;
+    --color-selected: #252031;
+    --color-border: #262133;
+    --color-border-strong: #3b334f;
+    --color-selection: #2c263b;
+    --color-ink: #eef4f8;
+    --color-body: #cbdbe5;
+    --color-muted: #a3b5c4;
+    --color-subtle: #8093a5;
+    --color-accent: #0fb6d6;
+    --color-postgres: #45aaff;
+    --color-db2: #3dd7fb;
+    --color-informix: #f4569d;
+    --color-danger: #f87171;
+    --color-success: #4ade80;
+    --color-syntax-keyword: #f4569d;
+    --color-syntax-string: #4ade80;
+    --color-syntax-number: #fbbf24;
+    --color-syntax-comment: #8093a5;
+    --color-syntax-variable: #6bcafb;
+    --color-link: #6bcafb;
+  }
+
+  :root[data-theme="obsidianite-light"] {
+    color-scheme: light;
+    --color-background: #fbfbfb;
+    --color-panel: #f2f4f5;
+    --color-raised: #e8ecee;
+    --color-selected: #e6eaec;
+    --color-border: #d4dcdf;
+    --color-border-strong: #b5c2c7;
+    --color-selection: #d2dfe6;
+    --color-ink: #121618;
+    --color-body: #2e3438;
+    --color-muted: #475157;
+    --color-subtle: #576268;
+    --color-accent: #096a7e;
+    --color-postgres: #1d5bbf;
+    --color-db2: #0c6c77;
+    --color-informix: #b62d32;
+    --color-danger: #b5282c;
+    --color-success: #196f3c;
+    --color-syntax-keyword: #b42d32;
+    --color-syntax-string: #186d3c;
+    --color-syntax-number: #875600;
+    --color-syntax-comment: #576268;
+    --color-syntax-variable: #096a7e;
+    --color-link: #b42d32;
+  }
+
+  :root[data-theme="atom"] {
+    color-scheme: dark;
+    --color-background: #272b34;
+    --color-panel: #20242b;
+    --color-raised: #1a1e24;
+    --color-selected: #353b47;
+    --color-border: #424958;
+    --color-border-strong: #545d70;
+    --color-selection: #3b4354;
+    --color-ink: #f0f2f5;
+    --color-body: #dcddde;
+    --color-muted: #afb6c2;
+    --color-subtle: #abb0ba;
+    --color-accent: #61afef;
+    --color-postgres: #61afef;
+    --color-db2: #98c379;
+    --color-informix: #d19a66;
+    --color-danger: #ea9ba1;
+    --color-success: #98c379;
+    --color-syntax-keyword: #d59be6;
+    --color-syntax-string: #98c379;
+    --color-syntax-number: #d7a77a;
+    --color-syntax-comment: #abb0ba;
+    --color-syntax-variable: #71b7f1;
+    --color-link: #70bdfc;
+  }
+
+  :root[data-theme="atom-light"] {
+    color-scheme: light;
+    --color-background: #fafafa;
+    --color-panel: #eaeaeb;
+    --color-raised: #f5f5f6;
+    --color-selected: #eaeaea;
+    --color-border: #dbdbdc;
+    --color-border-strong: #c2c2c4;
+    --color-selection: #d2d9e8;
+    --color-ink: #1f2026;
+    --color-body: #383a42;
+    --color-muted: #50535e;
+    --color-subtle: #5b5e69;
+    --color-accent: #085cbf;
+    --color-postgres: #085cbf;
+    --color-db2: #286c2b;
+    --color-informix: #8a5211;
+    --color-danger: #ad2f26;
+    --color-success: #286c2b;
+    --color-syntax-keyword: #831fdf;
+    --color-syntax-string: #276a2b;
+    --color-syntax-number: #885011;
+    --color-syntax-comment: #5b5e69;
+    --color-syntax-variable: #085bbd;
+    --color-link: #085bbd;
+  }
+
+  :root[data-theme="typewriter"] {
+    color-scheme: dark;
+    --color-background: #262626;
+    --color-panel: #202020;
+    --color-raised: #1a1a1a;
+    --color-selected: #363636;
+    --color-border: #383838;
+    --color-border-strong: #4d4d4d;
+    --color-selection: #3d3d3d;
+    --color-ink: #f2f2f2;
+    --color-body: #d9d9d9;
+    --color-muted: #b3b3b3;
+    --color-subtle: #a8a8a8;
+    --color-accent: #6fbf7b;
+    --color-postgres: #78a9ff;
+    --color-db2: #6fbf7b;
+    --color-informix: #f5a97f;
+    --color-danger: #f28c83;
+    --color-success: #6fbf7b;
+    --color-syntax-keyword: #7ec889;
+    --color-syntax-string: #a8db9b;
+    --color-syntax-number: #f5a97f;
+    --color-syntax-comment: #a8a8a8;
+    --color-syntax-variable: #8cc4ff;
+    --color-link: #7ec889;
+  }
+
+  :root[data-theme="typewriter-light"] {
+    color-scheme: light;
+    --color-background: #fefaf2;
+    --color-panel: #f7ecd2;
+    --color-raised: #f9f5e9;
+    --color-selected: #f2e9d6;
+    --color-border: #dfd0ad;
+    --color-border-strong: #c7b68f;
+    --color-selection: #d9cfb8;
+    --color-ink: #0f0e0d;
+    --color-body: #33302a;
+    --color-muted: #4f4a40;
+    --color-subtle: #5e584d;
+    --color-accent: #316839;
+    --color-postgres: #1f5aa6;
+    --color-db2: #2c6635;
+    --color-informix: #974415;
+    --color-danger: #a62929;
+    --color-success: #2c6635;
+    --color-syntax-keyword: #2b6434;
+    --color-syntax-string: #2e6337;
+    --color-syntax-number: #914114;
+    --color-syntax-comment: #5e584d;
+    --color-syntax-variable: #1e58a2;
+    --color-link: #2b6434;
+  }
+
+  :root[data-theme="willemstad"] {
+    color-scheme: dark;
+    --color-background: #1c1f21;
+    --color-panel: #16191b;
+    --color-raised: #222629;
+    --color-selected: #2d3337;
+    --color-border: #2f363a;
+    --color-border-strong: #434c52;
+    --color-selection: #2f3d42;
+    --color-ink: #edf2f4;
+    --color-body: #d2dce0;
+    --color-muted: #a5b4ba;
+    --color-subtle: #9aa8ac;
+    --color-accent: #38b29a;
+    --color-postgres: #5aa9e6;
+    --color-db2: #38b29a;
+    --color-informix: #f4a261;
+    --color-danger: #f3867a;
+    --color-success: #4cc98f;
+    --color-syntax-keyword: #4fd1b8;
+    --color-syntax-string: #74d69d;
+    --color-syntax-number: #f4a261;
+    --color-syntax-comment: #9aa8ac;
+    --color-syntax-variable: #64b5f6;
+    --color-link: #4fd1b8;
+  }
+
+  :root[data-theme="willemstad-light"] {
+    color-scheme: light;
+    --color-background: #fafafb;
+    --color-panel: #eff2f5;
+    --color-raised: #e5eaee;
+    --color-selected: #e5ebef;
+    --color-border: #d0dae0;
+    --color-border-strong: #b3c2cc;
+    --color-selection: #cde0e3;
+    --color-ink: #0e1416;
+    --color-body: #283438;
+    --color-muted: #425257;
+    --color-subtle: #526368;
+    --color-accent: #166973;
+    --color-postgres: #1b588c;
+    --color-db2: #166973;
+    --color-informix: #9f4816;
+    --color-danger: #af3025;
+    --color-success: #186d49;
+    --color-syntax-keyword: #125c66;
+    --color-syntax-string: #186d49;
+    --color-syntax-number: #9d4716;
+    --color-syntax-comment: #526368;
+    --color-syntax-variable: #1b588c;
+    --color-link: #125c66;
+  }
+
+  :root[data-theme="obsidian-gruvbox"] {
+    color-scheme: dark;
+    --color-background: #282828;
+    --color-panel: #1d2021;
+    --color-raised: #32302f;
+    --color-selected: #3c3836;
+    --color-border: #3c3836;
+    --color-border-strong: #504945;
+    --color-selection: #45403d;
+    --color-ink: #fbf1c7;
+    --color-body: #ebdbb2;
+    --color-muted: #d5c4a1;
+    --color-subtle: #bdae93;
+    --color-accent: #fe841f;
+    --color-postgres: #8aaa9e;
+    --color-db2: #b8bb26;
+    --color-informix: #fe8019;
+    --color-danger: #fc8f82;
+    --color-success: #b8bb26;
+    --color-syntax-keyword: #fd8f82;
+    --color-syntax-string: #b8bb26;
+    --color-syntax-number: #db9cae;
+    --color-syntax-comment: #bdae93;
+    --color-syntax-variable: #98b4a9;
+    --color-link: #98b4a9;
+  }
+
+  :root[data-theme="obsidian-gruvbox-light"] {
+    color-scheme: light;
+    --color-background: #fefbee;
+    --color-panel: #f9f2df;
+    --color-raised: #faf5ea;
+    --color-selected: #f0e9d7;
+    --color-border: #d5c4a1;
+    --color-border-strong: #bdae93;
+    --color-selection: #d9c89e;
+    --color-ink: #1d2021;
+    --color-body: #3c3836;
+    --color-muted: #504945;
+    --color-subtle: #5b534b;
+    --color-accent: #a03503;
+    --color-postgres: #076273;
+    --color-db2: #5c5c00;
+    --color-informix: #a03503;
+    --color-danger: #9d0006;
+    --color-success: #525f00;
+    --color-syntax-keyword: #9d0006;
+    --color-syntax-string: #4d5a00;
+    --color-syntax-number: #843a69;
+    --color-syntax-comment: #5b534b;
+    --color-syntax-variable: #065c6c;
+    --color-link: #065c6c;
+  }
+
+  :root[data-theme="primary"] {
+    color-scheme: dark;
+    --color-background: #211c18;
+    --color-panel: #1b1714;
+    --color-raised: #28221d;
+    --color-selected: #362d26;
+    --color-border: #362d26;
+    --color-border-strong: #4d4036;
+    --color-selection: #40352c;
+    --color-ink: #f2e5d5;
+    --color-body: #decab2;
+    --color-muted: #bfa88f;
+    --color-subtle: #b09e8b;
+    --color-accent: #e5a454;
+    --color-postgres: #6eb5e5;
+    --color-db2: #7ec488;
+    --color-informix: #e5a454;
+    --color-danger: #f17f76;
+    --color-success: #7ec488;
+    --color-syntax-keyword: #f18078;
+    --color-syntax-string: #7ec488;
+    --color-syntax-number: #ebc159;
+    --color-syntax-comment: #b09e8b;
+    --color-syntax-variable: #6eb5e5;
+    --color-link: #6eb5e5;
+  }
+
+  :root[data-theme="primary-light"] {
+    color-scheme: light;
+    --color-background: #fcfaf7;
+    --color-panel: #f6f2eb;
+    --color-raised: #efe9df;
+    --color-selected: #eee9e1;
+    --color-border: #dfd6c7;
+    --color-border-strong: #c9bda9;
+    --color-selection: #ded4c3;
+    --color-ink: #161009;
+    --color-body: #3d2f1d;
+    --color-muted: #594630;
+    --color-subtle: #6f583f;
+    --color-accent: #934e13;
+    --color-postgres: #1d5d8f;
+    --color-db2: #286e3b;
+    --color-informix: #934e13;
+    --color-danger: #ad2923;
+    --color-success: #286d3a;
+    --color-syntax-keyword: #ad2923;
+    --color-syntax-string: #266838;
+    --color-syntax-number: #7f5300;
+    --color-syntax-comment: #6f583f;
+    --color-syntax-variable: #1d5d8f;
+    --color-link: #1d5d8f;
+  }
+
+  :root[data-theme="catppuccin"] {
+    color-scheme: dark;
+    --color-background: #1e1e2e;
+    --color-panel: #181825;
+    --color-raised: #11111b;
+    --color-selected: #313244;
+    --color-border: #313244;
+    --color-border-strong: #45475a;
+    --color-selection: #3b3d54;
+    --color-ink: #cdd6f4;
+    --color-body: #bac2de;
+    --color-muted: #a9b0ca;
+    --color-subtle: #a5aabf;
+    --color-accent: #b4befe;
+    --color-postgres: #89b4fa;
+    --color-db2: #a6e3a1;
+    --color-informix: #fab387;
+    --color-danger: #f38ba8;
+    --color-success: #a6e3a1;
+    --color-syntax-keyword: #cba6f7;
+    --color-syntax-string: #a6e3a1;
+    --color-syntax-number: #fab387;
+    --color-syntax-comment: #a5aabf;
+    --color-syntax-variable: #b4befe;
+    --color-link: #89b4fa;
+  }
+
+  :root[data-theme="catppuccin-frappe"] {
+    color-scheme: dark;
+    --color-background: #282b3a;
+    --color-panel: #292c3c;
+    --color-raised: #232634;
+    --color-selected: #3e4255;
+    --color-border: #414559;
+    --color-border-strong: #51576d;
+    --color-selection: #3e4255;
+    --color-ink: #c6d0f5;
+    --color-body: #b7c1e3;
+    --color-muted: #b5bbd7;
+    --color-subtle: #afb5cc;
+    --color-accent: #babbf1;
+    --color-postgres: #99b4f0;
+    --color-db2: #a6d189;
+    --color-informix: #f0a27b;
+    --color-danger: #eda0a1;
+    --color-success: #a6d189;
+    --color-syntax-keyword: #d6b4ec;
+    --color-syntax-string: #a6d189;
+    --color-syntax-number: #f2b291;
+    --color-syntax-comment: #afb5cc;
+    --color-syntax-variable: #bcbdf1;
+    --color-link: #abc1f3;
+  }
+
+  :root[data-theme="catppuccin-macchiato"] {
+    color-scheme: dark;
+    --color-background: #24273a;
+    --color-panel: #1e2030;
+    --color-raised: #181926;
+    --color-selected: #363a4f;
+    --color-border: #363a4f;
+    --color-border-strong: #494d64;
+    --color-selection: #40455e;
+    --color-ink: #cad3f5;
+    --color-body: #b8c0e0;
+    --color-muted: #b3bad3;
+    --color-subtle: #afb4ca;
+    --color-accent: #b7bdf8;
+    --color-postgres: #8aadf4;
+    --color-db2: #a6da95;
+    --color-informix: #f5a97f;
+    --color-danger: #f09eaa;
+    --color-success: #a6da95;
+    --color-syntax-keyword: #c9a5f6;
+    --color-syntax-string: #a6da95;
+    --color-syntax-number: #f5a97f;
+    --color-syntax-comment: #afb4ca;
+    --color-syntax-variable: #b7bdf8;
+    --color-link: #96b5f5;
+  }
+
+  :root[data-theme="catppuccin-latte"] {
+    color-scheme: light;
+    --color-background: #fafbfc;
+    --color-panel: #e6e9ef;
+    --color-raised: #f4f5f8;
+    --color-selected: #e8eaee;
+    --color-border: #ccd0da;
+    --color-border-strong: #bcc0cc;
+    --color-selection: #c4c9d6;
+    --color-ink: #1e2030;
+    --color-body: #373a50;
+    --color-muted: #474962;
+    --color-subtle: #505368;
+    --color-accent: #1236fc;
+    --color-postgres: #094cd2;
+    --color-db2: #28641b;
+    --color-informix: #9b3901;
+    --color-danger: #a90c2e;
+    --color-success: #28641b;
+    --color-syntax-keyword: #6a12de;
+    --color-syntax-string: #26601a;
+    --color-syntax-number: #933601;
+    --color-syntax-comment: #505368;
+    --color-syntax-variable: #0948c5;
+    --color-link: #0948c5;
+  }
+
+  :root[data-theme="prism"] {
+    color-scheme: dark;
+    --color-background: #2e2e2e;
+    --color-panel: #1f1f1f;
+    --color-raised: #141414;
+    --color-selected: #3d3d3d;
+    --color-border: #3d3d3d;
+    --color-border-strong: #525252;
+    --color-selection: #454545;
+    --color-ink: #f2f2f2;
+    --color-body: #dedede;
+    --color-muted: #bdbdbd;
+    --color-subtle: #b3b3b3;
+    --color-accent: #b29bf9;
+    --color-postgres: #8ea8f8;
+    --color-db2: #6dd58c;
+    --color-informix: #f59e56;
+    --color-danger: #f19d9a;
+    --color-success: #6dd58c;
+    --color-syntax-keyword: #c2a4f9;
+    --color-syntax-string: #6dd58c;
+    --color-syntax-number: #f59f58;
+    --color-syntax-comment: #b3b3b3;
+    --color-syntax-variable: #9ab1f9;
+    --color-link: #9ab1f9;
+  }
+
+  :root[data-theme="prism-mocha"] {
+    color-scheme: dark;
+    --color-background: #30241c;
+    --color-panel: #211913;
+    --color-raised: #17110d;
+    --color-selected: #423227;
+    --color-border: #423227;
+    --color-border-strong: #574335;
+    --color-selection: #4a382c;
+    --color-ink: #f5ece6;
+    --color-body: #e3d4ca;
+    --color-muted: #c4b2a5;
+    --color-subtle: #b4a499;
+    --color-accent: #b592f6;
+    --color-postgres: #8ca6f5;
+    --color-db2: #73d18e;
+    --color-informix: #f29b55;
+    --color-danger: #ed8b86;
+    --color-success: #73d18e;
+    --color-syntax-keyword: #b897f6;
+    --color-syntax-string: #73d18e;
+    --color-syntax-number: #f29b55;
+    --color-syntax-comment: #b4a499;
+    --color-syntax-variable: #8ca6f5;
+    --color-link: #8ca6f5;
+  }
+
+  :root[data-theme="prism-indigo"] {
+    color-scheme: dark;
+    --color-background: #1f2647;
+    --color-panel: #14192e;
+    --color-raised: #0e1221;
+    --color-selected: #2d3763;
+    --color-border: #2d3763;
+    --color-border-strong: #3f4d87;
+    --color-selection: #344073;
+    --color-ink: #edf0fa;
+    --color-body: #d5dcf2;
+    --color-muted: #b0bce0;
+    --color-subtle: #a5b0d0;
+    --color-accent: #b695f8;
+    --color-postgres: #8ea8f8;
+    --color-db2: #6dd58c;
+    --color-informix: #f59e56;
+    --color-danger: #f19995;
+    --color-success: #6dd58c;
+    --color-syntax-keyword: #c0a3f9;
+    --color-syntax-string: #6dd58c;
+    --color-syntax-number: #f59e56;
+    --color-syntax-comment: #a5b0d0;
+    --color-syntax-variable: #95aef8;
+    --color-link: #95aef8;
+  }
+
+  :root[data-theme="prism-pine"] {
+    color-scheme: dark;
+    --color-background: #173619;
+    --color-panel: #0e2110;
+    --color-raised: #09170a;
+    --color-selected: #214c24;
+    --color-border: #224d25;
+    --color-border-strong: #316b35;
+    --color-selection: #224b24;
+    --color-ink: #eaf5eb;
+    --color-body: #cfe3d0;
+    --color-muted: #a8c4aa;
+    --color-subtle: #9fb8a1;
+    --color-accent: #73d68f;
+    --color-postgres: #98aff9;
+    --color-db2: #73d68f;
+    --color-informix: #f59e56;
+    --color-danger: #f19b98;
+    --color-success: #73d68f;
+    --color-syntax-keyword: #cdb6fa;
+    --color-syntax-string: #73d68f;
+    --color-syntax-number: #f7b37a;
+    --color-syntax-comment: #9fb8a1;
+    --color-syntax-variable: #adc0fa;
+    --color-link: #adc0fa;
+  }
+
+  :root[data-theme="prism-cherry"] {
+    color-scheme: dark;
+    --color-background: #471a19;
+    --color-panel: #2e1110;
+    --color-raised: #210c0b;
+    --color-selected: #612422;
+    --color-border: #612422;
+    --color-border-strong: #7d312e;
+    --color-selection: #6e2927;
+    --color-ink: #faeceb;
+    --color-body: #f0d3d1;
+    --color-muted: #d4b0ae;
+    --color-subtle: #c3a4a1;
+    --color-accent: #f58e9b;
+    --color-postgres: #9bb2fa;
+    --color-db2: #78db96;
+    --color-informix: #f7a868;
+    --color-danger: #f7948e;
+    --color-success: #78db96;
+    --color-syntax-keyword: #c4a2fc;
+    --color-syntax-string: #78db96;
+    --color-syntax-number: #f7a868;
+    --color-syntax-comment: #c3a4a1;
+    --color-syntax-variable: #9bb2fa;
+    --color-link: #9bb2fa;
+  }
+
+  :root[data-theme="prism-swan"] {
+    color-scheme: light;
+    --color-background: #ffffff;
+    --color-panel: #f5f5f5;
+    --color-raised: #ededed;
+    --color-selected: #eaeaea;
+    --color-border: #dedede;
+    --color-border-strong: #c4c4c4;
+    --color-selection: #d6d6d6;
+    --color-ink: #161616;
+    --color-body: #333333;
+    --color-muted: #4d4d4d;
+    --color-subtle: #5c5c5c;
+    --color-accent: #6538d4;
+    --color-postgres: #2655c7;
+    --color-db2: #217000;
+    --color-informix: #994f00;
+    --color-danger: #b0271f;
+    --color-success: #217000;
+    --color-syntax-keyword: #6538d4;
+    --color-syntax-string: #1f6b00;
+    --color-syntax-number: #8e4a00;
+    --color-syntax-comment: #5c5c5c;
+    --color-syntax-variable: #2654c5;
+    --color-link: #2654c5;
+  }
+
+  :root[data-theme="prism-latte"] {
+    color-scheme: light;
+    --color-background: #fcfaf8;
+    --color-panel: #f5ede6;
+    --color-raised: #f8f4f0;
+    --color-selected: #f0e9e2;
+    --color-border: #ded0c3;
+    --color-border-strong: #c7b5a5;
+    --color-selection: #d9c8b8;
+    --color-ink: #100b07;
+    --color-body: #3d2c1e;
+    --color-muted: #574230;
+    --color-subtle: #68513d;
+    --color-accent: #6538d4;
+    --color-postgres: #2553c3;
+    --color-db2: #1f6800;
+    --color-informix: #8c4800;
+    --color-danger: #a3231c;
+    --color-success: #1f6800;
+    --color-syntax-keyword: #5d2ed2;
+    --color-syntax-string: #1c6100;
+    --color-syntax-number: #844400;
+    --color-syntax-comment: #68513d;
+    --color-syntax-variable: #224db4;
+    --color-link: #224db4;
+  }
+
+  :root[data-theme="prism-periwinkle"] {
+    color-scheme: light;
+    --color-background: #f9fbfd;
+    --color-panel: #edf1f9;
+    --color-raised: #e3e9f5;
+    --color-selected: #e4eaf6;
+    --color-border: #d2dced;
+    --color-border-strong: #b5c4de;
+    --color-selection: #cad6eb;
+    --color-ink: #0b1224;
+    --color-body: #223154;
+    --color-muted: #394a70;
+    --color-subtle: #4b5c81;
+    --color-accent: #5b2ec9;
+    --color-postgres: #1e4ec2;
+    --color-db2: #1e6b00;
+    --color-informix: #964c00;
+    --color-danger: #b1241d;
+    --color-success: #1e6b00;
+    --color-syntax-keyword: #5b2ec9;
+    --color-syntax-string: #1d6800;
+    --color-syntax-number: #8f4800;
+    --color-syntax-comment: #4b5c81;
+    --color-syntax-variable: #1e4ec2;
+    --color-link: #1e4ec2;
+  }
+
+  :root[data-theme="prism-pistachio"] {
+    color-scheme: light;
+    --color-background: #fbfdf9;
+    --color-panel: #eff6ec;
+    --color-raised: #e5f0e1;
+    --color-selected: #e2edde;
+    --color-border: #d3e3cd;
+    --color-border-strong: #b7cfb0;
+    --color-selection: #cae0c3;
+    --color-ink: #172713;
+    --color-body: #294024;
+    --color-muted: #3f5939;
+    --color-subtle: #4c6547;
+    --color-accent: #296f22;
+    --color-postgres: #1e4ec2;
+    --color-db2: #297022;
+    --color-informix: #994d00;
+    --color-danger: #b6251e;
+    --color-success: #296f22;
+    --color-syntax-keyword: #5b2ec9;
+    --color-syntax-string: #286c21;
+    --color-syntax-number: #944b00;
+    --color-syntax-comment: #4c6547;
+    --color-syntax-variable: #1e4ec2;
+    --color-link: #1e4ec2;
+  }
+
+  :root[data-theme="prism-peach"] {
+    color-scheme: light;
+    --color-background: #fdfaf9;
+    --color-panel: #f9efed;
+    --color-raised: #f5e6e4;
+    --color-selected: #f4e7e6;
+    --color-border: #e8d3d0;
+    --color-border-strong: #d1b6b2;
+    --color-selection: #e3cac6;
+    --color-ink: #080303;
+    --color-body: #472320;
+    --color-muted: #613835;
+    --color-subtle: #784d49;
+    --color-accent: #b42821;
+    --color-postgres: #1e4ec2;
+    --color-db2: #1e6b00;
+    --color-informix: #964900;
+    --color-danger: #a9251f;
+    --color-success: #1e6b00;
+    --color-syntax-keyword: #5b2ec9;
+    --color-syntax-string: #1d6600;
+    --color-syntax-number: #8c4400;
+    --color-syntax-comment: #784d49;
+    --color-syntax-variable: #1e4ec2;
+    --color-link: #1e4ec2;
+  }
+
   /* A pilha da interface que vem com o app: a reserva da escolhida (RN-CONFIG-008). Fora do `@theme`, para não virar classe. */
   :root {
     --font-app-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
@@ -353,4 +1244,249 @@
     background-color: var(--color-background);
     color: var(--color-ink);
   }
+}
+
+/*
+ * A animação da ilustração do login (`brand-panel.tsx`), só com o desenho de `assets/`, sem tocar nele: as regras pegam os elementos da
+ * marca pela ordem do arquivo, que o teste da marca fixa. Dentro do grupo da marca: 1 os degradês, 2 o brilho borrado, 3 o raio, 4 a 6 as
+ * faixas, 7 a 10 o vidro do prisma, 11 a luz de dentro, 12 a 14 os raios coloridos de dentro, 15 o reflexo, 16 o contorno, 17 a 19 o ponto
+ * da entrada (o halo, o meio e o centro) e 20 a 28 os três cilindros, três elementos cada.
+ *
+ * A abertura, uma vez: o prisma acende e o contorno se desenha, o raio atravessa até ele, a luz se divide lá dentro, as faixas se abrem até
+ * os cilindros, e os cilindros chegam por último. Depois, o repouso: o brilho respira, o ponto da entrada pulsa e cada faixa clareia na sua
+ * vez. Quem pede menos movimento ao sistema vê o desenho parado, inteiro, desde o começo (as partículas também somem: `brand-panel.tsx`).
+ */
+@media (prefers-reduced-motion: no-preference) {
+  /* Quem entra em sequência (as faixas, os cilindros, as faixas que clareiam) diz só o próprio atraso, em `--delay`. */
+  .prism-scene > g > :is(:nth-child(n + 7):nth-child(-n + 10), :nth-child(15)) {
+    animation: prism-glass 900ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both;
+  }
+
+  /* O perímetro do contorno é de 875 unidades; o tracejado de 880 o desenha inteiro. */
+  .prism-scene > g > :nth-child(16) {
+    stroke-dasharray: 880;
+    animation: prism-rim 1000ms cubic-bezier(0.65, 0, 0.35, 1) 150ms both;
+  }
+
+  .prism-scene > g > :nth-child(3) {
+    animation: prism-reveal 550ms cubic-bezier(0.55, 0, 0.75, 0.4) 650ms both;
+  }
+
+  .prism-scene > g > :nth-child(n + 17):nth-child(-n + 19) {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: prism-spark 450ms cubic-bezier(0.16, 1, 0.3, 1) 1150ms both;
+  }
+
+  /* O halo e o meio do ponto da entrada pulsam; o centro fica firme. */
+  .prism-scene > g > :nth-child(n + 17):nth-child(-n + 18) {
+    animation:
+      prism-spark 450ms cubic-bezier(0.16, 1, 0.3, 1) 1150ms both,
+      prism-pulse 2800ms ease-in-out 1600ms infinite;
+  }
+
+  .prism-scene > g > :nth-child(n + 11):nth-child(-n + 14) {
+    animation: prism-reveal 400ms linear 1200ms both;
+  }
+
+  .prism-scene > g > :nth-child(n + 4):nth-child(-n + 6) {
+    animation: prism-reveal 850ms cubic-bezier(0.16, 1, 0.3, 1) var(--delay) both;
+  }
+  .prism-scene > g > :nth-child(4) {
+    --delay: 1500ms;
+  }
+  .prism-scene > g > :nth-child(5) {
+    --delay: 1560ms;
+  }
+  .prism-scene > g > :nth-child(6) {
+    --delay: 1620ms;
+  }
+
+  .prism-scene > g > :nth-child(2) {
+    animation:
+      prism-glow-in 900ms ease-out 1800ms both,
+      prism-breathe 6000ms ease-in-out 2700ms infinite;
+  }
+
+  .prism-scene > g > :nth-child(n + 20):nth-child(-n + 28) {
+    --delay: 2000ms;
+    animation: prism-arrive 700ms cubic-bezier(0.16, 1, 0.3, 1) var(--delay) both;
+  }
+  .prism-scene > g > :nth-child(n + 23):nth-child(-n + 25) {
+    --delay: 2090ms;
+  }
+  .prism-scene > g > :nth-child(n + 26):nth-child(-n + 28) {
+    --delay: 2180ms;
+  }
+
+  /* A ponta de cada faixa (a segunda parada do degradê, 0.45 no desenho) clareia e volta, uma faixa depois da outra. */
+  .prism-scene > g > defs > linearGradient:nth-of-type(-n + 3) > stop:last-child {
+    --delay: 2600ms;
+    animation: prism-shimmer 5400ms ease-in-out var(--delay) infinite;
+  }
+  .prism-scene > g > defs > linearGradient:nth-of-type(2) > stop:last-child {
+    --delay: 3500ms;
+  }
+  .prism-scene > g > defs > linearGradient:nth-of-type(3) > stop:last-child {
+    --delay: 4400ms;
+  }
+}
+
+@keyframes prism-glass {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes prism-rim {
+  from {
+    stroke-dashoffset: 880;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Revela da esquerda para a direita, que é o sentido da luz. */
+@keyframes prism-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes prism-spark {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+@keyframes prism-pulse {
+  50% {
+    transform: scale(1.45);
+    opacity: 0.55;
+  }
+}
+
+@keyframes prism-glow-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.5;
+  }
+}
+
+@keyframes prism-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+
+@keyframes prism-arrive {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
+@keyframes prism-shimmer {
+  0%,
+  100% {
+    stop-opacity: 0.45;
+  }
+  45% {
+    stop-opacity: 0.95;
+  }
+}
+
+/*
+ * RN-JANELA-001: a barra da janela. No Windows os botões do sistema ficam sobre a ponta direita dela, e o processo principal diz onde pelas variáveis
+ * `titlebar-area-*`, já em pixels da página (no zoom do programa): a barra tem a altura deles e reserva à direita o lugar deles, mais os 12 px de sempre. Ela
+ * arrasta a janela, e o duplo clique nela maximiza e restaura (o sistema faz os dois). Sem os botões sobrepostos (as outras plataformas, a tela fora do
+ * Electron) as variáveis faltam e fica o que era: a altura do conteúdo, 12 px à direita, e quem arrasta é a barra nativa.
+ */
+@utility window-bar {
+  position: relative;
+  height: env(titlebar-area-height, auto);
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 0.75rem);
+  app-region: drag;
+
+  /* O que não cabe na barra (num zoom alto) é cortado antes dos botões, e não passa por baixo deles. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+    background: inherit;
+  }
+}
+
+/*
+ * A faixa que arrasta a janela nas telas sem barra superior (a abertura, o login, o bloqueio): por cima do alto da tela, na altura dos botões do sistema, e
+ * sem eles, de altura nenhuma. Vem antes do conteúdo da tela, porque o Chromium junta as áreas de arrastar na ordem do documento: o que é clicável depois
+ * dela (a regra abaixo) é recortado da faixa.
+ */
+@utility window-drag {
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(titlebar-area-height, 0px);
+  app-region: drag;
+}
+
+/*
+ * Na barra e na tela da faixa, o que se clica, se digita ou mostra uma dica ao passar o mouse não arrasta a janela: sobre a área de arrastar o mouse é do
+ * sistema, e a página não o recebe. Fica só aí: a área de trabalho tem milhares de controles, e cada um entraria na conta das áreas a cada mudança de layout.
+ */
+:is(.window-bar, .window-drag ~ *) :is(a, button, input, select, textarea, summary, label, [role="button"], [tabindex]:not([tabindex="-1"]), [title]) {
+  app-region: no-drag;
+}
+
+/*
+ * A dica do app (`components/ui/tooltip.ts`), no lugar da do sistema: o `title` de qualquer elemento, desenhado com a superfície e a borda do que flutua (a
+ * lista do `Select`), o texto da interface no tamanho das legendas e uma sombra curta, de quem está a um passo da tela e não de um diálogo. É um `popover`,
+ * para ficar por cima também do diálogo modal (o bloqueio). Não recebe o mouse. O texto vai como veio, com as quebras e os espaços (o valor de uma célula, a
+ * mensagem de uma rotina), e para em 20 linhas com reticências: o valor inteiro está no visualizador da célula.
+ */
+.app-tip {
+  inset: auto;
+  margin: 0;
+  max-width: min(30rem, calc(100vw - 1rem));
+  padding: 0.3125rem 0.625rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+  color: var(--color-ink);
+  font: var(--text-xs) / var(--text-xs--line-height) var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 18px -4px light-dark(rgb(20 24 29 / 0.2), rgb(0 0 0 / 0.55));
+  pointer-events: none;
+}
+
+.app-tip-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 20;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A dica de várias linhas: o nome no texto principal, e o que se diz dele um tom abaixo. */
+.app-tip[data-headed] .app-tip-text {
+  color: var(--color-muted);
+}
+
+.app-tip-head {
+  color: var(--color-ink);
+  font-weight: 500;
 }

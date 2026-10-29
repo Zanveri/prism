@@ -15,7 +15,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ```
 electron/        main.ts, preload.ts, api-process.ts, dbeaver-source.ts e dbeaver-messages.ts (a procura e a cópia do DBeaver), app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot/KeepAliveSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, build, drivers, settings)
-src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
+src/components/  ui/ (primitivos + index.ts; e tooltip.ts, a dica do app no lugar da do sistema, ligada pelo main.tsx), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
 src/lib/api/     prism-api.ts, prism-endpoints.ts, query-client.ts, bridge.ts, vault-lock.ts (o estado de bloqueio e a barreira dos pedidos), workspace-sync.ts ("grave as abas agora", antes de o cofre fechar)
 src/lib/utils/   cn.ts, format.ts, form.ts (a submissão e a fiação de aria dos formulários), route-params.ts (a tela gasta o parâmetro da rota que leu), zod-jitless.ts
@@ -68,7 +68,7 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   `app://prism` no app construído. No app empacotado essa variável é ignorada: a origem que ela
   aponta receberia o token. `app.isPackaged` decide também o comando da API e o menu.
 - O app empacotado não tem o menu padrão do Electron (o Ctrl+R dele recarrega a janela e perde o
-  texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
+  texto das abas de SQL). Em desenvolvimento o menu fica (no Windows ele existe, mas não aparece: a barra da janela é a do app, RN-JANELA-001; para inspecionar a tela, `--remoteDebuggingPort`). No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
 - **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela; **o Ctrl+W nunca a fecha** (RN-ABAS-019). O Chromium do Electron não
@@ -103,6 +103,23 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   passa pelo `before-input-event`): o login abriu em 125% com o `zoom.json` já gravado, o splash em 800×500 com a página em 640×400, Ctrl+- e Ctrl+=,
   Ctrl++ e o + numérico andaram um passo cada com o foco no editor (o texto dele não mudou), Ctrl+0 voltou a 100%, o controle de Configurações
   acompanhou o atalho, e a janela nova de "Mover para nova janela" nasceu no zoom de então e mudou junto com a primeira.
+- **A barra da janela** (RN-JANELA-001; `windowBarOptions`, `windowBarOverlayHeight` e `isSymbolColor` em `platform.ts`, com teste). Só no Windows: a janela
+  do app nasce com `titleBarStyle: "hidden"` e os botões do sistema sobrepostos (`titleBarOverlay`) com o fundo **transparente**, conferido no Electron 44: o
+  sistema desenha só os símbolos e o realce do mouse (o cinza do minimizar e do maximizar, o vermelho do fechar), e o que fica atrás deles é a tela, em
+  qualquer tema e em qualquer tela. O Snap Layouts do Windows 11 continua no maximizar, porque o botão é o do sistema. No Linux (os botões sobrepostos seriam
+  do Electron) e no macOS (nunca aberto) a barra nativa fica, como a regra permite; as janelas do resultado também, que a seção 39 deixou para depois.
+  **A altura** é a da barra superior, 53 px, vezes o zoom do programa (`changeZoom` chama `setTitleBarOverlay({ height })` em todas as janelas), e a tela a lê
+  de volta em `env(titlebar-area-height)`, que já vem no zoom (conferido no app: 53 px a 100%, 110% e 200%, e 54 a 67%, em que a sobreposição arredonda para 36). **A cor dos
+  símbolos** é o `muted` do tema em uso: `syncWindowBar` (`components/layout/window-bar.ts`, chamado em `main.tsx`) a calcula num elemento escondido, converte
+  para `#rrggbb` (`hexOf`, com teste) e manda por `prism:window-bar` ao abrir a tela, antes de a janela aparecer, e quando o `<html>` muda de atributo (o
+  tema) ou o sistema troca entre claro e escuro (o tema do sistema). O processo principal só aceita `#rrggbb` e pinta só a janela que pediu. **Na tela**,
+  dois utilitários em `globals.css`: `window-bar` (a altura dos botões, o lugar deles à direita, por `env(titlebar-area-x/width)`, mais 12 px, e
+  `app-region: drag`) vai na barra superior e no cabeçalho de Configurações, que esconde a área de trabalho e por isso também é a barra da janela (numa
+  linha só, da mesma altura: quem encolhe é o nome do usuário); `window-drag` (uma faixa fixa no alto, da altura dos botões) vai antes do conteúdo da
+  abertura (`ApiGate`), da consulta do cofre (`VaultGuard`), do login e do bloqueio. O Chromium junta as áreas de arrastar na ordem do documento: o que é
+  clicável, se digita ou tem dica (`title`) dentro da barra, ou depois da faixa, é recortado dela (`app-region: no-drag`), e só aí: a regra global
+  poria os milhares de controles da área de trabalho na conta das áreas a cada mudança de layout. Fora do Windows as variáveis `titlebar-area-*` faltam,
+  e os dois utilitários ficam com a altura do conteúdo e 12 px à direita (a barra) e altura nenhuma (a faixa). Duplo clique na barra maximiza e restaura, e quem o faz é o sistema. O título continua "Prism" (a barra de tarefas e o Alt+Tab).
 - Sair do app, pela última janela fechada ou por `app.quit()`, passa por `before-quit`: grava as abas de todas as janelas (`workspaceHub.flush`, RN-ABAS-006,
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
@@ -115,7 +132,7 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   próxima entrada"), `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima) e `transfers` (o destino e a entrega das
   exportações de dados e o arquivo das importações, abaixo) e `dbeaver` (a procura e a cópia do DBeaver, abaixo). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
-  os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
+  os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; o da barra da janela, `prism:window-bar` (a cor dos símbolos, RN-JANELA-001); os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
   passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`; os das exportações de dados, `prism:transfer-destination`, `prism:transfer-deliver`,
   `prism:transfer-copy`, `prism:transfer-reveal` e `prism:transfer-release`; os do arquivo das importações de dados, `prism:transfer-source`,
   `prism:transfer-source-status` e `prism:transfer-source-release`; os da cópia do DBeaver, `prism:dbeaver-source` e `prism:dbeaver-source-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
@@ -246,15 +263,26 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   vezes versões simplificadas. Os desenhos vêm do canvas, copiados, sem redesenhar: o
   `build/icon.svg` (256 px) e o `build/icon-small.svg` (32 px, até 32 px o traço engrossa) são os
   `<svg>` de `IconeApp.dc.html`; o `PrismMark` é o `<svg viewBox="0 40 700 264">` de
-  `Workbench.dc.html`; o do splash é o de `Splash.dc.html`. Mudou o canvas, copie de novo.
+  `Workbench.dc.html`; o do splash é o de `Splash.dc.html`. Mudou o canvas, copie de novo. A exceção é a cor das faixas e dos
+  cilindros: o canvas (e o `docs/design/canvas/tools/gen-logo.mjs`, que só gera as pranchas) ficou com o rosa, o verde e o azul de antes, e
+  vale a especificação (RN-MARCA-001, alterada em 2026-10-29; seção 9): nos desenhos do app, essas cores são os três tons de violeta.
 - **No tema claro a marca continua inteira** (RN-MARCA-006): onde o fundo claro apagaria o raio branco e o vidro, ela muda de cor e nunca de
-  desenho. `markColors`, em `prism-mark.tsx`, tem para cada cor que muda um par `light-dark(clara, escura)`: **a escura é a cor do desenho do
-  canvas, sem mudança**, e a clara é a variante para o fundo claro (o raio e o contorno do prisma escuros, o tom do banco nas faixas, os
+  desenho. `markColors`, em `prism-mark.tsx`, tem para cada cor que muda um par `light-dark(clara, escura)`: **a escura é a cor do desenho de
+  `assets/prism-logo.svg`, sem mudança**, e a clara é a variante para o fundo claro (o raio e o contorno do prisma escuros, violetas mais escuros nas faixas, os
   cilindros claros). Quem escolhe a coluna é o `color-scheme` de onde a marca está: na barra superior, o do tema; na tela de login ela mora
   sobre o **palco escuro** (`.stage-dark`, em `globals.css`), que fica no tema escuro do Prism em qualquer tema, porque o raio e o prisma de
   vidro foram desenhados para um fundo escuro (os valores do palco são a coluna escura de `@theme`, token por token, e o `globals.test.ts` os
   confere). O contorno do prisma no claro (`#667085`) se destaca do vidro (3,3:1) e do fundo (4,3:1), e o teste confere o contraste do raio e
   do contorno em cada tema.
+- **As faixas e os cilindros são três tons de violeta** (RN-MARCA-001, alterada em 2026-10-29), e não as cores dos bancos: as chaves de
+  `markColors` são `bandTop`, `bandMiddle` e `bandBottom`. As fichas `informix`, `db2` e `postgres` do tema continuam sendo as dos bancos
+  na interface, e a marca não as usa. O `brand-assets.test.ts` lê as referências de dda5d19 com a troca das três cores de antes pelas de
+  agora (`repainted`), e só com ela.
+- **A animação do login** (RN-MARCA-009) não toca no desenho: as regras de `.prism-scene`, em `globals.css`, pegam os elementos da marca
+  pela posição no arquivo (`:nth-child`, com a lista do que é cada posição no comentário), e as partículas de luz ficam num `<svg>` à parte,
+  por cima, seguindo `lightPaths` (de `prism-mark.tsx`, que tira os pontos do próprio desenho). Mudou a ordem dos elementos de
+  `assets/prism-logo.svg`, mude as posições nas duas. Tudo fica dentro de `prefers-reduced-motion: no-preference`, e as partículas somem
+  com `motion-reduce:hidden`: com "reduzir movimento" a ilustração fica parada e inteira. A barra, o bloqueio e o splash não se animam.
 - Ids de filtro e gradiente: fixos nos `.svg` e no `splash.html` (cada um é uma página só);
   `useId()` no `PrismMark`, que aparece mais de uma vez na mesma tela.
 - `pnpm icons` roda o `scripts/make-icons.mjs` **dentro do Electron**: cada tamanho é o SVG numa
@@ -519,7 +547,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   e grava de novo; o Renomear não pede, e a recusa que chegasse nele iria ao aviso central. No diálogo, a senha errada (`INVALID_PASSWORD`) e a que
   faltou ficam no campo, que volta vazio; o 401 `VAULT_LOCKED` do quinto erro dá o aviso de atenção na `onSuccess` da própria mutação, e o
   `VaultGuard` leva ao login; o resto volta a quem abriu (`onDone`: o 422 dos campos vai a eles; `null` quando a falha já foi ao aviso central). A
-  senha não fica guardada (`gcTime: 0` e `reset`). Não há transação aberta a avisar: a tela ainda não tem o Commit manual (RN-TX-001). O diálogo
+  senha não fica guardada (`gcTime: 0` e `reset`). O aviso de que cinco erros desfazem as transações abertas (RN-TX-008) ainda não está aqui. O diálogo
   fica fora do `<form>` de quem o abre, como o de revelar.
 - Em desenvolvimento o `StrictMode` roda o efeito do `Dialog` duas vezes e o foco cai no painel, não no campo com
   `autoFocus`; sem o `StrictMode` cai no campo (conferido em dev; o app empacotado não foi aberto).
@@ -860,8 +888,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `aria-live="polite"` sempre montada, que só anuncia o "Nenhum item começa com “xyz”". Testes: `type-ahead.test.ts`, `use-type-ahead.test.ts`,
   `navigator.type-ahead.test.ts` (a `NavigatorList` com a lista virtual de mentira), `scripts-section.type-ahead.test.ts` e `type-ahead-indicator.test.ts`.
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
-  na barra do editor, "Explicar plano", "Formatar", o esquema da aba e a transação (a barra tem Executar e Cancelar,
-  seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
+  na barra do editor, "Explicar plano", "Formatar", o esquema da aba e o nível de isolamento (a barra tem Executar e Cancelar,
+  seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, o banco, RN-ARVORE-007, e a transação, RN-TX-001); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
   nos Registros de uma tabela, RN-TABELA-006). A edição de célula já existe nas duas grades: ver "Edição das células", abaixo.
   O canvas pinta em rosa a função do banco (`now`); a gramática do `lang-sql` não a distingue de um nome.
 - **Conferir na tela sem a API ter as rotas**: o `pnpm dev --remoteDebuggingPort 9222` sobe a API de verdade só para a
@@ -1462,6 +1490,39 @@ da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de
   `script-dialogs.test.ts`, `tab-transfer.test.ts` e `workbench-state.connection.test.ts`. O que não tem teste: o foco de verdade na linha depois de criar
   (o vitest não tem DOM; o efeito sai cedo sem `document`), e o app não foi aberto nesta mudança.
 
+## Commit manual da aba (seção 22: RN-TX-001 a 014)
+
+- **O estado é do executor** (`runner.transaction`, `_lib/transaction.ts`): o modo, se há transação aberta, se ela tem erro, os comandos sem commit, quando
+  abriu, se o banco tem transação (`available`) e se um Commit, Rollback ou troca de modo está a caminho (`pending`). Quem o escreve é o `call()` do executor:
+  toda resposta (e toda recusa, pelas extensões) que traz `transaction` vira o estado da aba (`noteTransaction`), e `transactionUndone` sobre a transação
+  que estava aberta dá o aviso de atenção com os comandos que se perderam. O "Salvar" da grade não passa pelo executor: `use-record-edits.ts` entrega o
+  `transaction` da resposta a `runner.transaction.note`. Os schemas aceitam o campo fora da forma como nulo, e o resultado só o leva quando a API o manda
+  (`withTransaction` em `query.schema.ts`), para a forma de antes continuar igual.
+- **A sessão abre no modo da aba** (`transactionMode: "manual"` no `POST`, só no Commit manual: o pedido de Auto-commit é o de sempre). Sem sessão, trocar
+  o modo só muda o estado; com ela, vai ao `PATCH`. A recusa `TRANSACTIONS_NOT_AVAILABLE` (Informix sem log, RN-TX-013), na abertura ou na troca, passa a
+  aba a Auto-commit e deixa o "Commit manual" desabilitado com o motivo; o aviso central diz por quê, e o comando não foi executado.
+- **A barra do editor** (`TransactionControl`, no fim dela, como o canvas): "Transação", o seletor e "Commit" e "Rollback", sempre à vista e desabilitados
+  sem sair do Tab (`aria-disabled`, com o motivo na dica e para o leitor de tela) sem transação aberta, com comando em andamento, ou, o Commit, com a
+  transação com erro. Sair do Commit manual com a transação aberta pergunta antes (RN-TX-005): Commit, Rollback ou Cancelar (com erro, sem o Commit), e só
+  troca depois de a transação acabar. Os Registros de uma tabela não têm a barra: são sempre Auto-commit.
+- **A barra de status** (`TransactionStatus`, com a chave da aba ativa) escreve o texto da RN-TX-003 (`transactionStatus`): "Auto-commit · Padrão do
+  banco", "Commit manual · Padrão do banco · sem transação aberta", "… · 3 comandos sem commit · há 4 min" (tom de atenção a partir de 10 minutos, com um
+  relógio de 30 s só enquanto a transação está aberta) e "… · transação com erro: só resta o Rollback" (tom de erro), num `role="status"`.
+- **Os avisos** (RN-TX-014): o comando e o "Salvar" que deram certo com a transação aberta dizem "sem commit" (`withUncommitted`); o Commit e o Rollback
+  dizem quantos comandos. **A sessão que cai com a transação aberta** (RN-TX-008) não é reaberta em silêncio: o executor não repete o comando, avisa quantos
+  comandos não foram confirmados, e a aba fica sem sessão até o próximo comando, que abre uma nova, no mesmo modo.
+- **Fechar abas com transação aberta pergunta** (RN-TX-006, em `workbench-tabs.tsx`), depois das alterações não salvas e antes dos scripts: "Commit e
+  fechar", "Rollback e fechar" ou "Cancelar", e a escolha vale para todas; o Commit recusado para a saída ali. Vale também para fechar a janela, que passa
+  pela mesma cadeia.
+- **O que não foi feito**: a pergunta nas outras saídas da RN-TX-006 (desconectar, excluir a conexão, trocar a conexão ou o banco da aba, "Sair",
+  reiniciar o serviço, atualizar: nelas a API desfaz a transação ao fechar a sessão, sem perguntar); o modo padrão de Configurações › Transações
+  (RN-CONFIG-007: a aba nova começa em Auto-commit, e a seção continua "em breve"); o seletor de nível de isolamento (RN-ISOL-*); a pergunta do "Cancelar"
+  do PostgreSQL com transação aberta (RN-TX-010); o aviso dos cinco erros de senha e o do bloqueio (RN-TX-007 e 008); e o "o total não inclui o que esta aba
+  ainda não confirmou" do "Contar total" (RN-TX-012). A aba levada para outra janela leva a sessão no modo dela, mas a outra janela só fica sabendo do
+  modo na primeira resposta.
+- **Os testes**: `transaction.test.ts` (o texto da barra de status e a leitura da API) e `use-query-runner.transaction.test.ts` (o modo na abertura, os
+  avisos, o Commit, a transação desfeita, a sessão perdida, o banco sem log e a troca recusada).
+
 ## A conexão da aba de consulta (RN-ARVORE-008)
 
 Seção 27 da especificação (issue #9 do repositório público: ao reabrir um script, não se sabia em qual servidor ele ia rodar). A barra do editor mostra, depois de
@@ -1534,8 +1595,8 @@ que a aba roda ("Banco", um `Select` com rótulo visível ligado a ele) e deixa 
   automática não segura a troca: o `retire()` a desliga, RN-GRADE-014). O editor segue o banco com ele montado: o completar e os
   links de tabela leem o cache da árvore do banco novo.
 - **Pergunta antes** com alterações não salvas na grade (RN-EDIT-007): a troca passa pelo `guard` da edição, o mesmo diálogo de executar outro comando
-  ("Salvar" grava pela sessão de antes e só então troca; "Descartar" troca sem elas; "Cancelar" fica no banco). A aba de consulta ainda não tem o Commit manual
-  (RN-TX-001), então não há transação aberta a perguntar; quando ele entrar, a troca é uma das saídas da RN-TX-006.
+  ("Salvar" grava pela sessão de antes e só então troca; "Descartar" troca sem elas; "Cancelar" fica no banco). Com a transação manual aberta a troca ainda
+  não pergunta (RN-TX-006): a sessão de antes fecha, e a API a desfaz (ver "Commit manual da aba").
 - **O que acompanha a troca**: a barra de status escreve a conexão e o banco da aba ativa (`conexão / banco`, o da conexão quando a aba não tem outro); o
   Ctrl+S grava o banco da aba (`PATCH`/`POST` com `database`, nulo para o da conexão), e a aba de um script fica com o ponto enquanto o banco não é o salvo;
   a aba que vai para outra janela leva o banco novo e o banco salvo do script; o bloqueio por inatividade dá à aba um executor no banco dela.
@@ -2010,8 +2071,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     pessoa não preencheu ficam em `RowsState.generated` ("gerado pelo banco — execute de novo para ver", em itálico e `text-subtle`): a célula não
     se edita e, com a chave entre elas, a linha também não (`cellAccess`, `deleteRowAccess`). `generated` viaja com a aba para outra janela
     (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
-    trata o Ctrl+S do script: vão por portal, e o teclado deles subiria até ela. Fechar a aba pergunta pelo mesmo registro `unsaved-edits.ts`. A
-    aba de consulta ainda não tem o Commit manual na tela (RN-TX-001): o Salvar é sempre uma transação própria.
+    trata o Ctrl+S do script: vão por portal, e o teclado deles subiria até ela. Fechar a aba pergunta pelo mesmo registro `unsaved-edits.ts`. No
+    Commit manual da aba de consulta o Salvar fica na transação dela (ver "Commit manual da aba"); nos Registros é sempre uma transação própria.
   - **Num resultado de junção** (RN-EDIT-002, pedido do dono de 2026-10-14; só a aba de consulta tem junção, os Registros são de uma tabela só e
     ficam como estavam): o `edit-target` diz a tabela de cada coluna (`columns[].table`) e a chave de cada tabela, e cada coluna se edita na
     tabela de onde veio (`cell-editing.ts`: `cellAccess` olha a tabela DA COLUNA, e numa tabela só, sempre a 0, como antes; a chave cortada,
@@ -2387,7 +2448,7 @@ literal da faixa), `_lib/record-edits.ts` (o grupo, a coluna inteira e o pedido 
   tolerado); `changes` ganhou `{ kind: "updateAll", table: 0, set, rows? }` (`ApiChange`); o preview lê o `note` de cada comando (o que não é texto vira nulo);
   as recusas do Salvar, do preview e da contagem ganharam `EDIT_ALL_ROWS_NOT_SUPPORTED`, e a da contagem também `TRANSACTION_FAILED`; o `editErrorDetails`
   lê o `outcome`. O endereço é `prismEndpoints.userDatabaseSessionQueriesEditsCount`.
-- **O que não foi feito**: o Commit manual (a tela não o tem: a frase das travas e o "sem commit" do aviso ficam para quando ele entrar); conferir na tela (o
+- **O que não foi feito**: a frase das travas no Commit manual (o "sem commit" do aviso já sai, `withUncommitted`); conferir na tela (o
   vitest não tem DOM: a dica do campo, o ponto do cabeçalho e a pergunta foram vistos só nos testes); o teste dos Registros com o `partial` (a ligação é uma
   linha, e o gancho tem o teste dele, `use-record-edits.multi.test.ts`).
 
@@ -3398,7 +3459,7 @@ arquivo das importações de dados", em "Processo principal"). Tudo em `_lib/dat
   fora. As outras fixtures da importação (o campo do CSV, os números e as datas, a ordem do nulo, o `_xHHHH_` lido) são só da API.
 - **O que não tem teste**: os assistentes montados com as consultas de verdade (as decisões, as etapas e o gancho da cópia têm), o diálogo de abrir do
   sistema, a cópia de um arquivo de 2 GiB e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato das seções 6 e
-  36, com a API simulada nos testes. A aba em Commit manual (o aviso da transação aberta da RN-IMPORT-013) não existe ainda na tela, e o aviso não sai.
+  36, com a API simulada nos testes. O aviso da transação aberta da aba em Commit manual (RN-IMPORT-013) ainda não sai.
 
 ## Gerar SQL (seção 37, RN-GRADE-006 e 018 a 020)
 
@@ -4188,6 +4249,16 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   ambiente no aviso de confirmação, RN-PROT-001; com ela o painel recorta o que passa da borda arredondada), e o `describedBy`, os ids do que, no
   corpo, o leitor de tela lê com o título (`describedByOf`: a `description` do cabeçalho vem antes, quando há). O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
+- **A dica é a do app, e não a do sistema** (`components/ui/tooltip.ts`, ligada uma vez pelo `main.tsx`; a classe `.app-tip` no fim do `globals.css`; a posição
+  e o título com teste). Quem quer dica continua escrevendo `title`: um ouvinte só, por documento (a janela da aba e cada janela do resultado, pelo
+  `resultHostRegistry.each`), mostra o `title` de qualquer elemento num `popover` com a superfície e a borda do que flutua, no tema em uso, depois de 500 ms de
+  repouso (300 ms depois de uma dica fechar, a seguinte vem sem espera). Com o mouse em cima o `title` fica **vazio**, e não é removido: o vazio cala a dica
+  do sistema, continua `[title]` para a barra da janela (que não arrasta o que tem dica) e deixa o `MutationObserver` ver o React trocar o valor (a célula
+  reciclada, a verificação da conexão: a dica acompanha) ou remover o atributo (o valor de antes não volta). O `title` volta quando o mouse sai; clique, tecla,
+  roda e rolagem fecham a dica até lá. Pelo teclado ela aparece no foco visível, sem tocar no `title` (o leitor de tela o lê), menos na árvore do navegador,
+  em que as setas passam por uma linha atrás da outra. A dica de várias linhas tem a primeira como título (a conexão: o nome, e embaixo o banco, o endereço e a
+  verificação); a da célula da grade vai como veio, com as quebras e os espaços, e para em 20 linhas. Conferido no Electron, num cofre descartável: botão de
+  ícone, barra da janela, `disabled`, os temas Escuro, Claro e Dracula. A janela do resultado usa o mesmo caminho e não foi aberta na conferência.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que
   nenhuma escolha muda (a mensagem do banco, as etiquetas, a Estrutura e o Diagrama). Texto novo que é SQL usa `font-editor`; **o dado do banco

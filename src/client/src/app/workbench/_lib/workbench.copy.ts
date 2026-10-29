@@ -450,7 +450,6 @@ export const workbenchCopy = {
     noTab: "Nenhuma aba ativa",
     // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na troca na barra do editor.
     place: (connection: string, database: string) => `${connection} / ${database}`,
-    autoCommit: "Auto-commit",
     // RN-PROT-002: a conexão da aba é somente leitura (a dica diz de onde vem).
     readOnly: "Somente leitura",
     vaultOpen: (userName: string) => `Cofre de ${userName} aberto`,

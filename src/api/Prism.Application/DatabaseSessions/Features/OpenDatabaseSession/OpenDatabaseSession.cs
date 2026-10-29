@@ -18,6 +18,12 @@ public sealed record OpenDatabaseSessionCommand : IRequest<Result<DatabaseSessio
 
     /// <summary>RN-ARVORE-006: outro banco do mesmo servidor, aberto com as credenciais da conexão. Sem ele, o banco da conexão.</summary>
     public string? Database { get; init; }
+
+    /// <summary>RN-TX-001 e RN-SESSAO-005: a sessão começa no modo da aba, `autoCommit` (o padrão) ou `manual`.</summary>
+    public string? TransactionMode { get; init; }
+
+    /// <summary>RN-ISOL-001: só `default` por enquanto.</summary>
+    public string? IsolationLevel { get; init; }
 }
 
 internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService) : IRequestHandler<OpenDatabaseSessionCommand, Result<DatabaseSessionDto, ApiErrorDto>>
@@ -54,11 +60,22 @@ internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQu
         // está no registro, e a sessão ficaria aberta para uma conexão que não existe mais. A exclusão grava antes de fechar as sessões, então
         // uma leitura feita depois do registro da sessão já a enxerga: sem a conexão (ou com o cofre fechado), a sessão não fica.
         var confirmed = await connectionQueries.GetRecordByID(request.ConnectionID, cancellationToken);
-        if (confirmed is { IsSuccess: true, Value: not null })
-            return Result.Success<DatabaseSessionDto, ApiErrorDto>(opened.Value.ToDto());
+        if (confirmed.IsFailure || confirmed.Value is null)
+        {
+            await databaseSessionService.CloseAsync(opened.Value.ID);
+
+            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(confirmed.IsFailure ? VaultErrors.From(confirmed.Error) : ConnectionErrors.NotFound(request.ConnectionID));
+        }
+
+        // RN-TX-001 e 013: a sessão começa no modo da aba antes de qualquer comando. No banco sem transação o Commit manual é recusado, e a sessão
+        // não fica: a aba passa a Auto-commit e abre outra.
+        var mode = request.TransactionMode == "manual" ? ETransactionMode.Manual : ETransactionMode.AutoCommit;
+        var transaction = await databaseSessionService.SetTransactionModeAsync(opened.Value.ID, mode, cancellationToken);
+        if (transaction.IsSuccess)
+            return Result.Success<DatabaseSessionDto, ApiErrorDto>(opened.Value.ToDto() with { Transaction = transaction.Value.ToDto() });
 
         await databaseSessionService.CloseAsync(opened.Value.ID);
 
-        return Result.Failure<DatabaseSessionDto, ApiErrorDto>(confirmed.IsFailure ? VaultErrors.From(confirmed.Error) : ConnectionErrors.NotFound(request.ConnectionID));
+        return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(transaction.Error));
     }
 }

@@ -108,6 +108,15 @@ export function onAppZoomChanged(listener: (zoom: AppZoom) => void): () => void 
   );
 }
 
+/** RN-JANELA-001: pinta os símbolos dos botões do sistema sobre a barra com a cor do tema em uso (`#rrggbb`). Nunca lança: sem eles, a tela passa igual. */
+export async function paintWindowBar(symbolColor: string): Promise<void> {
+  try {
+    await getBridge().windowBar.paint(symbolColor);
+  } catch {
+    // Sem ponte, ou a cor recusada: os botões ficam como estavam.
+  }
+}
+
 /**
  * Fora do Electron (só em desenvolvimento) não há processo principal para juntar e gravar as abas (RN-ABAS-006): a própria tela faz o papel dele, com o
  * mesmo centro (`workspace-hub.ts`), uma janela só e a gravação direto na API. É um só por página, como o processo principal é um só para todas as janelas.
@@ -206,6 +215,8 @@ export function getBridge(): PrismBridge {
       workspace: devWorkspaceBridge({ baseUrl: url.replace(/\/$/, ""), token }),
       // Fora do Electron o zoom é o do navegador: não há o do programa (RN-ZOOM-001), e a tela passa sem o controle.
       zoom: { get: async () => null, set: async () => null, onChanged: () => () => {} },
+      // Fora do Electron a barra é a do navegador: não há botões do sistema sobre a barra superior (RN-JANELA-001).
+      windowBar: { paint: async () => {} },
       // RN-EXPORT-019: fora do Electron não há processo principal para escolher o destino nem a área de transferência do sistema: o "Exportar" do assistente
       // diz que só funciona no app do Prism e não pede nada à API. Nenhum destes é chamado (a tela confere `available` antes); se for, recusa.
       transfers: {

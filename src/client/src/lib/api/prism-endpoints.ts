@@ -45,6 +45,9 @@ export const prismEndpoints = {
   userDatabaseSessionQueriesNext: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/next`,
   userDatabaseSessionQueriesCount: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/count`,
   userDatabaseSessionQueriesCancel: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/cancel`,
+  // RN-TX-002: o Commit e o Rollback da transação manual da aba.
+  userDatabaseSessionTransactionCommit: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/transaction/commit`,
+  userDatabaseSessionTransactionRollback: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/transaction/rollback`,
   userDatabaseSessionQueriesEditTarget: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edit-target`,
   userDatabaseSessionQueriesEdits: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits`,
   userDatabaseSessionQueriesEditsPreview: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits/preview`,

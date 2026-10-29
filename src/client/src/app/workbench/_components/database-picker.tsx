@@ -23,7 +23,8 @@ type DatabasePickerViewProps = {
 
 /**
  * RN-ARVORE-007, só o desenho: o rótulo "Banco", a lista com o banco em que a aba roda e, no Db2, o motivo de ela estar presa, à vista e ligado ao
- * controle. Enquanto a lista vem, uma frase numa região viva o diz (o leitor de tela ouve).
+ * controle. O controle fechado fica numa linha só (o nome que não cabe termina em reticências, sem engrossar a barra) e a lista aberta (`wideList`) mostra o
+ * nome inteiro. Enquanto a lista vem, uma frase numa região viva o diz (o leitor de tela ouve).
  */
 export function DatabasePickerView({ id, choices, loading, busy, onOpen, onChange }: DatabasePickerViewProps) {
   const reasonId = `${id}-motivo`;
@@ -41,7 +42,8 @@ export function DatabasePickerView({ id, choices, loading, busy, onOpen, onChang
         onOpen={onOpen}
         disabled={choices.locked || busy}
         aria-describedby={choices.locked ? reasonId : undefined}
-        className="min-h-8 w-52 py-1 text-sm"
+        wideList
+        className="min-h-8 w-52 py-1 text-sm [&>span:first-child]:truncate"
       />
       {choices.locked ? (
         <span id={reasonId} className="text-xs text-muted">

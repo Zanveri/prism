@@ -9,7 +9,7 @@ import { css, dark, light, paletteOf, themeBlock, type Palette } from "@/lib/tes
 
 /** Os temas além do Prism Escuro e do Prism Claro: cada um é um bloco de CSS que troca as fichas e fica com as do esquema dele nas demais. */
 const extraThemes = themeModes.filter((mode): mode is Exclude<ThemeId, "dark" | "light"> => mode !== "dark" && mode !== "light" && mode !== "system");
-const names: Record<ThemeId, string> = { dark: "Prism Escuro", light: "Prism Claro", monokai: "Monokai", dracula: "Dracula", nord: "Nord", "github-light": "GitHub Claro", kanagawa: "Kanagawa" };
+const names: Record<ThemeId, string> = { dark: "Prism Escuro", light: "Prism Claro", monokai: "Monokai", dracula: "Dracula", nord: "Nord", "github-light": "GitHub Claro", kanagawa: "Kanagawa", anuppuccin: "AnuPpuccin (Mocha)", "anuppuccin-frappe": "AnuPpuccin (Frappé)", "anuppuccin-macchiato": "AnuPpuccin (Macchiato)", "anuppuccin-latte": "AnuPpuccin (Latte)", "anuppuccin-rosepine-light": "AnuPpuccin (Rosé Pine Dawn)", "blue-topaz": "Blue Topaz (Dark)", "blue-topaz-light": "Blue Topaz (Light)", obsidianite: "Obsidianite (Dark)", "obsidianite-light": "Obsidianite (Light)", atom: "Atom (Dark)", "atom-light": "Atom (Light)", typewriter: "Typewriter (Dark)", "typewriter-light": "Typewriter (Light)", willemstad: "Willemstad (Dark)", "willemstad-light": "Willemstad (Light)", "obsidian-gruvbox": "Obsidian gruvbox (Dark)", "obsidian-gruvbox-light": "Obsidian gruvbox (Light)", primary: "Primary (Dark)", "primary-light": "Primary (Light)", catppuccin: "Catppuccin (Mocha)", "catppuccin-frappe": "Catppuccin (Frappé)", "catppuccin-macchiato": "Catppuccin (Macchiato)", "catppuccin-latte": "Catppuccin (Latte)", prism: "Prism (Raven)", "prism-mocha": "Prism (Mocha)", "prism-indigo": "Prism (Indigo)", "prism-pine": "Prism (Pine)", "prism-cherry": "Prism (Cherry)", "prism-swan": "Prism (Swan)", "prism-latte": "Prism (Latte)", "prism-periwinkle": "Prism (Periwinkle)", "prism-pistachio": "Prism (Pistachio)", "prism-peach": "Prism (Peach)" };
 
 /** Todos os temas do app. Cada um passa pela mesma bateria de contraste: quem acrescenta um tema acrescenta o bloco dele no CSS e o nome aqui. */
 const themes = (["light", "dark", ...extraThemes] as const).map((id) => ({ id, name: names[id], ...paletteOf(id) }));
@@ -140,8 +140,9 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
 });
 
 describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
+  const canvasThemes = ["monokai", "dracula", "nord", "github-light", "kanagawa"] as const;
   it("cada tema adicional tem o seu bloco no CSS", () => {
-    expect(extraThemes).toEqual(["monokai", "dracula", "nord", "github-light", "kanagawa"]);
+    expect(extraThemes.slice(0, 5)).toEqual(canvasThemes);
     for (const id of extraThemes) expect(css, id).toContain(`:root[data-theme="${id}"]`);
   });
 
@@ -151,7 +152,7 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
 
       expect(scheme, id).toBe(themeSchemes[id as keyof typeof themeSchemes]);
     }
-    expect(themeSchemes).toEqual({ dark: "dark", light: "light", monokai: "dark", dracula: "dark", nord: "dark", "github-light": "light", kanagawa: "dark" });
+    expect(Object.keys(themeSchemes).sort()).toEqual(["light", "dark", ...extraThemes].sort());
   });
 
   it("um bloco só troca fichas que existem: nenhum token inventado", () => {
@@ -179,7 +180,7 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
   const tokenOf = { bg: "background", painel: "panel", linha: "border", fg: "ink", kw: "syntax-keyword", str: "syntax-string", num: "syntax-number", com: "subtle", rolagem: "border-strong" } as const;
   const lifted: Record<string, string[]> = { monokai: ["kw", "num"], dracula: [], nord: ["kw", "num", "com"], "github-light": [], kanagawa: [] };
 
-  it.each(extraThemes)("o tema %s usa as cores do canvas, menos as que sozinhas não passam em 4,5:1 (e essas são as únicas trocadas)", (id) => {
+  it.each(canvasThemes)("o tema %s usa as cores do canvas, menos as que sozinhas não passam em 4,5:1 (e essas são as únicas trocadas)", (id) => {
     const theme = themes.find((candidate) => candidate.id === id)!;
 
     for (const [key, token] of Object.entries(tokenOf)) {
@@ -208,7 +209,7 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
   // RN-LINK-001: o azul de link de cada tema (o canvas não o desenha): o do Prism nos dois do Prism, o da paleta do tema nos outros quatro.
   const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7", kanagawa: "#7e9cd8" } as const;
 
-  it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas, o azul de link e as da lista de trocadas, nem uma a mais", (id) => {
+  it.each(canvasThemes)("o bloco do tema %s troca as fichas do canvas, o azul de link e as da lista de trocadas, nem uma a mais", (id) => {
     expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...variableText, ...Object.keys(paletteColors[id] ?? {}), ...swapped[id]].sort());
   });
 
@@ -216,11 +217,11 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
     expect(themes.find((theme) => theme.id === "kanagawa")!.palette[token]).toBe(color);
   });
 
-  it.each(extraThemes)("o azul de link do tema %s é o da paleta dele (o do GitHub Claro, escurecido o mínimo para passar na linha selecionada)", (id) => {
+  it.each(canvasThemes)("o azul de link do tema %s é o da paleta dele (o do GitHub Claro, escurecido o mínimo para passar na linha selecionada)", (id) => {
     expect(themeBlock(id).overrides.link).toBe(ownLink[id]);
   });
 
-  it.each(extraThemes.flatMap((id) => swapped[id].map((token) => [id, token] as const)))("o tema %s troca a ficha %s porque a herdada do esquema não passa em alguma superfície dele, e a trocada passa em todas", (id, token) => {
+  it.each(canvasThemes.flatMap((id) => swapped[id].map((token) => [id, token] as const)))("o tema %s troca a ficha %s porque a herdada do esquema não passa em alguma superfície dele, e a trocada passa em todas", (id, token) => {
     const theme = themes.find((candidate) => candidate.id === id)!;
     const inherited = (theme.kind === "dark" ? dark : light)[token];
     const surfacesOfTheme = [...surfaces.map((surface) => theme.palette[surface]), theme.palette.selection];
@@ -308,9 +309,9 @@ describe("todos os temas", () => {
     }
   });
 
-  it("são sete, e cada modo de tema (menos o do sistema) é um deles", () => {
+  it("são quarenta, e cada modo de tema (menos o do sistema) é um deles", () => {
     expect(themes.map((theme) => theme.id).sort()).toEqual(themeModes.filter((mode) => mode !== "system").sort());
-    expect(themes).toHaveLength(7);
+    expect(themes).toHaveLength(40);
   });
 });
 

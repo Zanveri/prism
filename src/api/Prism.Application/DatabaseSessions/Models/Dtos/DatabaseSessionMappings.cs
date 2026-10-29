@@ -11,7 +11,19 @@ internal static class DatabaseSessionMappings
 
     /// <summary>Um comando que devolve linhas traz a página; o que não devolve, as linhas afetadas. O tempo é o do comando.</summary>
     public static QueryResultDto ToDto(this QueryOutcome source)
-        => source.Page is { } page ? page.ToDto() with { ElapsedMs = source.ElapsedMs } : new QueryResultDto { RowsAffected = source.RowsAffected, ElapsedMs = source.ElapsedMs };
+        => (source.Page is { } page ? page.ToDto() with { ElapsedMs = source.ElapsedMs } : new QueryResultDto { RowsAffected = source.RowsAffected, ElapsedMs = source.ElapsedMs }) with { Transaction = source.Transaction?.ToDto(), TransactionUndone = source.TransactionUndone };
+
+    /// <summary>RN-TX-003: a tela lê o modo em texto, e não o número do enum.</summary>
+    public static TransactionDto ToDto(this TransactionInfo source)
+        => new(ModeText(source.Mode), source.IsolationLevel, source.Open, source.Failed, source.Commands, source.OpenedAt);
+
+    private static string ModeText(ETransactionMode mode)
+        => mode switch
+        {
+            ETransactionMode.AutoCommit => "autoCommit",
+            ETransactionMode.Manual => "manual",
+            _ => throw new NotImplementedException("O enum informado não foi mapeado pela aplicação")
+        };
 
     public static QueryResultDto ToDto(this QueryPage source)
         => new() { Columns = [.. source.Columns.Select(column => new QueryColumnDto(column.Name, column.Type, column.Kind))], Rows = source.Rows, HasMore = source.HasMore, ElapsedMs = source.ElapsedMs, TruncatedCells = source.TruncatedCells, TotalRows = source.TotalRows, ResultID = source.ResultID, Editable = source.Editable, CellsWithoutFullValue = source.CellsWithoutFullValue ?? [], FilterApplied = FilterText(source.FilterApplied), Read = source.Read };

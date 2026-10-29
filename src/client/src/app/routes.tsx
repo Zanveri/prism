@@ -10,6 +10,7 @@ import { DriversRedirect } from "@/app/drivers/page";
 import { FontSync } from "@/app/settings/_components/font-sync";
 import { SettingsShortcut } from "@/app/settings/_components/settings-shortcut";
 import { ThemeSync } from "@/app/settings/_components/theme-sync";
+import { settingsTo } from "@/app/settings/_lib/settings-route";
 import { SettingsPage } from "@/app/settings/page";
 import { SignInPage } from "@/app/sign-in/page";
 import { ConnectionChecks } from "@/app/workbench/_lib/use-connection-checks";
@@ -71,7 +72,9 @@ export const routes: RouteObject[] = [
           { path: pathsConfig.connections, element: <LegacyConnectionsRedirect /> },
           // A tela de Drivers virou Configurações › Drivers (RN-NAV-006); o endereço continua e leva para lá.
           { path: pathsConfig.drivers, element: <DriversRedirect /> },
-          { path: pathsConfig.settings, element: <SettingsPage /> },
+          // Cada seção das Configurações é uma página; o endereço sem seção leva à primeira.
+          { path: pathsConfig.settings, element: <Navigate to={settingsTo()} replace /> },
+          { path: pathsConfig.settingsSection, element: <SettingsPage /> },
           { path: pathsConfig.workbench },
           { path: pathsConfig.build },
         ],

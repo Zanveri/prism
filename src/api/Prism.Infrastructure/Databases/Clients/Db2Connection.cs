@@ -27,6 +27,20 @@ internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger)
     protected override string PingSql => "SELECT 1 FROM SYSIBM.SYSDUMMY1";
 
     /// <summary>
+    /// RN-TX-009: o banco desfaz só o comando que falhou, menos no SQLSTATE da classe 40 (impasse, tempo de trava esgotado: SQL0911N), em que ele
+    /// desfaz a transação inteira.
+    /// </summary>
+    protected override bool UndoesTheTransaction(DatabaseFailure failure)
+        => failure.SqlState?.StartsWith("40", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// RN-EDIT-005 e RN-TX-011: o driver da IBM não tem os pontos de salvamento do ADO.NET. O Db2 pede `ON ROLLBACK RETAIN CURSORS`: sem ele, a
+    /// volta ao ponto fecharia os cursores da sessão.
+    /// </summary>
+    protected override (string Save, string RollbackTo, string? Release)? SavepointSql(string name)
+        => ($"SAVEPOINT {name} ON ROLLBACK RETAIN CURSORS", $"ROLLBACK TO SAVEPOINT {name}", $"RELEASE SAVEPOINT {name}");
+
+    /// <summary>
     /// RN-ARVORE-004. O prefixo `SYS` é reservado aos esquemas do próprio Db2 (`SYSIBM`, `SYSCAT`, `SYSPROC`); `NULLID` e `SQLJ` também
     /// são dele. O catálogo completa com espaços, até oito caracteres, o nome de esquema mais curto que isso (`LOJA    `): o `RTRIM`
     /// os tira, e a comparação com o parâmetro das outras consultas não os enxerga (o Db2 compara texto completando o mais curto com

@@ -1,4 +1,4 @@
-import type { MenuItemConstructorOptions } from "electron";
+import type { BrowserWindowConstructorOptions, MenuItemConstructorOptions } from "electron";
 
 /**
  * O arquivo do ícone da janela e do splash (RN-MARCA-001), dentro de `resources` no app empacotado e de `build/` em
@@ -51,4 +51,34 @@ export function isWaylandSession({ platform, ozonePlatform, ozoneHint, env }: { 
   const waylandSession = env.XDG_SESSION_TYPE === "wayland" && (env.WAYLAND_DISPLAY ?? "") !== "";
   if (hint === "wayland") return (env.WAYLAND_DISPLAY ?? "") !== "";
   return hint === "auto" && waylandSession;
+}
+
+/**
+ * RN-JANELA-001: a barra superior do app é a barra da janela, e os botões de minimizar, maximizar e fechar são os do sistema, sobrepostos a ela
+ * (`titleBarOverlay`) com o fundo transparente: quem pinta atrás deles é a tela (a barra superior, o painel do login, o fundo da abertura e do bloqueio), e o
+ * sistema desenha só os símbolos e o realce do mouse, o vermelho do fechar inclusive. Só no Windows: no Linux os botões sobrepostos são desenhados pelo
+ * Electron, e não pelo sistema, e no macOS a barra nunca foi aberta; nos dois a janela mantém a barra nativa, como a regra permite.
+ *
+ * A altura é a da barra superior (53 px: a marca de 40 px, RN-MARCA-007, com 6 px em cima e embaixo, e a borda) vezes o zoom do programa (RN-ZOOM-001): o
+ * sistema a mede em pixels da tela, e a página, em pixels do zoom. A tela lê a altura de volta em `env(titlebar-area-height)`, já no zoom, e fica alinhada em
+ * qualquer valor. A cor dos símbolos nasce a do tema escuro, o padrão, e a tela manda a do tema em uso antes de a janela aparecer (`prism:window-bar`).
+ */
+export const windowBarHeight = 53;
+
+export function hasWindowBar(platform: NodeJS.Platform): boolean {
+  return platform === "win32";
+}
+
+export function windowBarOptions(platform: NodeJS.Platform, zoomFactor: number): Pick<BrowserWindowConstructorOptions, "titleBarStyle" | "titleBarOverlay"> {
+  if (!hasWindowBar(platform)) return {};
+  return { titleBarStyle: "hidden", titleBarOverlay: { color: "rgba(0, 0, 0, 0)", symbolColor: "#b4bcc8", height: windowBarOverlayHeight(zoomFactor) } };
+}
+
+export function windowBarOverlayHeight(zoomFactor: number): number {
+  return Math.round(windowBarHeight * zoomFactor);
+}
+
+/** A cor dos símbolos que a tela manda: só `#rrggbb`, que é como ela converte a cor calculada do tema. */
+export function isSymbolColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
 }

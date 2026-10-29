@@ -8,14 +8,15 @@ namespace Prism.UnitTesting.DatabaseSessions;
 public sealed class DatabaseSessionMappingsTests
 {
     [Trait("DatabaseSessionMappings", "ToDto")]
-    [Fact(DisplayName = "OK nenhuma propriedade do DTO fica sem origem")]
+    [Fact(DisplayName = "OK nenhuma propriedade do DTO fica sem origem, além da transação, que o handler põe")]
     public void DatabaseSessionDto_ShouldHaveNoUnmappedProperty()
     {
         //Act
         var unmapped = DomainDto.GetUnmappedProperties<DatabaseSessionInfo, DatabaseSessionDto>();
 
         //Assert
-        Assert.Empty(unmapped);
+        // RN-TX-003: o estado da transação é do registro de sessões, e não da sessão como ela abriu.
+        Assert.Equal([nameof(DatabaseSessionDto.Transaction)], unmapped);
     }
 
     [Trait("DatabaseSessionMappings", "ToDto")]
@@ -23,13 +24,13 @@ public sealed class DatabaseSessionMappingsTests
     public void ToDto_FromSessionInfo_ShouldCopyEveryField()
     {
         //Arrange
-        var info = new DatabaseSessionInfo(Guid.CreateVersion7(), Guid.CreateVersion7(), EDatabaseEngine.Informix, "producao", "14.10.FC9");
+        var info = new DatabaseSessionInfo(Guid.CreateVersion7(), Guid.CreateVersion7(), EDatabaseEngine.Informix, "producao", "14.10.FC9", TransactionsAvailable: false);
 
         //Act
         var dto = info.ToDto();
 
         //Assert
-        Assert.Equal(new DatabaseSessionDto { ID = info.ID, ConnectionID = info.ConnectionID, Engine = EDatabaseEngine.Informix, Database = "producao", ServerVersion = "14.10.FC9" }, dto);
+        Assert.Equal(new DatabaseSessionDto { ID = info.ID, ConnectionID = info.ConnectionID, Engine = EDatabaseEngine.Informix, Database = "producao", ServerVersion = "14.10.FC9", TransactionsAvailable = false }, dto);
     }
 
     /// <summary>RN-GRADE-011: a página diz como o filtro entrou, em texto; sem filtro, nulo.</summary>

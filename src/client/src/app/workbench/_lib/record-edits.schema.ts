@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { transactionSchema } from "./transaction";
+
 /**
  * As respostas das rotas da edição (seção 22, "Rotas e respostas"). `edit-target`: cada tabela do `FROM` com a chave (pela posição da
  * coluna no resultado) e o motivo de não se editar; cada coluna do resultado com a tabela de onde vem (nula na calculada), se se edita
@@ -66,13 +68,14 @@ export const editPreviewSchema = z.object({
 
 export type EditPreview = z.infer<typeof editPreviewSchema>;
 
-export const editsAppliedSchema = z.object({ applied: z.number().int() });
+// RN-EDIT-005 e RN-TX-003: no Commit manual o "Salvar" fica na transação da aba, e a resposta diz o estado dela; fora da forma, a aba fica como estava.
+export const editsAppliedSchema = z.object({ applied: z.number().int(), transaction: transactionSchema.nullish().catch(null) });
 
 export type EditsApplied = z.infer<typeof editsAppliedSchema>;
 
 /**
  * RN-EDIT-019 e 023: a contagem da coluna inteira (`queries/edits/count`): as linhas que o comando do resultado devolve agora, na sessão da aba. O
- * `transaction` (o Commit manual, que a tela ainda não tem) é tolerado em qualquer formato.
+ * `transaction` não muda com ela (a contagem não conta como comando, RN-TX-003), e é tolerado em qualquer formato.
  */
 export const wholeColumnCountSchema = z.object({ rows: z.number().int().min(0) });
 

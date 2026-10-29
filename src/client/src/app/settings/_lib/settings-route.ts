@@ -1,48 +1,37 @@
-import type { To } from "react-router";
+import { generatePath, type To } from "react-router";
 
 import { pathsConfig } from "@/config/paths.config";
 
-import { settingsSections, type SettingsSectionId } from "./sections";
-
-/** A seção que a tela mostra ao chegar (`?section=drivers`). */
-export const sectionParam = "section";
+import { settingsSections, type SettingsSection, type SettingsSectionId } from "./sections";
 
 /** O driver cuja linha Configurações › Drivers destaca ao chegar (`?driver=<id>`, o `driverID` do 422 `DRIVER_NOT_INSTALLED`). */
 export const driverParam = "driver";
 
 /**
- * Configurações já numa seção e, nos drivers, apontando a linha de um driver (RN-NAV-006). É o destino do endereço dos drivers
- * (`pathsConfig.drivers`, que redireciona para cá) e de quem precisa abrir uma seção pelo nome.
+ * A página de uma seção das Configurações (a primeira, sem seção) e, nos drivers, apontando a linha de um driver (RN-NAV-006). É o destino
+ * do endereço dos drivers (`pathsConfig.drivers`, que redireciona para cá), da navegação entre as seções e de quem precisa abrir uma pelo nome.
  */
-export function settingsTo(section?: SettingsSectionId, driverID?: string | null): To {
-  const params = new URLSearchParams();
-  if (section !== undefined) params.set(sectionParam, section);
-  if (driverID) params.set(driverParam, driverID);
-
-  const search = params.toString();
-  return { pathname: pathsConfig.settings, search: search === "" ? "" : `?${search}` };
+export function settingsTo(section: SettingsSectionId = settingsSections[0].id, driverID?: string | null): To {
+  return { pathname: generatePath(pathsConfig.settingsSection, { section }), search: driverID ? `?${new URLSearchParams({ [driverParam]: driverID })}` : "" };
 }
 
-/**
- * O que a tela faz ao chegar: rolar até a seção pedida (só se ela existe) e destacar a linha do driver. Um driver apontado é dos
- * drivers, mesmo sem a seção escrita.
- */
-export function arrivalOf(params: URLSearchParams): { section: SettingsSectionId | null; driver: string | null } {
-  const driver = params.get(driverParam) || null;
-  const requested = settingsSections.find((section) => section.id === params.get(sectionParam))?.id ?? null;
+/** A seção do endereço (`/settings/<seção>`), ou `undefined` se ela não existe. */
+export const sectionOf = (param: string | undefined): SettingsSection | undefined => settingsSections.find((section) => section.id === param);
 
-  return { section: requested ?? (driver === null ? null : "drivers"), driver };
-}
+/** O endereço é das Configurações, em qualquer seção. */
+export const isSettingsPath = (pathname: string) => pathname === pathsConfig.settings || pathname.startsWith(`${pathsConfig.settings}/`);
+
+/** O driver que a tela destaca ao chegar; vazio não aponta nada. */
+export const driverOf = (params: URLSearchParams): string | null => params.get(driverParam) || null;
 
 /**
- * Os parâmetros sem os dois da chegada, depois de lidos, ou `null` se não há o que limpar. Saem juntos, numa troca só: dois
- * `setSearchParams` seguidos partiriam da mesma busca, e o segundo devolveria o que o primeiro tirou. O objeto recebido não muda.
+ * Os parâmetros sem o do driver, depois de lido, ou `null` se não há o que limpar: remontar a tela (o bloqueio por inatividade remonta as telas
+ * de dentro do cofre) não destaca de novo. O objeto recebido não muda.
  */
 export function withoutArrival(params: URLSearchParams): URLSearchParams | null {
-  if (!params.has(sectionParam) && !params.has(driverParam)) return null;
+  if (!params.has(driverParam)) return null;
 
   const rest = new URLSearchParams(params);
-  rest.delete(sectionParam);
   rest.delete(driverParam);
   return rest;
 }
