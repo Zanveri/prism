@@ -246,15 +246,26 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   vezes versões simplificadas. Os desenhos vêm do canvas, copiados, sem redesenhar: o
   `build/icon.svg` (256 px) e o `build/icon-small.svg` (32 px, até 32 px o traço engrossa) são os
   `<svg>` de `IconeApp.dc.html`; o `PrismMark` é o `<svg viewBox="0 40 700 264">` de
-  `Workbench.dc.html`; o do splash é o de `Splash.dc.html`. Mudou o canvas, copie de novo.
+  `Workbench.dc.html`; o do splash é o de `Splash.dc.html`. Mudou o canvas, copie de novo. A exceção é a cor das faixas e dos
+  cilindros: o canvas (e o `docs/design/canvas/tools/gen-logo.mjs`, que só gera as pranchas) ficou com o rosa, o verde e o azul de antes, e
+  vale a especificação (RN-MARCA-001, alterada em 2026-10-29; seção 9): nos desenhos do app, essas cores são os três tons de violeta.
 - **No tema claro a marca continua inteira** (RN-MARCA-006): onde o fundo claro apagaria o raio branco e o vidro, ela muda de cor e nunca de
-  desenho. `markColors`, em `prism-mark.tsx`, tem para cada cor que muda um par `light-dark(clara, escura)`: **a escura é a cor do desenho do
-  canvas, sem mudança**, e a clara é a variante para o fundo claro (o raio e o contorno do prisma escuros, o tom do banco nas faixas, os
+  desenho. `markColors`, em `prism-mark.tsx`, tem para cada cor que muda um par `light-dark(clara, escura)`: **a escura é a cor do desenho de
+  `assets/prism-logo.svg`, sem mudança**, e a clara é a variante para o fundo claro (o raio e o contorno do prisma escuros, violetas mais escuros nas faixas, os
   cilindros claros). Quem escolhe a coluna é o `color-scheme` de onde a marca está: na barra superior, o do tema; na tela de login ela mora
   sobre o **palco escuro** (`.stage-dark`, em `globals.css`), que fica no tema escuro do Prism em qualquer tema, porque o raio e o prisma de
   vidro foram desenhados para um fundo escuro (os valores do palco são a coluna escura de `@theme`, token por token, e o `globals.test.ts` os
   confere). O contorno do prisma no claro (`#667085`) se destaca do vidro (3,3:1) e do fundo (4,3:1), e o teste confere o contraste do raio e
   do contorno em cada tema.
+- **As faixas e os cilindros são três tons de violeta** (RN-MARCA-001, alterada em 2026-10-29), e não as cores dos bancos: as chaves de
+  `markColors` são `bandTop`, `bandMiddle` e `bandBottom`. As fichas `informix`, `db2` e `postgres` do tema continuam sendo as dos bancos
+  na interface, e a marca não as usa. O `brand-assets.test.ts` lê as referências de dda5d19 com a troca das três cores de antes pelas de
+  agora (`repainted`), e só com ela.
+- **A animação do login** (RN-MARCA-009) não toca no desenho: as regras de `.prism-scene`, em `globals.css`, pegam os elementos da marca
+  pela posição no arquivo (`:nth-child`, com a lista do que é cada posição no comentário), e as partículas de luz ficam num `<svg>` à parte,
+  por cima, seguindo `lightPaths` (de `prism-mark.tsx`, que tira os pontos do próprio desenho). Mudou a ordem dos elementos de
+  `assets/prism-logo.svg`, mude as posições nas duas. Tudo fica dentro de `prefers-reduced-motion: no-preference`, e as partículas somem
+  com `motion-reduce:hidden`: com "reduzir movimento" a ilustração fica parada e inteira. A barra, o bloqueio e o splash não se animam.
 - Ids de filtro e gradiente: fixos nos `.svg` e no `splash.html` (cada um é uma página só);
   `useId()` no `PrismMark`, que aparece mais de uma vez na mesma tela.
 - `pnpm icons` roda o `scripts/make-icons.mjs` **dentro do Electron**: cada tamanho é o SVG numa

@@ -12,8 +12,9 @@ import { parseSvg, type SvgNode } from "./svg-tree";
  * claro sumiriam). O teste da marca confere que toda cor que muda entre os dois arquivos é um destes pares, e todos são usados.
  * O vidro do prisma, o brilho, a luz dentro dele e o ponto da entrada ficam como estão: valem nos dois fundos.
  *
- * As faixas e os contornos dos cilindros levam o tom do banco para o fundo claro (os mesmos tokens `informix`, `db2` e `postgres` do tema
- * claro), e os cilindros ficam claros, como os do painel do login.
+ * As faixas e os contornos dos cilindros são três tons de violeta, do mais claro (em cima) ao mais fundo (embaixo): eles não são as cores
+ * de um banco, porque o Prism abre mais bancos do que três. No fundo claro vão tons mais escuros do mesmo violeta, e os cilindros ficam
+ * claros, como os do painel do login.
  */
 function pair(light: string, dark: string) {
   return { light, dark, css: `light-dark(${light}, ${dark})` };
@@ -29,9 +30,10 @@ export const markColors = {
    * deixaria uma silhueta chapada. O #667085 é um cinza-azulado que se destaca do vidro (3,3:1) e do fundo claro (4,3:1).
    */
   rim: pair("#667085", "#E6EAF0"),
-  informix: pair("#B02A66", "#F591B6"),
-  db2: pair("#097244", "#5ED3A3"),
-  postgres: pair("#1D5FD1", "#7DB2FF"),
+  /** As três faixas, cada uma com o seu cilindro: de cima para baixo, do violeta mais claro ao mais fundo. */
+  bandTop: pair("#8B6AE0", "#DCCBFF"),
+  bandMiddle: pair("#6A45C9", "#A98BF5"),
+  bandBottom: pair("#46289E", "#7558D9"),
   /** O corpo e o topo de cada cilindro (um banco). */
   cylinderBody: pair("#ECEFF3", "#14181D"),
   cylinderTop: pair("#FFFFFF", "#1B2027"),
@@ -100,7 +102,7 @@ type PrismMarkProps = Omit<ComponentProps<"svg">, "width" | "height"> & { width?
 
 /**
  * A marca do Prism (RN-MARCA-001 e RN-MARCA-007): o feixe branco entra no prisma de vidro e sai em três faixas com brilho, cada uma
- * chegando a um banco (Informix, Db2 e PostgreSQL). É o desenho de `assets/prism-logo.svg` (com as cores de `prism-logo-light.svg` no
+ * chegando a um banco. É o desenho de `assets/prism-logo.svg` (com as cores de `prism-logo-light.svg` no
  * fundo claro), lido do arquivo no build, e não uma cópia dos traços: em qualquer tamanho é o mesmo desenho, escalado por igual, e as
  * linhas acompanham a escala.
  *
@@ -123,3 +125,26 @@ export function PrismMarkGroup() {
 
   return createElement("g", propsOf({ ...mark, attributes: groupAttributes, children: [] }, prefix), ...childrenOf(mark, prefix));
 }
+
+type Point = [x: number, y: number];
+
+/** Os pontos de um caminho de retas (`M x y L x y … Z`), na ordem. */
+const pointsOf = (node: MarkNode): Point[] => {
+  const numbers = (node.attributes.d.match(/-?[\d.]+/g) ?? []).map(Number);
+  return numbers.flatMap((value, index) => (index % 2 === 0 ? [[value, numbers[index + 1]] as Point] : []));
+};
+
+/**
+ * O caminho que a luz faz em cada faixa, de cima para baixo, para a animação do login: do começo do raio até a entrada no prisma, pelo raio
+ * colorido de dentro até a saída, e pelo meio da faixa até o cilindro. Sai dos pontos do próprio desenho, e não de uma cópia (RN-MARCA-007):
+ * pela ordem do arquivo, que o teste da marca fixa, o raio é o 3º elemento, as três faixas vêm logo depois dele, e os três raios de dentro
+ * são o 12º, o 13º e o 14º.
+ */
+export const lightPaths: Point[][] = (() => {
+  const [start, entry] = pointsOf(mark.children[2]);
+  return [0, 1, 2].map((band) => {
+    const [, exit] = pointsOf(mark.children[11 + band]);
+    const [, top, bottom] = pointsOf(mark.children[3 + band]);
+    return [start, entry, exit, [(top[0] + bottom[0]) / 2, (top[1] + bottom[1]) / 2]];
+  });
+})();

@@ -1245,3 +1245,165 @@
     color: var(--color-ink);
   }
 }
+
+/*
+ * A animação da ilustração do login (`brand-panel.tsx`), só com o desenho de `assets/`, sem tocar nele: as regras pegam os elementos da
+ * marca pela ordem do arquivo, que o teste da marca fixa. Dentro do grupo da marca: 1 os degradês, 2 o brilho borrado, 3 o raio, 4 a 6 as
+ * faixas, 7 a 10 o vidro do prisma, 11 a luz de dentro, 12 a 14 os raios coloridos de dentro, 15 o reflexo, 16 o contorno, 17 a 19 o ponto
+ * da entrada (o halo, o meio e o centro) e 20 a 28 os três cilindros, três elementos cada.
+ *
+ * A abertura, uma vez: o prisma acende e o contorno se desenha, o raio atravessa até ele, a luz se divide lá dentro, as faixas se abrem até
+ * os cilindros, e os cilindros chegam por último. Depois, o repouso: o brilho respira, o ponto da entrada pulsa e cada faixa clareia na sua
+ * vez. Quem pede menos movimento ao sistema vê o desenho parado, inteiro, desde o começo (as partículas também somem: `brand-panel.tsx`).
+ */
+@media (prefers-reduced-motion: no-preference) {
+  /* Quem entra em sequência (as faixas, os cilindros, as faixas que clareiam) diz só o próprio atraso, em `--delay`. */
+  .prism-scene > g > :is(:nth-child(n + 7):nth-child(-n + 10), :nth-child(15)) {
+    animation: prism-glass 900ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both;
+  }
+
+  /* O perímetro do contorno é de 875 unidades; o tracejado de 880 o desenha inteiro. */
+  .prism-scene > g > :nth-child(16) {
+    stroke-dasharray: 880;
+    animation: prism-rim 1000ms cubic-bezier(0.65, 0, 0.35, 1) 150ms both;
+  }
+
+  .prism-scene > g > :nth-child(3) {
+    animation: prism-reveal 550ms cubic-bezier(0.55, 0, 0.75, 0.4) 650ms both;
+  }
+
+  .prism-scene > g > :nth-child(n + 17):nth-child(-n + 19) {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: prism-spark 450ms cubic-bezier(0.16, 1, 0.3, 1) 1150ms both;
+  }
+
+  /* O halo e o meio do ponto da entrada pulsam; o centro fica firme. */
+  .prism-scene > g > :nth-child(n + 17):nth-child(-n + 18) {
+    animation:
+      prism-spark 450ms cubic-bezier(0.16, 1, 0.3, 1) 1150ms both,
+      prism-pulse 2800ms ease-in-out 1600ms infinite;
+  }
+
+  .prism-scene > g > :nth-child(n + 11):nth-child(-n + 14) {
+    animation: prism-reveal 400ms linear 1200ms both;
+  }
+
+  .prism-scene > g > :nth-child(n + 4):nth-child(-n + 6) {
+    animation: prism-reveal 850ms cubic-bezier(0.16, 1, 0.3, 1) var(--delay) both;
+  }
+  .prism-scene > g > :nth-child(4) {
+    --delay: 1500ms;
+  }
+  .prism-scene > g > :nth-child(5) {
+    --delay: 1560ms;
+  }
+  .prism-scene > g > :nth-child(6) {
+    --delay: 1620ms;
+  }
+
+  .prism-scene > g > :nth-child(2) {
+    animation:
+      prism-glow-in 900ms ease-out 1800ms both,
+      prism-breathe 6000ms ease-in-out 2700ms infinite;
+  }
+
+  .prism-scene > g > :nth-child(n + 20):nth-child(-n + 28) {
+    --delay: 2000ms;
+    animation: prism-arrive 700ms cubic-bezier(0.16, 1, 0.3, 1) var(--delay) both;
+  }
+  .prism-scene > g > :nth-child(n + 23):nth-child(-n + 25) {
+    --delay: 2090ms;
+  }
+  .prism-scene > g > :nth-child(n + 26):nth-child(-n + 28) {
+    --delay: 2180ms;
+  }
+
+  /* A ponta de cada faixa (a segunda parada do degradê, 0.45 no desenho) clareia e volta, uma faixa depois da outra. */
+  .prism-scene > g > defs > linearGradient:nth-of-type(-n + 3) > stop:last-child {
+    --delay: 2600ms;
+    animation: prism-shimmer 5400ms ease-in-out var(--delay) infinite;
+  }
+  .prism-scene > g > defs > linearGradient:nth-of-type(2) > stop:last-child {
+    --delay: 3500ms;
+  }
+  .prism-scene > g > defs > linearGradient:nth-of-type(3) > stop:last-child {
+    --delay: 4400ms;
+  }
+}
+
+@keyframes prism-glass {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes prism-rim {
+  from {
+    stroke-dashoffset: 880;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Revela da esquerda para a direita, que é o sentido da luz. */
+@keyframes prism-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes prism-spark {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+@keyframes prism-pulse {
+  50% {
+    transform: scale(1.45);
+    opacity: 0.55;
+  }
+}
+
+@keyframes prism-glow-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.5;
+  }
+}
+
+@keyframes prism-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+
+@keyframes prism-arrive {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
+@keyframes prism-shimmer {
+  0%,
+  100% {
+    stop-opacity: 0.45;
+  }
+  45% {
+    stop-opacity: 0.95;
+  }
+}
