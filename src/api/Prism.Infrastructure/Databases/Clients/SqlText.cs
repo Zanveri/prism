@@ -426,6 +426,46 @@ internal static class SqlText
     }
 
     /// <summary>
+    /// A chamada `<c>rotina(...)</c>` de um `<c>EXECUTE FUNCTION</c>` ou `<c>EXECUTE PROCEDURE</c>` isolado do Informix, como foi
+    /// escrita; nulo quando o texto é outro comando, não tem lista de argumentos ou traz mais alguma coisa além dos parênteses.
+    /// </summary>
+    public static string? InformixRoutineCall(string sql)
+    {
+        var tokens = Tokens(sql, ESqlDialect.Informix).SkipWhile(token => token.Token == ";").ToArray();
+        var end = tokens.Length;
+        while (end > 0 && tokens[end - 1].Token == ";")
+            end--;
+
+        if (end < 5 || tokens[0].Token != "EXECUTE" || tokens[1].Token is not ("FUNCTION" or "PROCEDURE"))
+            return null;
+
+        var depth = 0;
+        var opened = false;
+
+        for (var index = 2; index < end; index++)
+        {
+            var token = tokens[index].Token;
+            if (token == "(")
+            {
+                if (index == 2)
+                    return null;
+
+                opened = true;
+                depth++;
+            }
+            else if (token == ")")
+            {
+                if (--depth <= 0 && index < end - 1)
+                    return null;
+            }
+            else if (!opened && token == ";")
+                return null;
+        }
+
+        return opened && depth == 0 ? sql[tokens[2].Start..tokens[end - 1].End] : null;
+    }
+
+    /// <summary>
     /// As duas primeiras palavras, em maiúsculas; vazio onde o que vem não é palavra. Um parêntese na frente conta como a primeira (é como
     /// começa uma consulta entre parênteses).
     /// </summary>
