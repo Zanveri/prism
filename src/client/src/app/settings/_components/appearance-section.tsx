@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils/cn";
 
 import { fontStack } from "../_lib/fonts";
 import { navigatorDensities } from "../_lib/preferences";
-import { appliedTheme, subscribeSystemScheme, systemPrefersLight } from "../_lib/theme";
+import { appliedTheme, subscribeSystemScheme, systemPrefersLight, type ThemeId } from "../_lib/theme";
 import { settingsCopy } from "../_lib/settings.copy";
-import { themeOptions, themePreviews, type ThemeOption } from "../_lib/themes";
+import { findThemeOption, themeOptions, themePreviews, type ThemeOption } from "../_lib/themes";
 import { usePreferences } from "../_lib/use-preferences";
 import { AppZoomControl } from "./app-zoom-control";
 import { FontPicker } from "./font-picker";
@@ -19,11 +19,11 @@ const fontCopy = copy.fonts;
 const densityCopy = copy.density;
 
 /**
- * O cartão de um tema: uma faixa com as cores dele e o nome. As cores são as da prévia do tema, e não as do que está aplicado. A faixa é
+ * O cartão de um tema: uma faixa com as cores dele e o nome. As cores são as da prévia do tema (ou da variante ativa dele), e não as do que está aplicado. A faixa é
  * só para os olhos (`aria-hidden`): o nome acessível do botão é o do tema, e não "SELECT nome 'texto' 42 Prism Claro claro".
  */
-function ThemeCard({ option, selected, onPick }: { option: ThemeOption; selected: boolean; onPick: () => void }) {
-  const colors = themePreviews[option.mode];
+function ThemeCard({ option, previewMode, kindLabel, selected, onPick }: { option: ThemeOption; previewMode: ThemeId; kindLabel: string; selected: boolean; onPick: () => void }) {
+  const colors = themePreviews[previewMode];
 
   return (
     <button
@@ -41,7 +41,7 @@ function ThemeCard({ option, selected, onPick }: { option: ThemeOption; selected
       </span>
       <span className="flex items-center gap-2">
         <span className="font-semibold">{option.name}</span>
-        <span className="ml-auto text-xs text-muted">{option.kind}</span>
+        <span className="ml-auto text-xs text-muted">{kindLabel}</span>
       </span>
     </button>
   );
@@ -51,6 +51,8 @@ function ThemeCard({ option, selected, onPick }: { option: ThemeOption; selected
  * Aparência: tema (RN-CONFIG-001 e RN-CONFIG-003) e fontes (RN-CONFIG-008). Um dos temas disponíveis, ou o do sistema: a escolha vai para as preferências do
  * usuário, e quem aplica o tema na tela é o `ThemeSync`, na hora. Com "seguir o sistema" ligado o cartão marcado é o do Prism no modo que
  * o sistema está usando agora (Escuro ou Claro); escolher um cartão desliga o "seguir", e desligá-lo fica no tema que a tela já mostrava.
+ *
+ * Quando a família de tema escolhida possui variantes (sub-temas), exibe a barra de pílulas logo abaixo da grade para alternar entre elas.
  *
  * As fontes: a da interface e a do editor SQL, cada uma a do app ou uma instalada (`FontPicker`). Quem as aplica é o `FontSync`, na hora; a
  * interface inteira é a prévia da primeira, e uma linha de SQL, a da segunda.
@@ -64,20 +66,48 @@ export function AppearanceSection({ anchor }: { anchor: string }) {
 
   const applied = appliedTheme(preferences.theme, systemIsLight);
   const colors = themePreviews[applied];
-  const shown = themeOptions.find((option) => option.mode === applied) ?? themeOptions[0];
+  const { option: activeOption, variant: activeVariant } = findThemeOption(applied);
+  const previewTitle = activeVariant ? `${activeOption.name} · ${activeVariant.label}` : activeOption.name;
 
   return (
     <SettingsCard anchor={anchor} title={copy.title}>
       <div role="group" aria-label={copy.themeGroup} className="grid grid-cols-[repeat(auto-fill,minmax(min(200px,100%),232px))] gap-3">
-        {themeOptions.map((option) => (
-          <ThemeCard key={option.mode} option={option} selected={option.mode === applied} onPick={() => update({ theme: option.mode })} />
-        ))}
+        {themeOptions.map((option) => {
+          const isSelected = activeOption.mode === option.mode;
+          const previewMode = isSelected && activeVariant ? activeVariant.mode : option.mode;
+          const kindLabel = isSelected && activeVariant ? activeVariant.kind : option.kind;
+          return <ThemeCard key={option.mode} option={option} previewMode={previewMode} kindLabel={kindLabel} selected={isSelected} onPick={() => update({ theme: option.mode })} />;
+        })}
       </div>
+
+      {activeOption.variants && (
+        <div role="group" aria-label={copy.variantGroup} className="flex flex-wrap items-center gap-1.5">
+          {activeOption.variants.map((variant) => {
+            const isVariantActive = applied === variant.mode;
+            return (
+              <button
+                key={variant.mode}
+                type="button"
+                aria-pressed={isVariantActive}
+                onClick={() => update({ theme: variant.mode })}
+                className={cn(
+                  "cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35",
+                  isVariantActive
+                    ? "border-accent bg-selected text-ink shadow-[0_0_0_1px_var(--color-accent)]"
+                    : "border-border bg-panel text-muted hover:border-border-strong hover:text-ink",
+                )}
+              >
+                {variant.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex flex-col overflow-hidden rounded-lg border" style={{ background: colors.bg, color: colors.fg, borderColor: colors.linha }}>
         <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs" style={{ background: colors.painel, borderColor: colors.linha }}>
           <span>{copy.preview}</span>
-          <span className="font-semibold">{shown.name}</span>
+          <span className="font-semibold">{previewTitle}</span>
         </div>
         <SqlSample lines={themeSample} palette={colors} className="max-h-28" />
       </div>

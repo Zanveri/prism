@@ -487,9 +487,9 @@ describe("Sobre", () => {
 });
 
 describe("Aparência: tema", () => {
-  const cards = (markup: string) => [...markup.matchAll(/<button type="button" aria-pressed="(true|false)"[^>]*>[\s\S]*?<span class="font-semibold">([^<]*)<\/span>/g)].map((match) => [match[2], match[1]]);
+  const cards = (markup: string) => [...markup.matchAll(/<button type="button" aria-pressed="(true|false)"[^>]*>(?:(?!<\/button>)[\s\S])*?<span class="font-semibold">([^<]*)<\/span>/g)].map((match) => [match[2], match[1]]);
   const followSystem = (markup: string) => /<input type="checkbox"([^>]*)\/?>[\s\S]*?Seguir o modo claro ou escuro do sistema/.exec(markup)?.[1] ?? "";
-  const names = ["Prism Escuro", "Prism Claro", "Monokai", "Dracula", "Nord", "GitHub Claro", "Kanagawa"];
+  const names = ["Prism Escuro", "Prism Claro", "Monokai", "Dracula", "Nord", "GitHub Claro", "Kanagawa", "AnuPpuccin", "Blue Topaz", "Obsidianite", "Atom", "Typewriter", "Willemstad", "Obsidian gruvbox", "Primary", "Catppuccin", "Prism"];
   /** Os cartões, com só o do tema dado marcado. */
   const only = (name: string) => names.map((candidate) => [candidate, String(candidate === name)]);
 
@@ -553,6 +553,46 @@ describe("Aparência: tema", () => {
     const appearance = sectionsOf(markup).find((section) => section.id === "cfg-aparencia")?.html ?? "";
 
     expect(appearance).toContain('style="background:#2E3440;color:#D8DEE9;border-color:#434C5E"');
+    expect(appearance).not.toContain('aria-label="Variante do tema"');
+  });
+
+  it("ao escolher um tema com variantes, exibe o seletor 'Variante do tema', destaca o cartão da família e mostra 'Tema · Variante' na prévia", () => {
+    const markup = render({ theme: "anuppuccin-latte" as never }).markup;
+    const appearance = sectionsOf(markup).find((section) => section.id === "cfg-aparencia")?.html ?? "";
+    const variantGroup = /<div role="group" aria-label="Variante do tema"[^>]*>([\s\S]*?)<\/div>/.exec(appearance)?.[1] ?? "";
+    const variantButtons = [...variantGroup.matchAll(/<button type="button" aria-pressed="(true|false)"[^>]*>([^<]*)<\/button>/g)].map((match) => [match[2], match[1]]);
+
+    expect(cards(markup)).toEqual(only("AnuPpuccin"));
+    expect(variantButtons).toEqual([
+      ["Mocha", "false"],
+      ["Frappé", "false"],
+      ["Macchiato", "false"],
+      ["Latte", "true"],
+      ["Rosé Pine", "false"],
+    ]);
+    expect(appearance).toContain('Prévia</span><span class="font-semibold">AnuPpuccin · Latte</span>');
+  });
+
+  it("o tema Prism (Obsidian) lista as dez variantes (cinco escuras e cinco claras) e marca a variante ativa", () => {
+    const markup = render({ theme: "prism-cherry" as never }).markup;
+    const appearance = sectionsOf(markup).find((section) => section.id === "cfg-aparencia")?.html ?? "";
+    const variantGroup = /<div role="group" aria-label="Variante do tema"[^>]*>([\s\S]*?)<\/div>/.exec(appearance)?.[1] ?? "";
+    const variantButtons = [...variantGroup.matchAll(/<button type="button" aria-pressed="(true|false)"[^>]*>([^<]*)<\/button>/g)].map((match) => [match[2], match[1]]);
+
+    expect(cards(markup)).toEqual(only("Prism"));
+    expect(variantButtons).toEqual([
+      ["Raven", "false"],
+      ["Mocha", "false"],
+      ["Indigo", "false"],
+      ["Pine", "false"],
+      ["Cherry", "true"],
+      ["Swan", "false"],
+      ["Latte", "false"],
+      ["Periwinkle", "false"],
+      ["Pistachio", "false"],
+      ["Peach", "false"],
+    ]);
+    expect(appearance).toContain('Prévia</span><span class="font-semibold">Prism · Cherry</span>');
   });
 });
 
