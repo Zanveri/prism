@@ -15,6 +15,7 @@ import { updateCopy } from "@/components/update/update.copy";
 import { pathsConfig } from "@/config/paths.config";
 import { sharePeerEvent } from "@/lib/api/bridge";
 import { unwrap } from "@/lib/api/prism-api";
+import { buildModelSync } from "@/app/build/_lib/model-save";
 import { workspaceSync } from "@/lib/api/workspace-sync";
 import { cn } from "@/lib/utils/cn";
 
@@ -62,7 +63,7 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
     // pessoa confirmou sair com elas, são canceladas antes, com as importações e as cópias, e os destinos soltos.
     mutationFn: async (cancelTransfers: boolean) => {
       if (cancelTransfers) await transferExits.cancelForExit();
-      await workspaceSync.flush();
+      await Promise.all([workspaceSync.flush(), buildModelSync.flush()]);
       return unwrap(await signOut());
     },
     onSettled: () => setAsking(null),
