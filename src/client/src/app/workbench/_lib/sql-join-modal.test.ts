@@ -45,6 +45,17 @@ describe("analyzeStatementForJoinModal", () => {
     expect(plan?.insert.mode).toBe("append-clause");
     expect(doc.slice(0, plan?.insert.from)).toBe("select *\n  from orders");
   });
+
+  it("extrai a tabela e insere os JOINs dentro do subselect quando o cursor está dentro de (select ...)", () => {
+    const { doc, at } = withoutCursor("select *\n  from orders\n inner join (select * from integrations|)");
+    const plan = analyzeStatementForJoinModal(doc, at, postgres, false);
+
+    expect(plan).not.toBeNull();
+    expect(plan?.references.map((ref) => [ref.schema, ref.name])).toEqual([[null, "integrations"]]);
+    expect(plan?.insert.mode).toBe("append-clause");
+    expect(doc.slice(0, plan?.insert.from)).toBe("select *\n  from orders\n inner join (select * from integrations");
+    expect(doc.slice(plan?.insert.from)).toBe(")");
+  });
 });
 
 describe("árvore recursiva de sugestões do modal (toggleJoinNode, setJoinNodeChildren, buildSelectedJoins)", () => {
