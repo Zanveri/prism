@@ -1,57 +1,67 @@
 import { describe, expect, it } from "vitest";
 
-import { arrivalOf, settingsTo, withoutArrival } from "./settings-route";
+import { driverOf, isSettingsPath, sectionOf, settingsTo, withoutArrival } from "./settings-route";
 
 const search = (to: ReturnType<typeof settingsTo>) => new URLSearchParams(typeof to === "string" ? "" : (to.search ?? ""));
 
-describe("settingsTo: Configurações já numa seção (RN-NAV-006)", () => {
-  it("sem nada, é a tela como sempre", () => {
-    expect(settingsTo()).toEqual({ pathname: "/settings", search: "" });
+describe("settingsTo: a página de uma seção das Configurações (RN-NAV-006)", () => {
+  it("sem nada, é a página da primeira seção", () => {
+    expect(settingsTo()).toEqual({ pathname: "/settings/account", search: "" });
   });
 
-  it("numa seção: o parâmetro diz qual", () => {
-    expect(settingsTo("drivers")).toEqual({ pathname: "/settings", search: "?section=drivers" });
+  it("numa seção: o endereço é o da página dela", () => {
+    expect(settingsTo("drivers")).toEqual({ pathname: "/settings/drivers", search: "" });
   });
 
   it("os drivers apontando a linha de um driver (o `driverID` do 422 DRIVER_NOT_INSTALLED), com o valor codificado e de volta igual", () => {
     const hostile = "ibm&section=account x#y";
+    const to = settingsTo("drivers", hostile);
 
-    expect(search(settingsTo("drivers", hostile)).get("driver")).toBe(hostile);
-    expect(search(settingsTo("drivers", hostile)).getAll("section")).toEqual(["drivers"]);
+    expect(typeof to === "string" ? to : to.pathname).toBe("/settings/drivers");
+    expect(search(to).get("driver")).toBe(hostile);
+    expect([...search(to).keys()]).toEqual(["driver"]);
   });
 
   it("um driver vazio ou nulo não entra", () => {
-    expect(settingsTo("drivers", "")).toEqual({ pathname: "/settings", search: "?section=drivers" });
-    expect(settingsTo("drivers", null)).toEqual({ pathname: "/settings", search: "?section=drivers" });
+    expect(settingsTo("drivers", "")).toEqual({ pathname: "/settings/drivers", search: "" });
+    expect(settingsTo("drivers", null)).toEqual({ pathname: "/settings/drivers", search: "" });
   });
 });
 
-describe("arrivalOf: o que a tela faz ao chegar", () => {
-  it("a seção pedida, se existe; outra coisa é ignorada", () => {
-    expect(arrivalOf(new URLSearchParams("section=drivers"))).toEqual({ section: "drivers", driver: null });
-    expect(arrivalOf(new URLSearchParams("section=nada"))).toEqual({ section: null, driver: null });
-    expect(arrivalOf(new URLSearchParams(""))).toEqual({ section: null, driver: null });
-  });
-
-  it("um driver apontado leva aos drivers, mesmo sem a seção escrita", () => {
-    expect(arrivalOf(new URLSearchParams("driver=ibm-data-server"))).toEqual({ section: "drivers", driver: "ibm-data-server" });
-    expect(arrivalOf(new URLSearchParams("section=drivers&driver=ibm-data-server"))).toEqual({ section: "drivers", driver: "ibm-data-server" });
-  });
-
-  it("um driver vazio não aponta nada", () => {
-    expect(arrivalOf(new URLSearchParams("section=drivers&driver="))).toEqual({ section: "drivers", driver: null });
+describe("sectionOf: a seção do endereço", () => {
+  it("a que existe; outra coisa, ou nada, não é seção", () => {
+    expect(sectionOf("drivers")?.anchor).toBe("cfg-drivers");
+    expect(sectionOf("nada")).toBeUndefined();
+    expect(sectionOf(undefined)).toBeUndefined();
   });
 });
 
-describe("withoutArrival: depois de lidos, os dois parâmetros saem da URL de uma vez (o bloqueio remonta a tela, e ela não pode chegar de novo)", () => {
-  it("tira a seção e o driver, deixa o resto e não altera o objeto recebido", () => {
-    const params = new URLSearchParams("section=drivers&driver=ibm&outro=1");
+describe("isSettingsPath: o endereço é das Configurações, em qualquer seção", () => {
+  it("a tela e as páginas dela, e só elas", () => {
+    expect(isSettingsPath("/settings")).toBe(true);
+    expect(isSettingsPath("/settings/editor")).toBe(true);
+    expect(isSettingsPath("/workbench")).toBe(false);
+    expect(isSettingsPath("/settingsx")).toBe(false);
+  });
+});
+
+describe("driverOf: o driver que a tela destaca ao chegar", () => {
+  it("o apontado; vazio não aponta nada", () => {
+    expect(driverOf(new URLSearchParams("driver=ibm-data-server"))).toBe("ibm-data-server");
+    expect(driverOf(new URLSearchParams("driver="))).toBeNull();
+    expect(driverOf(new URLSearchParams(""))).toBeNull();
+  });
+});
+
+describe("withoutArrival: depois de lido, o driver sai da URL (o bloqueio remonta a tela, e ela não pode destacar de novo)", () => {
+  it("tira o driver, deixa o resto e não altera o objeto recebido", () => {
+    const params = new URLSearchParams("driver=ibm&outro=1");
 
     expect(withoutArrival(params)?.toString()).toBe("outro=1");
-    expect(params.toString()).toBe("section=drivers&driver=ibm&outro=1");
+    expect(params.toString()).toBe("driver=ibm&outro=1");
   });
 
-  it("sem nenhum dos dois, não há o que limpar", () => {
+  it("sem o driver, não há o que limpar", () => {
     expect(withoutArrival(new URLSearchParams("outro=1"))).toBeNull();
   });
 });

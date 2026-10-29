@@ -75,7 +75,7 @@ export function AccountSection({ anchor }: { anchor: string }) {
       <form ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         {/* O usuário do cofre, escondido: a convenção dos formulários de senha, para o leitor de tela e o gerenciador de senhas saberem de que conta é esta senha. Não é um campo da tela. */}
         <input type="text" name="userName" autoComplete="username" value={userName} readOnly hidden />
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
+        <div className="grid max-w-5xl grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
           <TextField id="cfg-senha-atual" name="currentPassword" type="password" label={copy.currentPassword} autoComplete="current-password" error={errors.currentPassword} />
           <TextField id="cfg-senha-nova" name="newPassword" type="password" label={copy.newPassword} autoComplete="new-password" error={errors.newPassword} />
           <TextField id="cfg-senha-confirma" name="newPasswordConfirmation" type="password" label={copy.newPasswordConfirmation} autoComplete="new-password" error={errors.newPasswordConfirmation} />
