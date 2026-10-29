@@ -772,8 +772,10 @@ function parseSelectQuery(tokens: readonly Token[]): ParsedSelect | null {
 
 function joinTokensWithSubqueries(
   tokens: readonly Token[],
-  renderSubquery: (sub: ParsedSelect) => string,
+  renderSubquery: (sub: ParsedSelect, openCol: number) => string,
   closeIndent = "",
+  prefixLength = 0,
+  inline = false,
 ): string {
   if (tokens.length === 0) return "";
   let out = "";
@@ -800,12 +802,16 @@ function joinTokensWithSubqueries(
       }
 
       if (depth === 0) {
+        const lastNewline = out.lastIndexOf("\n");
+        const openCol = (lastNewline === -1 ? prefixLength + out.length : out.length - lastNewline - 1) + 1;
         const innerTokens = tokens.slice(i + 1, closeIdx);
         const subParsed = parseSelectQuery(innerTokens);
         if (subParsed !== null) {
-          out += `(\n${renderSubquery(subParsed)}\n${closeIndent})`;
+          out += inline
+            ? `(${renderSubquery(subParsed, openCol).slice(openCol)})`
+            : `(\n${renderSubquery(subParsed, openCol)}\n${closeIndent})`;
         } else {
-          out += `(${joinTokensWithSubqueries(innerTokens, renderSubquery, closeIndent)})`;
+          out += `(${joinTokensWithSubqueries(innerTokens, renderSubquery, closeIndent, openCol, inline)})`;
         }
         i = closeIdx;
         continue;
@@ -830,8 +836,17 @@ function riverPad(keyword: string): string {
 function renderRiver(parsed: ParsedSelect, baseIndent = ""): string {
   const lines: string[] = [];
   const riverIndent = baseIndent + " ".repeat(7);
-  const fmt = (tokens: readonly Token[], closeIndent = baseIndent) =>
-    joinTokensWithSubqueries(tokens, (sub) => renderRiver(sub, `${closeIndent}    `), closeIndent);
+  const fmt = (tokens: readonly Token[], prefixLength: number) =>
+    joinTokensWithSubqueries(
+      tokens,
+      (sub, openCol) => renderRiver(sub, " ".repeat(openCol)),
+      baseIndent,
+      prefixLength,
+      true,
+    );
+  const pushLine = (prefix: string, tokens: readonly Token[]) => {
+    lines.push(`${prefix}${fmt(tokens, prefix.length)}`);
+  };
 
   if (parsed.ctes.length > 0) {
     for (const cte of parsed.ctes) {
@@ -845,62 +860,58 @@ function renderRiver(parsed: ParsedSelect, baseIndent = ""): string {
     }
   }
 
-  const selectTexts = parsed.selectItems.map((item) => fmt(item));
-  if (selectTexts.length > 0) {
-    selectTexts.forEach((item, idx) => {
-      const suffix = idx < selectTexts.length - 1 ? "," : "";
-      if (idx === 0) {
-        lines.push(`${baseIndent}${riverPad(parsed.selectKeyword)} ${item}${suffix}`);
-      } else {
-        lines.push(`${riverIndent}${item}${suffix}`);
-      }
-    });
-  }
+  parsed.selectItems.forEach((item, idx) => {
+    const suffix = idx < parsed.selectItems.length - 1 ? "," : "";
+    const prefix = idx === 0 ? `${baseIndent}${riverPad(parsed.selectKeyword)} ` : riverIndent;
+    lines.push(`${prefix}${fmt(item, prefix.length)}${suffix}`);
+  });
 
   if (parsed.fromKeyword && parsed.fromTable) {
-    lines.push(`${baseIndent}${riverPad(parsed.fromKeyword)} ${fmt(parsed.fromTable)}`);
+    pushLine(`${baseIndent}${riverPad(parsed.fromKeyword)} `, parsed.fromTable);
   }
 
   for (const join of parsed.joins) {
-    lines.push(`${baseIndent}${riverPad(join.keyword)} ${fmt(join.tableTokens)}`);
+    pushLine(`${baseIndent}${riverPad(join.keyword)} `, join.tableTokens);
     for (const cond of join.onConditions) {
       const kw = cond.conjunction ?? "ON";
-      lines.push(`${baseIndent}${riverPad(kw)} ${fmt(cond.tokens)}`);
+      pushLine(`${baseIndent}${riverPad(kw)} `, cond.tokens);
     }
   }
 
   if (parsed.whereKeyword && parsed.whereConditions.length > 0) {
     parsed.whereConditions.forEach((cond, idx) => {
       const kw = idx === 0 ? parsed.whereKeyword! : (cond.conjunction ?? "AND");
-      lines.push(`${baseIndent}${riverPad(kw)} ${fmt(cond.tokens)}`);
+      pushLine(`${baseIndent}${riverPad(kw)} `, cond.tokens);
     });
   }
 
   if (parsed.groupByKeyword && parsed.groupByItems.length > 0) {
+    const prefix = `${baseIndent}${riverPad(parsed.groupByKeyword)} `;
     lines.push(
-      `${baseIndent}${riverPad(parsed.groupByKeyword)} ${parsed.groupByItems.map((item) => fmt(item)).join(", ")}`,
+      `${prefix}${parsed.groupByItems.map((item) => fmt(item, prefix.length)).join(", ")}`,
     );
   }
 
   if (parsed.havingKeyword && parsed.havingConditions.length > 0) {
     parsed.havingConditions.forEach((cond, idx) => {
       const kw = idx === 0 ? parsed.havingKeyword! : (cond.conjunction ?? "AND");
-      lines.push(`${baseIndent}${riverPad(kw)} ${fmt(cond.tokens)}`);
+      pushLine(`${baseIndent}${riverPad(kw)} `, cond.tokens);
     });
   }
 
   if (parsed.orderByKeyword && parsed.orderByItems.length > 0) {
+    const prefix = `${baseIndent}${riverPad(parsed.orderByKeyword)} `;
     lines.push(
-      `${baseIndent}${riverPad(parsed.orderByKeyword)} ${parsed.orderByItems.map((item) => fmt(item)).join(", ")}`,
+      `${prefix}${parsed.orderByItems.map((item) => fmt(item, prefix.length)).join(", ")}`,
     );
   }
 
   if (parsed.limitClause) {
-    lines.push(`${baseIndent}${riverPad(parsed.limitClause.keyword)} ${fmt(parsed.limitClause.tokens)}`);
+    pushLine(`${baseIndent}${riverPad(parsed.limitClause.keyword)} `, parsed.limitClause.tokens);
   }
 
   if (parsed.offsetClause) {
-    lines.push(`${baseIndent}${riverPad(parsed.offsetClause.keyword)} ${fmt(parsed.offsetClause.tokens)}`);
+    pushLine(`${baseIndent}${riverPad(parsed.offsetClause.keyword)} `, parsed.offsetClause.tokens);
   }
 
   return lines.join("\n");

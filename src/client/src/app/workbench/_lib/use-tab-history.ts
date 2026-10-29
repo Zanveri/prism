@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate } from "react-router";
 
+import { isSettingsPath } from "@/app/settings/_lib/settings-route";
 import { pathsConfig } from "@/config/paths.config";
 import { vaultLock } from "@/lib/api/vault-lock";
 import { isMacPlatform } from "@/lib/utils/platform";
@@ -10,7 +11,7 @@ import { createTabHistory, type HistoryScreen } from "./tab-history-controller";
 import { popupOpen } from "./tab-focus";
 import { useWorkbench } from "./workbench-state";
 
-const screenOf = (pathname: string): HistoryScreen => (pathname === pathsConfig.workbench ? "workbench" : pathname === pathsConfig.settings ? "settings" : "other");
+const screenOf = (pathname: string): HistoryScreen => (pathname === pathsConfig.workbench ? "workbench" : isSettingsPath(pathname) ? "settings" : "other");
 
 /**
  * Voltar e Avançar entre as abas desta janela (RN-ABAS-018): registra a aba ativa a cada mudança, ouve os botões "voltar" e "avançar" do mouse e as teclas

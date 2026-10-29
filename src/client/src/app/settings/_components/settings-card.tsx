@@ -5,23 +5,24 @@ import { StatusBadge } from "@/components/ui";
 import { settingsCopy } from "../_lib/settings.copy";
 
 type SettingsCardProps = {
-  /** O `id` do elemento, que a navegação rola até (`settingsSections[].anchor`). */
+  /** O `id` do elemento (`settingsSections[].anchor`). */
   anchor: string;
   title: string;
-  /** O cartão de uma seção "em breve" leva a etiqueta ao lado do título. */
+  /** A página de uma seção "em breve" leva a etiqueta ao lado do título. */
   soon?: boolean;
   children: ReactNode;
 };
 
 /**
- * Um cartão do canvas: painel com borda, título e o conteúdo da seção. O título recebe o foco quando a navegação leva a ele
+ * A página de uma seção: o título, com um fio embaixo, e o conteúdo na largura toda da janela. Listas, grades e prévias ocupam a largura; o texto
+ * corrido para em 80 caracteres por linha, para continuar legível com a janela maximizada. O título recebe o foco quando a navegação leva a ele
  * (`tabIndex={-1}`), para quem usa o teclado continuar dali.
  */
 export function SettingsCard({ anchor, title, soon = false, children }: SettingsCardProps) {
   return (
-    <section id={anchor} aria-labelledby={`${anchor}-title`} className="flex scroll-mt-5 flex-col gap-4 rounded-lg border border-border bg-panel p-5">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 id={`${anchor}-title`} tabIndex={-1} className="text-[16px] leading-6 font-semibold">
+    <section id={anchor} aria-labelledby={`${anchor}-title`} className="flex flex-col gap-4 [&_p]:max-w-[80ch]">
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border pb-4">
+        <h2 id={`${anchor}-title`} tabIndex={-1} className="text-xl leading-7 font-semibold text-balance">
           {title}
         </h2>
         {soon ? <StatusBadge>{settingsCopy.soonBadge}</StatusBadge> : null}
@@ -38,7 +39,7 @@ export function SettingsCard({ anchor, title, soon = false, children }: Settings
 export function ComingSoonCard({ anchor, title, description }: { anchor: string; title: string; description: string }) {
   return (
     <SettingsCard anchor={anchor} title={title} soon>
-      <p className="max-w-[68ch] text-muted">{description}</p>
+      <p className="text-muted">{description}</p>
     </SettingsCard>
   );
 }
