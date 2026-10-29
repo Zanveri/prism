@@ -15,7 +15,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ```
 electron/        main.ts, preload.ts, api-process.ts, dbeaver-source.ts e dbeaver-messages.ts (a procura e a cópia do DBeaver), app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
-src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
+src/components/  ui/ (primitivos + index.ts; e tooltip.ts, a dica do app no lugar da do sistema, ligada pelo main.tsx), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
 src/lib/api/     prism-api.ts, prism-endpoints.ts, query-client.ts, bridge.ts, vault-lock.ts (o estado de bloqueio e a barreira dos pedidos), workspace-sync.ts ("grave as abas agora", antes de o cofre fechar)
 src/lib/utils/   cn.ts, format.ts, form.ts (a submissão e a fiação de aria dos formulários), route-params.ts (a tela gasta o parâmetro da rota que leu), zod-jitless.ts
@@ -4249,6 +4249,16 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   ambiente no aviso de confirmação, RN-PROT-001; com ela o painel recorta o que passa da borda arredondada), e o `describedBy`, os ids do que, no
   corpo, o leitor de tela lê com o título (`describedByOf`: a `description` do cabeçalho vem antes, quando há). O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
+- **A dica é a do app, e não a do sistema** (`components/ui/tooltip.ts`, ligada uma vez pelo `main.tsx`; a classe `.app-tip` no fim do `globals.css`; a posição
+  e o título com teste). Quem quer dica continua escrevendo `title`: um ouvinte só, por documento (a janela da aba e cada janela do resultado, pelo
+  `resultHostRegistry.each`), mostra o `title` de qualquer elemento num `popover` com a superfície e a borda do que flutua, no tema em uso, depois de 500 ms de
+  repouso (300 ms depois de uma dica fechar, a seguinte vem sem espera). Com o mouse em cima o `title` fica **vazio**, e não é removido: o vazio cala a dica
+  do sistema, continua `[title]` para a barra da janela (que não arrasta o que tem dica) e deixa o `MutationObserver` ver o React trocar o valor (a célula
+  reciclada, a verificação da conexão: a dica acompanha) ou remover o atributo (o valor de antes não volta). O `title` volta quando o mouse sai; clique, tecla,
+  roda e rolagem fecham a dica até lá. Pelo teclado ela aparece no foco visível, sem tocar no `title` (o leitor de tela o lê), menos na árvore do navegador,
+  em que as setas passam por uma linha atrás da outra. A dica de várias linhas tem a primeira como título (a conexão: o nome, e embaixo o banco, o endereço e a
+  verificação); a da célula da grade vai como veio, com as quebras e os espaços, e para em 20 linhas. Conferido no Electron, num cofre descartável: botão de
+  ícone, barra da janela, `disabled`, os temas Escuro, Claro e Dracula. A janela do resultado usa o mesmo caminho e não foi aberta na conferência.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que
   nenhuma escolha muda (a mensagem do banco, as etiquetas, a Estrutura e o Diagrama). Texto novo que é SQL usa `font-editor`; **o dado do banco

@@ -409,7 +409,7 @@ public sealed class InformixClientTests : IbmClientContractTests
     /// <summary>
     /// Rotinas do Informix declaradas como `RETURNING LVARCHAR` sem comprimento explícito (como `sysadmin:task`) têm precisão
     /// estática de 2.048 bytes em `sysprocedures`, e o servidor DRDA do Informix trunca o retorno de `EXECUTE FUNCTION` em 2.048
-    /// bytes. A conexão envolve a chamada em `SELECT CAST(... AS LVARCHAR(32739)) FROM TABLE(SET{1})`, trazendo o texto inteiro
+    /// bytes. A conexão envolve a chamada em `SELECT CAST(... AS CLOB) FROM TABLE(SET{1})`, trazendo o texto inteiro
     /// para a página e para `FullValues` (F7).
     /// </summary>
     [Test]
@@ -420,7 +420,7 @@ public sealed class InformixClientTests : IbmClientContractTests
         await using var connection = await OpenAsync();
         var created = await connection.ExecuteAsync($"CREATE FUNCTION teste.{writingRoutine}() RETURNING LVARCHAR; UPDATE {table} SET versao = 5 WHERE numero = 1001; RETURN 'atualizado'; END FUNCTION;", CancellationToken.None);
 
-        var taskPage = await ExecutePageAsync(connection, "execute function sysadmin:task ('onstat', '-g cfg')");
+        var taskPage = await ExecutePageAsync(connection, "execute function sysadmin:task ('onstat', '-a')");
         var writingPage = await ExecutePageAsync(connection, $"EXECUTE FUNCTION teste.{writingRoutine}()");
         var updated = await ReadFromAnotherConnectionAsync($"SELECT COUNT(*) FROM {table} WHERE versao = 5");
         var dropped = await connection.ExecuteAsync($"DROP FUNCTION teste.{writingRoutine}", CancellationToken.None);
@@ -429,7 +429,7 @@ public sealed class InformixClientTests : IbmClientContractTests
         Assert.That(created.IsSuccess, Is.True, created.IsFailure ? created.Error.Message : null);
         Assert.That(dropped.IsSuccess, Is.True, dropped.IsFailure ? dropped.Error.Message : null);
         Assert.That(taskPage.Columns[0].Name, Is.Empty);
-        Assert.That(taskPage.Columns[0].Type, Is.EqualTo("LVARCHAR"));
+        Assert.That(taskPage.Columns[0].Type, Is.EqualTo("CLOB"));
         Assert.That(taskPage.Rows[0][0]!.Length, Is.EqualTo(10000));
         Assert.That(taskPage.TruncatedCells, Is.EqualTo(new[] { new[] { 0, 0 } }));
         Assert.That(taskPage.FullValues![0].Write().Length, Is.GreaterThan(10000));
