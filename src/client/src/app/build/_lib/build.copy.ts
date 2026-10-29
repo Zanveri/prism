@@ -78,6 +78,81 @@ export const buildCopy = {
   textGoToLine: "Ir para a linha",
   textEditorSqlLabel: "Editor SQL do modelo",
   textEditorDbmlLabel: "Editor DBML do modelo",
+  newModelTitle: "Novo modelo",
+  closeEscLabel: "Fechar (Esc)",
+  modelNameLabel: "Nome do modelo",
+  startPointLegend: "Ponto de partida",
+  startZeroLabel: "Do zero",
+  startZeroHint: "Um modelo vazio. Você escolhe o banco de destino e cria cada tabela.",
+  startDatabaseLabel: "A partir de um banco",
+  startDatabaseHint:
+    "Lê as tabelas de uma conexão para você ligar as novas a elas e alterar as que já existem.",
+  targetEngineLegend: "Banco de destino",
+  targetEngineHint:
+    "O destino decide os tipos que o editor sugere, os limites de nome e o DDL gerado. Não muda depois de criado; para outro banco, duplique o modelo.",
+  connectionLabel: "Conexão",
+  databaseLabel: "Banco",
+  schemasAndTablesLegend: "Esquemas e tabelas para ler",
+  markedCount: (checked: number, total: number) => `${checked} de ${total} marcadas`,
+  schemaTablesCount: (checked: number, total: number) =>
+    checked > 0 ? `${checked} de ${total} tabelas` : `${total} ${total === 1 ? "tabela" : "tabelas"}`,
+  markAllLabel: "Marcar todas",
+  unmarkLabel: "Desmarcar",
+  existingTablesExplain:
+    "As tabelas marcadas entram como existentes: recebem FKs das novas e também podem ser alteradas. Ao gerar o DDL, você escolhe se ele traz tudo ou só as diferenças.",
+  targetSameAsConnection: (engineLabel: string) =>
+    `O destino é ${engineLabel}, o mesmo banco da conexão.`,
+  defaultSchemaLabel: "Esquema das tabelas novas",
+  createSchemaCheckbox: "Criar o esquema no DDL",
+  informixSchemaNote:
+    "No Informix, que não tem esquemas, este campo é o dono das tabelas e o DDL não traz CREATE SCHEMA.",
+  readOnlyCatalogNotice: "O Prism só lê o catálogo. Nada muda no banco.",
+  cancelButton: "Cancelar",
+  createModelButton: "Criar modelo",
+  readingTablesProgress: (done: number, total: number) => `Lendo ${done} de ${total} tabelas…`,
+  importTablesTitle: "Importar tabelas de um banco",
+  importTablesButton: "Importar tabelas",
+  alreadyInModelNote: "já está no modelo",
+  changeBaseMenuLabel: "Trocar a base…",
+  changeBaseTitle: "Trocar a base do modelo",
+  changeBaseConfirm: "Trocar base e reler",
+  scopeDialogTitle: "O que o DDL deve trazer?",
+  scopeDialogIntro: (modelName: string, baseLabel: string) =>
+    `O modelo ${modelName} partiu de ${baseLabel}. O DDL pode trazer só o que você mudou em relação a ele, ou o esquema inteiro.`,
+  scopeChangesLabel: "Só as diferenças",
+  scopeChangesDescription: (baseLabel: string) =>
+    `CREATE das tabelas novas e ALTER do que você mudou nas existentes. As existentes sem mudança ficam de fora. Para rodar em ${baseLabel}.`,
+  scopeFullLabel: "Tudo",
+  scopeFullDescription: (baseLabel: string) =>
+    `O esquema inteiro, do zero: CREATE de todas as tabelas, novas e existentes, como estão no modelo. Para criar em outro banco; na própria ${baseLabel}, falha no primeiro CREATE.`,
+  scopeSavedNotice:
+    "A escolha fica guardada no modelo. Dá para trocar depois, no topo do DDL.",
+  ddlBackToDiagram: "Voltar ao diagrama",
+  ddlTitlePrefix: "DDL de",
+  ddlScopeGroupLabel: "O que o DDL traz",
+  ddlCopyButton: "Copiar",
+  ddlCopiedToast: "DDL copiado para a área de transferência.",
+  ddlSaveSqlButton: "Salvar .sql",
+  ddlOpenInWorkbenchButton: "Abrir na Área de trabalho",
+  ddlOpenInWorkbenchHint:
+    "Abre uma aba de consulta com este script. Nada roda até você executar.",
+  ddlOptionsGroupLabel: "Opções do DDL",
+  ddlOptionConstraintNames: "Nomes das restrições",
+  ddlOptionComments: "Comentários",
+  ddlOptionFkAtEnd: "FKs em ALTER TABLE no fim",
+  ddlOptionDropNewFirst: "DROP das novas antes de criar",
+  ddlReadOnlyLabel: "DDL gerado, somente leitura",
+  ddlProblemsTitle: "Problemas",
+  ddlProblemsExplain:
+    "Avisos não impedem o DDL. Um erro, como uma FK para uma coluna que não existe, impede: o DDL só sai depois de corrigido.",
+  ddlIgnoreWarning: "Ignorar neste modelo",
+  ddlGoToColumn: "Ir para a coluna",
+  ddlNothingChanged: (baseLabel: string) => `Nada mudou em relação a ${baseLabel}.`,
+  connectionChoiceTitle: "Em qual conexão abrir o DDL?",
+  connectionChoiceIntro:
+    "O script vai para uma aba de consulta nova. Nada é executado até você mandar rodar.",
+  connectionChoiceBaseNote: "as existentes já estão aqui",
+  connectionChoiceConfirm: "Abrir na Área de trabalho",
   problems: {
     e1: (target: string) =>
       `Nome de ${target} vazio ou com caractere de controle. O banco rejeita identificadores assim.`,
