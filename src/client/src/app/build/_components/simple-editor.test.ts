@@ -42,7 +42,7 @@ describe("SimpleEditor", () => {
     expect(html).toContain("Ao excluir: anular");
   });
 
-  it("renderiza tabela existente producao.maquina com aviso de base, coluna alterada, removida, nova e DDL da tabela", () => {
+  it("renderiza tabela existente producao.maquina com coluna alterada, removida, nova e DDL da tabela", () => {
     let model = readCanvasModel();
     model = updateColumn(model, "producao.maquina", "tag", {
       name: "tag_patrimonio",
@@ -64,7 +64,6 @@ describe("SimpleEditor", () => {
     );
     const text = stripTags(html);
 
-    expect(text).toContain("Existe em MES Produção / mes");
     expect(text).toContain("Era tag varchar(12)");
     expect(text).toContain("modelo");
     expect(text).toContain("Restaurar");

@@ -3,6 +3,8 @@ import { useId, useState } from "react";
 import {
   Button,
   ConfirmDialog,
+  ContextMenu,
+  type ContextMenuGroup,
   Field,
   FieldLabel,
   Input,
@@ -38,7 +40,6 @@ import { tableChangesDdl } from "../_lib/ddl-changes";
 import type { DdlContext } from "../_lib/ddl-full";
 import { columnRowState, removedColumns } from "../_lib/editor-rows";
 import { ColumnRow, RemovedColumnRow } from "./column-row";
-import { ExistingTableBanner } from "./existing-table-banner";
 import { ForeignKeysSection } from "./foreign-keys-section";
 import { IndexesSection } from "./indexes-section";
 import { TableCommands } from "./table-commands";
@@ -54,14 +55,15 @@ export type SimpleEditorProps = {
 export function SimpleEditor({
   model,
   tableKey,
-  baseLabel,
   ddlContext,
   onChange,
 }: SimpleEditorProps) {
   const uid = useId();
   const tableInputId = `${uid}-table-name`;
   const schemaSelectId = `${uid}-table-schema`;
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [confirmDropOpen, setConfirmDropOpen] = useState(false);
 
   const table =
@@ -81,7 +83,6 @@ export function SimpleEditor({
   const isExisting = table.origin !== null;
   const changes = tableChanges(model.engine, table);
   const removedCols = removedColumns(table);
-  const typesListId = `tipos-${model.engine}`;
   const catalogTypes = engineRules[model.engine].types;
 
   const schemaNames = Array.from(
@@ -123,21 +124,56 @@ export function SimpleEditor({
     onChange(next);
   };
 
+  const menuGroups: ContextMenuGroup[] = [
+    [
+      {
+        id: "copy-table",
+        label: isExisting ? "Copiar como tabela nova" : "Duplicar tabela",
+        hint: "Uma tabela nova com as mesmas colunas",
+        onSelect: () =>
+          onChange(copyAsNewTable(model, currentKey, model.defaultSchema)),
+      },
+      ...(isExisting && changes.kind === "changed"
+        ? [
+            {
+              id: "revert-table",
+              label: "Desfazer alterações da tabela",
+              hint: "Volta a tabela para como está no banco",
+              onSelect: () => onChange(revertTable(model, currentKey)),
+            },
+          ]
+        : []),
+      {
+        id: "remove-table",
+        label: isExisting ? "Tirar do modelo" : "Excluir tabela",
+        hint: "Some daqui; nada vai para o DDL",
+        onSelect: () => onChange(removeTable(model, currentKey), null),
+      },
+    ],
+    ...(isExisting
+      ? [
+          [
+            {
+              id: "drop-in-db",
+              label: table.dropInDatabase
+                ? "Cancelar exclusão no banco"
+                : "Excluir no banco…",
+              hint: "Vira DROP TABLE no DDL de diferenças",
+              onSelect: () => {
+                if (table.dropInDatabase) {
+                  onChange(setDropInDatabase(model, currentKey, false));
+                } else {
+                  setConfirmDropOpen(true);
+                }
+              },
+            },
+          ],
+        ]
+      : []),
+  ];
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pb-10">
-      {isExisting ? (
-        <ExistingTableBanner
-          baseLabel={
-            baseLabel ??
-            (model.base
-              ? `${model.base.connectionId}${model.base.database ? ` / ${model.base.database}` : ""}`
-              : "banco de base")
-          }
-          changes={changes}
-          onRevertTable={() => onChange(revertTable(model, currentKey))}
-        />
-      ) : null}
-
       <div className="grid grid-cols-[minmax(0,1fr)_140px_32px] items-end gap-2">
         <Field className="gap-1">
           <FieldLabel htmlFor={tableInputId} className="text-xs">
@@ -184,7 +220,7 @@ export function SimpleEditor({
               label: schemaName,
             }))}
             wideList
-            className="min-h-8 px-2 py-1 font-mono text-[13px]"
+            className="h-8 min-h-8 px-2 py-0 font-mono text-[13px]"
           />
         </Field>
 
@@ -194,9 +230,16 @@ export function SimpleEditor({
           size="compact"
           aria-label="Mais ações da tabela"
           aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((prev) => !prev)}
-          className={`h-8 w-8 p-0 ${menuOpen ? "bg-selected" : ""}`}
+          aria-expanded={menuPoint !== null}
+          onClick={(e) => {
+            if (menuPoint !== null) {
+              setMenuPoint(null);
+            } else {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setMenuPoint({ x: rect.left, y: rect.bottom + 4 });
+            }
+          }}
+          className={`h-8 w-8 p-0 ${menuPoint !== null ? "bg-selected" : ""}`}
         >
           <svg
             width="16"
@@ -212,72 +255,13 @@ export function SimpleEditor({
         </Button>
       </div>
 
-      {menuOpen ? (
-        <div
-          role="menu"
-          aria-label={`Ações de ${table.name}`}
-          className="-mt-2.5 box-border w-[260px] self-end rounded-md border border-border-strong bg-raised p-1 shadow-2xl"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenuOpen(false);
-              onChange(copyAsNewTable(model, currentKey, model.defaultSchema));
-            }}
-            className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-body hover:bg-selected"
-          >
-            <span>
-              {isExisting ? "Copiar como tabela nova" : "Duplicar tabela"}
-            </span>
-            <span className="text-xs leading-[18px] text-muted">
-              Uma tabela nova com as mesmas colunas
-            </span>
-          </button>
-
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenuOpen(false);
-              onChange(removeTable(model, currentKey), null);
-            }}
-            className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-body hover:bg-selected"
-          >
-            <span>{isExisting ? "Tirar do modelo" : "Excluir tabela"}</span>
-            <span className="text-xs leading-[18px] text-muted">
-              Some daqui; nada vai para o DDL
-            </span>
-          </button>
-
-          {isExisting ? (
-            <>
-              <div role="separator" className="my-1 h-px bg-border" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  if (table.dropInDatabase) {
-                    onChange(setDropInDatabase(model, currentKey, false));
-                  } else {
-                    setConfirmDropOpen(true);
-                  }
-                }}
-                className="flex w-full cursor-pointer flex-col rounded border-0 bg-transparent px-2 py-1 text-left text-danger hover:bg-selected"
-              >
-                <span>
-                  {table.dropInDatabase
-                    ? "Cancelar exclusão no banco"
-                    : "Excluir no banco…"}
-                </span>
-                <span className="text-xs leading-[18px] text-muted">
-                  Vira DROP TABLE no DDL de diferenças
-                </span>
-              </button>
-            </>
-          ) : null}
-        </div>
+      {menuPoint !== null ? (
+        <ContextMenu
+          label={`Ações de ${table.name}`}
+          point={menuPoint}
+          groups={menuGroups}
+          onClose={() => setMenuPoint(null)}
+        />
       ) : null}
 
       <section aria-labelledby="h-colunas" className="flex flex-col gap-1">
@@ -339,7 +323,7 @@ export function SimpleEditor({
 
           return (
             <ColumnRow
-              key={column.originName ?? `${column.name}-${idx}`}
+              key={idx}
               index={idx}
               column={column}
               isExistingTable={isExisting}
@@ -347,10 +331,10 @@ export function SimpleEditor({
               isUnique={isUnique}
               fkTargetDisplay={fkTargetDisplay}
               rowState={state}
-              typesListId={typesListId}
+              catalogTypes={catalogTypes}
               checkExpression={colCheck}
               onUpdateColumn={(patch) =>
-                onChange(updateColumn(model, currentKey, column.name, patch))
+                onChange(updateColumn(model, currentKey, column.name, patch, idx))
               }
               onTogglePk={() =>
                 onChange(togglePrimaryKey(model, currentKey, column.name))
@@ -420,12 +404,6 @@ export function SimpleEditor({
             </span>
           ) : null}
         </Button>
-
-        <datalist id={typesListId}>
-          {catalogTypes.map((typeName) => (
-            <option key={typeName} value={typeName} />
-          ))}
-        </datalist>
       </section>
 
       <ForeignKeysSection

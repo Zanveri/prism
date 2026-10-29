@@ -63,7 +63,7 @@ export function IndexesSection({
 
         return (
           <div
-            key={`${ix.name}-${idx}`}
+            key={idx}
             className={`grid grid-cols-[minmax(0,1fr)_26px_28px] items-center gap-x-2 gap-y-1.5 rounded-md border bg-raised px-2.5 py-2 ${
               isNewInExisting ? "border-success" : "border-border"
             }`}
@@ -153,7 +153,7 @@ export function IndexesSection({
                     label: col,
                   }))}
                   wideList
-                  className="min-h-6 border-dashed bg-transparent px-2 py-0.5 font-mono text-xs"
+                  className="h-6 min-h-6 border-dashed bg-transparent px-2 py-0 font-mono text-xs"
                 />
               ) : null}
             </div>

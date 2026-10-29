@@ -54,7 +54,11 @@ export function ModelsList({
   onDeleteModel,
 }: ModelsListProps) {
   const [filterText, setFilterText] = useState("");
-  const [menuOpenForId, setMenuOpenForId] = useState<string | null>(null);
+  const [menuOpenFor, setMenuOpenFor] = useState<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deletingModel, setDeletingModel] = useState<SavedModelEntry | null>(null);
@@ -67,7 +71,7 @@ export function ModelsList({
   });
 
   function startRename(entry: SavedModelEntry) {
-    setMenuOpenForId(null);
+    setMenuOpenFor(null);
     setRenamingId(entry.id);
     setRenameValue(entry.name);
   }
@@ -169,7 +173,7 @@ export function ModelsList({
             {filteredModels.map((entry, idx) => {
               const summary = modelSummary(entry.model, connectionName);
               const isLast = idx === filteredModels.length - 1;
-              const isMenuOpen = menuOpenForId === entry.id;
+              const isMenuOpen = menuOpenFor?.id === entry.id;
 
               return (
                 <tr key={entry.id}>
@@ -263,9 +267,18 @@ export function ModelsList({
                         aria-label={`Mais ações de ${entry.name}`}
                         aria-haspopup="menu"
                         aria-expanded={isMenuOpen}
-                        onClick={() =>
-                          setMenuOpenForId((prev) => (prev === entry.id ? null : entry.id))
-                        }
+                        onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setMenuOpenFor((prev) =>
+                            prev?.id === entry.id
+                              ? null
+                              : {
+                                  id: entry.id,
+                                  x: Math.max(8, rect.right - 220),
+                                  y: rect.bottom + 4,
+                                },
+                          );
+                        }}
                         className={cn(
                           "h-7 w-7 p-0 text-ink",
                           isMenuOpen && "bg-selected",
@@ -284,11 +297,11 @@ export function ModelsList({
                         </svg>
                       </Button>
 
-                      {isMenuOpen && (
+                      {isMenuOpen && menuOpenFor && (
                         <ContextMenu
                           label={`Ações de ${entry.name}`}
-                          point={{ x: 0, y: 32 }}
-                          onClose={() => setMenuOpenForId(null)}
+                          point={{ x: menuOpenFor.x, y: menuOpenFor.y }}
+                          onClose={() => setMenuOpenFor(null)}
                           groups={[
                             [
                               {
@@ -300,7 +313,7 @@ export function ModelsList({
                                 id: "duplicate",
                                 label: buildCopy.duplicateAction,
                                 onSelect: () => {
-                                  setMenuOpenForId(null);
+                                  setMenuOpenFor(null);
                                   onDuplicateModel?.(entry.id);
                                 },
                               },
@@ -311,7 +324,7 @@ export function ModelsList({
                                 label: buildCopy.exportDbmlAction,
                                 hint: ".dbml",
                                 onSelect: () => {
-                                  setMenuOpenForId(null);
+                                  setMenuOpenFor(null);
                                   onExportModel?.(entry.id, "dbml");
                                 },
                               },
@@ -320,7 +333,7 @@ export function ModelsList({
                                 label: buildCopy.exportDdlAction,
                                 hint: ".sql",
                                 onSelect: () => {
-                                  setMenuOpenForId(null);
+                                  setMenuOpenFor(null);
                                   onExportModel?.(entry.id, "sql");
                                 },
                               },
@@ -329,7 +342,7 @@ export function ModelsList({
                                 label: buildCopy.exportPngAction,
                                 hint: ".png",
                                 onSelect: () => {
-                                  setMenuOpenForId(null);
+                                  setMenuOpenFor(null);
                                   onExportModel?.(entry.id, "png");
                                 },
                               },
@@ -339,7 +352,7 @@ export function ModelsList({
                                 id: "delete",
                                 label: buildCopy.deleteModelAction,
                                 onSelect: () => {
-                                  setMenuOpenForId(null);
+                                  setMenuOpenFor(null);
                                   setDeletingModel(entry);
                                 },
                               },

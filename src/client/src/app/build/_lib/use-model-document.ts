@@ -87,7 +87,10 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
 
   const handleSaved = useEffectEvent((dto: BuildModelDto) => {
     setDocState((prev) => ({ ...prev, name: dto.name }));
-    void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
+    queryClient.setQueryData<readonly BuildModelDto[]>(
+      buildModelsQuery.queryKey,
+      (old) => (old ? old.map((m) => (m.id === dto.id ? dto : m)) : [dto]),
+    );
   });
 
   const handleStateChange = useEffectEvent((nextState: SaveState) => {
@@ -119,7 +122,8 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
     return () => {
       scheduler.dispose();
     };
-  }, [id, initialUpdatedAt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `initialUpdatedAt` é lido apenas na abertura do modelo; o agendador atualiza `expectedUpdatedAt` a cada gravação
+  }, [id]);
 
   function applyModel(nextHistory: History) {
     setDocState((prev) => ({ ...prev, history: nextHistory }));

@@ -58,7 +58,10 @@ export function ModelToolbar({
   onExport,
   onGenerateDdl,
 }: ModelToolbarProps) {
-  const [exportOpen, setExportOpen] = useState(false);
+  const [exportMenuPoint, setExportMenuPoint] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const rules = engineRules[model.engine];
 
   return (
@@ -206,8 +209,15 @@ export function ModelToolbar({
           variant="secondary"
           size="compact"
           aria-haspopup="menu"
-          aria-expanded={exportOpen}
-          onClick={() => setExportOpen((v) => !v)}
+          aria-expanded={exportMenuPoint !== null}
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setExportMenuPoint((prev) =>
+              prev === null
+                ? { x: Math.max(8, rect.left), y: rect.bottom + 4 }
+                : null,
+            );
+          }}
           className="gap-1.5 pr-2.5 pl-3"
         >
           <span>{buildCopy.toolbarExport}</span>
@@ -215,11 +225,11 @@ export function ModelToolbar({
             <ChevronIcon direction="down" />
           </span>
         </Button>
-        {exportOpen && (
+        {exportMenuPoint !== null && (
           <ContextMenu
             label={buildCopy.toolbarExport}
-            point={{ x: 0, y: 36 }}
-            onClose={() => setExportOpen(false)}
+            point={exportMenuPoint}
+            onClose={() => setExportMenuPoint(null)}
             groups={[
               [
                 {
@@ -227,7 +237,7 @@ export function ModelToolbar({
                   label: buildCopy.exportDbmlAction,
                   hint: ".dbml",
                   onSelect: () => {
-                    setExportOpen(false);
+                    setExportMenuPoint(null);
                     onExport?.("dbml");
                   },
                 },
@@ -236,7 +246,7 @@ export function ModelToolbar({
                   label: buildCopy.exportDdlAction,
                   hint: ".sql",
                   onSelect: () => {
-                    setExportOpen(false);
+                    setExportMenuPoint(null);
                     onExport?.("sql");
                   },
                 },
@@ -245,7 +255,7 @@ export function ModelToolbar({
                   label: buildCopy.exportPngAction,
                   hint: ".png",
                   onSelect: () => {
-                    setExportOpen(false);
+                    setExportMenuPoint(null);
                     onExport?.("png");
                   },
                 },

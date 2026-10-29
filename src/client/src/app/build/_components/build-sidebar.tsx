@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils/cn";
 
 type BuildSidebarProps = {
   model: BuildModel | null;
+  width?: number;
   selectedTableKey?: string | null;
   problems?: readonly Problem[];
   onSelectTable?: (tableKey: string) => void;
@@ -64,6 +65,7 @@ function groupTablesBySchema(model: BuildModel, filterText: string): SchemaGroup
 
 export function BuildSidebar({
   model,
+  width = 272,
   selectedTableKey = null,
   problems = [],
   onSelectTable,
@@ -80,7 +82,8 @@ export function BuildSidebar({
     return (
       <aside
         aria-label={buildCopy.sidebarTitle}
-        className="flex min-h-0 min-w-0 flex-[1_1_272px] flex-col overflow-hidden border-r border-border bg-panel"
+        style={{ width }}
+        className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
       >
         <div className="flex min-h-8 items-center py-2 pr-2 pl-3">
           <span className="text-xs font-semibold tracking-wider text-muted uppercase">
@@ -110,7 +113,8 @@ export function BuildSidebar({
   return (
     <aside
       aria-label={buildCopy.sidebarTitle}
-      className="flex min-h-0 min-w-0 flex-[1_1_272px] flex-col overflow-hidden border-r border-border bg-panel"
+      style={{ width }}
+      className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
     >
       <div className="flex items-center gap-1 py-2 pr-2 pl-3">
         <span className="text-xs font-semibold tracking-wider text-muted uppercase">

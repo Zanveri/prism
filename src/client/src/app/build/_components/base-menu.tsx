@@ -34,7 +34,7 @@ export function BaseMenu({
   baseEnvironmentColor = null,
   onChangeBase,
 }: BaseMenuProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   if (!model.base) return null;
@@ -47,8 +47,13 @@ export function BaseMenu({
         size="compact"
         aria-label={buildCopy.toolbarBaseAria}
         aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onClick={() => setMenuOpen((prev) => !prev)}
+        aria-expanded={menuPoint !== null}
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          setMenuPoint((prev) =>
+            prev === null ? { x: rect.left, y: rect.bottom + 4 } : null,
+          );
+        }}
         className="bg-raised px-2.5 font-normal"
       >
         <span className="text-muted">{buildCopy.toolbarBase}</span>
@@ -59,18 +64,18 @@ export function BaseMenu({
         </span>
       </Button>
 
-      {menuOpen && (
+      {menuPoint !== null && (
         <ContextMenu
           label={buildCopy.toolbarBaseAria}
-          point={{ x: 0, y: 36 }}
-          onClose={() => setMenuOpen(false)}
+          point={menuPoint}
+          onClose={() => setMenuPoint(null)}
           groups={[
             [
               {
                 id: "change-base",
                 label: buildCopy.changeBaseMenuLabel,
                 onSelect: () => {
-                  setMenuOpen(false);
+                  setMenuPoint(null);
                   setDialogOpen(true);
                 },
               },

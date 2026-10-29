@@ -310,14 +310,20 @@ export function connectColumn(
 
   const defaultOnDelete = model.engine === "informix" ? "noAction" : "restrict";
   const pkCols = targetTable.primaryKey?.columns ?? [];
-  if (pkCols.length === 1) {
+  const fallbackTargetCol =
+    pkCols.length === 1
+      ? pkCols[0]!
+      : pkCols.length === 0 && targetTable.columns.length > 0
+        ? targetTable.columns[0]!.name
+        : null;
+  if (fallbackTargetCol !== null) {
     const fk: ModelForeignKey = {
       name: null,
       columns: [column],
       target: {
         schema: targetTable.schema,
         table: targetTable.name,
-        columns: [pkCols[0]],
+        columns: [fallbackTargetCol],
       },
       onDelete: defaultOnDelete,
       onUpdate: "noAction",

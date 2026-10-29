@@ -86,6 +86,7 @@ function ColumnRow({
   rowHeight,
   boxWidth,
   maxChars,
+  activeConnect = false,
   onStartConnect,
 }: {
   column: DiagramColumn;
@@ -93,7 +94,8 @@ function ColumnRow({
   rowHeight?: number;
   boxWidth?: number;
   maxChars?: number;
-  onStartConnect?: (columnName: string, event: ReactPointerEvent<SVGTextElement>) => void;
+  activeConnect?: boolean;
+  onStartConnect?: (columnName: string, event: ReactPointerEvent<SVGElement>) => void;
 }) {
   const marks = [column.primaryKey ? "PK" : null, column.foreignKey ? "FK" : null].filter((mark) => mark !== null);
   const fitted = fitText(column.name, column.type, marks.length === 0 ? null : marks.join(" "), maxChars);
@@ -105,10 +107,26 @@ function ColumnRow({
       {isAdded && boxWidth !== undefined && rowHeight !== undefined ? (
         <rect x={2} y={y - rowHeight / 2} width={boxWidth - 4} height={rowHeight} className="fill-success/10" />
       ) : null}
+      {onStartConnect && boxWidth !== undefined && rowHeight !== undefined ? (
+        <rect
+          x={2}
+          y={y - rowHeight / 2}
+          width={boxWidth - 4}
+          height={rowHeight}
+          rx={3}
+          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => onStartConnect(column.name, event)}
+          className={cn(
+            "cursor-crosshair transition-colors",
+            activeConnect ? "fill-accent/20 stroke-accent stroke-1" : "fill-transparent hover:fill-selected/60",
+          )}
+        />
+      ) : null}
       <text
         x={textX}
         y={y}
         dominantBaseline="central"
+        onMouseDown={onStartConnect ? (event) => event.stopPropagation() : undefined}
         onPointerDown={onStartConnect ? (event) => onStartConnect(column.name, event) : undefined}
         className={cn("fill-body font-mono text-[13px]", isRemoved && "line-through opacity-60", onStartConnect && "cursor-crosshair")}
         style={{ fontSize: "inherit", fontFamily: "inherit" }}
@@ -140,9 +158,10 @@ type TableBoxProps = {
   maxChars: number;
   dimmed?: boolean;
   selected?: boolean;
+  activeConnectColumn?: string | null;
   onSelect?: (key: string) => void;
   onStartMove?: (box: DiagramBox, event: ReactPointerEvent<SVGElement>) => void;
-  onStartConnect?: (box: DiagramBox, columnName: string, event: ReactPointerEvent<SVGTextElement>) => void;
+  onStartConnect?: (box: DiagramBox, columnName: string, event: ReactPointerEvent<SVGElement>) => void;
   onDropConnect?: (targetKey: string) => void;
   onOpen: (ref: TableRef) => void;
 };
@@ -152,7 +171,7 @@ type TableBoxProps = {
  * vizinhas abrem a aba delas com duplo clique, Enter ou Espaço (como um botão). O foco por teclado usa o anel do app
  * (`:focus-visible` em `globals.css`) e, além dele, o contorno da caixa no acento.
  */
-function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, onSelect, onStartMove, onStartConnect, onDropConnect, onOpen }: TableBoxProps) {
+function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, activeConnectColumn = null, onSelect, onStartMove, onStartConnect, onDropConnect, onOpen }: TableBoxProps) {
   const title = box.title ?? box.ref.name;
   const highlighted = box.center || selected;
   const boxMaxChars = box.width === 264 ? maxChars : Math.max(maxChars, Math.floor((maxChars * (box.width - 40)) / (264 - 32)));
@@ -205,6 +224,7 @@ function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, 
           rowHeight={rowHeight}
           boxWidth={box.width}
           maxChars={boxMaxChars}
+          activeConnect={activeConnectColumn === column.name}
           onStartConnect={onStartConnect ? (colName, event) => onStartConnect(box, colName, event) : undefined}
         />
       ))}
@@ -213,7 +233,13 @@ function TableBox({ box, rowHeight, maxChars, dimmed = false, selected = false, 
 
   if (box.center) {
     return (
-      <g transform={`translate(${box.x} ${box.y})`} role="group" aria-label={title} className={dimmed ? "opacity-30 transition-opacity" : undefined}>
+      <g
+        transform={`translate(${box.x} ${box.y})`}
+        role="group"
+        aria-label={title}
+        onPointerUp={onDropConnect ? () => onDropConnect(box.key) : undefined}
+        className={dimmed ? "opacity-30 transition-opacity" : undefined}
+      >
         {body}
       </g>
     );
@@ -349,7 +375,22 @@ export function DiagramCanvas({
     moved: boolean;
   } | null>(null);
   const moveSession = useRef<{ key: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
-  const connectSession = useRef<{ fromKey: string; column: string } | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const connectSession = useRef<{
+    fromKey: string;
+    column: string;
+    x1: number;
+    y1: number;
+    sticky: boolean;
+  } | null>(null);
+  const [connectingLine, setConnectingLine] = useState<{
+    fromKey: string;
+    column: string;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } | null>(null);
   const suppressClick = useRef(false);
   const zoomRef = useRef(zoom);
   const fitted = useRef(start !== undefined);
@@ -504,6 +545,22 @@ export function DiagramCanvas({
     if (!onMoveTable && !onConnect) return;
 
     function handlePointerMove(event: PointerEvent) {
+      const connecting = connectSession.current;
+      if (connecting && svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        const x2 = (event.clientX - rect.left) / zoomRef.current;
+        const y2 = (event.clientY - rect.top) / zoomRef.current;
+        setConnectingLine({
+          fromKey: connecting.fromKey,
+          column: connecting.column,
+          x1: connecting.x1,
+          y1: connecting.y1,
+          x2,
+          y2,
+        });
+        return;
+      }
+
       const moving = moveSession.current;
       if (!moving || !onMoveTable) return;
       const dx = (event.clientX - moving.startX) / zoomRef.current;
@@ -518,9 +575,36 @@ export function DiagramCanvas({
       }
     }
 
-    function handlePointerUp() {
+    function handlePointerUp(event: PointerEvent) {
       moveSession.current = null;
+      const connecting = connectSession.current;
+      if (!connecting) return;
+
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        const svgX = (event.clientX - rect.left) / zoomRef.current;
+        const svgY = (event.clientY - rect.top) / zoomRef.current;
+        const hitBox = activeLayout.boxes.find(
+          (b) =>
+            svgX >= b.x &&
+            svgX <= b.x + b.width &&
+            svgY >= b.y &&
+            svgY <= b.y + b.height,
+        );
+        if (hitBox && hitBox.key !== connecting.fromKey) {
+          connectSession.current = null;
+          setConnectingLine(null);
+          onConnect?.(connecting.fromKey, connecting.column, hitBox.key);
+          return;
+        }
+        if (hitBox && hitBox.key === connecting.fromKey && !connecting.sticky) {
+          connecting.sticky = true;
+          return;
+        }
+      }
+
       connectSession.current = null;
+      setConnectingLine(null);
     }
 
     window.addEventListener("pointermove", handlePointerMove);
@@ -529,7 +613,7 @@ export function DiagramCanvas({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
-  }, [onMoveTable, onConnect]);
+  }, [onMoveTable, onConnect, activeLayout.boxes]);
 
   function handleMouseDown(event: ReactMouseEvent<HTMLDivElement>) {
     if (moveSession.current !== null || connectSession.current !== null) return;
@@ -678,6 +762,7 @@ export function DiagramCanvas({
         )}
       >
         <svg
+          ref={svgRef}
           width={activeLayout.width * zoom}
           height={activeLayout.height * zoom}
           viewBox={`0 0 ${activeLayout.width} ${activeLayout.height}`}
@@ -704,6 +789,7 @@ export function DiagramCanvas({
               maxChars={metrics.rowChars}
               dimmed={neighborhood !== null && !neighborhood.tables.has(box.key)}
               selected={selectedKey === box.key}
+              activeConnectColumn={connectingLine?.fromKey === box.key ? connectingLine.column : null}
               onSelect={
                 onSelectBox
                   ? (key) => {
@@ -728,6 +814,14 @@ export function DiagramCanvas({
                   ? (targetBox, event) => {
                       if (event.button !== 0) return;
                       event.stopPropagation();
+                      const activeConn = connectSession.current;
+                      if (activeConn && activeConn.sticky && activeConn.fromKey !== targetBox.key && onConnect) {
+                        connectSession.current = null;
+                        setConnectingLine(null);
+                        suppressClick.current = true;
+                        onConnect(activeConn.fromKey, activeConn.column, targetBox.key);
+                        return;
+                      }
                       moveSession.current = {
                         key: targetBox.key,
                         startX: event.clientX,
@@ -743,10 +837,47 @@ export function DiagramCanvas({
                   ? (targetBox, columnName, event) => {
                       if (event.button !== 0) return;
                       event.stopPropagation();
+                      const activeConn = connectSession.current;
+                      if (activeConn && activeConn.sticky) {
+                        if (activeConn.fromKey !== targetBox.key) {
+                          connectSession.current = null;
+                          setConnectingLine(null);
+                          suppressClick.current = true;
+                          onConnect(activeConn.fromKey, activeConn.column, targetBox.key);
+                          return;
+                        }
+                        if (activeConn.column === columnName) {
+                          connectSession.current = null;
+                          setConnectingLine(null);
+                          return;
+                        }
+                      }
+                      const colIndex = Math.max(
+                        0,
+                        targetBox.columns?.findIndex((c) => c.name === columnName) ?? 0,
+                      );
+                      const x1 = targetBox.x + targetBox.width / 2;
+                      const y1 =
+                        targetBox.y +
+                        boxPaddingY +
+                        metrics.rowHeight * (colIndex + 1) +
+                        metrics.rowHeight / 2;
                       connectSession.current = {
                         fromKey: targetBox.key,
                         column: columnName,
+                        x1,
+                        y1,
+                        sticky: false,
                       };
+                      setConnectingLine({
+                        fromKey: targetBox.key,
+                        column: columnName,
+                        x1,
+                        y1,
+                        x2: x1,
+                        y2: y1,
+                      });
+                      onSelectBox?.(targetBox.key);
                     }
                   : undefined
               }
@@ -754,9 +885,13 @@ export function DiagramCanvas({
                 onConnect
                   ? (targetKey) => {
                       const session = connectSession.current;
-                      connectSession.current = null;
-                      if (session && session.fromKey !== targetKey) {
+                      if (!session) return;
+                      if (session.fromKey !== targetKey) {
+                        connectSession.current = null;
+                        setConnectingLine(null);
                         onConnect(session.fromKey, session.column, targetKey);
+                      } else if (!session.sticky) {
+                        session.sticky = true;
                       }
                     }
                   : undefined
@@ -764,6 +899,18 @@ export function DiagramCanvas({
               onOpen={onOpenTable}
             />
           ))}
+          {connectingLine !== null ? (
+            <line
+              x1={connectingLine.x1}
+              y1={connectingLine.y1}
+              x2={connectingLine.x2}
+              y2={connectingLine.y2}
+              strokeDasharray="4 3"
+              strokeWidth="2"
+              markerEnd={`url(#${marker})`}
+              className="pointer-events-none stroke-accent"
+            />
+          ) : null}
         </svg>
       </div>
 

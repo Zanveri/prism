@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BaseMenu } from "@/app/build/_components/base-menu";
@@ -126,6 +134,73 @@ export type BuildPageViewProps = {
   onDeleteModel?: (id: string) => void;
 };
 
+const SIDEBAR_MIN_WIDTH = 180;
+const SIDEBAR_MAX_WIDTH = 520;
+const SIDEBAR_DEFAULT_WIDTH = 272;
+
+const EDITOR_MIN_WIDTH = 320;
+const EDITOR_MAX_WIDTH = 860;
+const EDITOR_DEFAULT_WIDTH = 448;
+
+function PaneResizeHandle({
+  label,
+  width,
+  minWidth,
+  maxWidth,
+  onResize,
+}: {
+  label: string;
+  width: number;
+  minWidth: number;
+  maxWidth: number;
+  onResize: (width: number) => void;
+}) {
+  const startRef = useRef<{ x: number; w: number } | null>(null);
+  const clamp = (value: number) => Math.max(minWidth, Math.min(maxWidth, value));
+
+  const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.currentTarget.dataset.dragging = "";
+    startRef.current = { x: e.clientX, w: width };
+  };
+  const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!startRef.current) return;
+    onResize(clamp(startRef.current.w + (e.clientX - startRef.current.x)));
+  };
+  const handlePointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
+    delete e.currentTarget.dataset.dragging;
+    startRef.current = null;
+  };
+  const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      onResize(clamp(width - 16));
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      onResize(clamp(width + 16));
+    }
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      aria-valuemin={minWidth}
+      aria-valuemax={maxWidth}
+      aria-valuenow={width}
+      tabIndex={0}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onKeyDown={handleKeyDown}
+      className="-mx-0.5 z-10 w-1 flex-none cursor-col-resize touch-none bg-transparent transition-colors hover:bg-accent/60 focus-visible:bg-accent/60 data-[dragging]:bg-accent"
+    />
+  );
+}
+
 export function BuildPageView({
   userName,
   sidebarHidden,
@@ -171,6 +246,9 @@ export function BuildPageView({
   onExportModel,
   onDeleteModel,
 }: BuildPageViewProps) {
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [editorWidth, setEditorWidth] = useState(EDITOR_DEFAULT_WIDTH);
+
   const activeEntry =
     activeModelId !== null
       ? (savedModels.find((m) => m.id === activeModelId) ?? null)
@@ -219,15 +297,25 @@ export function BuildPageView({
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {!sidebarHidden && (
-          <BuildSidebar
-            model={activeModel}
-            selectedTableKey={selectedTableKey}
-            problems={problems}
-            onSelectTable={onSelectTable}
-            onAddTable={onAddTable}
-            onImportTables={onImportTables}
-            onOpenDdlView={onGenerateDdl}
-          />
+          <>
+            <BuildSidebar
+              model={activeModel}
+              selectedTableKey={selectedTableKey}
+              problems={problems}
+              width={sidebarWidth}
+              onSelectTable={onSelectTable}
+              onAddTable={onAddTable}
+              onImportTables={onImportTables}
+              onOpenDdlView={onGenerateDdl}
+            />
+            <PaneResizeHandle
+              label="Ajustar a largura das tabelas do modelo"
+              width={sidebarWidth}
+              minWidth={SIDEBAR_MIN_WIDTH}
+              maxWidth={SIDEBAR_MAX_WIDTH}
+              onResize={setSidebarWidth}
+            />
+          </>
         )}
 
         {activeModel === null ? (
@@ -292,7 +380,8 @@ export function BuildPageView({
               <div className="flex min-h-0 flex-1 overflow-hidden">
                 <section
                   aria-label="Editor do modelo"
-                  className="flex min-h-0 min-w-0 flex-[1_1_448px] flex-col overflow-hidden border-r border-border bg-panel"
+                  style={{ width: editorWidth }}
+                  className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
                 >
                   <div
                     role="group"
@@ -324,13 +413,18 @@ export function BuildPageView({
                         </button>
                       );
                     })}
-                    <span className="ml-auto text-xs text-subtle">
-                      {buildCopy.paneSameModelHint}
-                    </span>
                   </div>
 
                   {editorContent}
                 </section>
+
+                <PaneResizeHandle
+                  label="Ajustar a largura do editor do modelo"
+                  width={editorWidth}
+                  minWidth={EDITOR_MIN_WIDTH}
+                  maxWidth={EDITOR_MAX_WIDTH}
+                  onResize={setEditorWidth}
+                />
 
                 <section
                   aria-label="Diagrama do modelo"

@@ -401,12 +401,13 @@ export function updateColumn(
   key: string,
   name: string,
   patch: Partial<ModelColumn>,
+  columnIndex?: number,
 ): BuildModel {
   let baseModel = model;
   let targetColumnName = name;
   if (patch.name !== undefined && patch.name !== name) {
-    baseModel = renameColumn(model, key, name, patch.name);
-    targetColumnName = patch.name;
+    baseModel = renameColumn(model, key, name, patch.name, columnIndex);
+    targetColumnName = patch.name.trim();
   }
   return {
     ...baseModel,
@@ -417,8 +418,10 @@ export function updateColumn(
       const isPk = t.primaryKey?.columns.includes(targetColumnName) ?? false;
       return {
         ...t,
-        columns: t.columns.map((c) => {
-          if (c.name !== targetColumnName) {
+        columns: t.columns.map((c, idx) => {
+          const matches =
+            columnIndex !== undefined ? idx === columnIndex : c.name === targetColumnName;
+          if (!matches) {
             return c;
           }
           const updated: ModelColumn = {
@@ -446,13 +449,18 @@ export function renameColumn(
   key: string,
   from: string,
   to: string,
+  columnIndex?: number,
 ): BuildModel {
   const target = model.tables.find((t) => tableKey(t) === key);
   if (!target) {
     return model;
   }
   const trimmed = to.trim();
-  const replaceCol = (cols: string[]) => cols.map((c) => (c === from ? trimmed : c));
+  const hasOtherSameName =
+    columnIndex !== undefined &&
+    target.columns.some((c, idx) => idx !== columnIndex && c.name === from);
+  const replaceCol = (cols: string[]) =>
+    hasOtherSameName ? cols : cols.map((c) => (c === from ? trimmed : c));
 
   return {
     ...model,
@@ -481,15 +489,16 @@ export function renameColumn(
 
       return {
         ...t,
-        columns: t.columns.map((c) =>
-          c.name === from
+        columns: t.columns.map((c, idx) => {
+          const matches = columnIndex !== undefined ? idx === columnIndex : c.name === from;
+          return matches
             ? {
                 ...c,
                 name: trimmed,
                 exactName: needsQuotes(model.engine, trimmed, false),
               }
-            : c,
-        ),
+            : c;
+        }),
         primaryKey: t.primaryKey
           ? { ...t.primaryKey, columns: replaceCol(t.primaryKey.columns) }
           : null,

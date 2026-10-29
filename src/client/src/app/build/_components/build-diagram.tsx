@@ -4,6 +4,7 @@ import { DiagramCanvas } from "@/app/workbench/_components/table-tab/diagram-can
 import { Button } from "@/components/ui";
 
 import {
+  addForeignKey,
   removeTable,
   tableKey,
   type BuildModel,
@@ -71,9 +72,19 @@ export function BuildDiagram({
           const res = connectColumn(model, fromKey, column, toKey);
           if ("model" in res) {
             onChange(res.model);
-          } else {
+          } else if (onNeedsForeignKeyDialog) {
             onSelectTable(fromKey);
-            onNeedsForeignKeyDialog?.(fromKey, res.needsDialog);
+            onNeedsForeignKeyDialog(fromKey, res.needsDialog);
+          } else {
+            onChange(
+              addForeignKey(model, fromKey, {
+                ...res.needsDialog,
+                target: {
+                  ...res.needsDialog.target,
+                  columns: [res.needsDialog.target.columns[0] ?? "id"],
+                },
+              }),
+            );
           }
         }}
       />

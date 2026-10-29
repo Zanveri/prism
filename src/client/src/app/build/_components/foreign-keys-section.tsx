@@ -1,5 +1,15 @@
-import { Button, CloseIcon, PlusIcon, Select } from "@/components/ui";
+import { useState } from "react";
+import {
+  Button,
+  CloseIcon,
+  Dialog,
+  Field,
+  FieldLabel,
+  PlusIcon,
+  Select,
+} from "@/components/ui";
 import { sameName } from "../_lib/build-engines";
+import { tableKey } from "../_lib/build-model";
 import type {
   BuildModel,
   FkAction,
@@ -23,6 +33,14 @@ export type ForeignKeysSectionProps = {
   onRemoveForeignKey: (index: number) => void;
 };
 
+type FkDraft = {
+  editIndex: number | null;
+  sourceColumn: string;
+  targetTableKey: string;
+  targetColumn: string;
+  onDelete: FkAction;
+};
+
 export function ForeignKeysSection({
   model,
   table,
@@ -31,32 +49,75 @@ export function ForeignKeysSection({
   onRemoveForeignKey,
 }: ForeignKeysSectionProps) {
   const options = fkActionOptions(model.engine).onDelete;
+  const [draft, setDraft] = useState<FkDraft | null>(null);
 
-  const handleAdd = () => {
+  const openNewDraft = () => {
     const candidateTarget =
       model.tables.find(
         (t) =>
           (t.schema !== table.schema || t.name !== table.name) &&
           t.primaryKey &&
           t.primaryKey.columns.length > 0,
-      ) ?? model.tables[0];
+      ) ??
+      model.tables.find(
+        (t) => t.schema !== table.schema || t.name !== table.name,
+      ) ??
+      model.tables[0];
     const sourceCol = table.columns[0]?.name ?? "id";
-    const targetSchema = candidateTarget?.schema ?? table.schema;
-    const targetTable = candidateTarget?.name ?? table.name;
-    const targetCols = candidateTarget?.primaryKey?.columns ?? ["id"];
+    const targetKey = candidateTarget ? tableKey(candidateTarget) : tableKey(table);
+    const targetCol =
+      candidateTarget?.primaryKey?.columns[0] ??
+      candidateTarget?.columns[0]?.name ??
+      "id";
+    const defaultOnDelete: FkAction =
+      model.engine === "informix" ? "noAction" : "restrict";
 
-    onAddForeignKey({
-      name: null,
-      columns: [sourceCol],
-      target: {
-        schema: targetSchema,
-        table: targetTable,
-        columns: [...targetCols],
-      },
-      onDelete: "noAction",
-      onUpdate: "noAction",
+    setDraft({
+      editIndex: null,
+      sourceColumn: sourceCol,
+      targetTableKey: targetKey,
+      targetColumn: targetCol,
+      onDelete: options.includes(defaultOnDelete) ? defaultOnDelete : (options[0] ?? "noAction"),
     });
   };
+
+  const openEditDraft = (idx: number, fk: ModelForeignKey) => {
+    const targetKey = `${fk.target.schema}.${fk.target.table}`;
+    setDraft({
+      editIndex: idx,
+      sourceColumn: fk.columns[0] ?? table.columns[0]?.name ?? "id",
+      targetTableKey: targetKey,
+      targetColumn: fk.target.columns[0] ?? "id",
+      onDelete: fk.onDelete,
+    });
+  };
+
+  const submitDraft = () => {
+    if (!draft) return;
+    const targetTable =
+      model.tables.find((t) => tableKey(t) === draft.targetTableKey) ?? table;
+    const fk: ModelForeignKey = {
+      name: draft.editIndex !== null ? (table.foreignKeys[draft.editIndex]?.name ?? null) : null,
+      columns: [draft.sourceColumn],
+      target: {
+        schema: targetTable.schema,
+        table: targetTable.name,
+        columns: [draft.targetColumn],
+      },
+      onDelete: draft.onDelete,
+      onUpdate: "noAction",
+    };
+    if (draft.editIndex !== null) {
+      onUpdateForeignKey(draft.editIndex, fk);
+    } else {
+      onAddForeignKey(fk);
+    }
+    setDraft(null);
+  };
+
+  const draftTargetTable = draft
+    ? (model.tables.find((t) => tableKey(t) === draft.targetTableKey) ?? null)
+    : null;
 
   return (
     <section
@@ -72,7 +133,7 @@ export function ForeignKeysSection({
           type="button"
           variant="secondary"
           size="compact"
-          onClick={handleAdd}
+          onClick={openNewDraft}
           className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
         >
           <PlusIcon />
@@ -106,16 +167,21 @@ export function ForeignKeysSection({
 
         return (
           <div
-            key={`${colsLabel}-${idx}`}
+            key={idx}
             className="grid grid-cols-[minmax(0,1fr)_164px_28px] items-center gap-x-2 gap-y-1.5 rounded-md border border-border bg-raised px-2.5 py-2 font-mono text-xs"
           >
-            <span className="min-w-0 truncate">
+            <button
+              type="button"
+              onClick={() => openEditDraft(idx, fk)}
+              title="Clique para editar a relação"
+              className="min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-left font-mono text-xs text-ink hover:underline"
+            >
               {colsLabel} <span className="text-accent">→</span> {targetDisplay}
               <span className="text-subtle">
                 {" "}
                 ({fk.target.columns.join(", ")})
               </span>
-            </span>
+            </button>
 
             <Select
               aria-label={`Ao excluir em ${colsLabel}`}
@@ -131,7 +197,7 @@ export function ForeignKeysSection({
                 label: deleteActionLabels[action],
               }))}
               wideList
-              className="min-h-7 bg-background px-2 py-1 font-sans text-xs"
+              className="h-7 min-h-7 bg-background px-2 py-0 font-sans text-xs"
             />
 
             <Button
@@ -154,6 +220,123 @@ export function ForeignKeysSection({
           </div>
         );
       })}
+
+      {draft !== null ? (
+        <Dialog
+          open
+          title={draft.editIndex !== null ? "Editar chave estrangeira" : "Nova chave estrangeira"}
+          onClose={() => setDraft(null)}
+          size="md"
+          footer={
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setDraft(null)}
+              >
+                Cancelar
+              </Button>
+              <Button type="button" variant="primary" onClick={submitDraft}>
+                Salvar
+              </Button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            <Field>
+              <FieldLabel>Coluna em {table.name}</FieldLabel>
+              <Select
+                aria-label={`Coluna em ${table.name}`}
+                value={draft.sourceColumn}
+                onChange={(nextCol) =>
+                  setDraft((prev) =>
+                    prev ? { ...prev, sourceColumn: nextCol } : null,
+                  )
+                }
+                options={
+                  table.columns.length > 0
+                    ? table.columns.map((c) => ({
+                        value: c.name,
+                        label: `${c.name} (${c.type})`,
+                      }))
+                    : [{ value: draft.sourceColumn, label: draft.sourceColumn }]
+                }
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel>Tabela de destino</FieldLabel>
+              <Select
+                aria-label="Tabela de destino"
+                value={draft.targetTableKey}
+                onChange={(nextKey) => {
+                  const nextTarget = model.tables.find(
+                    (t) => tableKey(t) === nextKey,
+                  );
+                  const nextTargetCol =
+                    nextTarget?.primaryKey?.columns[0] ??
+                    nextTarget?.columns[0]?.name ??
+                    "id";
+                  setDraft((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          targetTableKey: nextKey,
+                          targetColumn: nextTargetCol,
+                        }
+                      : null,
+                  );
+                }}
+                options={model.tables.map((t) => {
+                  const k = tableKey(t);
+                  return {
+                    value: k,
+                    label: t.schema === table.schema ? t.name : k,
+                  };
+                })}
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel>Coluna de destino</FieldLabel>
+              <Select
+                aria-label="Coluna de destino"
+                value={draft.targetColumn}
+                onChange={(nextCol) =>
+                  setDraft((prev) =>
+                    prev ? { ...prev, targetColumn: nextCol } : null,
+                  )
+                }
+                options={
+                  draftTargetTable && draftTargetTable.columns.length > 0
+                    ? draftTargetTable.columns.map((c) => ({
+                        value: c.name,
+                        label: `${c.name} (${c.type})`,
+                      }))
+                    : [{ value: draft.targetColumn, label: draft.targetColumn }]
+                }
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel>Ao excluir</FieldLabel>
+              <Select
+                aria-label="Ao excluir"
+                value={draft.onDelete}
+                onChange={(nextAction) =>
+                  setDraft((prev) =>
+                    prev ? { ...prev, onDelete: nextAction as FkAction } : null,
+                  )
+                }
+                options={options.map((action) => ({
+                  value: action,
+                  label: deleteActionLabels[action],
+                }))}
+              />
+            </Field>
+          </div>
+        </Dialog>
+      ) : null}
 
       {!table.origin ? (
         <p className="m-0 text-xs leading-[18px] text-muted">

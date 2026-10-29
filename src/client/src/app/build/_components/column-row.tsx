@@ -1,8 +1,49 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-import { Button, ChevronIcon, Input } from "@/components/ui";
+import { Button, ChevronIcon, Input, Select, type SelectOption } from "@/components/ui";
 import type { ModelColumn } from "../_lib/build-model.schema";
 import type { RowState } from "../_lib/editor-rows";
+
+const parameterizedPresets: Record<string, readonly string[]> = {
+  varchar: ["varchar(80)", "varchar(255)"],
+  char: ["char(1)"],
+  decimal: ["decimal(12,2)"],
+  numeric: ["numeric(12,2)"],
+};
+
+function buildTypeOptions(
+  catalogTypes: readonly string[],
+  currentType: string,
+): SelectOption[] {
+  const expanded: string[] = [];
+  for (const t of catalogTypes) {
+    expanded.push(t);
+    const presets = parameterizedPresets[t.toLowerCase()];
+    if (presets) {
+      for (const p of presets) {
+        if (!expanded.some((e) => e.toLowerCase() === p.toLowerCase())) {
+          expanded.push(p);
+        }
+      }
+    }
+  }
+
+  const currentLower = currentType.trim().toLowerCase();
+  let matchedCurrent = false;
+  const options: SelectOption[] = expanded.map((t) => {
+    if (!matchedCurrent && t.toLowerCase() === currentLower) {
+      matchedCurrent = true;
+      return { value: currentType, label: currentType };
+    }
+    return { value: t, label: t };
+  });
+
+  if (!matchedCurrent && currentType.trim() !== "") {
+    options.unshift({ value: currentType, label: currentType });
+  }
+
+  return options;
+}
 
 export type ColumnRowProps = {
   index: number;
@@ -12,7 +53,7 @@ export type ColumnRowProps = {
   isUnique: boolean;
   fkTargetDisplay: string | null;
   rowState: RowState;
-  typesListId: string;
+  catalogTypes: readonly string[];
   checkExpression: string;
   onUpdateColumn: (patch: Partial<ModelColumn>) => void;
   onTogglePk: () => void;
@@ -32,7 +73,7 @@ export function ColumnRow({
   isUnique,
   fkTargetDisplay,
   rowState,
-  typesListId,
+  catalogTypes,
   checkExpression,
   onUpdateColumn,
   onTogglePk,
@@ -44,6 +85,10 @@ export function ColumnRow({
   onAddNextColumn,
 }: ColumnRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const typeOptions = useMemo(
+    () => buildTypeOptions(catalogTypes, column.type),
+    [catalogTypes, column.type],
+  );
   const beforeId = rowState.marker === "changed" ? `col${index + 1}-antes` : undefined;
   const nameAriaLabel =
     rowState.marker === "new"
@@ -111,6 +156,12 @@ export function ColumnRow({
             aria-label={nameAriaLabel}
             aria-describedby={beforeId}
             onChange={(e) => onUpdateColumn({ name: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && onAddNextColumn) {
+                e.preventDefault();
+                onAddNextColumn();
+              }
+            }}
             className={`h-7 min-w-0 rounded bg-background font-mono text-xs ${borderClass} ${
               fkTargetDisplay
                 ? "pr-[30px] pl-2"
@@ -133,20 +184,14 @@ export function ColumnRow({
           ) : null}
         </div>
 
-        <Input
-          type="text"
+        <Select
           value={column.type}
-          list={typesListId}
+          options={typeOptions}
           aria-label={`Tipo de ${column.name}`}
           aria-describedby={beforeId}
-          onChange={(e) => onUpdateColumn({ type: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && onAddNextColumn) {
-              e.preventDefault();
-              onAddNextColumn();
-            }
-          }}
-          className={`h-7 min-w-0 rounded bg-background px-2 font-mono text-xs text-body ${
+          onChange={(nextType) => onUpdateColumn({ type: nextType })}
+          wideList
+          className={`h-7 min-h-7 rounded bg-background px-2 py-0 font-mono text-xs text-body ${
             rowState.marker === "changed" ? "border-accent" : "border-border"
           }`}
         />
@@ -259,6 +304,15 @@ export function ColumnRow({
 
       {expanded ? (
         <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 border-t border-border pt-2 pr-3 pb-3 pl-[19px] text-xs text-muted">
+          <label htmlFor={`col-${index}-tipo`}>Tipo / tamanho</label>
+          <Input
+            id={`col-${index}-tipo`}
+            type="text"
+            value={column.type}
+            onChange={(e) => onUpdateColumn({ type: e.target.value })}
+            className="h-7 rounded border-border bg-background px-2 font-mono text-xs text-body"
+          />
+
           <label htmlFor={`col-${index}-padrao`}>Padrão</label>
           <Input
             id={`col-${index}-padrao`}
