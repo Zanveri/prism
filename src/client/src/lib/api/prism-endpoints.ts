@@ -38,6 +38,7 @@ export const prismEndpoints = {
   userDatabaseSessionSchemaDiagram: (id: string, schema: string) => `api/user/database-sessions/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/diagram`,
   userDatabaseSessionColumns: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/columns`,
   userDatabaseSessionIndexes: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/indexes`,
+  userDatabaseSessionChecks: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/checks`,
   userDatabaseSessionForeignKeys: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/foreign-keys`,
   userDatabaseSessionReferencedBy: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/referenced-by`,
   userDatabaseSessionQueries: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries`,
@@ -54,6 +55,9 @@ export const prismEndpoints = {
   // RN-SCRIPT-007: as pastas da seção Scripts, à parte das pastas de conexões.
   userScriptFolders: "api/user/script-folders",
   userScriptFolder: (id: string) => `api/user/script-folders/${encodeURIComponent(id)}`,
+  // RN-CONSTRUIR-080: modelos do Construir no cofre.
+  userBuildModels: "api/user/build-models",
+  userBuildModel: (id: string) => `api/user/build-models/${encodeURIComponent(id)}`,
   userWorkspace: "api/user/workspace",
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
