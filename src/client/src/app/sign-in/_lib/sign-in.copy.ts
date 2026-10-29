@@ -1,7 +1,7 @@
 /** Os textos da tela de entrada e de criação de usuário, num lugar só (RN-COFRE-009, RN-AVISO-002). */
 export const signInCopy = {
   brand: {
-    title: "Informix, Db2 e PostgreSQL no mesmo lugar.",
+    title: "Abra, conecte, consulte.",
     illustration: "Um feixe de luz entra no prisma e sai em três faixas de cor, cada uma chegando a um banco de dados",
   },
   subtitle: "Cada usuário tem o seu próprio cofre de conexões.",

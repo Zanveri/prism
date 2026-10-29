@@ -8,8 +8,8 @@ dos traços.
 
 | Arquivo | O que é |
 | --- | --- |
-| `prism-logo.svg` | O logotipo: o feixe branco entra no prisma de vidro e sai em três faixas de cor, cada uma chegando a um banco de dados (Informix, Db2 e PostgreSQL). É o desenho de traço fino do splash e da tela de login, copiado elemento por elemento, com o mesmo `viewBox`. Para fundo escuro. Fundo transparente. |
-| `prism-logo-light.svg` | A variante para fundo claro (RN-MARCA-006): a mesma geometria e as mesmas grossuras. Mudam só as cores que sumiriam no claro: o raio e o brilho dele, o contorno do prisma, as três cores dos bancos e o corpo e o topo dos cilindros. O vidro do prisma, a luz dentro dele e o ponto da entrada ficam como estão. |
+| `prism-logo.svg` | O logotipo: o feixe branco entra no prisma de vidro e sai em três faixas de cor, em três tons de violeta, cada uma chegando a um banco de dados. É o desenho de traço fino do splash e da tela de login, copiado elemento por elemento, com o mesmo `viewBox`. Para fundo escuro. Fundo transparente. |
+| `prism-logo-light.svg` | A variante para fundo claro (RN-MARCA-006): a mesma geometria e as mesmas grossuras. Mudam só as cores que sumiriam no claro: o raio e o brilho dele, o contorno do prisma, os três tons de violeta (mais escuros) e o corpo e o topo dos cilindros. O vidro do prisma, a luz dentro dele e o ponto da entrada ficam como estão. |
 
 E os PNG, de cada SVG, com fundo transparente:
 
@@ -40,7 +40,9 @@ A regra da marca:
   `prism-logo-light.svg`.
 
 O teste `src/client/src/components/layout/brand-assets.test.ts` confere que `prism-logo.svg` é o desenho do splash
-(elemento por elemento) e que a variante clara só difere nas cores.
+(elemento por elemento, com o violeta no lugar do rosa, do verde e do azul de antes: RN-MARCA-001, alterada em 2026-10-29) e
+que a variante clara só difere nas cores. As cópias em `site/` (`prism-logo.svg`, `prism-logo-light.svg` e `favicon.svg`, que é
+o `src/client/build/icon.svg`) são os mesmos arquivos, byte a byte.
 
 ## A marca da Zanveri (`zanveri/`)
 
