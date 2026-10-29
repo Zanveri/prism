@@ -14,9 +14,11 @@ import "@fontsource/ibm-plex-mono/600.css";
 
 import { App } from "@/app/app";
 import { syncWindowBar } from "@/components/layout/window-bar";
+import { installTooltips } from "@/components/ui/tooltip";
 import "@/styles/globals.css";
 
 syncWindowBar();
+installTooltips();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
