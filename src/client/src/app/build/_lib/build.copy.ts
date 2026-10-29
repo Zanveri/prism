@@ -67,6 +67,9 @@ export const buildCopy = {
   footerVaultOpen: (user: string) => `Cofre de ${user} aberto`,
   footerSavedModelsCount: (count: number) =>
     `${count} ${count === 1 ? "modelo salvo" : "modelos salvos"}`,
+  diagramLabel: "Diagrama do modelo",
+  diagramTableRemoved: (table: string) => `Tabela "${table}" removida.`,
+  undoAction: "Desfazer",
   problems: {
     e1: (target: string) =>
       `Nome de ${target} vazio ou com caractere de controle. O banco rejeita identificadores assim.`,

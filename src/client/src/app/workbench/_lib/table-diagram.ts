@@ -27,7 +27,7 @@ const loopRoom = 64;
 /** Mais do que isto e o desenho vira uma parede: as outras ficam de fora, e a tela diz quantas. */
 export const maxNeighbors = 12;
 
-export type DiagramColumn = { name: string; type: string; primaryKey: boolean; foreignKey: boolean };
+export type DiagramColumn = { name: string; type: string; primaryKey: boolean; foreignKey: boolean; state?: "added" | "removed" };
 
 export type DiagramBox = {
   key: string;
@@ -36,6 +36,10 @@ export type DiagramBox = {
   title?: string;
   /** Tabela referenciada fora do esquema/banco atual (stub sem colunas). */
   external?: boolean;
+  variant?: "new" | "existing";
+  badge?: string;
+  dropped?: boolean;
+  warning?: "error" | "warning";
   center: boolean;
   x: number;
   y: number;
