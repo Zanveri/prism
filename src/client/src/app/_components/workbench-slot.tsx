@@ -6,26 +6,23 @@ import { pathsConfig } from "@/config/paths.config";
 import { isLost } from "../workbench/_lib/tab-focus";
 
 /**
- * O lugar da área de trabalho dentro do cofre. Ela fica MONTADA enquanto o cofre está aberto, e as outras telas de dentro dele
- * (Configurações; o formulário de conexão é um diálogo sobre ela) aparecem no lugar dela sem desmontá-la: fora da rota dela ela fica escondida (`hidden`) e inerte
- * (`inert`: fora da ordem do teclado e do leitor de tela, sem clique), como as abas inativas já ficam. Assim o que o editor
- * guarda, e que não volta se ele for recriado (o cursor, a seleção, o histórico de desfazer, a rolagem), e o que a tela guarda
- * (a largura do navegador, a divisão entre editor e resultado, o zoom do diagrama) não se perdem ao ir e voltar.
+ * O lugar das telas que ficam montadas dentro do cofre (Área de trabalho e Construir, RN-CONSTRUIR-001). Elas ficam MONTADAS enquanto o cofre
+ * está aberto, e as outras telas de dentro dele (Configurações; o formulário de conexão é um diálogo sobre a área de trabalho) aparecem no lugar
+ * delas sem desmontá-las: fora da rota de cada uma, ela fica escondida (`hidden`) e inerte (`inert`: fora da ordem do teclado e do leitor de tela,
+ * sem clique), como as abas inativas já ficam. Assim o que o editor guarda, e que não volta se ele for recriado (o cursor, a seleção, o histórico
+ * de desfazer, a rolagem), e o que a tela guarda (a largura do navegador, a divisão entre editor e resultado, o zoom do diagrama) não se perdem ao
+ * ir e voltar.
  *
- * Uma consulta em andamento continua rodando com ela escondida (o executor mora no provedor, e é o que acontece ao trocar de aba). Os
- * atalhos dela (Ctrl+Enter, as setas da árvore) são do que está com o foco, e com ela inerte nada ali recebe o foco: não disparam.
+ * Com `mountOnFirstVisit`, a tela só é montada na primeira vez que a rota dela é visitada na janela, e dali em diante fica montada até o cofre fechar.
  *
  * Ao reaparecer, o foco volta ao elemento que o tinha quando ela foi escondida (o editor, em geral), se ele ainda existe: as linhas de uma
  * lista virtual saem do DOM enquanto ela está escondida. Só volta se o foco está perdido (RN-ABAS-019): este invólucro é pai da área das abas e o efeito dele
  * roda depois do dela, então devolver o foco antigo sempre desfaria o foco que ela acabou de levar a uma aba aberta na mesma volta da tela.
- *
- * `hidden` é `display: none`: enquanto dura, TODA caixa aqui dentro mede 0x0, e quem observa tamanho (`ResizeObserver`) é avisado disso. O
- * CodeMirror e o diagrama tratam o tamanho zero como "sem medida". A lista virtual, não: o contêiner sem altura só deixa de desenhar linhas
- * (e volta a desenhar quando reaparece), mas a LINHA medida com altura zero ficava guardada assim, e as primeiras linhas do navegador sumiam
- * ao voltar (E2). Por isso a lista que mede as linhas passa `measureElement: measureRendered` (`workbench/_lib/row-measure.ts`, com teste).
  */
-export function WorkbenchSlot({ children }: { children: ReactNode }) {
-  const visible = useLocation().pathname === pathsConfig.workbench;
+export function KeepAliveSlot({ path = pathsConfig.workbench, mountOnFirstVisit = false, children }: { path?: string; mountOnFirstVisit?: boolean; children: ReactNode }) {
+  const visible = useLocation().pathname === path;
+  const visited = useRef(!mountOnFirstVisit || visible);
+  if (visible) visited.current = true;
   const lastFocused = useRef<HTMLElement | null>(null);
   const wasVisible = useRef(visible);
 
@@ -37,6 +34,8 @@ export function WorkbenchSlot({ children }: { children: ReactNode }) {
 
     wasVisible.current = visible;
   }, [visible]);
+
+  if (!visited.current) return null;
 
   return (
     <div
@@ -52,3 +51,6 @@ export function WorkbenchSlot({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+/** O invólucro da Área de trabalho, com o caminho padrão `/workbench`. */
+export const WorkbenchSlot = KeepAliveSlot;
