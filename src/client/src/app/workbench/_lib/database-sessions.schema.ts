@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { engineSchema } from "@/app/connections/_lib/connections.schema";
 
+import { transactionSchema } from "./transaction";
+
 /**
  * A sessão que a API abre com o banco de uma conexão (RN-SESSAO-001). A tela só usa o `id`, que é
  * opaco, e o `database`; o resto é tolerado em qualquer formato e vira `undefined` se não servir.
@@ -14,9 +16,17 @@ export const databaseSessionSchema = z.object({
   connectionID: z.guid().optional().catch(undefined),
   engine: engineSchema.optional().catch(undefined),
   serverVersion: z.string().optional().catch(undefined),
+  // RN-TX-001 e 013: o modo em que a sessão começou e se o banco tem transação; fora da forma, a aba fica como estava.
+  transaction: transactionSchema.nullish().catch(null),
+  transactionsAvailable: z.boolean().optional().catch(undefined),
 });
 
 export type DatabaseSession = z.infer<typeof databaseSessionSchema>;
+
+/** RN-TX-002 e 014: a resposta do Commit e do Rollback: o estado depois deles e quantos comandos a transação tinha. */
+export const transactionEndedSchema = z.object({ transaction: transactionSchema.nullish().catch(null), commands: z.number().int() });
+
+export type TransactionEnded = z.infer<typeof transactionEndedSchema>;
 
 /** RN-ARVORE-006: um banco do servidor a que a conta pode se conectar; `isCurrent` é o da sessão que listou (o da conexão). */
 export const serverDatabaseSchema = z.object({ name: z.string(), isCurrent: z.boolean() });

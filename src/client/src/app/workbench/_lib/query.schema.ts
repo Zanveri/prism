@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { transactionSchema, type TransactionWire } from "./transaction";
+
 /**
  * Uma coluna do resultado. `kind` só serve para alinhar (número à direita): um valor que a tela
  * não conhece vira `text`, em vez de recusar um resultado que o banco já entregou.
@@ -38,13 +40,17 @@ export type QueryPage = {
    * "Exportar…" do resultado (RN-EXPORT-001). Nulo quando a API não o diz: na dúvida, não é leitura.
    */
   read?: boolean | null;
+  /** RN-TX-003: o estado da transação da sessão depois do comando; só vem quando a API o manda. */
+  transaction?: TransactionWire;
+  /** RN-TX-008 e 009: a transação manual que estava aberta foi desfeita sem a pessoa pedir. */
+  transactionUndone?: true;
 };
 
 /** RN-GRADE-011: o filtro do resultado juntado ao comando (`merged`) ou por fora dele (`wrapped`). */
 export type FilterApplied = "merged" | "wrapped";
 
 /** O que um comando que não devolve linhas responde (RN-SQL-008). */
-export type QueryAffected = { kind: "affected"; rowsAffected: number; elapsedMs: number };
+export type QueryAffected = { kind: "affected"; rowsAffected: number; elapsedMs: number; transaction?: TransactionWire; transactionUndone?: true };
 
 export type QueryResult = QueryPage | QueryAffected;
 
@@ -71,7 +77,13 @@ const responseSchema = z.object({
   filterApplied: z.enum(["merged", "wrapped"]).nullish().catch(null),
   // RN-EXPORT-002: fora do formato não recusa a página; só o "Exportar…" fica desabilitado, como na dúvida.
   read: z.boolean().nullish().catch(null),
+  // RN-TX-003: fora do formato não recusa o resultado, que o banco já entregou; o estado da aba fica como estava.
+  transaction: transactionSchema.nullish().catch(null),
+  transactionUndone: z.boolean().nullish().catch(null),
 });
+
+/** RN-TX-003: o estado da transação vai no resultado só quando a API o manda: a forma de antes continua a mesma. */
+const withTransaction = (response: { transaction?: TransactionWire | null; transactionUndone?: boolean | null }) => ({ ...(response.transaction == null ? {} : { transaction: response.transaction }), ...(response.transactionUndone === true ? { transactionUndone: true as const } : {}) });
 
 export const queryResultSchema = responseSchema.transform((response, context): QueryResult => {
   const { columns, rows, elapsedMs } = response;
@@ -80,12 +92,12 @@ export const queryResultSchema = responseSchema.transform((response, context): Q
     return z.NEVER;
   };
 
-  if (columns == null) return typeof response.rowsAffected === "number" ? { kind: "affected", rowsAffected: response.rowsAffected, elapsedMs } : refuse("A resposta não tem colunas nem linhas afetadas.");
+  if (columns == null) return typeof response.rowsAffected === "number" ? { kind: "affected", rowsAffected: response.rowsAffected, elapsedMs, ...withTransaction(response) } : refuse("A resposta não tem colunas nem linhas afetadas.");
   if (rows == null) return refuse("A resposta tem colunas e não tem linhas.");
   if (rows.some((row) => row.length !== columns.length)) return refuse("Há linha com tamanho diferente do número de colunas.");
 
   const readOnly = response.editable?.known === true ? (response.editable.reason ?? null) : null;
-  return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null, resultId: response.resultID ?? null, readOnly, filterApplied: response.filterApplied ?? null, read: response.read ?? null };
+  return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null, resultId: response.resultID ?? null, readOnly, filterApplied: response.filterApplied ?? null, read: response.read ?? null, ...withTransaction(response) };
 });
 
 /** "Carregar mais" só devolve página de linhas. */

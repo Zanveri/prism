@@ -23,6 +23,9 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     private const int AlreadyInTransaction = -535;
     private const int TransactionNotAvailable = -256;
 
+    /// <summary>RN-TX-009: "Long transaction aborted": a transação passou do limite de transação longa do servidor (o `LTXHWM`), e o banco a desfez inteira.</summary>
+    private const int LongTransactionAborted = -458;
+
     /// <summary>
     /// Os números nativos do Informix quando a sonda da chamada de rotina (`SELECT rotina(...) FROM TABLE(SET{1})`) encontra um
     /// procedimento sem retorno (-674), uma função com mais de um valor (-684), uma rotina SPL que grava ou controla transação (-675) ou
@@ -71,6 +74,20 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     private const string RoutineModes = "'D', 'O', 'P', 'R', 'T'";
 
     protected override ESqlDialect Dialect => ESqlDialect.Informix;
+
+    /// <summary>RN-TX-009: o banco desfaz só o comando que falhou, menos na transação longa, que ele aborta inteira.</summary>
+    protected override bool UndoesTheTransaction(DatabaseFailure failure)
+        => _lastNativeError == LongTransactionAborted;
+
+    /// <summary>RN-TX-013: o banco sem log de transação (`is_logging` zero) não tem transação, e o Commit manual não existe nele.</summary>
+    protected override string TransactionsAvailableSql => "SELECT is_logging FROM sysmaster:sysdatabases WHERE name = DBINFO('dbname')";
+
+    /// <summary>
+    /// RN-EDIT-005 e RN-TX-011: o driver da IBM não tem os pontos de salvamento do ADO.NET. A volta vai sem `WORK`: por este driver, `ROLLBACK WORK TO
+    /// SAVEPOINT` desfaz a transação inteira (<see cref="AdoDatabaseConnection.RollbackWorkEndsTheTransaction"/>).
+    /// </summary>
+    protected override (string Save, string RollbackTo, string? Release)? SavepointSql(string name)
+        => ($"SAVEPOINT {name}", $"ROLLBACK TO SAVEPOINT {name}", $"RELEASE SAVEPOINT {name}");
 
     /// <summary>RN-CONN-013.</summary>
     protected override string PingSql => "SELECT 1 FROM systables WHERE tabid = 1";

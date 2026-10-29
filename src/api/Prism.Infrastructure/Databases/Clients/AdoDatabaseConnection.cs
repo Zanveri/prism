@@ -61,7 +61,19 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private const string ViewObjectKind = "view";
 
     private const string UnknownObjectKindMessage = "O tipo de objeto pedido não existe: use tables, views, routines ou sequences.";
-    private const string TransactionControlMessage = "Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos: toda sessão é auto-commit, e cada comando é confirmado quando termina.";
+    private const string TransactionControlMessage = "Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos em Auto-commit, em que cada comando é confirmado quando termina. Para controlar a transação, escolha \"Commit manual\" na barra do editor: o primeiro comando abre a transação, e \"Commit\" e \"Rollback\" (ou COMMIT e ROLLBACK digitados) a encerram.";
+    private const string BeginInManualMessage = "No Commit manual o Prism já abre a transação no primeiro comando: não é preciso enviar BEGIN. Execute os comandos e encerre com \"Commit\" ou \"Rollback\" (ou COMMIT e ROLLBACK digitados).";
+    private const string NeverTransactionControlMessage = "A confirmação em duas fases (PREPARE TRANSACTION, COMMIT PREPARED), o AND CHAIN e o COMMIT ou ROLLBACK com mais alguma coisa depois não são aceitos; nada foi enviado. Use COMMIT ou ROLLBACK sozinhos, ou os botões \"Commit\" e \"Rollback\".";
+    private const string NotAllowedInTransactionMessage = "Este comando não roda dentro de transação, e a recusa do banco estragaria a transação manual da aba; nada foi enviado. Execute-o numa aba em Auto-commit.";
+    private const string ReadOnlyWithTransactionMessage = "A conexão passou a somente leitura com uma transação manual aberta nesta aba; nada foi enviado. Encerre a transação com \"Commit\" ou \"Rollback\" antes.";
+    private const string RollbackWorkToSavepointMessage = "Pelo driver da IBM, ROLLBACK WORK TO SAVEPOINT desfaz a transação inteira, e não só o que veio depois do ponto de salvamento; nada foi enviado. Escreva ROLLBACK TO SAVEPOINT, sem o WORK.";
+    private const string CanceledWhileReturningRowsInTransactionMessage = "O cancelamento chegou enquanto o comando devolvia as linhas. O que ele gravou até ali ficou na transação, sem commit, e pode ser só uma parte do comando: o Prism não sabe se ele foi concluído. Confira antes do Commit.";
+
+    /// <summary>RN-TX-011: o ponto de salvamento da leitura paginada dentro da transação manual do PostgreSQL, desfeito quando o cursor fecha antes do fim.</summary>
+    private const string ReadSavepoint = "prism_read";
+
+    /// <summary>RN-EDIT-005: o ponto de salvamento do "Salvar" dentro da transação manual, desfeito quando ele falha.</summary>
+    private const string EditSavepoint = "prism_edit";
     private const string UndoneTransactionMessage = $"O comando deixou uma transação aberta, e o Prism a desfez: nada do que ele gravou dentro dela ficou. {TransactionControlMessage}";
     private const string WritesAfterTheFirstPageMessage = "O comando começou como leitura e tentou gravar depois da primeira página; nada foi gravado. Execute-o de novo: ele será executado até o fim.";
     private const string SeveralStatementsMessage = "Cada execução leva um comando só, e o texto enviado tem mais de um; nada foi executado. Envie um de cada vez. Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) é um comando só.";
@@ -147,6 +159,22 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private DbTransaction? _editTransaction;
 
     /// <summary>
+    /// RN-TX-001 e 002: a transação do Commit manual, do driver (no Db2 e no Informix é ela que tira a conexão do auto-commit). Aberta pelo
+    /// primeiro comando ou "Salvar" com <see cref="ManualCommit"/> ligado, e encerrada só pelo Commit, pelo Rollback, pelo banco que a desfaz
+    /// ou pelo fim da conexão: fechar um cursor nunca a encerra (RN-TX-011). Todo comando entra nela, menos os do "Salvar" em Auto-commit.
+    /// </summary>
+    private DbTransaction? _manualTransaction;
+
+    /// <summary>RN-TX-009: no PostgreSQL, um erro deixou a transação manual inteira com erro: o banco só aceita o Rollback.</summary>
+    private bool _manualFailed;
+
+    /// <summary>
+    /// O ponto de salvamento aberto dentro da transação manual: o da leitura paginada do PostgreSQL (<see cref="ReadSavepoint"/>), enquanto o
+    /// cursor está aberto, ou o do "Salvar" (<see cref="EditSavepoint"/>). O fim do cursor abandonado volta a ele, e a transação continua.
+    /// </summary>
+    private string? _savepoint;
+
+    /// <summary>
     /// RN-PROT-006: o modo da sessão que o Prism pôs no banco (<see cref="SessionModeSql"/>): verdadeiro depois do primeiro comando de uma conexão
     /// somente leitura, falso depois de ela deixar de ser. Nulo enquanto o Prism não mandou nada: a sessão de uma conexão que nunca foi somente
     /// leitura fica com o que o banco e o usuário dele já usam.
@@ -171,6 +199,47 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>O leitor só fica aberto entre páginas: o fim da leitura (<see cref="FinishCursorAsync"/>) e o abandono (<see cref="DisposeCursorAsync"/>) o tiram.</summary>
     public bool HasOpenCursor => _reader is not null;
+
+    public bool ManualCommit { get; set; }
+
+    public ETransactionState Transaction => _manualTransaction is null ? ETransactionState.None : _manualFailed ? ETransactionState.Failed : ETransactionState.Open;
+
+    /// <summary>
+    /// RN-TX-009: no banco em que um erro dentro da transação a deixa inteira com erro, até o Rollback (o PostgreSQL). Ali o cancelamento também
+    /// a estraga, e por isso a leitura paginada do Commit manual roda num ponto de salvamento só dela (<see cref="ReadSavepoint"/>): o cursor que
+    /// fecha antes do fim é cancelado e volta a ele, sem estragar a transação (RN-TX-011). Nos outros o banco desfaz só o comando que falhou.
+    /// </summary>
+    protected virtual bool ErrorsSpoilTheTransaction => false;
+
+    /// <summary>
+    /// RN-TX-009: a falha é o banco dizendo que desfez a transação inteira, e não só o comando (no Db2, o SQLSTATE da classe 40; no Informix, a
+    /// transação longa abortada). A transação do driver fica sem uso, e a aba diz que ela foi desfeita. Nenhuma, por padrão.
+    /// </summary>
+    protected virtual bool UndoesTheTransaction(DatabaseFailure failure)
+        => false;
+
+    /// <summary>
+    /// RN-TX-013: a consulta que diz se o banco da sessão tem transação, sem parâmetro, com uma linha e uma coluna (0 ou 1). Nula no banco que
+    /// sempre tem; o Informix sem log de transação não tem.
+    /// </summary>
+    protected virtual string? TransactionsAvailableSql => null;
+
+    /// <summary>RN-TX-013: o banco não tem transação nenhuma (os motores analíticos que o driver gerenciado atende): o Commit manual não existe nele.</summary>
+    protected virtual bool HasTransactions => true;
+
+    /// <summary>
+    /// RN-EDIT-005 e RN-TX-011: o ponto de salvamento dentro da transação manual, pela transação do driver (`DbTransaction.SaveAsync` e afins). O
+    /// banco cujo driver não os tem os escreve aqui, como texto (o Db2 e o Informix); nulo, por padrão. `Release` pode ser nulo: o banco que
+    /// não solta o ponto de salvamento.
+    /// </summary>
+    protected virtual (string Save, string RollbackTo, string? Release)? SavepointSql(string name)
+        => null;
+
+    /// <summary>
+    /// RN-TX-004: o driver deste banco trata `ROLLBACK WORK TO SAVEPOINT` como o `ROLLBACK` da transação inteira, sem erro (o da IBM, provado no Db2 12.1 e
+    /// no Informix 14.10: a transação some, e o Commit seguinte não tem nada). A forma sem `WORK` volta ao ponto, como o banco promete. Por padrão, não.
+    /// </summary>
+    protected virtual bool RollbackWorkEndsTheTransaction => false;
 
     /// <summary>A consulta de verificação do banco (RN-CONN-013).</summary>
     protected abstract string PingSql { get; }
@@ -640,16 +709,118 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
     {
-        // RN-SQL-003: recusado aqui, sem ir ao banco. Um `BEGIN` deixaria a conexão dentro de uma transação que ninguém fecha.
-        if (IsTransactionControl(sql))
-            return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, TransactionControlMessage);
+        // RN-SQL-003 e RN-TX-004: recusado aqui, sem ir ao banco. Um `BEGIN` deixaria a conexão dentro de uma transação que ninguém fecha.
+        if (TransactionControlRefusal(sql) is { } refusal)
+            return refusal;
 
         // RN-SQL-001: também sem ir ao banco. O driver que executa os comandos de um envio um por um deixaria gravado o que veio antes
         // de um erro, e um `BEGIN` depois do primeiro comando abriria a transação que a recusa acima existe para evitar.
         if (HasSeveralStatements(sql))
             return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
 
+        if (ManualCommit)
+            return await ExecuteInTransactionAsync(sql, pageSize, cancellationToken, parameters);
+
         return await ExecuteWithoutRefusalAsync(sql, pageSize, cancellationToken, parameters);
+    }
+
+    /// <summary>
+    /// RN-TX-002 e 004: encerra a transação manual pelo driver. O cursor aberto fecha antes, como antes de qualquer comando. A transação sai do campo
+    /// antes do envio: se o Commit falha, o banco já a encerrou (no PostgreSQL a recusa de uma restrição adiada a desfaz), e quem chama vê pelo
+    /// <see cref="Transaction"/> que não há mais o que confirmar. O cancelamento não a interrompe, como a confirmação da carga.
+    /// </summary>
+    public Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken)
+        => EndTransactionAsync(nameof(CommitAsync), commit: true);
+
+    public Task<UnitResult<DatabaseFailure>> RollbackAsync(CancellationToken cancellationToken)
+        => EndTransactionAsync(nameof(RollbackAsync), commit: false);
+
+    /// <summary>RN-TX-013: sem a consulta (<see cref="TransactionsAvailableSql"/>), o banco tem transação. Pela vez da sessão, como o catálogo.</summary>
+    public async Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken)
+    {
+        if (!HasTransactions)
+            return false;
+
+        if (TransactionsAvailableSql is not { } sql)
+            return true;
+
+        var available = await QueryAsync(nameof(TransactionsAvailableAsync), EDatabaseFailure.ExecutionFailed, sql, [], reader => Flag(reader, 0), cancellationToken);
+
+        return available.Map(rows => rows.Count == 0 || rows[0]);
+    }
+
+    private async Task<UnitResult<DatabaseFailure>> EndTransactionAsync(string operation, bool commit)
+    {
+        if (_manualTransaction is null)
+            return UnitResult.Success<DatabaseFailure>();
+
+        return await RunAsync(operation, EDatabaseFailure.ExecutionFailed, async _ =>
+        {
+            var transaction = _manualTransaction!;
+            _manualTransaction = null;
+            _manualFailed = false;
+            _executed = true;
+
+            await using (transaction)
+            {
+                if (commit)
+                    await transaction.CommitAsync(CancellationToken.None);
+                else
+                    await transaction.RollbackAsync(CancellationToken.None);
+            }
+
+            return true;
+        }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// RN-SQL-003 e RN-TX-004: o controle de transação digitado. Em Auto-commit, todo ele é recusado, e a mensagem diz que ele vale no Commit manual.
+    /// No Commit manual os pontos de salvamento vão ao banco; o `BEGIN` e as formas que nunca valem são recusados; `COMMIT` e `ROLLBACK` são os
+    /// botões, e quem os atende é o registro de sessões (aqui só chegam por engano, e são recusados). No PostgreSQL, também o comando que o banco não
+    /// aceita dentro de transação: a recusa dele estragaria a transação inteira (RN-TX-009).
+    /// </summary>
+    private DatabaseFailure? TransactionControlRefusal(string sql)
+    {
+        if (!IsTransactionControl(sql))
+            return ManualCommit && ErrorsSpoilTheTransaction && SqlText.RunsOnlyOutsideTransaction(sql) ? new DatabaseFailure(EDatabaseFailure.CommandNotAllowedInTransaction, NotAllowedInTransactionMessage) : null;
+
+        if (!ManualCommit)
+            return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, TransactionControlMessage);
+
+        return SqlText.TransactionControlOf(sql, QueryDialect) switch
+        {
+            ETransactionControl.RollbackToSavepoint when RollbackWorkEndsTheTransaction && SqlText.IsRollbackWork(sql, QueryDialect) => new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, RollbackWorkToSavepointMessage),
+            ETransactionControl.Savepoint or ETransactionControl.RollbackToSavepoint => null,
+            ETransactionControl.Begin => new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, BeginInManualMessage),
+            _ => new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, NeverTransactionControlMessage)
+        };
+    }
+
+    /// <summary>
+    /// RN-TX-002, 009, 011 e 015: o comando do Commit manual, dentro da transação da aba, que ele abre quando não há uma. Não passa pela tentativa
+    /// só de leitura nem pela rede de segurança, que são do Auto-commit: a sonda de transação do Informix desfaria a transação da pessoa. A leitura
+    /// fica com o cursor aberto dentro da transação (no PostgreSQL, num ponto de salvamento só dela, para o cursor fechar antes do fim sem estragar
+    /// a transação), e o resto é lido até o fim e fica pendente. O `ROLLBACK TO` digitado tira a transação do PostgreSQL do estado de erro.
+    /// </summary>
+    private async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteInTransactionAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters)
+    {
+        var paged = TriesAsRead(sql);
+        var executed = await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            await BeginTransactionAsync(token);
+
+            // ponytail: voltar ao ponto de salvamento desfaz também o que uma função chamada pela leitura gravou antes de o cursor fechar no meio
+            // (a RN-TX-011 o deixa pendente). Um cursor do servidor (`DECLARE`/`FETCH`) fecha sem cancelar, se isso pesar.
+            if (paged && ErrorsSpoilTheTransaction)
+                await SaveAsync(ReadSavepoint, token);
+
+            return await ExecuteCommandAsync(sql, pageSize, paged, token, parameters: parameters);
+        }, cancellationToken);
+
+        if (executed.IsSuccess && SqlText.TransactionControlOf(sql, QueryDialect) == ETransactionControl.RollbackToSavepoint)
+            _manualFailed = false;
+
+        return executed;
     }
 
     /// <summary>
@@ -664,6 +835,11 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         if (HasSeveralStatements(sql))
             return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
+
+        // RN-PROT-006 e RN-TX-002: a garantia do banco é a transação só de leitura, que não abre dentro da transação manual. A conexão que passou a
+        // somente leitura com ela aberta não executa nada até a pessoa encerrá-la; sem ela, o comando roda como em Auto-commit.
+        if (_manualTransaction is not null)
+            return new DatabaseFailure(EDatabaseFailure.TransactionOpen, ReadOnlyWithTransactionMessage);
 
         return await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: true, token, readOnly: true, parameters: parameters), cancellationToken);
     }
@@ -1013,6 +1189,10 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// é desfeito, `ResultChanged`; no banco sem log ele já ficou gravado, `EditRowMismatch` com `Applied` 1). No banco que pede (o PostgreSQL), a
     /// transação de um "Salvar" com a coluna inteira é a do retrato (<see cref="WholeColumnIsolation"/>). No banco sem log, a falha do `UPDATE` da
     /// coluna inteira, de qualquer tipo (também o cancelamento), pode tê-lo deixado gravado em parte: `Outcome` é `Unknown`.
+    ///
+    /// No Commit manual (RN-EDIT-005), o "Salvar" entra na transação da aba (e a abre, quando não há uma), num ponto de salvamento só dele: a
+    /// falha volta a ele e desfaz só o que este "Salvar" fez, sem estragar a transação nem desfazer o que já estava pendente; o sucesso o solta, e
+    /// as alterações ficam pendentes até o Commit.
     /// </summary>
     public async Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, bool wholeColumn, Func<IReadOnlyList<EditCatalogTable?>, Result<EditPlan, DatabaseFailure>> plan, CancellationToken cancellationToken)
     {
@@ -1025,7 +1205,12 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             // RN-PROT-006: o "Salvar" só chega aqui numa conexão que não é somente leitura; a sessão que já foi sai do modo só de leitura do banco.
             await ApplySessionModeAsync(readOnly: false, token);
 
-            if (!oneAtATime)
+            if (!oneAtATime && ManualCommit)
+            {
+                await BeginTransactionAsync(token);
+                await SaveAsync(EditSavepoint, token);
+            }
+            else if (!oneAtATime)
                 _editTransaction = wholeColumn && WholeColumnIsolation is { } isolation ? await _connection!.BeginTransactionAsync(isolation, token) : await _connection!.BeginTransactionAsync(token);
 
             var planned = plan(await DescribeCoreAsync(tables, inTheSession: true, token));
@@ -1099,6 +1284,12 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
                 _editTransaction = null;
                 await transaction.CommitAsync(token);
                 await transaction.DisposeAsync();
+            }
+
+            if (_savepoint == EditSavepoint)
+            {
+                _savepoint = null;
+                await ReleaseSavepointAsync(EditSavepoint, token);
             }
 
             return Result.Success<int, DatabaseFailure>(applied);
@@ -1191,7 +1382,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             var command = _connection!.CreateCommand();
             command.CommandText = $"DELETE FROM {QuotedName(schema)}.{QuotedName(table)}";
             command.CommandTimeout = 0;
-            command.Transaction = _editTransaction;
+            command.Transaction = CommandTransaction;
             await ExecuteLoadCommandAsync(command, token);
             await command.DisposeAsync();
 
@@ -1393,6 +1584,11 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         if (!_running)
             await DisposeCursorAsync();
 
+        // RN-TX-006: a sessão que fecha com a transação manual aberta, por qualquer caminho, manda o Rollback antes de fechar a conexão: o driver
+        // que fecha a conexão com a transação pendente não promete desfazê-la.
+        if (!_running && _manualTransaction is not null)
+            await DropTransactionAsync();
+
         if (!_running && _loadCommand is { } loadCommand)
         {
             _loadCommand = null;
@@ -1588,7 +1784,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         var command = _connection!.CreateCommand();
         command.CommandText = edit.Sql;
         command.CommandTimeout = 0;
-        command.Transaction = _editTransaction;
+        command.Transaction = CommandTransaction;
 
         foreach (var value in edit.Parameters)
         {
@@ -1616,7 +1812,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         var command = _connection!.CreateCommand();
         command.CommandText = edit.Sql;
         command.CommandTimeout = 0;
-        command.Transaction = _editTransaction;
+        command.Transaction = CommandTransaction;
 
         foreach (var value in edit.Parameters)
         {
@@ -1786,7 +1982,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     {
         var sql = InsertSql(target, 1);
         var batch = _loadBatch = _connection!.CreateBatch();
-        batch.Transaction = _editTransaction;
+        batch.Transaction = CommandTransaction;
         batch.Timeout = 0;
         foreach (var row in rows)
         {
@@ -1828,7 +2024,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             command.CommandTimeout = 0;
         }
 
-        command!.Transaction = _editTransaction;
+        command!.Transaction = CommandTransaction;
         var position = 0;
         foreach (var row in rows)
         {
@@ -1926,14 +2122,27 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             result = new DatabaseFailure(kind, CanceledMessage, Outcome: ECancelOutcome.Canceled);
 
         // O comando executado até o fim que devolvia linhas quando o cancelamento chegou: sem página e sem total, que podem estar
-        // cortados, e sem dizer que foi cancelado, porque o que ele gravou está confirmado.
+        // cortados, e sem dizer que foi cancelado, porque o que ele gravou está confirmado (no Commit manual, pendente na transação: RN-TX-010).
         if (result.IsSuccess && _canceledWhileReturningRows)
-            result = new DatabaseFailure(kind, CanceledWhileReturningRowsMessage, Outcome: ECancelOutcome.Partial);
+            result = new DatabaseFailure(kind, _manualTransaction is null ? CanceledWhileReturningRowsMessage : CanceledWhileReturningRowsInTransactionMessage, Outcome: ECancelOutcome.Partial);
 
         if (result.IsFailure)
         {
             result = WithTheCancelOutcome(result.Error, cancelRequested);
+
+            // RN-TX-009: o que a falha fez com a transação manual, lido antes do fim do cursor (que pode recusar outra coisa e trocar o último erro
+            // do driver). O banco que a desfez inteira não tem ponto de salvamento a que voltar; no PostgreSQL, o erro que nenhum ponto de
+            // salvamento cobre deixa a transação com erro.
+            var undone = _manualTransaction is not null && UndoesTheTransaction(result.Error);
+            if (undone)
+                _savepoint = null;
+            else if (_manualTransaction is not null && ErrorsSpoilTheTransaction && _savepoint is null && result.Error.SqlState is not null)
+                _manualFailed = true;
+
             await DisposeCursorAsync();
+
+            if (undone)
+                await DropTransactionAsync();
         }
 
         _running = false;
@@ -2014,12 +2223,72 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// </summary>
     private async Task BeginReadOnlyAsync(CancellationToken cancellationToken)
     {
-        // O banco sem transação só de leitura: a leitura roda em auto-commit, e não há o que confirmar nem desfazer depois.
-        if (BeginReadOnlySql is not { } beginReadOnlySql)
+        // O banco sem transação só de leitura: a leitura roda em auto-commit, e não há o que confirmar nem desfazer depois. Dentro da transação
+        // manual a leitura roda nela (RN-TX-011): a do PostgreSQL não abre outra, e o `COMMIT` do fim da leitura confirmaria a da pessoa.
+        if (BeginReadOnlySql is not { } beginReadOnlySql || _manualTransaction is not null)
             return;
 
         _inTransaction = true;
         await NonQueryAsync(beginReadOnlySql, cancellationToken);
+    }
+
+    /// <summary>A transação em que os comandos da sessão entram: a do "Salvar" em Auto-commit e da carga, ou a do Commit manual.</summary>
+    private DbTransaction? CommandTransaction => _editTransaction ?? _manualTransaction;
+
+    /// <summary>RN-TX-002: a transação manual abre no primeiro comando (ou "Salvar") da aba, já com o cursor anterior fechado.</summary>
+    private async Task BeginTransactionAsync(CancellationToken cancellationToken)
+        => _manualTransaction ??= await _connection!.BeginTransactionAsync(cancellationToken);
+
+    /// <summary>
+    /// RN-EDIT-005 e RN-TX-011: abre o ponto de salvamento dentro da transação manual. A marca sobe antes do envio, como a da transação da
+    /// tentativa: o ponto que o banco abriu e cuja resposta se perdeu é desfeito pelo fim de sempre.
+    /// </summary>
+    private async Task SaveAsync(string name, CancellationToken cancellationToken)
+    {
+        _savepoint = name;
+        if (SavepointSql(name) is { } sql)
+            await NonQueryAsync(sql.Save, cancellationToken);
+        else
+            await _manualTransaction!.SaveAsync(name, cancellationToken);
+    }
+
+    private async Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken)
+    {
+        if (SavepointSql(name) is { } sql)
+            await NonQueryAsync(sql.Release ?? string.Empty, cancellationToken);
+        else
+            await _manualTransaction!.ReleaseAsync(name, cancellationToken);
+    }
+
+    /// <summary>Volta ao ponto de salvamento e o solta: a transação continua como estava antes dele, e não acumula pontos de leituras que fecharam no meio.</summary>
+    private async Task RollbackToSavepointAsync(string name)
+    {
+        if (SavepointSql(name) is { } sql)
+            await NonQueryAsync(sql.RollbackTo, CancellationToken.None);
+        else
+            await _manualTransaction!.RollbackAsync(name, CancellationToken.None);
+
+        await ReleaseSavepointAsync(name, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// RN-TX-006 e 009: tira a transação manual do campo e a desfaz pelo driver, sem falhar: a da conexão que fecha, e a que o banco já desfez
+    /// (no Db2 e no Informix o driver só volta ao auto-commit quando ela termina).
+    /// </summary>
+    private async Task DropTransactionAsync()
+    {
+        var transaction = _manualTransaction!;
+        _manualTransaction = null;
+        _manualFailed = false;
+        _savepoint = null;
+
+        await Send(nameof(DropTransactionAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            await using (transaction)
+                await transaction.RollbackAsync(CancellationToken.None);
+
+            return true;
+        });
     }
 
     /// <summary>
@@ -2043,7 +2312,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         await using var command = _connection!.CreateCommand();
         command.CommandText = sql;
-        command.Transaction = _editTransaction;
+        command.Transaction = CommandTransaction;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -2063,6 +2332,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             var command = _connection!.CreateCommand();
             command.CommandText = sql;
             command.CommandTimeout = 0;
+            command.Transaction = CommandTransaction;
             ConfigureUserCommand(command);
             BindQueryParameters(command, parameters);
             PrepareCommand(command);
@@ -2130,7 +2400,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     {
         var command = _connection!.CreateCommand();
         command.CommandText = sql;
-        command.Transaction = _editTransaction;
+        command.Transaction = CommandTransaction;
 
         // O padrão dos drivers é 30 segundos, e um comando do usuário pode levar horas.
         if (userCommand)
@@ -2164,6 +2434,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         var command = _connection!.CreateCommand();
         command.CommandText = sql;
         command.CommandTimeout = 0;
+        command.Transaction = CommandTransaction;
         ConfigureUserCommand(command);
         BindQueryParameters(command, parameters);
         PrepareCommand(command);
@@ -2265,6 +2536,13 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         _rowPending = false;
         _cursorSql = null;
 
+        // RN-TX-011: a leitura do Commit manual chegou ao fim; o que ela fez fica pendente na transação, e o ponto de salvamento dela sai.
+        if (_savepoint == ReadSavepoint)
+        {
+            _savepoint = null;
+            await ReleaseSavepointAsync(ReadSavepoint, CancellationToken.None);
+        }
+
         if (!_inTransaction)
             return;
 
@@ -2291,7 +2569,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         _rowPending = false;
         _cursorSql = null;
 
-        if (reader is null && command is null && !_inTransaction && _editTransaction is null)
+        if (reader is null && command is null && !_inTransaction && _editTransaction is null && _savepoint is null)
             return;
 
         await Send(nameof(DisposeCursorAsync), EDatabaseFailure.ExecutionFailed, async () =>
@@ -2425,6 +2703,19 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
                 await transaction.RollbackAsync();
                 await transaction.DisposeAsync();
                 connection._editTransaction = null;
+
+                return;
+            }
+
+            // RN-TX-011 e RN-EDIT-005: dentro da transação manual, o cursor abandonado e o "Salvar" que falhou voltam ao ponto de salvamento deles,
+            // e a transação continua. No PostgreSQL ela fica com erro até o banco aceitar a volta: sem ela, o cancelamento a estragou (RN-TX-009).
+            if (connection._savepoint is { } savepoint)
+            {
+                var failed = connection._manualFailed;
+                connection._savepoint = null;
+                connection._manualFailed = connection.ErrorsSpoilTheTransaction;
+                await connection.RollbackToSavepointAsync(savepoint);
+                connection._manualFailed = failed;
 
                 return;
             }

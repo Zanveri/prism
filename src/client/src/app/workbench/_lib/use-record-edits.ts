@@ -99,6 +99,7 @@ import { recordsCopy } from "./records.copy";
 import { sqlTargetKey } from "./sql-target-key";
 import { recall, remember } from "./tab-memory";
 import { nextSort, type RecordsSort } from "./table-sql";
+import { withUncommitted } from "./transaction";
 import { unsavedEdits } from "./unsaved-edits";
 import { wholeColumnQuestion } from "./whole-column-question";
 import { isBusyState, isPersonBusy, type LoadMoreOutcome, type QueryRunner, type RowsState, type RunnerState } from "./use-query-runner";
@@ -1724,7 +1725,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         if (result === null) return "failed";
         if (!result.ok) return refuseSave(result.error, plan, known, current, pending, id);
 
-        toast.success(multi.saved(columns, rows, Math.max(result.data.applied - 1, 0)));
+        runner.transaction.note(result.data.transaction);
+        toast.success(withUncommitted(multi.saved(columns, rows, Math.max(result.data.applied - 1, 0)), runner.transaction.getState()));
         putEdits(noEdits);
         setBanner(noBanner);
         const saved = savedResultOf(current, pending, current.columns.length);
@@ -1737,7 +1739,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         release();
       }
     },
-    [sessionOfShown, startSaving, stopSaving, hold, ensureTarget, say, queryClient, closeCursor, subject, refuseSave, toast, putEdits, updateSelection, onSaved],
+    [sessionOfShown, startSaving, stopSaving, hold, ensureTarget, say, queryClient, closeCursor, subject, refuseSave, toast, putEdits, updateSelection, onSaved, runner.transaction],
   );
 
   /**
@@ -1784,7 +1786,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       if (result === null) return "failed";
 
       if (result.ok) {
-        toast.success(copy.saved(result.data.applied));
+        runner.transaction.note(result.data.transaction);
+        toast.success(withUncommitted(copy.saved(result.data.applied), runner.transaction.getState()));
         putEdits(noEdits);
         setBanner(noBanner);
         // RN-EDIT-009: numa junção, o valor salvo fica em todas as linhas que mostram a mesma linha da tabela.
@@ -1800,7 +1803,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     } finally {
       stopSaving();
     }
-  }, [cancelBuild, sessionOfShown, saveWholeColumn, startSaving, stopSaving, ensureTarget, say, queryClient, toast, putEdits, updateSelection, onSaved, refuseSave]);
+  }, [cancelBuild, sessionOfShown, saveWholeColumn, startSaving, stopSaving, ensureTarget, say, queryClient, toast, putEdits, updateSelection, onSaved, refuseSave, runner.transaction]);
 
   /** O Salvar como booleano (gravou tudo), para quem só quer saber disso (o registro da aba, o Ctrl+S). */
   const save = useCallback(async (reread = true): Promise<boolean> => (await saveNow(reread)) === "saved", [saveNow]);

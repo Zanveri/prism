@@ -1,4 +1,5 @@
 using Prism.Application.Common.Vault;
+using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Vault.Models;
@@ -18,6 +19,25 @@ namespace Prism.Application.DatabaseSessions.Models;
 internal static class DatabaseSessionErrors
 {
     public static ApiErrorDto From(DatabaseFailure failure)
+        => WithTheTransaction(Of(failure), failure);
+
+    /// <summary>
+    /// Seção 22 da especificação: a recusa de uma operação na sessão leva o estado da transação (`transaction`) e, quando a transação manual se
+    /// perdeu sem a pessoa pedir, `transactionUndone`, para a tela dizer em que pé ficou sem ler o texto (Ruling 135).
+    /// </summary>
+    private static ApiErrorDto WithTheTransaction(ApiErrorDto error, DatabaseFailure failure)
+    {
+        if (failure.Transaction is null)
+            return error;
+
+        error.Extensions["transaction"] = failure.Transaction.ToDto();
+        if (failure.TransactionUndone)
+            error.Extensions["transactionUndone"] = true;
+
+        return error;
+    }
+
+    private static ApiErrorDto Of(DatabaseFailure failure)
         => failure.Kind switch
         {
             EDatabaseFailure.ConnectionFailed => ApiErrorDto.CreateUnprocessableEntity("Falha ao conectar no banco de dados.", "DATABASE_CONNECTION_FAILED", failure.Message),
@@ -28,6 +48,13 @@ internal static class DatabaseSessionErrors
             EDatabaseFailure.NoQueryToCount => ApiErrorDto.CreateConflict("Não há consulta para contar.", "NO_QUERY_TO_COUNT", failure.Message),
             EDatabaseFailure.TransactionControlNotSupported => ApiErrorDto.CreateUnprocessableEntity("Controle de transação não é aceito.", "TRANSACTION_CONTROL_NOT_SUPPORTED", failure.Message, ExecutedDetails(failure)),
             EDatabaseFailure.MultipleStatementsNotSupported => ApiErrorDto.CreateUnprocessableEntity("Só um comando por execução.", "MULTIPLE_STATEMENTS_NOT_SUPPORTED", failure.Message),
+
+            // Seção 22 (RN-TX-004, 005, 009 e 013): nada foi ao banco.
+            EDatabaseFailure.TransactionFailed => ApiErrorDto.CreateConflict("A transação tem um erro.", "TRANSACTION_FAILED", failure.Message),
+            EDatabaseFailure.CommandNotAllowedInTransaction => ApiErrorDto.CreateUnprocessableEntity("O comando não roda dentro de transação.", "COMMAND_NOT_ALLOWED_IN_TRANSACTION", failure.Message),
+            EDatabaseFailure.NoOpenTransaction => ApiErrorDto.CreateConflict("Não há transação aberta.", "NO_OPEN_TRANSACTION", failure.Message),
+            EDatabaseFailure.TransactionOpen => ApiErrorDto.CreateConflict("Há uma transação aberta.", "TRANSACTION_OPEN", failure.Message),
+            EDatabaseFailure.TransactionsNotAvailable => ApiErrorDto.CreateUnprocessableEntity("O banco não tem transação.", "TRANSACTIONS_NOT_AVAILABLE", failure.Message),
 
             // RN-DRIVER-006: o detalhe diz o nome do driver que falta, e a extensão `driverID` leva a tela até a linha dele ("Instalar driver").
             EDatabaseFailure.DriverNotInstalled => ApiErrorDto.CreateUnprocessableEntity("Driver não instalado.", "DRIVER_NOT_INSTALLED", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["driverID"] = failure.DriverID }),

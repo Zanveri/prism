@@ -10,4 +10,10 @@ public sealed record DatabaseSessionDto
     public EDatabaseEngine Engine { get; init; }
     public string Database { get; init; } = string.Empty;
     public string ServerVersion { get; init; } = string.Empty;
+
+    /// <summary>RN-TX-013: o banco tem transação, e a aba pode ficar no Commit manual (o Informix sem log de transação não tem).</summary>
+    public bool TransactionsAvailable { get; init; }
+
+    /// <summary>RN-TX-001 e 003: o modo e a transação da sessão. Quem o põe é o handler, depois de abrir ou de trocar o modo.</summary>
+    public TransactionDto? Transaction { get; init; }
 }

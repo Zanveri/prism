@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { environmentLookup } from "@/app/connections/_lib/environment";
-import { ConfirmDialog, useToast } from "@/components/ui";
+import { Button, ConfirmDialog, Dialog, useToast } from "@/components/ui";
 import { currentWindowId, endTabDrag, onTabWanted, onWindowCloseRequested, sendTabAway, tellWindows } from "@/lib/api/bridge";
 import { vaultLock } from "@/lib/api/vault-lock";
 
@@ -26,6 +26,7 @@ import { stripTitles } from "../_lib/tab-titles";
 import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
 import { scriptsQuery } from "../_lib/scripts.service";
+import { transactionCopy } from "../_lib/transaction.copy";
 import { handOffTab } from "../_lib/tab-handoff";
 import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
@@ -385,6 +386,33 @@ export function WorkbenchTabs() {
     latestAskAboutSql.current(question.scope, question.tabId);
   }
 
+  // RN-TX-006: depois das alterações não salvas e antes dos scripts, as transações abertas das abas que fecham: Commit, Rollback ou Cancelar, e a escolha vale
+  // para todas; com erro, só o Rollback. Fechar a sessão desfaz a transação na API de qualquer jeito: a pergunta é para a pessoa não a perder sem saber.
+  const [transactionQuestion, setTransactionQuestion] = useState<{ scope: CloseScope; tabId: string; asks: CloseAsks; open: string[]; commands: number; failed: boolean; ending: boolean } | null>(null);
+  const askAboutTransactions = useCallback(
+    (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
+      const open = tabsToClose(scope, tabs, tabId).filter((id) => runnerOf(id).transaction.getState().open);
+      if (open.length === 0) return askAboutScripts(scope, tabId, asks);
+      const states = open.map((id) => runnerOf(id).transaction.getState());
+      setTransactionQuestion({ scope, tabId, asks, open, commands: states.reduce((sum, state) => sum + state.commands, 0), failed: states.some((state) => state.failed), ending: false });
+    },
+    [tabs, runnerOf, askAboutScripts, setTransactionQuestion],
+  );
+
+  async function endTransactionsAndClose(question: { scope: CloseScope; tabId: string; asks: CloseAsks; open: string[] }, commit: boolean) {
+    setTransactionQuestion((current) => (current === null ? null : { ...current, ending: true }));
+    for (const id of question.open) {
+      if (await runnerOf(id).transaction.end(commit)) continue;
+      // O banco recusou o Commit: a saída para ali, aquela aba mostra o erro, e o que ainda não foi feito fica como estava.
+      setTransactionQuestion(null);
+      setWindowClosing(false);
+      releaseWindowClose();
+      return;
+    }
+    setTransactionQuestion(null);
+    askAboutScripts(question.scope, question.tabId, question.asks);
+  }
+
   // RN-EDIT-007: antes, as alterações não salvas dos Registros das abas que fecham: uma aba oferece Salvar; várias, só Descartar e Cancelar. Levar a aba
   // para outra janela pergunta o mesmo (as alterações não salvas não mudam de janela): Salvar e levar, ou Descartar e levar.
   // Elas não voltam na próxima entrada, e perguntam também ao fechar o app (RN-ABAS-007); `asks` diz o que vem depois.
@@ -393,10 +421,10 @@ export function WorkbenchTabs() {
   const handleClose = useCallback(
     (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
       const question = unsavedQuestion(tabsToClose(scope, tabs, tabId), unsavedEdits.countOf, unsavedEdits.saveOf);
-      if (question === null) askAboutScripts(scope, tabId, asks);
+      if (question === null) askAboutTransactions(scope, tabId, asks);
       else setUnsaved({ intent: { kind: "close", scope, asks }, tabId, ...question, saving: false });
     },
-    [tabs, askAboutScripts, setUnsaved],
+    [tabs, askAboutTransactions, setUnsaved],
   );
 
   /**
@@ -465,7 +493,7 @@ export function WorkbenchTabs() {
   // Depois da pergunta: fecha (com a pergunta do SQL, se for o caso) ou leva a aba. Levar depois de "Descartar" é levá-la sem as alterações: elas
   // ficam na memória desta janela, que a aba deixa, e não vão.
   function proceed(intent: Intent, tabId: string, saved = false) {
-    if (intent.kind === "close") askAboutScripts(intent.scope, tabId, intent.asks);
+    if (intent.kind === "close") askAboutTransactions(intent.scope, tabId, intent.asks);
     else void sendTab(tabId, intent.target, saved);
   }
 
@@ -753,6 +781,46 @@ export function WorkbenchTabs() {
             setWindowClosing(false);
             releaseWindowClose();
           }}
+        />
+      )}
+
+      {transactionQuestion === null ? null : (
+        <Dialog
+          open
+          role="alertdialog"
+          title={transactionCopy.closing.title(transactionQuestion.open.length)}
+          description={transactionCopy.closing.description(transactionQuestion.commands, transactionQuestion.failed)}
+          pending={transactionQuestion.ending}
+          onClose={() => {
+            setTransactionQuestion(null);
+            setWindowClosing(false);
+            releaseWindowClose();
+          }}
+          footer={
+            <>
+              <Button
+                autoFocus
+                type="button"
+                variant="secondary"
+                disabled={transactionQuestion.ending}
+                onClick={() => {
+                  setTransactionQuestion(null);
+                  setWindowClosing(false);
+                  releaseWindowClose();
+                }}
+              >
+                {transactionCopy.closing.cancel}
+              </Button>
+              <Button type="button" variant="danger" disabled={transactionQuestion.ending} onClick={() => void endTransactionsAndClose(transactionQuestion, false)}>
+                {transactionCopy.closing.rollback}
+              </Button>
+              {transactionQuestion.failed ? null : (
+                <Button type="button" disabled={transactionQuestion.ending} onClick={() => void endTransactionsAndClose(transactionQuestion, true)}>
+                  {transactionCopy.closing.commit}
+                </Button>
+              )}
+            </>
+          }
         />
       )}
 

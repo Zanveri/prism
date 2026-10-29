@@ -23,14 +23,16 @@ type EditorToolbarProps = {
   connection?: ReactNode;
   /** RN-ARVORE-007: o banco em que a aba roda, e a troca dele (`DatabasePicker`); nulo na aba sem conexão, que pede uma antes. */
   database?: ReactNode;
+  /** RN-TX-001: o modo de transação da aba, o Commit e o Rollback (`TransactionControl`), no fim da barra, como no canvas. */
+  transaction?: ReactNode;
 };
 
 /**
- * A barra do editor: Executar, Executar script e Cancelar (seção 9 da especificação, RN-SQL-019), a conexão da aba (RN-ARVORE-008) e o banco dela
- * (RN-ARVORE-007). Enquanto um comando (ou um script) roda, os dois botões de executar dão lugar a "Cancelar", e por isso a tela nunca pede um segundo
+ * A barra do editor: Executar, Executar script e Cancelar (seção 9 da especificação, RN-SQL-019), a conexão da aba (RN-ARVORE-008), o banco dela
+ * (RN-ARVORE-007) e a transação (RN-TX-001). Enquanto um comando (ou um script) roda, os dois botões de executar dão lugar a "Cancelar", e por isso a tela nunca pede um segundo
  * comando à mesma sessão (`SESSION_BUSY`, RN-SESSAO-002).
  */
-export function EditorToolbar({ busy, cancelling, runnable, onRun, onRunScript, scriptShortcut, onCancel, connection, database }: EditorToolbarProps) {
+export function EditorToolbar({ busy, cancelling, runnable, onRun, onRunScript, scriptShortcut, onCancel, connection, database, transaction }: EditorToolbarProps) {
   return (
     <div role="toolbar" aria-label={copy.toolbar} className="flex flex-none flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-2">
       {busy ? (
@@ -54,6 +56,7 @@ export function EditorToolbar({ busy, cancelling, runnable, onRun, onRunScript, 
       )}
       {connection}
       {database}
+      {transaction}
     </div>
   );
 }

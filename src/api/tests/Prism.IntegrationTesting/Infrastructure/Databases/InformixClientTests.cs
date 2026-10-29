@@ -88,6 +88,22 @@ public sealed class InformixClientTests : IbmClientContractTests
         Assert.That(last.Rows.Select(row => row[0]!.Trim()), Has.Member("SELECT 1 FROM systables WHERE tabid = 1"));
     }
 
+    /// <summary>RN-TX-013: o banco com log tem transação, e o sem log (`prism_sem_log`), não: nele o Commit manual não existe.</summary>
+    [Test]
+    public async Task Informix_TransactionsAvailable_OnlyInTheLoggedDatabase()
+    {
+        await using var logged = await OpenAsync();
+        var unloggedOpened = await Client.OpenAsync(await InformixSingleton.GetUnloggedSettingsAsync(), CancellationToken.None);
+        Assert.That(unloggedOpened.IsSuccess, Is.True, unloggedOpened.IsFailure ? unloggedOpened.Error.Message : null);
+        await using var unlogged = unloggedOpened.Value;
+
+        var inLogged = await logged.TransactionsAvailableAsync(CancellationToken.None);
+        var inUnlogged = await unlogged.TransactionsAvailableAsync(CancellationToken.None);
+
+        Assert.That((inLogged.IsSuccess, inLogged.IsSuccess && inLogged.Value), Is.EqualTo((true, true)));
+        Assert.That((inUnlogged.IsSuccess, inUnlogged.IsSuccess && inUnlogged.Value), Is.EqualTo((true, false)));
+    }
+
     /// <summary>RN-ARVORE-004: no Informix "esquema" é o dono do objeto. De sistema é o `informix`, dono do catálogo, que vem por último.</summary>
     [Test]
     public async Task Informix_Schemas_AreObjectOwners()

@@ -33,6 +33,7 @@ public sealed class FetchNextPageHandlerTests
         Assert.Null(result.Value.RowsAffected);
         Assert.Null(result.Value.TotalRows);
         _databaseSessionService.Verify(s => s.FetchNextAsync(sessionID, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.TransactionOf(sessionID), Times.Once);
         _databaseSessionService.VerifyNoOtherCalls();
     }
 

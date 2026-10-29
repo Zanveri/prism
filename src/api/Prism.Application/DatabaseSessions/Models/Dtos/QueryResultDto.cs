@@ -39,4 +39,10 @@ public sealed record QueryResultDto
     /// habilita o "Exportar…" do resultado; falso nas linhas afetadas.
     /// </summary>
     public bool Read { get; init; }
+
+    /// <summary>RN-TX-003: o estado da transação da sessão depois do comando (no "carregar mais", depois da página).</summary>
+    public TransactionDto? Transaction { get; init; }
+
+    /// <summary>RN-TX-008, 009 e 014: a transação manual que estava aberta foi desfeita sem a pessoa pedir.</summary>
+    public bool TransactionUndone { get; init; }
 }
