@@ -81,6 +81,7 @@ describe("tela de login: a própria área de rolagem", () => {
   it("rola por dentro, e o conteúdo tem pelo menos a altura da janela", () => {
     vi.stubGlobal("window", { prism: bridge("0.1.0") });
 
-    expect(renderSignIn()).toMatch(/^<div class="h-full overflow-y-auto"><div class="flex min-h-full /);
+    // RN-JANELA-001: antes do conteúdo, a faixa que arrasta a janela (antes, para o que é clicável depois dela ser recortado da área de arrastar).
+    expect(renderSignIn()).toMatch(/^<div class="h-full overflow-y-auto"><div aria-hidden="true" class="window-drag"><\/div><div class="flex min-h-full /);
   });
 });

@@ -13,7 +13,10 @@ import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";
 
 import { App } from "@/app/app";
+import { syncWindowBar } from "@/components/layout/window-bar";
 import "@/styles/globals.css";
+
+syncWindowBar();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

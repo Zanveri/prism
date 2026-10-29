@@ -110,14 +110,17 @@ function SettingsScreen({ section }: { section: SettingsSection }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex min-h-14 flex-none flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-panel py-2 pr-4 pl-6">
+      {/* RN-JANELA-001: com a área de trabalho escondida, este cabeçalho é a barra da janela. Numa linha só, da altura da barra superior: quem encolhe é o nome do usuário. */}
+      <header className="window-bar flex min-h-12 flex-none items-center gap-x-4 border-b border-border bg-panel py-2 pl-6">
         <h1 ref={title} tabIndex={-1} className="text-lg font-semibold">
           {copy.title}
         </h1>
         {session.data?.userName ? (
-          <span className="flex items-center gap-2 text-muted">
+          <span className="flex min-w-0 items-center gap-2 text-muted">
             <LockOpenIcon />
-            <span>{session.data.userName}</span>
+            <span title={session.data.userName} className="truncate">
+              {session.data.userName}
+            </span>
           </span>
         ) : null}
         <Link to={pathsConfig.workbench} className="ml-auto flex h-9 items-center gap-2 rounded-md border border-border-strong px-3 text-ink no-underline transition-colors hover:bg-selected">

@@ -35,6 +35,8 @@ export function SignInPage() {
   return (
     // A raiz do app não rola (`globals.css`): numa janela baixa, é esta área que rola até o botão de entrar.
     <div className="h-full overflow-y-auto">
+      {/* RN-JANELA-001: o login não tem barra superior; a faixa do alto arrasta a janela, e os botões do sistema ficam sobre o painel do formulário. */}
+      <div aria-hidden="true" className="window-drag" />
       <div className="flex min-h-full flex-wrap-reverse bg-background">
         <BrandPanel version={getBridge().version} />
 
