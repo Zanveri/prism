@@ -146,6 +146,11 @@ export function ContextMenuItems({ groups, onChoose, expanded = null, onHover }:
           <span className="max-w-72 text-xs whitespace-normal text-muted">{item.hint}</span>
         </span>
       )}
+      {item.icon !== undefined && item.checked === true ? (
+        <span className="flex size-4 flex-none items-center justify-center text-accent">
+          <CheckIcon />
+        </span>
+      ) : null}
       {item.shortcut === undefined ? null : <span className="ml-6 flex-none font-mono text-[11px] text-subtle">{item.shortcut}</span>}
       {item.submenu === undefined ? null : (
         <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn("flex-none text-muted", item.shortcut === undefined && "ml-6")}>

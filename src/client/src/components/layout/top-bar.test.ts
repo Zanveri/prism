@@ -39,14 +39,15 @@ function render(drivers?: Driver[], leading?: ReactNode) {
 }
 
 describe("a barra superior", () => {
-  it("sem Conexões e sem Drivers (RN-NAV-001): ficam o caminho de volta à área de trabalho e as Configurações, com ícone e texto como os outros (RN-CONFIG-002)", () => {
+  it("sem Conexões e sem Drivers (RN-NAV-001): ficam o seletor de modo e as Configurações, com ícone e texto como os outros (RN-CONFIG-002)", () => {
     const markup = render();
 
-    // O texto de cada link, sem as marcas.
+    // O texto de cada link, sem as marcas; antes das Configurações fica o seletor de modo (RN-CONSTRUIR-001).
     expect([...markup.matchAll(/<a [^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/g)].map((match) => [match[1], stripTags(match[2])])).toEqual([
-      ["/workbench", "Área de trabalho"],
       ["/settings", "Configurações"],
     ]);
+    expect(markup).toMatch(/<button [^>]*aria-haspopup="menu"[^>]*aria-expanded="false"[^>]*>[\s\S]*?<span>Área de trabalho<\/span>[\s\S]*?<\/button>/);
+    expect(markup.indexOf("Área de trabalho")).toBeLessThan(markup.indexOf("Configurações"));
     expect(markup).not.toContain("Conexões");
     expect(markup).not.toMatch(/>Drivers</);
   });
@@ -104,8 +105,8 @@ describe("a barra superior", () => {
     const markup = render([{ ...ibm, restartRequired: true }]);
     const items = [...markup.matchAll(/<(a|button|span) [^>]*class="([^"]*\bh-(\d+)\b[^"]*)"/g)].map((match) => `${match[1]} h-${match[3]}`);
 
-    // Área de trabalho, o lembrete, Configurações, o usuário e Sair.
-    expect(items).toEqual(["a h-9", "a h-9", "a h-9", "span h-9", "button h-9"]);
+    // O seletor de modo, o lembrete, Configurações, o usuário e Sair.
+    expect(items).toEqual(["button h-9", "a h-9", "a h-9", "span h-9", "button h-9"]);
   });
 
   describe("as atualizações (RN-ATUALIZA-002)", () => {

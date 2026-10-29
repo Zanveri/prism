@@ -469,3 +469,24 @@ export function FlagIcon(props: ComponentProps<"svg">) {
     </Icon>
   );
 }
+
+/** RN-CONSTRUIR-001: bigorna e martelo do modo Construir. */
+export function BuildIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M7.5 2.5l3.5 3.5 1.25-1.25-3.5-3.5z" />
+      <path d="M9.25 4.25L4.75 8.75" />
+      <path d="M2 10h10.5v1.25c-1.3 0-2.25.6-2.25 1.5H11V14H5.5v-1.25h.75c0-.9-.95-1.5-2.25-1.5-1 0-1.7-.45-2-1.25z" />
+    </Icon>
+  );
+}
+
+/** Círculo com o `i` de dica ou aviso informativo. */
+export function InfoIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M8 7.5v3M8 5.25v.01" />
+    </Icon>
+  );
+}
