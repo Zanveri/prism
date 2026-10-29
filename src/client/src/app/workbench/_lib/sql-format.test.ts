@@ -361,14 +361,12 @@ describe("formatSql", () => {
         "    on integration_request_index_keys.id = integration_request_indexes.integration_request_index_key_id",
         " inner join integration_responses",
         "    on integration_responses.integration_request_id = integration_requests.id",
-        " inner join (",
-        "    select *",
-        "      from integrations",
-        "     inner join integration_requests",
-        "        on integration_requests.integration_id = integrations.id",
-        "     inner join integration_responses",
-        "        on integration_responses.integration_request_id = integration_requests.id",
-        ")",
+        " inner join (select *",
+        "               from integrations",
+        "              inner join integration_requests",
+        "                 on integration_requests.integration_id = integrations.id",
+        "              inner join integration_responses",
+        "                 on integration_responses.integration_request_id = integration_requests.id)",
       ].join("\n"),
     );
 
@@ -384,23 +382,37 @@ describe("formatSql", () => {
     ).toBe(
       [
         "select *",
-        "  from (",
-        "    select id",
-        "      from clientes",
-        "     where ativo = 1",
-        ") as c",
-        " inner join (",
-        "    select id,",
-        "           cliente_id",
-        "      from pedidos",
-        "     inner join itens",
-        "        on itens.pedido_id = pedidos.id",
-        ") as p",
+        "  from (select id",
+        "          from clientes",
+        "         where ativo = 1) as c",
+        " inner join (select id,",
+        "                    cliente_id",
+        "               from pedidos",
+        "              inner join itens",
+        "                 on itens.pedido_id = pedidos.id) as p",
         "    on p.cliente_id = c.id",
-        " where c.id in (",
-        "    select cliente_id",
-        "      from pedidos",
-        ")",
+        " where c.id in (select cliente_id",
+        "                  from pedidos)",
+      ].join("\n"),
+    );
+
+    const subselectWithWhereAndAlias =
+      "select * from integrations inner join (select 1 from sysmaster:sysdual where integration_requests.integration_status_id = integration_statuses.id and integration_requests.integration_status_id = integration_statuses.id) as teste";
+
+    expect(
+      formatSql(subselectWithWhereAndAlias, {
+        style: "river",
+        uppercaseKeywords: false,
+        tabSize: 4,
+      }),
+    ).toBe(
+      [
+        "select *",
+        "  from integrations",
+        " inner join (select 1",
+        "               from sysmaster : sysdual",
+        "              where integration_requests.integration_status_id = integration_statuses.id",
+        "                and integration_requests.integration_status_id = integration_statuses.id) as teste",
       ].join("\n"),
     );
 
