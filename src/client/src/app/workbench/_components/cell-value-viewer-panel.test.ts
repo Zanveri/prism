@@ -355,4 +355,83 @@ describe("CellValueViewerPanel (painel Valor — F7)", () => {
     (byTestId(tree, "value-viewer-apply")!.props.onClick as () => void)();
     expect(onCommitValue).toHaveBeenCalledWith("0xCAFE");
   });
+
+  it("usa a fonte configurada pelo usuário (font-editor, e não font-mono fixa) para exibir os valores no leitor", () => {
+    rt.unmount();
+    const state = makeState({
+      column: { name: "content", type: "jsonb", kind: "text" },
+      value: '{"id":1,"ativo":true}',
+    });
+    const tree = rt.render(() => CellValueViewerPanel({ state }));
+
+    const textarea = byTestId(tree, "value-viewer-textarea")!;
+    expect(String(textarea.props.className)).toContain("font-editor");
+    expect(String(textarea.props.className)).not.toContain("font-mono");
+
+    const highlight = byTestId(tree, "value-viewer-highlight")!;
+    expect(highlight).toBeDefined();
+    expect(String(highlight.props.className)).toContain("font-editor");
+    expect(String(highlight.props.className)).not.toContain("font-mono");
+  });
+
+  it("aplica syntax highlighting com as cores do tema do usuário para JSON, XML e HTML", () => {
+    rt.unmount();
+    const jsonTree = rt.render(() =>
+      CellValueViewerPanel({
+        state: makeState({
+          column: { name: "content", type: "CLOB", kind: "text" },
+          value: '{"Direction":"ENVIADO","SapIntegrationType":6,"IsTransfer":true,"salesOrder":null}',
+        }),
+      }),
+    );
+
+    const jsonHighlight = byTestId(jsonTree, "value-viewer-highlight")!;
+    expect(jsonHighlight).toBeDefined();
+    const jsonClasses = elementsOf(jsonHighlight).map((el) => String(el.props.className ?? ""));
+    expect(jsonClasses.some((c) => c.includes("text-syntax-variable"))).toBe(true);
+    expect(jsonClasses.some((c) => c.includes("text-syntax-string"))).toBe(true);
+    expect(jsonClasses.some((c) => c.includes("text-syntax-number"))).toBe(true);
+    expect(jsonClasses.some((c) => c.includes("text-syntax-keyword"))).toBe(true);
+
+    rt.unmount();
+    const htmlTree = rt.render(() =>
+      CellValueViewerPanel({
+        state: makeState({
+          column: { name: "pagina", type: "html", kind: "text" },
+          value: '<!-- topo --><div class="box">Olá</div>',
+        }),
+      }),
+    );
+
+    const htmlHighlight = byTestId(htmlTree, "value-viewer-highlight")!;
+    expect(htmlHighlight).toBeDefined();
+    const htmlClasses = elementsOf(htmlHighlight).map((el) => String(el.props.className ?? ""));
+    expect(htmlClasses.some((c) => c.includes("text-syntax-comment"))).toBe(true);
+    expect(htmlClasses.some((c) => c.includes("text-syntax-keyword"))).toBe(true);
+    expect(htmlClasses.some((c) => c.includes("text-syntax-variable"))).toBe(true);
+    expect(htmlClasses.some((c) => c.includes("text-syntax-string"))).toBe(true);
+  });
+
+  it("estiliza o botão Aplicar com as cores de contraste do tema (bg-accent e text-panel, sem text-white ilegível)", () => {
+    rt.unmount();
+    const state = makeState({
+      column: { name: "content", type: "jsonb", kind: "text" },
+      value: '{"id":1}',
+      editable: { editable: true },
+      setNullAccess: { editable: true },
+      onCommitValue: vi.fn(),
+    });
+
+    let tree = rt.render(() => CellValueViewerPanel({ state }));
+    (byTestId(tree, "value-viewer-edit-toggle")!.props.onClick as () => void)();
+    tree = rt.render(() => CellValueViewerPanel({ state }));
+
+    const applyBtn = byTestId(tree, "value-viewer-apply")!;
+    const className = String(applyBtn.props.className);
+    expect(className).toContain("bg-accent");
+    expect(className).toContain("text-panel");
+    expect(className).not.toContain("text-white");
+    expect(className).not.toContain("hover:bg-accent-hover");
+  });
 });
+

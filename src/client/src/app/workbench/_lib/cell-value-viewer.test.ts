@@ -14,6 +14,7 @@ import {
   formatHtmlValue,
   formatJsonValue,
   formatXmlValue,
+  highlightCellValue,
   normalizeEditedCellValue,
   suggestedCellFileName,
 } from "./cell-value-viewer";
@@ -332,3 +333,53 @@ describe("a normalização do valor editado no F7 antes de salvar (UPDATE / INSE
     ).toBe("0x4F69");
   });
 });
+
+describe("o realce de sintaxe (syntax highlighting) para JSON, XML e HTML no leitor de célula", () => {
+  it("destaca chaves, textos, números, booleanos e null no JSON preservando o texto exato", () => {
+    const sample = '{\n  "id": 6295,\n  "direction": "ENVIADO",\n  "isTransfer": true,\n  "specialStock": null\n}';
+    const tokens = highlightCellValue(sample, "json");
+
+    expect(tokens.map((t) => t.text).join("")).toBe(sample);
+    expect(tokens.filter((t) => t.kind === "variable").map((t) => t.text)).toEqual([
+      '"id"',
+      '"direction"',
+      '"isTransfer"',
+      '"specialStock"',
+    ]);
+    expect(tokens.filter((t) => t.kind === "string").map((t) => t.text)).toEqual(['"ENVIADO"']);
+    expect(tokens.filter((t) => t.kind === "number").map((t) => t.text)).toEqual(["6295"]);
+    expect(tokens.filter((t) => t.kind === "keyword").map((t) => t.text)).toEqual(["true", "null"]);
+  });
+
+  it("destaca declaração, comentários, tags, atributos e valores no XML e no HTML", () => {
+    const xml = '<?xml version="1.0"?><!-- nota --><pedido codigo="A1"><item>Notebook</item></pedido>';
+    const xmlTokens = highlightCellValue(xml, "xml");
+
+    expect(xmlTokens.map((t) => t.text).join("")).toBe(xml);
+    expect(xmlTokens.some((t) => t.kind === "comment" && t.text === "<!-- nota -->")).toBe(true);
+    expect(xmlTokens.some((t) => t.kind === "variable" && t.text === "version")).toBe(true);
+    expect(xmlTokens.some((t) => t.kind === "variable" && t.text === "codigo")).toBe(true);
+    expect(xmlTokens.some((t) => t.kind === "string" && t.text === '"A1"')).toBe(true);
+    expect(xmlTokens.some((t) => t.kind === "keyword" && t.text.includes("pedido"))).toBe(true);
+
+    const html = '<!DOCTYPE html><div class="card" data-id=\'10\'>Olá</div>';
+    const htmlTokens = highlightCellValue(html, "html");
+
+    expect(htmlTokens.map((t) => t.text).join("")).toBe(html);
+    expect(htmlTokens.some((t) => t.kind === "keyword" && t.text.includes("<!DOCTYPE"))).toBe(true);
+    expect(htmlTokens.some((t) => t.kind === "variable" && t.text === "class")).toBe(true);
+    expect(htmlTokens.some((t) => t.kind === "variable" && t.text === "data-id")).toBe(true);
+    expect(htmlTokens.some((t) => t.kind === "string" && t.text === '"card"')).toBe(true);
+    expect(htmlTokens.some((t) => t.kind === "string" && t.text === "'10'")).toBe(true);
+  });
+
+  it("detecta automaticamente JSON, XML e HTML em colunas de texto (como CLOB ou VARCHAR) quando o valor tem essa estrutura", () => {
+    const clob = { name: "content", type: "CLOB", kind: "text" as const };
+
+    expect(detectCellValueFormat(clob, '{"id": 1}')).toBe("json");
+    expect(detectCellValueFormat(clob, '<?xml version="1.0"?><root/>')).toBe("xml");
+    expect(detectCellValueFormat(clob, "<!DOCTYPE html><html><body>Oi</body></html>")).toBe("html");
+    expect(detectCellValueFormat(clob, "apenas um texto comum")).toBe("text");
+  });
+});
+

@@ -10,7 +10,7 @@ import { apiExitMessage, closeVaultAndStop, startApi, type ApiProcess } from "./
 import { versionArgument, windowArgument } from "./app-version";
 import { userDataDir } from "./data-dir";
 import { permissionAllowed } from "./permissions";
-import { applicationMenuTemplate, isWaylandSession, menuShortcutIgnored, windowIconFile } from "./platform";
+import { applicationMenuTemplate, hasWindowBar, isSymbolColor, isWaylandSession, menuShortcutIgnored, windowBarOptions, windowBarOverlayHeight, windowIconFile } from "./platform";
 import type { ApiConfigReply } from "./preload";
 import { createResultWindowSaver, readResultWindow, resultWindowFileName, writeResultWindow, type SavedResultWindow } from "./result-window-file";
 import {
@@ -93,6 +93,8 @@ function changeZoom(next: AppZoom): AppZoom {
   for (const window of liveWindows()) {
     window.webContents.setZoomFactor(zoomFactor(next));
     window.webContents.send("prism:zoom-changed", next);
+    // RN-JANELA-001: os botões do sistema acompanham a barra, que cresce e encolhe com o zoom.
+    if (hasWindowBar(process.platform)) window.setTitleBarOverlay({ height: windowBarOverlayHeight(zoomFactor(next)) });
   }
   // RN-ABAS-013 e RN-ZOOM-001: as janelas do resultado também (elas não têm ponte, então não recebem o aviso: a tela da aba, que as desenha, o recebe).
   for (const entry of resultWindows.all()) if (!entry.handle.window.isDestroyed()) entry.handle.window.webContents.setZoomFactor(zoomFactor(next));
@@ -742,6 +744,8 @@ function createAppWindow(bounds?: Rect) {
     icon: iconPath,
     show: false,
     backgroundColor: "#0E1114",
+    // RN-JANELA-001: no Windows a barra superior do app é a barra da janela, com os botões do sistema sobre ela (`windowBarOptions`).
+    ...windowBarOptions(process.platform, zoomFactor(appZoom)),
     // RN-SHELL-001.
     // A versão (RN-VERSAO-004) e o número da janela (RN-ABAS-003) vão como argumentos: o preload os lê em `process.argv` (`app-version.ts`).
     // RN-ZOOM-001: a janela já nasce no zoom do programa, sem um quadro em 100% antes.
@@ -892,6 +896,12 @@ ipcMain.handle("prism:windows-ready", (event, ready: unknown) => {
 ipcMain.handle("prism:windows-describe", (event, summary: unknown) => {
   assertFromApp(event);
   hub.describe(windowIdOf(event.sender), summary);
+});
+// RN-JANELA-001: a cor dos símbolos dos botões do sistema, a do tema em uso na janela que pediu. Fora do Windows a janela tem a barra nativa, e não há o que pintar.
+ipcMain.handle("prism:window-bar", (event, symbolColor: unknown) => {
+  assertFromApp(event);
+  if (!isSymbolColor(symbolColor)) throw new Error("A cor dos botões da janela não é #rrggbb.");
+  if (hasWindowBar(process.platform)) appWindows.get(windowIdOf(event.sender))?.setTitleBarOverlay({ symbolColor });
 });
 ipcMain.handle("prism:windows-close", (event) => {
   assertFromApp(event);

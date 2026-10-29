@@ -55,7 +55,7 @@ describe("a leitura tolerante", () => {
   });
 
   it("os modos de tema são os seis do canvas e o do sistema, e o padrão é o Prism Escuro", () => {
-    expect([...themeModes].sort()).toEqual(["dark", "dracula", "github-light", "kanagawa", "light", "monokai", "nord", "system"]);
+    expect([...themeModes].sort()).toEqual(["anuppuccin", "anuppuccin-frappe", "anuppuccin-latte", "anuppuccin-macchiato", "anuppuccin-rosepine-light", "atom", "atom-light", "blue-topaz", "blue-topaz-light", "catppuccin", "catppuccin-frappe", "catppuccin-latte", "catppuccin-macchiato", "dark", "dracula", "github-light", "kanagawa", "light", "monokai", "nord", "obsidian-gruvbox", "obsidian-gruvbox-light", "obsidianite", "obsidianite-light", "primary", "primary-light", "prism", "prism-cherry", "prism-indigo", "prism-latte", "prism-mocha", "prism-peach", "prism-periwinkle", "prism-pine", "prism-pistachio", "prism-swan", "system", "typewriter", "typewriter-light", "willemstad", "willemstad-light"]);
     expect(defaultPreferences.theme).toBe("dark");
   });
 

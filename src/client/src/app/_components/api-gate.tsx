@@ -76,6 +76,8 @@ export function ApiGate({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-full flex-col items-center justify-center-safe gap-6 overflow-y-auto p-8">
+      {/* RN-JANELA-001: sem barra superior, a faixa do alto arrasta a janela. */}
+      <div aria-hidden="true" className="window-drag" />
       <div className="flex items-center gap-2.5 text-lg font-semibold tracking-[0.01em]">
         <PrismMark height={28} />
         <span>Prism</span>

@@ -23,6 +23,22 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     private const int AlreadyInTransaction = -535;
     private const int TransactionNotAvailable = -256;
 
+    /// <summary>
+    /// Os números nativos do Informix quando a sonda da chamada de rotina (`SELECT rotina(...) FROM TABLE(SET{1})`) encontra um
+    /// procedimento sem retorno (-674), uma função com mais de um valor (-684), uma rotina SPL que grava ou controla transação (-675) ou
+    /// uma função com `WITH RESUME` que devolve mais de uma linha (-686): ela sai do `SELECT` e roda como `EXECUTE`.
+    /// </summary>
+    private const int RoutineCannotBeResolved = -674;
+    private const int IllegalSqlInSplRoutine = -675;
+    private const int FunctionReturnsTooManyValues = -684;
+    private const int FunctionReturnedMoreThanOneRow = -686;
+
+    /// <summary>
+    /// O tamanho que o Informix dá ao retorno `LVARCHAR` sem parâmetro de uma rotina (como `sysadmin:task`): pela porta DRDA, o
+    /// `EXECUTE FUNCTION` corta o valor nos 2.048 bytes declarados no catálogo, e o `CAST` para `CLOB` entrega o texto inteiro.
+    /// </summary>
+    private const int DefaultLvarcharBytes = 2_048;
+
     /// <summary>"Statement interrupted by user": o número nativo com que o Informix diz que interrompeu o comando a pedido (RN-SQL-010).</summary>
     private const int StatementInterrupted = -213;
 
@@ -355,7 +371,30 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     /// RN-LOG-001: as duas respostas que a sonda procura, "já há uma transação" (-535) e "transação não existe" (-256), são rotina.
     /// Num banco sem log a segunda vem depois de cada comando, e cada uma somava ao log uma linha de informação.
     /// </summary>
-    protected override bool IsRoutineRefusal => _lastNativeError is AlreadyInTransaction or TransactionNotAvailable;
+    protected override bool IsRoutineRefusal
+        => _lastNativeError is AlreadyInTransaction or TransactionNotAvailable or RoutineCannotBeResolved or IllegalSqlInSplRoutine or FunctionReturnsTooManyValues or FunctionReturnedMoreThanOneRow;
+
+    /// <summary>
+    /// RN-SQL-004 e 011: pela porta DRDA, o Informix descreve como `LVARCHAR(2048)` o retorno de uma rotina declarada `RETURNS LVARCHAR`
+    /// sem tamanho (como `sysadmin:task`) num `EXECUTE FUNCTION` ou `EXECUTE PROCEDURE`, e corta o texto em 2.048 bytes antes de enviá-lo.
+    /// Quando a preparação como consulta (`CommandBehavior.SchemaOnly`, que não executa a rotina) mostra uma coluna `LVARCHAR` de 2.048
+    /// bytes, a chamada roda envolvida em `SELECT CAST(... AS CLOB) FROM TABLE(SET{1})`, já lida até a primeira linha: se a
+    /// rotina for SPL com gravação (-675) ou com mais de uma linha (-686), o banco recusa sem ter gravado nada e o comando segue como
+    /// `EXECUTE`.
+    /// </summary>
+    protected override async Task<DbDataReader> StartUserCommandAsync(string sql, IReadOnlyList<QueryParameter>? parameters, CancellationToken cancellationToken)
+    {
+        if (SqlText.InformixRoutineCall(SqlText.RewriteDoubleQuotedLiterals(SqlText.Statement(sql, Dialect), Dialect)) is { } call && await TryDescribeUserCommandAsync($"SELECT {call} FROM TABLE(SET{{1}})", parameters, cancellationToken) is (1, "LVARCHAR", DefaultLvarcharBytes))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await TryStartUserSelectAsync($"SELECT CAST({call} AS CLOB) FROM TABLE(SET{{1}})", parameters, cancellationToken) is { } reader)
+                return reader;
+
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        return await base.StartUserCommandAsync(sql, parameters, cancellationToken);
+    }
 
     /// <summary>
     /// RN-SESSAO-005. O driver não sabe da transação que um comando abriu no servidor, e o catálogo de monitoração (`sysmaster`) só a

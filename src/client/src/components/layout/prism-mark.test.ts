@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { contrast } from "@/lib/testing/contrast";
 
-import { markColors, mergeSchemes, PrismMark, PrismMarkGroup } from "./prism-mark";
+import { lightPaths, markColors, mergeSchemes, PrismMark, PrismMarkGroup } from "./prism-mark";
 import { parseSvg, type SvgNode } from "./svg-tree";
 
 const assets = new URL("../../../../../assets/", import.meta.url);
@@ -114,14 +114,14 @@ describe("a marca como grupo, dentro da ilustração do login", () => {
 });
 
 describe("as cores que mudam com o tema (RN-MARCA-006)", () => {
-  it("no tema escuro nada mudou: a coluna escura de cada cor que muda com o tema é a do desenho do splash", () => {
+  it("no tema escuro, a coluna escura de cada cor que muda com o tema é a do desenho do splash, com as faixas em três tons de violeta", () => {
     expect(Object.fromEntries(Object.entries(markColors).map(([name, color]) => [name, color.dark]))).toEqual({
       ray: "#F3F5F8",
       rayGlow: "#F3F5F8",
       rim: "#E6EAF0",
-      informix: "#F591B6",
-      db2: "#5ED3A3",
-      postgres: "#7DB2FF",
+      bandTop: "#DCCBFF",
+      bandMiddle: "#A98BF5",
+      bandBottom: "#7558D9",
       cylinderBody: "#14181D",
       cylinderTop: "#1B2027",
     });
@@ -142,7 +142,7 @@ describe("as cores que mudam com o tema (RN-MARCA-006)", () => {
       ["a tela (background)", "#F7F8FA"],
     ] as const;
 
-    it.each(surfaces.flatMap(([surface, hex]) => (["ray", "rim", "informix", "db2", "postgres"] as const).map((name) => [name, surface, hex] as const)))("%s sobre %s", (name, _surface, hex) => {
+    it.each(surfaces.flatMap(([surface, hex]) => (["ray", "rim", "bandTop", "bandMiddle", "bandBottom"] as const).map((name) => [name, surface, hex] as const)))("%s sobre %s", (name, _surface, hex) => {
       expect(contrast(markColors[name].light, hex)).toBeGreaterThanOrEqual(3);
     });
 
@@ -152,5 +152,23 @@ describe("as cores que mudam com o tema (RN-MARCA-006)", () => {
       expect(contrast(markColors.rim.light, glass)).toBeGreaterThanOrEqual(3);
       expect(contrast(markColors.rim.dark, glass)).toBeGreaterThanOrEqual(3);
     });
+  });
+});
+
+describe("o caminho da luz em cada faixa, para as partículas do login (lightPaths)", () => {
+  const shapes = drawing(asset("prism-logo.svg"));
+  const [entryPoint] = shapes.filter((node) => node.name === "circle");
+  const cylinderTops = shapes.filter((node) => node.name === "ellipse").map((node) => ({ cx: Number(node.attributes.cx), cy: Number(node.attributes.cy), rx: Number(node.attributes.rx) }));
+
+  it("sai do próprio desenho: vem da borda pelo raio até o ponto da entrada, sai do prisma à direita dele e chega na frente do cilindro da sua faixa", () => {
+    expect(lightPaths).toHaveLength(3);
+    for (const [band, [start, entry, exit, end]] of lightPaths.entries()) {
+      expect(start[0]).toBe(0);
+      expect(entry).toEqual([Number(entryPoint.attributes.cx), Number(entryPoint.attributes.cy)]);
+      expect(exit[0]).toBeGreaterThan(entry[0]);
+      expect(end[0]).toBeLessThan(cylinderTops[band].cx - cylinderTops[band].rx);
+      expect(end[1]).toBeGreaterThan(cylinderTops[band].cy);
+      expect(end[1]).toBeLessThan(cylinderTops[band + 1]?.cy ?? Infinity);
+    }
   });
 });

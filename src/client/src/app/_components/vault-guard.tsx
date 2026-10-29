@@ -44,10 +44,12 @@ export function VaultGuard() {
   useEffect(() => () => vaultLock.reset(), []);
 
   if (state === "open") return <Outlet />;
-  if (state !== "failed") return null;
+  // RN-JANELA-001: enquanto o cofre é consultado a tela fica vazia, mas a janela continua arrastável.
+  if (state !== "failed") return <div aria-hidden="true" className="window-drag" />;
 
   return (
     <div className="flex h-full flex-col items-center justify-center-safe gap-4 overflow-y-auto p-8">
+      <div aria-hidden="true" className="window-drag" />
       <FormMessage tone="error">Não foi possível consultar o cofre.</FormMessage>
       <Button type="button" variant="secondary" onClick={() => void session.refetch()}>
         Tentar de novo

@@ -573,6 +573,14 @@ de inicialização" do canvas (`docs/design/canvas/IconeApp.dc.html` e `Splash.d
   engrossa, com os mesmos elementos. Na barra superior das telas e ao lado do nome no login,
   a marca é a mesma ilustração em formato largo. O ícone padrão do Electron não aparece em
   lugar nenhum.
+
+  Alterada em 2026-10-29 (pedido do dono): as três faixas, os raios coloridos de dentro do
+  prisma e os três cilindros passam a ser três tons de violeta (`#DCCBFF`, `#A98BF5` e
+  `#7558D9` no fundo escuro; `#8B6AE0`, `#6A45C9` e `#46289E` na variante clara), no lugar do
+  rosa, do verde e do azul do Informix, do Db2 e do PostgreSQL. O Prism abre mais bancos do que
+  esses três, então as faixas e os cilindros não dizem mais qual banco é: dizem que a luz
+  chega a bancos de dados. O desenho é o mesmo, traço por traço, e vale em todo lugar em que a
+  marca aparece (o ícone do aplicativo também). As cores dos bancos na interface não mudam.
 - **RN-MARCA-002.** Ao abrir, o app mostra de imediato uma janela de splash de 640×400 em 100%,
   sem moldura e centralizada, com a ilustração do prisma, o nome, a versão, o passo atual e uma
   barra de progresso. Ela cresce com o zoom do programa (RN-ZOOM-001), até caber na área útil da
@@ -1445,6 +1453,8 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   mostra e ainda depende da API (proteções) aparece como "em breve", sem controle que finja
   funcionar. Transações deixa
   de ser "em breve" (RN-CONFIG-007). *Alterada a pedido do dono em 2026-10-20 (seção 40): entrou a seção Importar.*
+  *Alterada a pedido do dono em 2026-10-29: cada seção é uma página própria (`/settings/<seção>`), escolhida na navegação
+  à esquerda e na largura e na altura toda da janela; antes, as seções vinham uma embaixo da outra numa página só, que rolava.*
 - **RN-CONFIG-007.** Configurações › Transações tem "Modo padrão das novas abas" (Auto-commit ou
   Commit manual; vem Auto-commit) e "Nível de isolamento padrão" (RN-ISOL-006), guardados por
   usuário; valem para as abas abertas depois.
@@ -2229,6 +2239,17 @@ Marca (pedido do dono em 2026-10-12):
   `assets/zanveri/`, como a empresa os entregou, sem redesenho nem recoloração: a versão clara
   sobre fundo escuro e a escura sobre fundo claro. O nome do processo e o do instalador não
   mudam.
+- **RN-MARCA-009.** A ilustração da tela de login é animada (pedido do dono em 2026-10-29). Ao
+  abrir, uma vez: o prisma acende e o contorno se desenha, o raio branco atravessa até ele, a
+  luz se divide lá dentro, as faixas se abrem até os cilindros e os cilindros chegam por
+  último, em pouco mais de dois segundos. Depois, sem parar: o brilho respira, o ponto da
+  entrada pulsa, a ponta de cada faixa clareia na sua vez, e partículas de luz vêm pelo raio,
+  ganham a cor da faixa ao entrar no prisma, andam mais devagar dentro do vidro e saem pela
+  faixa até o cilindro. A animação usa o desenho de `assets/` sem mudar nada nele
+  (RN-MARCA-007), e só existe no login: a barra, o bloqueio, o splash e o ícone ficam parados.
+  Com "reduzir movimento" ligado no sistema, o login mostra a ilustração parada e inteira,
+  sem partículas. A frase do painel e do splash é "Abra, conecte, consulte.", e o painel não
+  lista mais os bancos.
 
 Janela e zoom (pedido do dono em 2026-10-12):
 

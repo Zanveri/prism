@@ -104,7 +104,7 @@ export function PluginsSection({ anchor }: { anchor: string }) {
 
   return (
     <SettingsCard anchor={anchor} title={copy.title}>
-      <p className="max-w-[68ch] text-muted">{copy.subtitle}</p>
+      <p className="text-muted">{copy.subtitle}</p>
 
       {actionError ? <FormMessage tone="error">{actionError}</FormMessage> : null}
 
@@ -113,7 +113,7 @@ export function PluginsSection({ anchor }: { anchor: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone="warning">{copy.restrictedBadge}</StatusBadge>
           </div>
-          <p className="max-w-[68ch] text-sm text-muted">{copy.restrictedNote}</p>
+          <p className="text-sm text-muted">{copy.restrictedNote}</p>
           <div>
             <Button
               type="button"

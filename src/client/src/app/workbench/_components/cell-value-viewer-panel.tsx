@@ -13,8 +13,10 @@ import {
   cellValueToBytes,
   detectCellValueFormat,
   formatCellValue,
+  highlightCellValue,
   isHexPrefixedBinary,
   normalizeEditedCellValue,
+  type CellHighlightKind,
   type CellValueFormat,
 } from "../_lib/cell-value-viewer";
 import type { CellValueViewerState } from "../_lib/grid-editing";
@@ -23,6 +25,15 @@ import { saveCellFile } from "../_lib/save-file";
 
 const copy = recordsCopy.valueViewer;
 const HEX_COLUMNS = ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0A", "0B", "0C", "0D", "0E", "0F"] as const;
+
+const HIGHLIGHT_CLASS_BY_KIND: Record<CellHighlightKind, string> = {
+  plain: "text-ink",
+  keyword: "text-syntax-keyword",
+  string: "text-syntax-string",
+  number: "text-syntax-number",
+  comment: "text-syntax-comment",
+  variable: "text-syntax-variable",
+};
 
 /** Largura padrão, mínima e máxima (em px) do painel "Valor", ajustável arrastando a borda esquerda para os lados. */
 const DEFAULT_VIEWER_WIDTH = 352;
@@ -89,6 +100,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
   const toast = useToast();
   const panelRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const highlightRef = useRef<HTMLPreElement | null>(null);
 
   const [width, setWidth] = useState(DEFAULT_VIEWER_WIDTH);
   const [drag, setDrag] = useState<{ startX: number; startWidth: number } | null>(null);
@@ -106,7 +118,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
   const isBinaryColumn =
     column?.kind === "binary" || detectCellValueFormat(column) === "binary";
 
-  const autoFormat = detectCellValueFormat(column);
+  const autoFormat = detectCellValueFormat(column, rawValue);
   const format: CellValueFormat =
     active !== null && manualFormat !== null && manualFormat.column === active.column
       ? manualFormat.format
@@ -142,6 +154,9 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
       : isNull
         ? ""
         : rendered.text;
+  const highlightTokens =
+    format === "binary" ? [] : highlightCellValue(displayedText, format);
+  const hasSyntaxHighlight = highlightTokens.some((token) => token.kind !== "plain");
   const canSetNull = state.setNullAccess?.editable === true && active !== null && typeof state.onCommitValue === "function";
   const supportsFormatToggle = format === "json" || format === "xml" || format === "html";
 
@@ -279,11 +294,11 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
       />
 
       {/* Cabeçalho estilo DBeaver: aba "Valor" + informações da coluna + ações rápidas */}
-      <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-border bg-surface px-2.5">
+      <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-border bg-panel px-2.5">
         <div className="flex min-w-0 items-center gap-2">
           <span className="text-xs font-semibold text-ink">{copy.title}</span>
           {column !== null && (
-            <span className="truncate font-mono text-2xs text-muted" title={`${column.name} (${column.type})`}>
+            <span className="truncate text-xs text-muted" title={`${column.name} (${column.type})`}>
               {column.name} <span className="text-subtle">({column.type})</span>
             </span>
           )}
@@ -350,14 +365,14 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
           />
 
           {supportsFormatToggle && (
-            <div className="inline-flex h-6 items-center rounded border border-border bg-surface p-0.5">
+            <div className="inline-flex h-6 items-center rounded border border-border bg-background p-0.5">
               <button
                 type="button"
                 data-testid="value-viewer-mode-formatted"
                 aria-pressed={formatted}
                 onClick={() => handleToggleFormatted(true)}
                 className={cn(
-                  "h-5 rounded-xs px-1.5 text-2xs font-medium transition-colors",
+                  "h-5 rounded-xs px-1.5 text-xs font-medium transition-colors",
                   formatted ? "bg-selected text-ink" : "text-muted hover:text-ink",
                 )}
               >
@@ -369,7 +384,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
                 aria-pressed={!formatted}
                 onClick={() => handleToggleFormatted(false)}
                 className={cn(
-                  "h-5 rounded-xs px-1.5 text-2xs font-medium transition-colors",
+                  "h-5 rounded-xs px-1.5 text-xs font-medium transition-colors",
                   !formatted ? "bg-selected text-ink" : "text-muted hover:text-ink",
                 )}
               >
@@ -389,10 +404,10 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
               title={copy.editValue}
               aria-label={copy.editValue}
               className={cn(
-                "inline-flex h-6 items-center gap-1 rounded border px-1.5 text-2xs transition-colors",
+                "inline-flex h-6 items-center gap-1 rounded border px-1.5 text-xs transition-colors",
                 isEditing
                   ? "border-accent/40 bg-selected text-ink"
-                  : "border-border bg-surface text-muted hover:text-ink",
+                  : "border-border bg-background text-muted hover:text-ink",
               )}
             >
               <PencilIcon className="h-3.5 w-3.5" />
@@ -407,10 +422,10 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
               title={copy.wordWrap}
               aria-label={copy.wordWrap}
               className={cn(
-                "inline-flex h-6 items-center gap-1 rounded border px-1.5 text-2xs transition-colors",
+                "inline-flex h-6 items-center gap-1 rounded border px-1.5 text-xs transition-colors",
                 wordWrap
                   ? "border-accent/40 bg-selected text-ink"
-                  : "border-border bg-surface text-muted hover:text-ink",
+                  : "border-border bg-background text-muted hover:text-ink",
               )}
             >
               <WordWrapIcon className="h-3.5 w-3.5" />
@@ -427,12 +442,12 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
           </div>
         ) : isNull && !hasDraft && !isEditing ? (
           <div className="flex flex-1 flex-col p-3">
-            <span className="inline-flex w-fit rounded bg-raised px-1.5 py-0.5 font-mono text-xs italic text-subtle">
+            <span className="inline-flex w-fit rounded bg-raised px-1.5 py-0.5 font-editor text-xs italic text-subtle">
               {nullText}
             </span>
           </div>
         ) : format === "binary" && rendered.hexDump !== undefined && !isEditing ? (
-          <div className="min-h-0 flex-1 overflow-auto bg-surface p-2 font-mono text-[11px] leading-5">
+          <div className="min-h-0 flex-1 overflow-auto bg-background p-2 font-editor text-[11px] leading-5">
             <table data-testid="value-viewer-hex-table" className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-border text-subtle">
@@ -476,31 +491,60 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
             {format === "json" && rendered.validJson === false && (rawValue ?? "").trim().length > 0 && (
-              <div className="border-b border-border bg-raised px-2.5 py-1 text-2xs text-muted">
+              <div className="border-b border-border bg-raised px-2.5 py-1 text-xs text-muted">
                 {copy.invalidJson}
               </div>
             )}
-            <textarea
-              data-testid="value-viewer-textarea"
-              aria-label={copy.title}
-              readOnly={!isEditing}
-              value={displayedText}
-              placeholder={isNull ? nullText : undefined}
-              onChange={(event) => {
-                if (!isEditing) return;
-                setDraftState({ cellKey, value: event.target.value });
-              }}
-              className={cn(
-                "min-h-0 flex-1 resize-none border-0 bg-surface p-2.5 font-mono text-xs leading-relaxed text-ink outline-none",
-                wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto",
+            <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+              {hasSyntaxHighlight && (
+                <pre
+                  ref={highlightRef}
+                  data-testid="value-viewer-highlight"
+                  aria-hidden="true"
+                  className={cn(
+                    "pointer-events-none absolute inset-0 m-0 overflow-hidden p-2.5 font-editor text-xs leading-relaxed text-ink",
+                    wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
+                  )}
+                >
+                  {highlightTokens.map((token, index) => (
+                    <span key={index} className={HIGHLIGHT_CLASS_BY_KIND[token.kind]}>
+                      {token.text}
+                    </span>
+                  ))}
+                  {displayedText.endsWith("\n") ? " " : null}
+                </pre>
               )}
-            />
+              <textarea
+                data-testid="value-viewer-textarea"
+                aria-label={copy.title}
+                readOnly={!isEditing}
+                spellCheck={false}
+                value={displayedText}
+                placeholder={isNull ? nullText : undefined}
+                onScroll={(event) => {
+                  if (!highlightRef.current) return;
+                  highlightRef.current.scrollTop = event.currentTarget.scrollTop;
+                  highlightRef.current.scrollLeft = event.currentTarget.scrollLeft;
+                }}
+                onChange={(event) => {
+                  if (!isEditing) return;
+                  setDraftState({ cellKey, value: event.target.value });
+                }}
+                className={cn(
+                  "relative z-10 h-full w-full resize-none border-0 bg-transparent p-2.5 font-editor text-xs leading-relaxed outline-none",
+                  hasSyntaxHighlight
+                    ? "text-transparent caret-accent selection:bg-selection selection:text-transparent"
+                    : "text-ink selection:bg-selection",
+                  wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto",
+                )}
+              />
+            </div>
           </div>
         )}
       </div>
 
       {/* Rodapé com tamanho (bytes / caracteres) e controles de edição (Definir NULL, Carregar arquivo, Reverter, Aplicar) */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-surface px-2.5 py-1.5 text-2xs text-muted">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-panel px-2.5 py-1.5 text-xs text-muted">
         <div className="flex items-center gap-2">
           {active !== null && !isNull && (
             <span>
@@ -541,7 +585,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
                   data-testid="value-viewer-load-file"
                   onClick={() => fileInputRef.current?.click()}
                   title={copy.loadFile}
-                  className="inline-flex h-6 items-center gap-1 rounded border border-border bg-panel px-1.5 text-2xs text-muted transition-colors hover:bg-raised hover:text-ink"
+                  className="inline-flex h-6 items-center gap-1 rounded border border-border bg-background px-1.5 text-xs text-muted transition-colors hover:bg-raised hover:text-ink"
                 >
                   <UploadIcon className="h-3.5 w-3.5" />
                 </button>
@@ -552,7 +596,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
                 type="button"
                 data-testid="value-viewer-set-null"
                 onClick={handleSetNull}
-                className="inline-flex h-6 items-center rounded border border-border bg-panel px-2 text-2xs text-muted transition-colors hover:bg-raised hover:text-ink"
+                className="inline-flex h-6 items-center rounded border border-border bg-background px-2 text-xs text-muted transition-colors hover:bg-raised hover:text-ink"
               >
                 {copy.setNull}
               </button>
@@ -562,7 +606,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
                 type="button"
                 data-testid="value-viewer-revert"
                 onClick={handleRevert}
-                className="inline-flex h-6 items-center rounded border border-border bg-panel px-2 text-2xs text-muted transition-colors hover:bg-raised hover:text-ink"
+                className="inline-flex h-6 items-center rounded border border-border bg-background px-2 text-xs text-muted transition-colors hover:bg-raised hover:text-ink"
               >
                 {copy.revert}
               </button>
@@ -573,7 +617,7 @@ export function CellValueViewerPanel({ state, nullText = "NULL" }: CellValueView
                 data-testid="value-viewer-apply"
                 disabled={!hasDraft && !isNull}
                 onClick={handleApply}
-                className="inline-flex h-6 items-center rounded bg-accent px-2 text-2xs font-medium text-white transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40"
+                className="inline-flex h-6 items-center rounded bg-accent px-2.5 text-xs font-semibold text-panel transition-[background-color,color,filter] enabled:hover:brightness-110 disabled:pointer-events-none disabled:opacity-40"
               >
                 {copy.apply}
               </button>

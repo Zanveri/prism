@@ -391,6 +391,37 @@ public sealed class InformixClientTests : IbmClientContractTests
     }
 
     /// <summary>
+    /// Rotinas do Informix declaradas como `RETURNING LVARCHAR` sem comprimento explícito (como `sysadmin:task`) têm precisão
+    /// estática de 2.048 bytes em `sysprocedures`, e o servidor DRDA do Informix trunca o retorno de `EXECUTE FUNCTION` em 2.048
+    /// bytes. A conexão envolve a chamada em `SELECT CAST(... AS CLOB) FROM TABLE(SET{1})`, trazendo o texto inteiro
+    /// para a página e para `FullValues` (F7).
+    /// </summary>
+    [Test]
+    public async Task Execute_RoutineReturningDefaultLvarchar_DoesNotTruncateAt2048Bytes()
+    {
+        var table = await CreateWriteTableAsync();
+        var writingRoutine = $"grava_{Guid.NewGuid():N}";
+        await using var connection = await OpenAsync();
+        var created = await connection.ExecuteAsync($"CREATE FUNCTION teste.{writingRoutine}() RETURNING LVARCHAR; UPDATE {table} SET versao = 5 WHERE numero = 1001; RETURN 'atualizado'; END FUNCTION;", CancellationToken.None);
+
+        var taskPage = await ExecutePageAsync(connection, "execute function sysadmin:task ('onstat', '-a')");
+        var writingPage = await ExecutePageAsync(connection, $"EXECUTE FUNCTION teste.{writingRoutine}()");
+        var updated = await ReadFromAnotherConnectionAsync($"SELECT COUNT(*) FROM {table} WHERE versao = 5");
+        var dropped = await connection.ExecuteAsync($"DROP FUNCTION teste.{writingRoutine}", CancellationToken.None);
+        await DropAsync(table);
+
+        Assert.That(created.IsSuccess, Is.True, created.IsFailure ? created.Error.Message : null);
+        Assert.That(dropped.IsSuccess, Is.True, dropped.IsFailure ? dropped.Error.Message : null);
+        Assert.That(taskPage.Columns[0].Name, Is.Empty);
+        Assert.That(taskPage.Columns[0].Type, Is.EqualTo("CLOB"));
+        Assert.That(taskPage.Rows[0][0]!.Length, Is.EqualTo(10000));
+        Assert.That(taskPage.TruncatedCells, Is.EqualTo(new[] { new[] { 0, 0 } }));
+        Assert.That(taskPage.FullValues![0].Write().Length, Is.GreaterThan(10000));
+        Assert.That(writingPage.Rows[0][0], Is.EqualTo("atualizado"));
+        Assert.That(updated, Is.EqualTo(1));
+    }
+
+    /// <summary>
     /// RN-SQL-001 e RN-SESSAO-005: um comando com contagem de linhas seguido de `BEGIN WORK`, num envio só. O driver executava os
     /// dois: a resposta era o sucesso do primeiro, a conexão ficava dentro de uma transação, e tudo o que fosse gravado depois sumia
     /// quando a sessão fechasse. O envio é recusado sem ir ao banco: nada dele é executado, e a gravação seguinte é confirmada como

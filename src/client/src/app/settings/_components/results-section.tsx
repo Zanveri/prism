@@ -24,7 +24,7 @@ export function ResultsSection({ anchor }: { anchor: string }) {
 
   return (
     <SettingsCard anchor={anchor} title={copy.title}>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
+      <div className="grid max-w-2xl grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
         <Field>
           <p className="text-sm text-muted">{copy.rowsPerPage}</p>
           <p className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1">

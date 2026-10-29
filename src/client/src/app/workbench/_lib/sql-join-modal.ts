@@ -284,6 +284,50 @@ function findFromSectionEnd(statementText: string, engine: Engine | undefined): 
   return lastTokenEnd;
 }
 
+function findEnclosingSubqueryBounds(
+  statementText: string,
+  cursorOffset: number,
+  engine: Engine | undefined,
+): { start: number; end: number } {
+  const tokens = sqlTokens(statementText, engine);
+  const stack: number[] = [];
+  const closes = new Map<number, number>();
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.word) continue;
+    if (token.text === "(") stack.push(i);
+    else if (token.text === ")") {
+      const open = stack.pop();
+      if (open !== undefined) closes.set(open, i);
+    }
+  }
+
+  let bestOpen: number | undefined;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.word || token.text !== "(") continue;
+    const next = tokens[i + 1];
+    if (next?.word !== true || (next.text !== "select" && next.text !== "with")) continue;
+    const closeIdx = closes.get(i);
+    const openEnd = token.end;
+    const closeStart = closeIdx !== undefined ? tokens[closeIdx].start : statementText.length;
+    if (cursorOffset >= openEnd && cursorOffset <= closeStart) {
+      bestOpen = i;
+    }
+  }
+
+  if (bestOpen === undefined) {
+    return { start: 0, end: statementText.length };
+  }
+
+  const closeIdx = closes.get(bestOpen);
+  return {
+    start: tokens[bestOpen].end,
+    end: closeIdx !== undefined ? tokens[closeIdx].start : statementText.length,
+  };
+}
+
 export type StatementJoinModalPlan = {
   references: Reference[];
   used: Set<string>;
@@ -310,8 +354,12 @@ export function analyzeStatementForJoinModal(
   const statement = statementAt(sql, position, engine, { blankLines });
   if (statement === null) return null;
 
+  const cursorInStatement = Math.max(0, Math.min(position - statement.start, statement.text.length));
+  const bounds = findEnclosingSubqueryBounds(statement.text, cursorInStatement, engine);
+  const fullSql = `${statement.text.slice(0, bounds.end)} ${statement.text.slice(bounds.end)}`;
+
   const atCursor = analyzeAt(sql, position, engine, blankLines);
-  const full = analyzeAt(`${statement.text} `, statement.text.length + 1, engine, false);
+  const full = analyzeAt(fullSql, bounds.end + 1, engine, false);
   const base = atCursor?.context.kind === "join" ? atCursor : (full ?? atCursor);
   if (base === null) return null;
 
@@ -353,7 +401,8 @@ export function analyzeStatementForJoinModal(
     };
   }
 
-  const sectionEnd = statement.start + findFromSectionEnd(statement.text, engine);
+  const scopeText = statement.text.slice(bounds.start, bounds.end);
+  const sectionEnd = statement.start + bounds.start + findFromSectionEnd(scopeText, engine);
   return {
     references,
     used: base.used,

@@ -323,4 +323,206 @@ describe("formatSql", () => {
       }),
     ).toContain("select id\n      from pedidos");
   });
+
+  it("formata subselects em JOIN, FROM e WHERE no estilo River e nos demais estilos", () => {
+    const queryWithJoinSubselect = [
+      "select *",
+      "  from integrations",
+      " inner join integration_requests",
+      "    on integration_requests.integration_id = integrations.id",
+      " inner join integration_statuses",
+      "    on integration_statuses.id = integration_requests.integration_status_id",
+      " inner join integration_request_indexes",
+      "    on integration_request_indexes.integration_request_id = integration_requests.id",
+      " inner join integration_request_index_keys",
+      "    on integration_request_index_keys.id = integration_request_indexes.integration_request_index_key_id",
+      " inner join integration_responses",
+      "    on integration_responses.integration_request_id = integration_requests.id",
+      " inner join (select * from integrations inner join integration_requests on integration_requests.integration_id = integrations.id inner join integration_responses on integration_responses.integration_request_id = integration_requests.id)",
+    ].join("\n");
+
+    expect(
+      formatSql(queryWithJoinSubselect, {
+        style: "river",
+        uppercaseKeywords: false,
+        tabSize: 4,
+      }),
+    ).toBe(
+      [
+        "select *",
+        "  from integrations",
+        " inner join integration_requests",
+        "    on integration_requests.integration_id = integrations.id",
+        " inner join integration_statuses",
+        "    on integration_statuses.id = integration_requests.integration_status_id",
+        " inner join integration_request_indexes",
+        "    on integration_request_indexes.integration_request_id = integration_requests.id",
+        " inner join integration_request_index_keys",
+        "    on integration_request_index_keys.id = integration_request_indexes.integration_request_index_key_id",
+        " inner join integration_responses",
+        "    on integration_responses.integration_request_id = integration_requests.id",
+        " inner join (select *",
+        "               from integrations",
+        "              inner join integration_requests",
+        "                 on integration_requests.integration_id = integrations.id",
+        "              inner join integration_responses",
+        "                 on integration_responses.integration_request_id = integration_requests.id)",
+      ].join("\n"),
+    );
+
+    const subselectWithAliasAndOn =
+      "select * from (select id from clientes where ativo = 1) as c inner join (select id, cliente_id from pedidos inner join itens on itens.pedido_id = pedidos.id) as p on p.cliente_id = c.id where c.id in (select cliente_id from pedidos)";
+
+    expect(
+      formatSql(subselectWithAliasAndOn, {
+        style: "river",
+        uppercaseKeywords: false,
+        tabSize: 4,
+      }),
+    ).toBe(
+      [
+        "select *",
+        "  from (select id",
+        "          from clientes",
+        "         where ativo = 1) as c",
+        " inner join (select id,",
+        "                    cliente_id",
+        "               from pedidos",
+        "              inner join itens",
+        "                 on itens.pedido_id = pedidos.id) as p",
+        "    on p.cliente_id = c.id",
+        " where c.id in (select cliente_id",
+        "                  from pedidos)",
+      ].join("\n"),
+    );
+
+    const subselectWithWhereAndAlias =
+      "select * from integrations inner join (select 1 from sysmaster:sysdual where integration_requests.integration_status_id = integration_statuses.id and integration_requests.integration_status_id = integration_statuses.id) as teste";
+
+    expect(
+      formatSql(subselectWithWhereAndAlias, {
+        style: "river",
+        uppercaseKeywords: false,
+        tabSize: 4,
+      }),
+    ).toBe(
+      [
+        "select *",
+        "  from integrations",
+        " inner join (select 1",
+        "               from sysmaster : sysdual",
+        "              where integration_requests.integration_status_id = integration_statuses.id",
+        "                and integration_requests.integration_status_id = integration_statuses.id) as teste",
+      ].join("\n"),
+    );
+
+    expect(
+      formatSql(subselectWithAliasAndOn, {
+        style: "expanded",
+        uppercaseKeywords: true,
+        tabSize: 4,
+      }),
+    ).toBe(
+      [
+        "SELECT",
+        "    *",
+        "FROM",
+        "    (",
+        "        SELECT",
+        "            id",
+        "        FROM",
+        "            clientes",
+        "        WHERE",
+        "            ativo = 1",
+        "    ) AS c",
+        "    INNER JOIN (",
+        "        SELECT",
+        "            id,",
+        "            cliente_id",
+        "        FROM",
+        "            pedidos",
+        "            INNER JOIN itens",
+        "                ON itens.pedido_id = pedidos.id",
+        "    ) AS p",
+        "        ON p.cliente_id = c.id",
+        "WHERE",
+        "    c.id IN (",
+        "        SELECT",
+        "            cliente_id",
+        "        FROM",
+        "            pedidos",
+        "    )",
+      ].join("\n"),
+    );
+
+    expect(
+      formatSql(subselectWithAliasAndOn, {
+        style: "modern",
+        uppercaseKeywords: false,
+        tabSize: 4,
+      }),
+    ).toBe(
+      [
+        "select",
+        "    *",
+        "from (",
+        "    select",
+        "        id",
+        "    from clientes",
+        "    where ativo = 1",
+        ") as c",
+        "inner join (",
+        "    select",
+        "        id,",
+        "        cliente_id",
+        "    from pedidos",
+        "    inner join itens",
+        "        on itens.pedido_id = pedidos.id",
+        ") as p",
+        "    on p.cliente_id = c.id",
+        "where c.id in (",
+        "    select",
+        "        cliente_id",
+        "    from pedidos",
+        ")",
+      ].join("\n"),
+    );
+
+    expect(
+      formatSql("select * from clientes c join (select id, cliente_id from pedidos) p on p.cliente_id = c.id", {
+        style: "tabular",
+        uppercaseKeywords: true,
+        tabSize: 4,
+      }),
+    ).toBe(
+      [
+        "SELECT   *",
+        "FROM     clientes c",
+        "JOIN     (",
+        "    SELECT   id,",
+        "             cliente_id",
+        "    FROM     pedidos",
+        ") p ON p.cliente_id = c.id",
+      ].join("\n"),
+    );
+
+    expect(
+      formatSql("select * from clientes c join (select id, cliente_id from pedidos) p on p.cliente_id = c.id", {
+        style: "leadingComma",
+        uppercaseKeywords: true,
+        tabSize: 4,
+      }),
+    ).toBe(
+      [
+        "SELECT *",
+        "FROM clientes c",
+        "JOIN (",
+        "    SELECT id",
+        "         , cliente_id",
+        "    FROM pedidos",
+        ") p",
+        "  ON p.cliente_id = c.id",
+      ].join("\n"),
+    );
+  });
 });

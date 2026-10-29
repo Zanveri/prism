@@ -8,7 +8,7 @@
 (function () {
   try {
     var mode = localStorage.getItem("prism:theme");
-    if (["dark", "light", "system", "monokai", "dracula", "nord", "github-light", "kanagawa"].indexOf(mode) !== -1) document.documentElement.dataset.theme = mode;
+    if (["dark","light","system","monokai","dracula","nord","github-light","kanagawa","anuppuccin","anuppuccin-frappe","anuppuccin-macchiato","anuppuccin-latte","anuppuccin-rosepine-light","blue-topaz","blue-topaz-light","obsidianite","obsidianite-light","atom","atom-light","typewriter","typewriter-light","willemstad","willemstad-light","obsidian-gruvbox","obsidian-gruvbox-light","primary","primary-light","catppuccin","catppuccin-frappe","catppuccin-macchiato","catppuccin-latte","prism","prism-mocha","prism-indigo","prism-pine","prism-cherry","prism-swan","prism-latte","prism-periwinkle","prism-pistachio","prism-peach"].indexOf(mode) !== -1) document.documentElement.dataset.theme = mode;
   } catch {
     // Sem acesso ao localStorage: fica o tema padrão.
   }
