@@ -1449,3 +1449,44 @@
 :is(.window-bar, .window-drag ~ *) :is(a, button, input, select, textarea, summary, label, [role="button"], [tabindex]:not([tabindex="-1"]), [title]) {
   app-region: no-drag;
 }
+
+/*
+ * A dica do app (`components/ui/tooltip.ts`), no lugar da do sistema: o `title` de qualquer elemento, desenhado com a superfície e a borda do que flutua (a
+ * lista do `Select`), o texto da interface no tamanho das legendas e uma sombra curta, de quem está a um passo da tela e não de um diálogo. É um `popover`,
+ * para ficar por cima também do diálogo modal (o bloqueio). Não recebe o mouse. O texto vai como veio, com as quebras e os espaços (o valor de uma célula, a
+ * mensagem de uma rotina), e para em 20 linhas com reticências: o valor inteiro está no visualizador da célula.
+ */
+.app-tip {
+  inset: auto;
+  margin: 0;
+  max-width: min(30rem, calc(100vw - 1rem));
+  padding: 0.3125rem 0.625rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+  color: var(--color-ink);
+  font: var(--text-xs) / var(--text-xs--line-height) var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 18px -4px light-dark(rgb(20 24 29 / 0.2), rgb(0 0 0 / 0.55));
+  pointer-events: none;
+}
+
+.app-tip-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 20;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A dica de várias linhas: o nome no texto principal, e o que se diz dele um tom abaixo. */
+.app-tip[data-headed] .app-tip-text {
+  color: var(--color-muted);
+}
+
+.app-tip-head {
+  color: var(--color-ink);
+  font-weight: 500;
+}

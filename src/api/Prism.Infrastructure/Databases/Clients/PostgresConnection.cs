@@ -212,6 +212,9 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
     protected override string BeginReadOnlySql => "BEGIN TRANSACTION READ ONLY";
 
+    /// <summary>RN-TX-009: qualquer erro de um comando dentro da transação, também o cancelamento, a deixa inteira com erro até o Rollback.</summary>
+    protected override bool ErrorsSpoilTheTransaction => true;
+
     /// <summary>
     /// RN-PROT-006: o modo de toda transação seguinte da sessão (`default_transaction_read_only`). Com ele, o que rodasse fora da transação só de leitura
     /// da tentativa também seria recusado pelo banco; a leitura de uma conexão somente leitura roda sempre nela, e o modo é a segunda trava.

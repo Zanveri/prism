@@ -11,7 +11,8 @@ namespace Prism.Application.DatabaseSessions.Features.ApplyEdits;
 
 /// <summary>
 /// RN-EDIT-005, 011 e 012: o "Salvar" das pendências, na sessão da aba, numa transação própria (nos Registros a aba é sempre
-/// Auto-commit, RN-TX-001); no Informix sem log, uma alteração por vez. Responde `{ applied }`.
+/// Auto-commit, RN-TX-001), ou, no Commit manual, na transação da aba, num ponto de salvamento só dele; no Informix sem log, uma alteração por vez.
+/// Responde `{ applied, transaction }`.
 /// </summary>
 public sealed record ApplyEditsCommand : IRequest<Result<EditsAppliedDto, ApiErrorDto>>
 {
@@ -36,6 +37,6 @@ internal sealed class ApplyEditsHandler(IConnectionQueries connectionQueries, ID
         if (readOnly.Value)
             return Result.Failure<EditsAppliedDto, ApiErrorDto>(SessionProtections.EditsRefusal());
 
-        return (await databaseSessionService.ApplyEditsAsync(request.SessionID, request.ResultID, request.Changes.ToChanges(), cancellationToken)).Map(applied => new EditsAppliedDto(applied)).MapError(DatabaseSessionErrors.From);
+        return (await databaseSessionService.ApplyEditsAsync(request.SessionID, request.ResultID, request.Changes.ToChanges(), cancellationToken)).Map(applied => new EditsAppliedDto(applied, databaseSessionService.TransactionOf(request.SessionID)?.ToDto())).MapError(DatabaseSessionErrors.From);
     }
 }

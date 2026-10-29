@@ -12,7 +12,10 @@ public enum EDatabaseFailure
     /// <summary>O cofre aberto mudou entre a leitura das credenciais e a conexão ficar pronta: a sessão não é registrada.</summary>
     VaultChanged,
 
-    /// <summary>RN-SQL-003: `BEGIN`, `COMMIT`, `ROLLBACK` e os demais comandos de controle de transação não são aceitos nesta fatia, em que toda sessão é auto-commit (RN-SESSAO-005).</summary>
+    /// <summary>
+    /// RN-SQL-003 e RN-TX-004: o controle de transação digitado em Auto-commit (RN-SESSAO-005); no Commit manual, o `BEGIN` (o Prism já abre a transação
+    /// no primeiro comando) e as formas que nunca valem (`PREPARE TRANSACTION`, `... AND CHAIN`).
+    /// </summary>
     TransactionControlNotSupported,
 
     /// <summary>RN-SQL-001: no Db2 e no Informix cada execução leva um comando só; o envio com mais de um é recusado sem ir ao banco.</summary>
@@ -65,7 +68,22 @@ public enum EDatabaseFailure
     QueryInvalid,
 
     /// <summary>RN-VAR-032: os marcadores do texto não batem com os valores; `Markers` e `Values` são os dois números. Nada foi ao banco, e o resultado anterior continua.</summary>
-    ParametersMismatch
+    ParametersMismatch,
+
+    /// <summary>RN-TX-009: no PostgreSQL, a transação manual tem um erro, e só o Rollback vale até ela ser desfeita. Nada foi ao banco.</summary>
+    TransactionFailed,
+
+    /// <summary>RN-TX-004: no Commit manual do PostgreSQL, o comando que o banco não aceita dentro de transação (`VACUUM`, `CREATE DATABASE`...). Nada foi ao banco.</summary>
+    CommandNotAllowedInTransaction,
+
+    /// <summary>RN-TX-002: Commit ou Rollback sem transação aberta.</summary>
+    NoOpenTransaction,
+
+    /// <summary>RN-TX-005: a troca para Auto-commit (ou o comando da conexão que passou a somente leitura) com a transação manual aberta: a pessoa a termina antes.</summary>
+    TransactionOpen,
+
+    /// <summary>RN-TX-013: o banco não tem transação (Informix sem log de transação), e o Commit manual não existe nele.</summary>
+    TransactionsNotAvailable
 }
 
 /// <summary>
@@ -103,5 +121,8 @@ public enum ECancelOutcome
 /// Na carga da importação e da cópia (RN-IMPORT-016): `Change` é a posição, entre as linhas mandadas num comando (ou num lote), da linha que o banco
 /// recusou, quando se sabe; e `ColumnName` é o nome da coluna da tabela que o banco diz no erro (no PostgreSQL, o campo `column`, que vem na recusa do
 /// nulo), ou nulo.
+///
+/// No Commit manual (seção 22): `Transaction` é o estado da transação da sessão depois da recusa, e `TransactionUndone` diz que a transação que
+/// estava aberta foi desfeita sem a pessoa pedir (o banco a desfez, ou a sessão caiu). Quem os põe é o registro de sessões.
 /// </summary>
-public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null, string? ColumnName = null, string? Field = null, int? Markers = null, int? Values = null);
+public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null, string? ColumnName = null, string? Field = null, int? Markers = null, int? Values = null, TransactionInfo? Transaction = null, bool TransactionUndone = false);

@@ -1167,7 +1167,7 @@ public sealed partial class AdoDatabaseConnectionTests
         //Assert
         Assert.True(outcome.IsFailure);
         Assert.Equal(EDatabaseFailure.TransactionControlNotSupported, outcome.Error.Kind);
-        Assert.Equal("O comando deixou uma transação aberta, e o Prism a desfez: nada do que ele gravou dentro dela ficou. Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos: toda sessão é auto-commit, e cada comando é confirmado quando termina.", outcome.Error.Message);
+        Assert.Equal("O comando deixou uma transação aberta, e o Prism a desfez: nada do que ele gravou dentro dela ficou. Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos em Auto-commit, em que cada comando é confirmado quando termina. Para controlar a transação, escolha \"Commit manual\" na barra do editor: o primeiro comando abre a transação, e \"Commit\" e \"Rollback\" (ou COMMIT e ROLLBACK digitados) a encerram.", outcome.Error.Message);
         Assert.True(outcome.Error.Executed);
         Assert.Null(outcome.Error.Outcome);
         Assert.Equal(1, _transactionProbes);

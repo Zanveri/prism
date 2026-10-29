@@ -16,6 +16,8 @@ public sealed class OpenDatabaseSessionHandlerTests
 {
     private const long Generation = 7;
 
+    private static readonly TransactionInfo AutoCommit = new(ETransactionMode.AutoCommit, false, false, 0, null);
+
     private readonly Mock<IConnectionQueries> _connectionQueries = new();
     private readonly Mock<IDatabaseSessionService> _databaseSessionService = new();
     private readonly Mock<IVaultService> _vaultService = new();
@@ -36,19 +38,22 @@ public sealed class OpenDatabaseSessionHandlerTests
         _vaultService.SetupGet(v => v.Generation).Callback(() => calls.Add("Generation")).Returns(Generation);
         _connectionQueries.Setup(q => q.GetRecordByID(record.ID, cancellationToken)).Callback(() => calls.Add("GetRecordByID")).ReturnsAsync(Result.Success<VaultConnectionRecord?, EVaultError>(record));
         _databaseSessionService.Setup(s => s.OpenAsync(record.ID, settings, Generation, cancellationToken)).Callback(() => calls.Add("OpenAsync")).ReturnsAsync(Result.Success<DatabaseSessionInfo, DatabaseFailure>(info));
+        _databaseSessionService.Setup(s => s.SetTransactionModeAsync(info.ID, ETransactionMode.AutoCommit, cancellationToken)).Callback(() => calls.Add("SetTransactionModeAsync")).ReturnsAsync(Result.Success<TransactionInfo, DatabaseFailure>(AutoCommit));
 
         //Act
         var result = await CreateHandler().Handle(new OpenDatabaseSessionCommand { ConnectionID = record.ID }, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(new DatabaseSessionDto { ID = info.ID, ConnectionID = record.ID, Engine = EDatabaseEngine.PostgreSql, Database = record.Database, ServerVersion = "PostgreSQL 18.0" }, result.Value);
+        Assert.Equal(new DatabaseSessionDto { ID = info.ID, ConnectionID = record.ID, Engine = EDatabaseEngine.PostgreSql, Database = record.Database, ServerVersion = "PostgreSQL 18.0", TransactionsAvailable = true, Transaction = new TransactionDto("autoCommit", "default", false, false, 0, null) }, result.Value);
         // A regra da geração: lida ANTES das credenciais, e a mesma vai ao registro de sessões.
         // A conexão é lida de novo depois de a sessão abrir: se a exclusão terminou no meio, a sessão não estava no registro para ser fechada por ela.
-        Assert.Equal(["Generation", "GetRecordByID", "OpenAsync", "GetRecordByID"], calls);
+        // RN-TX-001: o modo da aba vai à sessão antes de qualquer comando; sem ele, Auto-commit.
+        Assert.Equal(["Generation", "GetRecordByID", "OpenAsync", "GetRecordByID", "SetTransactionModeAsync"], calls);
         _vaultService.VerifyGet(v => v.Generation, Times.Once);
         _connectionQueries.Verify(q => q.GetRecordByID(record.ID, cancellationToken), Times.Exactly(2));
         _databaseSessionService.Verify(s => s.OpenAsync(record.ID, settings, Generation, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.SetTransactionModeAsync(info.ID, ETransactionMode.AutoCommit, cancellationToken), Times.Once);
         _vaultService.VerifyNoOtherCalls();
         _connectionQueries.VerifyNoOtherCalls();
         _databaseSessionService.VerifyNoOtherCalls();
@@ -67,6 +72,7 @@ public sealed class OpenDatabaseSessionHandlerTests
         _vaultService.SetupGet(v => v.Generation).Returns(Generation);
         _connectionQueries.Setup(q => q.GetRecordByID(record.ID, cancellationToken)).ReturnsAsync(Result.Success<VaultConnectionRecord?, EVaultError>(record));
         _databaseSessionService.Setup(s => s.OpenAsync(record.ID, settings, Generation, cancellationToken)).ReturnsAsync(Result.Success<DatabaseSessionInfo, DatabaseFailure>(info));
+        _databaseSessionService.Setup(s => s.SetTransactionModeAsync(info.ID, ETransactionMode.AutoCommit, cancellationToken)).ReturnsAsync(Result.Success<TransactionInfo, DatabaseFailure>(AutoCommit));
 
         //Act
         var result = await CreateHandler().Handle(new OpenDatabaseSessionCommand { ConnectionID = record.ID, Database = "sysmaster" }, cancellationToken);
@@ -75,6 +81,36 @@ public sealed class OpenDatabaseSessionHandlerTests
         Assert.True(result.IsSuccess);
         Assert.Equal("sysmaster", result.Value.Database);
         _databaseSessionService.Verify(s => s.OpenAsync(record.ID, settings, Generation, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.SetTransactionModeAsync(info.ID, ETransactionMode.AutoCommit, cancellationToken), Times.Once);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-TX-013: no banco sem transação, a aba que pede o Commit manual recebe a recusa, e a sessão aberta não fica.</summary>
+    [Trait("OpenDatabaseSessionHandler", "OpenDatabaseSessionCommand")]
+    [Fact(DisplayName = "Erro o Commit manual num banco sem transação fecha a sessão aberta")]
+    public async Task Handle_ShouldBeError_DatabaseSessionService_SetTransactionModeAsync()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var record = VaultFakers.CreateConnection(password: "senha-do-banco", engine: EDatabaseEngine.Informix);
+        var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, record.Database, record.UserName, record.Password);
+        var info = new DatabaseSessionInfo(Guid.CreateVersion7(), record.ID, EDatabaseEngine.Informix, record.Database, "IDS/UNIX64 14.10", TransactionsAvailable: false);
+        _vaultService.SetupGet(v => v.Generation).Returns(Generation);
+        _connectionQueries.Setup(q => q.GetRecordByID(record.ID, cancellationToken)).ReturnsAsync(Result.Success<VaultConnectionRecord?, EVaultError>(record));
+        _databaseSessionService.Setup(s => s.OpenAsync(record.ID, settings, Generation, cancellationToken)).ReturnsAsync(Result.Success<DatabaseSessionInfo, DatabaseFailure>(info));
+        _databaseSessionService.Setup(s => s.SetTransactionModeAsync(info.ID, ETransactionMode.Manual, cancellationToken)).ReturnsAsync(Result.Failure<TransactionInfo, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.TransactionsNotAvailable, "Este banco não tem log de transação.")));
+        _databaseSessionService.Setup(s => s.CloseAsync(info.ID)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
+
+        //Act
+        var result = await CreateHandler().Handle(new OpenDatabaseSessionCommand { ConnectionID = record.ID, TransactionMode = "manual" }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("TRANSACTIONS_NOT_AVAILABLE", result.Error.Type);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, result.Error.StatusCode);
+        _databaseSessionService.Verify(s => s.OpenAsync(record.ID, settings, Generation, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.SetTransactionModeAsync(info.ID, ETransactionMode.Manual, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.CloseAsync(info.ID), Times.Once);
         _databaseSessionService.VerifyNoOtherCalls();
     }
 

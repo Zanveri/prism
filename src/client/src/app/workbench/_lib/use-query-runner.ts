@@ -13,7 +13,7 @@ import { confirmedOf, queryParamsOf, sentTextOf } from "./command-wire";
 import { commandQuestion, numberedScriptQuestion } from "./command-confirmation";
 import type { MakeQuestion } from "./use-command-confirmation";
 import { credentialsMissingField, credentialsRequests } from "./credentials-missing";
-import { closeDatabaseSession, openDatabaseSession } from "./database-sessions.service";
+import { changeTransactionMode, closeDatabaseSession, endTransaction, openDatabaseSession } from "./database-sessions.service";
 import { queryOutcomeCopy } from "./query-outcome.copy";
 import { createScriptRun, finishRun, keptResultIds, platformScriptShortcut, scriptEndToast, scriptResultCap, startEntry, withEntry, withSavedResult, type ScriptChoice, type ScriptError, type ScriptRun } from "./script-run";
 import { scriptRunCopy } from "./script-run.copy";
@@ -23,6 +23,8 @@ import { sqlErrorDetails, type FilterApplied, type QueryColumn, type QueryPage, 
 import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage, type QueryParam } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
 import { bindItem, planItem, planScript, scopeBefore, usesVariables, type Plan, type ScriptDoc } from "./variable-execution";
+import { closedTransaction, createTransactionStore, fromWire, transactionOf, withUncommitted, type TransactionMode, type TransactionStore } from "./transaction";
+import { transactionCopy } from "./transaction.copy";
 import { variableRunCopy } from "./variable-run.copy";
 import type { BoundCommand } from "./variables/bind";
 import { createEvaluatorHost, type Evaluator } from "./variables/evaluator-host";
@@ -341,6 +343,13 @@ export type QueryRunner = {
   runCommand: (target: RunTarget) => Promise<void>;
   /** RN-SQL-019 a 022: o script da aba (nulo sem script), e a resposta da pergunta de erro. */
   script: { subscribe: (listener: () => void) => () => void; getState: () => ScriptRun | null; decide: (choice: ScriptChoice) => void };
+  /**
+   * RN-TX-001 a 014: o modo de transação da aba e a transação manual dela, que cada resposta da API atualiza. `setMode` troca o modo (na sessão aberta,
+   * pela API; sem ela, vale na abertura) e diz se trocou: sair do Commit manual com a transação aberta é recusado, e quem chama pergunta antes (RN-TX-005).
+   * `end` é o "Commit" (`true`) e o "Rollback" (`false`) da barra do editor, e diz se a transação acabou. `note` recebe o `transaction` de uma resposta que não
+   * passa pelo executor (o "Salvar" da grade, RN-EDIT-005).
+   */
+  transaction: Pick<TransactionStore, "subscribe" | "getState"> & { setMode: (mode: TransactionMode) => Promise<boolean>; end: (commit: boolean) => Promise<boolean>; note: (wire: unknown) => void };
   /** Executa de novo o comando das linhas que estão na tela, e nunca outro: é o que o aviso de cursor fechado oferece. */
   rerun: () => Promise<void>;
   cancel: () => Promise<void>;
@@ -439,6 +448,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   const listeners = new Set<() => void>();
   const values = createTabValuesStore(initial?.values);
   const reveal = createRevealStore();
+  const transaction = createTransactionStore();
   /** O hospedeiro do Worker, aberto no primeiro uso (RN-VAR-014). */
   let host: Evaluator | null = evaluator ?? null;
   const evaluatorHost = () => (host ??= createEvaluatorHost());
@@ -531,8 +541,25 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * (RN-GRADE-014, RN-SESSAO-004). O comando da pessoa que a reabre e executa não chama isto: o mesmo comando (o F5) a mantém ligada.
    */
   function sessionLost() {
+    // RN-TX-008: a transação manual some com a sessão; a aba diz quantos comandos não foram confirmados.
+    const lost = transaction.getState();
+    if (lost.open) toast.warning(transactionCopy.toasts.lost(lost.commands));
+    transaction.set(closedTransaction);
     setSession(null);
     autoRefresh.lost();
+  }
+
+  /**
+   * RN-TX-003, 008 e 009: o estado da transação que a resposta (ou a recusa) traz vira o da aba. A transação que estava aberta e foi desfeita sem a pessoa
+   * pedir (`transactionUndone`) é avisada aqui, uma vez, com os comandos que se perderam.
+   */
+  function noteTransaction(result: ApiResult<unknown>) {
+    const carried = (result.ok ? result.data : result.error.extensions) as { transaction?: unknown; transactionUndone?: unknown } | null | undefined;
+    const before = transaction.getState();
+    const wire = transactionOf(carried?.transaction);
+    if (carried?.transactionUndone === true && before.open) toast.warning(transactionCopy.toasts.undone(before.commands));
+    if (wire !== null) transaction.set(fromWire(wire));
+    else if (carried?.transactionUndone === true) transaction.set(closedTransaction);
   }
 
   /**
@@ -577,6 +604,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     try {
       return await throughMutationCache(queryClient, async () => {
         const result = await request();
+        if (started === epoch) noteTransaction(result);
         // `allowRefusal` sem códigos lança a recusa que a aba não trata.
         return started !== epoch || result.ok || handled(result.error) ? result : allowRefusal(result);
       });
@@ -599,13 +627,16 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       let id = sessionId;
 
       if (id === null) {
-        const opened = await call(() => openDatabaseSession(connection, database));
+        // RN-TX-001: a sessão começa no modo da aba; sem o Commit manual, o pedido vai como sempre foi.
+        const opened = await call(() => openDatabaseSession(connection, database, transaction.getState().mode === "manual" ? "manual" : undefined));
         if (started !== epoch) {
           // A aba foi solta enquanto a sessão abria: ninguém mais a usaria nem a fecharia.
           if (opened.ok) void call(() => closeDatabaseSession(opened.data.id), codes("DATABASE_SESSION_NOT_FOUND")).catch(() => undefined);
           return null;
         }
         if (!opened.ok) {
+          // RN-TX-013: o banco sem log de transação não tem Commit manual. O comando não foi executado; a aba passa a Auto-commit (o aviso central diz por quê).
+          if (opened.error.code === "TRANSACTIONS_NOT_AVAILABLE") transaction.set({ mode: "autoCommit", available: false });
           // A sessão que caiu não reabriu: a aba segue sem ela.
           if (reopened) autoRefresh.lost();
           // RN-TRANSF-016: a conexão sem usuário ou sem senha não chega ao driver. A aba fica com o resultado de antes e o comando sem executar (o erro de
@@ -616,6 +647,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
 
         id = opened.data.id;
         setSession(id);
+        transaction.set({ available: opened.data.transactionsAvailable ?? true });
         if (reopened) toast.warning(copy.sessionReopened);
         if (cancelRequested) {
           settle();
@@ -632,8 +664,9 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       if (started !== epoch) return null;
       if (result.ok || result.error.code !== "DATABASE_SESSION_NOT_FOUND") return result;
 
-      // Reabrir é do comando da pessoa (`reopen`), uma vez; fora isso a sessão fica caída.
-      if (!reopen || reopened || cancelRequested) {
+      // Reabrir é do comando da pessoa (`reopen`), uma vez; fora isso a sessão fica caída. RN-TX-008: no Commit manual com a transação aberta, a sessão
+      // perdida não é reaberta em silêncio, e o comando não é repetido: os de antes dele se perderam, e a pessoa executa de novo numa transação nova.
+      if (!reopen || reopened || cancelRequested || transaction.getState().open) {
         sessionLost();
         return result;
       }
@@ -867,7 +900,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       const data = result.data;
       if (data.kind === "affected") {
         set({ status: "affected", rowsAffected: data.rowsAffected, elapsedMs: data.elapsedMs });
-        toast.success(copy.commandExecuted(data.rowsAffected));
+        toast.success(uncommitted(copy.commandExecuted(data.rowsAffected)));
         return;
       }
 
@@ -899,7 +932,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         read: data.read ?? null,
       });
       // RN-SQL-013 e RN-AVISO-002: o comando gravou e está confirmado; as linhas são o que ele devolveu.
-      if (data.totalRows !== null) toast.success(copy.commandCompleted(data.totalRows));
+      if (data.totalRows !== null) toast.success(uncommitted(copy.commandCompleted(data.totalRows)));
       // RN-GRADE-014: a execução automática não repete o aviso de valores cortados; as células seguem marcadas, e "carregar mais" ainda avisa.
       if (!auto) warnTruncated(data);
     });
@@ -1535,6 +1568,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     epoch++;
     sessionId = null;
     cancelRequested = false;
+    transaction.set({ ...closedTransaction, pending: false });
     settle();
     // RN-SQL-022: o script para com a sessão. O comando que rodava fica cancelado (a sessão fecha com ele), e o que esperava a pergunta, com o erro dele.
     if (script !== null && (script.phase === "running" || script.phase === "paused")) publishScript(finishRun(script, script.phase === "paused" ? "stopped" : "cancelled", "cancelled"));
@@ -1559,6 +1593,68 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     publishScript(null);
 
     return released;
+  }
+
+  /**
+   * RN-TX-001 e 005: troca o modo da aba. Sem sessão, o modo vale na abertura dela. Com a sessão aberta, a API confere (a transação aberta impede a saída
+   * do Commit manual: quem chama pergunta antes) e responde o estado, que `call` já pôs na aba.
+   */
+  async function setMode(mode: TransactionMode): Promise<boolean> {
+    const current = transaction.getState();
+    if (current.mode === mode) return true;
+    if (retired || current.pending || isBusy()) return false;
+
+    const id = sessionId;
+    if (id === null) {
+      transaction.set({ mode });
+      return true;
+    }
+
+    const started = epoch;
+    transaction.set({ pending: true });
+    const changed = await call(() => changeTransactionMode(id, mode), codes("DATABASE_SESSION_NOT_FOUND"));
+    if (started !== epoch) return false;
+    transaction.set({ pending: false });
+    if (changed.ok) return true;
+
+    // A sessão caiu: o modo vale na próxima, que abre com ele.
+    if (changed.error.code === "DATABASE_SESSION_NOT_FOUND") {
+      sessionLost();
+      transaction.set({ mode });
+      return true;
+    }
+    if (changed.error.code === "TRANSACTIONS_NOT_AVAILABLE") transaction.set({ available: false });
+    return false;
+  }
+
+  /** RN-TX-002 e 014: o "Commit" e o "Rollback" da barra do editor. A recusa do banco vai ao aviso central, e a transação que ele desfez, ao aviso da aba. */
+  async function end(commit: boolean): Promise<boolean> {
+    const id = sessionId;
+    if (id === null || retired || transaction.getState().pending || isBusy()) return false;
+
+    const started = epoch;
+    transaction.set({ pending: true });
+    const ended = await call(() => endTransaction(id, commit), codes("NO_OPEN_TRANSACTION", "DATABASE_SESSION_NOT_FOUND"));
+    if (started !== epoch) return false;
+    transaction.set({ pending: false });
+
+    if (ended.ok) {
+      toast.success(commit ? transactionCopy.toasts.committed(ended.data.commands) : transactionCopy.toasts.rolledBack(ended.data.commands));
+      return true;
+    }
+    if (ended.error.code === "DATABASE_SESSION_NOT_FOUND") sessionLost();
+    if (ended.error.code === "NO_OPEN_TRANSACTION") transaction.set(closedTransaction);
+    return ended.error.code !== "TRANSACTION_FAILED" && !transaction.getState().open;
+  }
+
+  /** RN-TX-014: no Commit manual, o aviso do comando diz que ele ficou sem commit. */
+  function uncommitted(text: string): string {
+    return withUncommitted(text, transaction.getState());
+  }
+
+  function noteWire(value: unknown) {
+    const wire = transactionOf(value);
+    if (wire !== null && !retired) transaction.set(fromWire(wire));
   }
 
   // RN-GRADE-014: o relógio da atualização automática observa este executor e executa por ele, como execução automática.
@@ -1598,6 +1694,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         answer?.(choice);
       },
     },
+    transaction: { subscribe: transaction.subscribe, getState: transaction.getState, setMode, end, note: noteWire },
     rerun: () => {
       // Com a execução automática em andamento, o resultado na tela é o de antes dela, e o comando dele é o que se executa de novo.
       const shownTarget = () => {

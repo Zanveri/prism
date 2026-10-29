@@ -11,7 +11,8 @@ const rt = vi.hoisted(() => ({
   folders: [] as { id: string; name: string }[],
 }));
 
-vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ tabs: rt.tabs, activeTabId: rt.activeTabId }) }));
+// RN-TX-003: o executor da aba só é entregue ao `TransactionStatus`, que este teste não desenha.
+vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ tabs: rt.tabs, activeTabId: rt.activeTabId, runnerOf: () => ({}) }) }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {

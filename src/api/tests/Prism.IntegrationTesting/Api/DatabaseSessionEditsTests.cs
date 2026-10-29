@@ -65,7 +65,7 @@ public sealed class DatabaseSessionEditsTests
         Assert.That(preview.GetProperty("oneAtATime").GetBoolean(), Is.False);
 
         var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes }), HttpStatusCode.OK);
-        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":2}"""));
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":2,"transaction":{"mode":"autoCommit","isolationLevel":"default","open":false,"failed":false,"commands":0,"openedAt":null}}"""));
 
         var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM {Pedido} ORDER BY 1")).GetProperty("rows").ToString();
         Assert.That(rows, Is.EqualTo("""[["1","paga"],["2","aberta"],["3",null]]"""));
@@ -96,7 +96,7 @@ public sealed class DatabaseSessionEditsTests
         Assert.That(refused.GetProperty("change").GetInt32(), Is.Zero);
 
         var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes }), HttpStatusCode.OK);
-        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":2}"""));
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":2,"transaction":{"mode":"autoCommit","isolationLevel":"default","open":false,"failed":false,"commands":0,"openedAt":null}}"""));
 
         var rows = (await host.Client.ExecuteAsync(session, $"SELECT conta.id, conta.saldo, c.nome FROM {Conta} conta JOIN {Cliente} c ON c.id = conta.cliente_id ORDER BY 1")).GetProperty("rows").ToString();
         Assert.That(rows, Is.EqualTo("""[["1","15","Ana Maria"],["2","20","Ana Maria"]]"""));
@@ -157,7 +157,7 @@ public sealed class DatabaseSessionEditsTests
         Assert.That(preview.GetProperty("statements")[0].GetProperty("sql").GetString(), Is.EqualTo($"UPDATE {guardado} SET \"status\" = 'guardada' WHERE \"id\" = 2"));
 
         var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID = first, changes }), HttpStatusCode.OK);
-        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":1}"""));
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":1,"transaction":{"mode":"autoCommit","isolationLevel":"default","open":false,"failed":false,"commands":0,"openedAt":null}}"""));
 
         // O "Salvar" fechou o cursor do atual (RN-EDIT-009), que continua o atual: o "carregar mais" não tem mais o que ler.
         await ProblemAsync(await host.Client.PostAsync(Url(session, "/queries/next"), null), HttpStatusCode.Conflict, "NO_OPEN_CURSOR");
@@ -239,7 +239,7 @@ public sealed class DatabaseSessionEditsTests
         var whole = new { kind = "updateAll", table = 0, set = new[] { new { column = 1, value = (string?)"todas" } } };
 
         var counted = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), new { resultID, changes = new object[] { whole } }), HttpStatusCode.OK);
-        Assert.That(counted.ToString(), Is.EqualTo("""{"rows":2}"""));
+        Assert.That(counted.ToString(), Is.EqualTo("""{"rows":2,"transaction":{"mode":"autoCommit","isolationLevel":"default","open":false,"failed":false,"commands":0,"openedAt":null}}"""));
 
         var mixed = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), new { resultID, changes = new object[] { whole, new { kind = "delete", table = 0, key = new[] { "2" } } } }), HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
         Assert.That(mixed.GetProperty("change").GetInt32(), Is.EqualTo(1));
@@ -261,7 +261,7 @@ public sealed class DatabaseSessionEditsTests
         Assert.That(changed.GetProperty("detail").GetString(), Is.EqualTo("O resultado mudou desde a contagem: o comando devolve agora 2 linhas, e não as 5 confirmadas. Nada foi gravado; salve de novo para contar outra vez."));
 
         var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { whole.kind, whole.table, whole.set, rows = 2 } } }), HttpStatusCode.OK);
-        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":1}"""));
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":1,"transaction":{"mode":"autoCommit","isolationLevel":"default","open":false,"failed":false,"commands":0,"openedAt":null}}"""));
 
         var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM {inteira} ORDER BY 1")).GetProperty("rows").ToString();
         Assert.That(rows, Is.EqualTo("""[["1","aberta"],["2","todas"],["3","todas"]]"""));

@@ -90,6 +90,7 @@ import { tabEntries } from "../_lib/tab-focus";
 import { forgetExcept, recall, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
 import { isPersonBusy } from "../_lib/use-query-runner";
+import { initialTransaction } from "../_lib/transaction";
 import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
@@ -197,6 +198,8 @@ function fakeRunner(initial: RunnerState) {
     runCommand: vi.fn<(target: RunTarget) => Promise<void>>(() => Promise.resolve()),
     scriptState: null as ScriptRun | null,
     script: { subscribe: () => () => {}, getState: (): ScriptRun | null => runner.scriptState, decide: vi.fn<(choice: ScriptChoice) => void>() },
+    /** RN-TX-001: a aba em Auto-commit, sem transação; o "Salvar" entrega o estado que a API mandou (`note`). */
+    transaction: { subscribe: () => () => {}, getState: () => initialTransaction, setMode: vi.fn(() => Promise.resolve(true)), end: vi.fn(() => Promise.resolve(true)), note: vi.fn() },
     cancel: vi.fn(),
     loadMore: vi.fn(),
     countTotal: vi.fn(),

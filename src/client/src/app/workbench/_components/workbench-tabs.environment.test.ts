@@ -11,7 +11,7 @@ import type { QueryTab, TableTab } from "../_lib/workbench-model";
 const rt = await vi.hoisted(async () => {
   const { createHookRuntime } = await import("@/lib/testing/react-hooks");
 
-  const runner = { values: { snapshot: () => ({ values: new Map(), counter: 0 }) }, getState: () => ({ status: "idle" }), autoRunSettled: () => Promise.resolve(), autoRefresh: { pause: vi.fn() }, sessionOf: () => null };
+  const runner = { values: { snapshot: () => ({ values: new Map(), counter: 0 }) }, getState: () => ({ status: "idle" }), autoRunSettled: () => Promise.resolve(), autoRefresh: { pause: vi.fn() }, sessionOf: () => null, transaction: { getState: () => ({ open: false }) } };
   const workbench = { tabs: [] as unknown[], activeTabId: null as string | null, resultActive: false, runnerOf: () => runner, showEntry: vi.fn(), setResultPlace: vi.fn(), closeTab: vi.fn(), detachTab: vi.fn() };
   /** As listas que as consultas entregam, pela chave: `connections` e `folders`. Sem a chave, a lista ainda não chegou. */
   const lists = new Map<string, unknown>();

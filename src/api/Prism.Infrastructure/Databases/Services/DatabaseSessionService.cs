@@ -64,7 +64,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             return opened.Error;
         }
 
-        var session = new Session(new DatabaseSessionInfo(Guid.CreateVersion7(), connectionID, settings.Engine, settings.Database, opened.Value.ServerVersion), settings, opened.Value, vaultGeneration);
+        // RN-TX-013: a aba sabe, ao abrir a sessão, se o Commit manual existe no banco. A consulta que falha não o tira: o banco diz depois, no comando.
+        var available = await opened.Value.TransactionsAvailableAsync(cancellationToken);
+        var session = new Session(new DatabaseSessionInfo(Guid.CreateVersion7(), connectionID, settings.Engine, settings.Database, opened.Value.ServerVersion, available.IsFailure || available.Value), settings, opened.Value, vaultGeneration);
         session.IdleTimer = _timeProvider.CreateTimer(_ => OnCursorIdle(session), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
         if (!Register(session))
@@ -124,8 +126,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
             using var turnEnd = new TurnEnd(session.Turn);
 
-            // A sessão fechou depois da lista, ou tem um cursor que a consulta fecharia (RN-SQL-007).
-            if (session.Closed || session.Connection.HasOpenCursor)
+            // A sessão fechou depois da lista, ou tem um cursor que a consulta fecharia (RN-SQL-007), ou uma transação manual aberta, em que a
+            // consulta rodaria (no PostgreSQL, a transação com erro a recusaria, e a conexão pareceria com defeito; RN-TX-009).
+            if (session.Closed || session.Connection.HasOpenCursor || session.Connection.Transaction != ETransactionState.None)
                 continue;
 
             // O comando da pessoa que chega agora espera o fim da verificação, em vez de responder que a sessão está ocupada (`RunAsync`).
@@ -155,6 +158,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
     public Guid? ConnectionOf(Guid sessionID)
         => _sessions.TryGetValue(sessionID, out var session) ? session.Info.ConnectionID : null;
+
+    public DatabaseSessionInfo? InfoOf(Guid sessionID)
+        => _sessions.TryGetValue(sessionID, out var session) ? session.Info : null;
 
     public async Task<UnitResult<DatabaseFailure>> CloseAsync(Guid sessionID)
     {
@@ -229,84 +235,106 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
-            var dialect = DialectOf(session);
-            sql = SqlText.RewriteDoubleQuotedLiterals(sql, dialect);
-
-            // RN-GRADE-011: o comando montado é o que roda. A recusa do filtro, como a do texto do comando, deixa o resultado anterior como estava.
-            // RN-VAR-032: com `params`, o filtro não tem marcador (os marcadores do comando ficam na ordem, e o filtro entra sem marcador).
-            FilteredSql? filtered = null;
-            if (!string.IsNullOrWhiteSpace(filter))
+            // RN-TX-004: no Commit manual, `COMMIT` e `ROLLBACK` digitados fazem o que os botões fazem, e respondem como um comando sem linhas. Sem
+            // transação aberta não há o que encerrar. Na transação com erro (RN-TX-009), só o que a desfaz vai ao banco.
+            var control = session.Connection.ManualCommit ? SqlText.TransactionControlOf(sql, DialectOf(session)) : ETransactionControl.None;
+            if (control is ETransactionControl.Commit or ETransactionControl.Rollback)
             {
-                if (parameters.Count > 0 && QueryParameterRules.FilterHasMarker(filter, session.Info.Engine))
-                    return new DatabaseFailure(EDatabaseFailure.FilterInvalid, QueryParameterRules.FilterMarker);
+                var started = _timeProvider.GetTimestamp();
+                var ended = session.Connection.Transaction == ETransactionState.None ? 0 : await EndTransactionAsync(session, commit: control == ETransactionControl.Commit);
 
-                var applied = SqlFilter.Apply(sql, filter, dialect);
-                if (applied.IsFailure)
-                    return applied.Error;
-
-                filtered = applied.Value;
+                return ended.Map(_ => new QueryOutcome(null, 0, (long)_timeProvider.GetElapsedTime(started).TotalMilliseconds, TransactionOf(session)));
             }
 
-            var sent = filtered?.Sql ?? sql;
+            if (session.Connection.Transaction == ETransactionState.Failed && control != ETransactionControl.RollbackToSavepoint)
+                return TransactionFailed(session);
 
-            // RN-VAR-032: os marcadores do texto montado contra os valores, e o que o banco não guarda; antes de qualquer coisa ir a ele.
-            if (QueryParameterRules.Refusal(sent, session.Info.Engine, parameters, "params") is { } invalid)
-                return invalid;
+            var outcome = await InTheTransactionAsync(session, ran => ran.IsSuccess || ran.Error.Kind == EDatabaseFailure.ExecutionFailed, () => ExecuteInSessionAsync(session, sql, filter, pageSize, readOnly, keep, parameters, cancellationToken));
 
-            // RN-PROT-002: na conexão somente leitura, o comando montado que não é uma leitura nem vai ao banco, e o resultado anterior fica.
-            if (readOnly && ReadOnlySql.Refusal(sent, session.Info.Engine) is { } reason)
-                return new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, ReadOnlySql.Message(reason));
-
-            var outcome = readOnly ? await session.Connection.ExecuteReadOnlyAsync(sent, pageSize, cancellationToken, parameters) : await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken, parameters);
-
-            // RN-LOG-001 e RN-VAR-036: quantos parâmetros o comando levou, nunca o valor.
-            if (parameters.Count > 0)
-                _logger.Information("Sessão {SessionID}: {Operation} levou {Parameters} parâmetros.", session.Info.ID, nameof(ExecuteAsync), parameters.Count);
-
-            // RN-SQL-009: a posição do erro seria a do comando montado, que a tela não mostra (como na contagem, RN-SQL-006).
-            if (outcome.IsFailure && filtered is not null)
-                outcome = outcome.Error with { Position = null };
-
-            // RN-SQL-024: o comando que foi ao banco (deu certo, o banco recusou, ou rodou e foi desfeito) guarda os resultados da lista, entre o
-            // atual e os já guardados, antes de o atual ser trocado, e conta, no Db2 e no Informix, o que pode ter trocado o esquema atual da
-            // sessão. A recusa pelo texto, antes de executar, não muda nada.
-            var ran = outcome.IsSuccess || outcome.Error.Kind == EDatabaseFailure.ExecutionFailed || outcome.Error.Executed;
-            if (ran)
-            {
-                Keep(session, keep);
-                if (dialect != ESqlDialect.PostgreSql && EditableSql.MayChangeTheCurrentSchema(sent, dialect))
-                    session.SchemaChanges++;
-            }
-
-            // RN-SQL-006: "contar total" vale para o último comando que devolveu linhas, mesmo que outros sem linhas venham depois.
-            if (outcome.IsSuccess && outcome.Value.Page is { } page)
-            {
-                session.LastRowQuery = new RowQuery(sent, page.TotalRows, parameters);
-
-                // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
-                // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura. O filtro junto é lido com o comando
-                // (a edição vale como sem ele); o embrulhado é só leitura, com o motivo do próprio comando.
-                // RN-PROT-002: na conexão somente leitura a página diz o resultado inteiro só leitura, com o motivo que a grade mostra; RN-GRADE-020: o
-                // que o texto diz das tabelas fica com o resultado, para o alvo do "Gerar SQL" nela e para a edição quando ela deixar de ser somente leitura.
-                var source = page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
-                    : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
-                    : EditableSql.Read(sent, dialect);
-                // RN-EXPORT-001 e 002: exportar executa o comando de novo, numa conexão à parte; só vale para a leitura só, pelo comando montado, que não gravou.
-                var read = page.TotalRows is null && ReadOnlySql.ExportRefusal(sent, session.Info.Engine) is null;
-                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read, readOnly ? ReadOnlySql.ResultReason : null, sent, parameters);
-                var withoutFullValue = result.Cells.Add(page);
-                ReplaceResult(session, result);
-
-                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = withoutFullValue, FilterApplied = result.FilterApplied, Read = result.Read } };
-            }
-
-            // O comando que rodou deixa a sessão sem resultado (RN-SQL-017: e larga os valores completos dele); a recusa pelo texto, antes
-            // de executar, deixa o anterior como estava.
-            if (ran)
-                ReplaceResult(session, null);
-
-            return outcome;
+            return outcome.Map(executed => executed with { Transaction = TransactionOf(session) });
         }, cancellationToken);
+
+    /// <summary>O comando da aba na sessão dela, com a vez tomada: o filtro, os parâmetros, a recusa do somente leitura e o resultado que fica.</summary>
+    private async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteInSessionAsync(Session session, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
+    {
+        var dialect = DialectOf(session);
+        sql = SqlText.RewriteDoubleQuotedLiterals(sql, dialect);
+
+        // RN-GRADE-011: o comando montado é o que roda. A recusa do filtro, como a do texto do comando, deixa o resultado anterior como estava.
+        // RN-VAR-032: com `params`, o filtro não tem marcador (os marcadores do comando ficam na ordem, e o filtro entra sem marcador).
+        FilteredSql? filtered = null;
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            if (parameters.Count > 0 && QueryParameterRules.FilterHasMarker(filter, session.Info.Engine))
+                return new DatabaseFailure(EDatabaseFailure.FilterInvalid, QueryParameterRules.FilterMarker);
+
+            var applied = SqlFilter.Apply(sql, filter, dialect);
+            if (applied.IsFailure)
+                return applied.Error;
+
+            filtered = applied.Value;
+        }
+
+        var sent = filtered?.Sql ?? sql;
+
+        // RN-VAR-032: os marcadores do texto montado contra os valores, e o que o banco não guarda; antes de qualquer coisa ir a ele.
+        if (QueryParameterRules.Refusal(sent, session.Info.Engine, parameters, "params") is { } invalid)
+            return invalid;
+
+        // RN-PROT-002: na conexão somente leitura, o comando montado que não é uma leitura nem vai ao banco, e o resultado anterior fica.
+        if (readOnly && ReadOnlySql.Refusal(sent, session.Info.Engine) is { } reason)
+            return new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, ReadOnlySql.Message(reason));
+
+        var outcome = readOnly ? await session.Connection.ExecuteReadOnlyAsync(sent, pageSize, cancellationToken, parameters) : await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken, parameters);
+
+        // RN-LOG-001 e RN-VAR-036: quantos parâmetros o comando levou, nunca o valor.
+        if (parameters.Count > 0)
+            _logger.Information("Sessão {SessionID}: {Operation} levou {Parameters} parâmetros.", session.Info.ID, nameof(ExecuteAsync), parameters.Count);
+
+        // RN-SQL-009: a posição do erro seria a do comando montado, que a tela não mostra (como na contagem, RN-SQL-006).
+        if (outcome.IsFailure && filtered is not null)
+            outcome = outcome.Error with { Position = null };
+
+        // RN-SQL-024: o comando que foi ao banco (deu certo, o banco recusou, ou rodou e foi desfeito) guarda os resultados da lista, entre o
+        // atual e os já guardados, antes de o atual ser trocado, e conta, no Db2 e no Informix, o que pode ter trocado o esquema atual da
+        // sessão. A recusa pelo texto, antes de executar, não muda nada.
+        var ran = outcome.IsSuccess || outcome.Error.Kind == EDatabaseFailure.ExecutionFailed || outcome.Error.Executed;
+        if (ran)
+        {
+            Keep(session, keep);
+            if (dialect != ESqlDialect.PostgreSql && EditableSql.MayChangeTheCurrentSchema(sent, dialect))
+                session.SchemaChanges++;
+        }
+
+        // RN-SQL-006: "contar total" vale para o último comando que devolveu linhas, mesmo que outros sem linhas venham depois.
+        if (outcome.IsSuccess && outcome.Value.Page is { } page)
+        {
+            session.LastRowQuery = new RowQuery(sent, page.TotalRows, parameters);
+
+            // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
+            // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura. O filtro junto é lido com o comando
+            // (a edição vale como sem ele); o embrulhado é só leitura, com o motivo do próprio comando.
+            // RN-PROT-002: na conexão somente leitura a página diz o resultado inteiro só leitura, com o motivo que a grade mostra; RN-GRADE-020: o
+            // que o texto diz das tabelas fica com o resultado, para o alvo do "Gerar SQL" nela e para a edição quando ela deixar de ser somente leitura.
+            var source = page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
+                : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
+                : EditableSql.Read(sent, dialect);
+            // RN-EXPORT-001 e 002: exportar executa o comando de novo, numa conexão à parte; só vale para a leitura só, pelo comando montado, que não gravou.
+            var read = page.TotalRows is null && ReadOnlySql.ExportRefusal(sent, session.Info.Engine) is null;
+            var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read, readOnly ? ReadOnlySql.ResultReason : null, sent, parameters);
+            var withoutFullValue = result.Cells.Add(page);
+            ReplaceResult(session, result);
+
+            return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = withoutFullValue, FilterApplied = result.FilterApplied, Read = result.Read } };
+        }
+
+        // O comando que rodou deixa a sessão sem resultado (RN-SQL-017: e larga os valores completos dele); a recusa pelo texto, antes
+        // de executar, deixa o anterior como estava.
+        if (ran)
+            ReplaceResult(session, null);
+
+        return outcome;
+    }
 
     public string? FilterRefusal(Guid sessionID, string? filter)
         => FilterRefusal(sessionID, filter, withParameters: false);
@@ -325,7 +353,8 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(FetchNextAsync), waitsForTurn: false, async session =>
         {
-            var page = await session.Connection.FetchNextAsync(cancellationToken);
+            // RN-TX-009 e 011: o "carregar mais" lê dentro da transação manual, e a falha dele (no Db2, o impasse) pode desfazê-la.
+            var page = await InTheTransactionAsync(session, _ => false, () => session.Connection.FetchNextAsync(cancellationToken));
             if (page.IsFailure)
                 return page;
 
@@ -476,6 +505,10 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ApplyEditsAsync), waitsForTurn: false, async session =>
         {
+            // RN-TX-009: na transação com erro do PostgreSQL, o "Salvar" é recusado antes de qualquer consulta, também a do catálogo.
+            if (session.Connection.Transaction == ETransactionState.Failed)
+                return TransactionFailed(session);
+
             var whole = WholeColumnSql.Find(changes);
             if (whole.IsFailure)
                 return whole.Error;
@@ -495,14 +528,15 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             if (planned.IsFailure)
                 return planned.Error;
 
-            var saved = await session.Connection.ApplyEditsAsync(tables, expected.Value.OneAtATime, whole.Value is not null, catalogs =>
+            // RN-TX-003: no Commit manual, o "Salvar" que deu certo conta um comando.
+            var saved = await InTheTransactionAsync(session, applied => applied.IsSuccess, () => session.Connection.ApplyEditsAsync(tables, expected.Value.OneAtATime, whole.Value is not null, catalogs =>
             {
                 var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalogs);
                 if (now.IsFailure || !EditTargetResolver.Same(expected.Value, now.Value))
                     return Result.Failure<EditPlan, DatabaseFailure>(TableChanged(expected.Value, now));
 
                 return Plan(dialect, result, now.Value, changes, whole.Value);
-            }, cancellationToken);
+            }, cancellationToken));
 
             // RN-EDIT-021 e RN-LOG-001: os IDs e o número de linhas da coluna inteira, nunca o comando, os nomes nem os valores.
             if (saved.IsSuccess && whole.Value is { } index)
@@ -518,6 +552,10 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(CountWholeColumnAsync), waitsForTurn: false, async session =>
         {
+            // RN-TX-009: na transação com erro do PostgreSQL, a contagem é recusada antes de qualquer consulta, também a do catálogo.
+            if (session.Connection.Transaction == ETransactionState.Failed)
+                return TransactionFailed(session);
+
             var only = WholeColumnSql.OnlyOne(changes);
             if (only.IsFailure)
                 return only.Error;
@@ -537,15 +575,131 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             if (planned.IsFailure)
                 return planned.Error;
 
-            return await session.Connection.CountWholeColumnAsync(TablesOf(result), catalogs =>
+            // RN-TX-012: no Commit manual a contagem roda na transação da aba e vê o que ela gravou.
+            return await InTheTransactionAsync(session, _ => false, () => session.Connection.CountWholeColumnAsync(TablesOf(result), catalogs =>
             {
                 var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalogs);
                 if (now.IsFailure || !EditTargetResolver.Same(expected.Value, now.Value))
                     return Result.Failure<WholeColumnPlan, DatabaseFailure>(TableChanged(expected.Value, now));
 
                 return WholeColumnSql.Plan(dialect, result.Sql, result.Read, now.Value, result.Columns, changes[index], index, requiresRows: false, result.Parameters);
-            }, cancellationToken);
+            }, cancellationToken));
         }, cancellationToken);
+
+    public TransactionInfo? TransactionOf(Guid sessionID)
+        => _sessions.TryGetValue(sessionID, out var session) ? TransactionOf(session) : null;
+
+    public Task<Result<TransactionInfo, DatabaseFailure>> SetTransactionModeAsync(Guid sessionID, ETransactionMode mode, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(SetTransactionModeAsync), waitsForTurn: false, session => Task.FromResult(ChangeMode(session, mode)), cancellationToken);
+
+    public Task<Result<int, DatabaseFailure>> CommitAsync(Guid sessionID, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(CommitAsync), waitsForTurn: false, session => EndTransactionAsync(session, commit: true), cancellationToken);
+
+    public Task<Result<int, DatabaseFailure>> RollbackAsync(Guid sessionID, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(RollbackAsync), waitsForTurn: false, session => EndTransactionAsync(session, commit: false), cancellationToken);
+
+    /// <summary>
+    /// RN-TX-001, 005 e 013, com a vez tomada: a tela pergunta Commit, Rollback ou Cancelar antes de sair do Commit manual com a transação aberta;
+    /// aqui ela só impede a troca. O banco sem transação não tem Commit manual.
+    /// </summary>
+    private Result<TransactionInfo, DatabaseFailure> ChangeMode(Session session, ETransactionMode mode)
+    {
+        var manual = mode == ETransactionMode.Manual;
+        if (manual == session.Connection.ManualCommit)
+            return TransactionOf(session);
+
+        if (!manual && session.Connection.Transaction != ETransactionState.None)
+            return new DatabaseFailure(EDatabaseFailure.TransactionOpen, "A aba tem uma transação aberta: encerre-a com Commit ou Rollback antes de passar para Auto-commit.", Transaction: TransactionOf(session));
+
+        if (manual && !session.Info.TransactionsAvailable)
+            return new DatabaseFailure(EDatabaseFailure.TransactionsNotAvailable, "Este banco não tem log de transação: cada comando é gravado quando termina, e não há Commit manual.");
+
+        session.Connection.ManualCommit = manual;
+        _logger.Information("Sessão {SessionID}: modo de transação {Mode}.", session.Info.ID, mode);
+
+        return TransactionOf(session);
+    }
+
+    /// <summary>
+    /// RN-TX-002, 009, 014 e 016: o Commit ou o Rollback da transação manual, com a vez tomada; devolve quantos comandos ela tinha. Na transação com
+    /// erro do PostgreSQL o Commit é recusado sem ir ao banco: ele seria desfeito, e o Prism nunca anuncia como confirmada uma transação que o banco
+    /// desfez. A recusa do banco encerra a transação do mesmo jeito (o Commit recusado no PostgreSQL é desfeito), e a resposta diz isso.
+    /// </summary>
+    private async Task<Result<int, DatabaseFailure>> EndTransactionAsync(Session session, bool commit)
+    {
+        var state = session.Connection.Transaction;
+        if (state == ETransactionState.None)
+            return new DatabaseFailure(EDatabaseFailure.NoOpenTransaction, "Não há transação aberta nesta aba.", Transaction: TransactionOf(session));
+
+        if (commit && state == ETransactionState.Failed)
+            return TransactionFailed(session);
+
+        var commands = session.Commands;
+        var duration = session.OpenedAt is { } openedAt ? _timeProvider.GetUtcNow() - openedAt : TimeSpan.Zero;
+        var ended = commit ? await session.Connection.CommitAsync(CancellationToken.None) : await session.Connection.RollbackAsync(CancellationToken.None);
+        session.Commands = 0;
+        session.OpenedAt = null;
+
+        // RN-TX-016 e RN-LOG-001: a sessão, os comandos e a duração, nunca o SQL.
+        if (ended.IsFailure)
+        {
+            _logger.Information("Sessão {SessionID}: a transação manual se perdeu no {Operation}, com {Commands} comandos, aberta havia {Seconds:0} s ({Failure}, SQLSTATE {SqlState}).", session.Info.ID, commit ? "Commit" : "Rollback", commands, duration.TotalSeconds, ended.Error.Kind, ended.Error.SqlState);
+
+            return ended.Error with { Transaction = TransactionOf(session), TransactionUndone = true };
+        }
+
+        _logger.Information("Sessão {SessionID}: transação manual {Ended}, com {Commands} comandos, aberta havia {Seconds:0} s.", session.Info.ID, commit ? "confirmada" : "desfeita", commands, duration.TotalSeconds);
+
+        return commands;
+    }
+
+    /// <summary>
+    /// RN-TX-002, 003, 008, 009 e 016: uma operação que roda na transação da aba (executar, "carregar mais", "Salvar", a contagem da coluna inteira), com
+    /// a vez tomada. Depois dela o registro nota a transação que o primeiro comando abriu, conta o comando (`counts`), e nota a transação que sumiu sem
+    /// Commit nem Rollback: o banco a desfez, ou a conexão caiu. A recusa leva o estado e o `TransactionUndone`, para a tela dizer o que se perdeu.
+    /// </summary>
+    private async Task<Result<T, DatabaseFailure>> InTheTransactionAsync<T>(Session session, Func<Result<T, DatabaseFailure>, bool> counts, Func<Task<Result<T, DatabaseFailure>>> work)
+    {
+        var before = session.Connection.Transaction;
+        var result = await work();
+        var after = session.Connection.IsOpen ? session.Connection.Transaction : ETransactionState.None;
+
+        if (before == ETransactionState.None && after != ETransactionState.None)
+        {
+            session.OpenedAt = _timeProvider.GetUtcNow();
+            session.Commands = 0;
+            _logger.Information("Sessão {SessionID}: transação manual aberta.", session.Info.ID);
+        }
+
+        if (after != ETransactionState.None && counts(result))
+            session.Commands++;
+
+        if (before == ETransactionState.Open && after == ETransactionState.Failed)
+            _logger.Information("Sessão {SessionID}: a transação manual ficou com erro, com {Commands} comandos.", session.Info.ID, session.Commands);
+
+        var undone = before != ETransactionState.None && after == ETransactionState.None;
+        if (undone)
+        {
+            _logger.Information("Sessão {SessionID}: a transação manual foi desfeita sem pedido, com {Commands} comandos.", session.Info.ID, session.Commands);
+            session.Commands = 0;
+            session.OpenedAt = null;
+        }
+
+        return result.IsSuccess ? result : result.Error with { Transaction = TransactionOf(session), TransactionUndone = undone };
+    }
+
+    /// <summary>RN-TX-003: o modo, e a transação manual quando há uma: os comandos sem commit e quando ela abriu.</summary>
+    private static TransactionInfo TransactionOf(Session session)
+    {
+        var state = session.Connection.IsOpen ? session.Connection.Transaction : ETransactionState.None;
+        var open = state != ETransactionState.None;
+
+        return new TransactionInfo(session.Connection.ManualCommit ? ETransactionMode.Manual : ETransactionMode.AutoCommit, open, state == ETransactionState.Failed, open ? session.Commands : 0, open ? session.OpenedAt : null);
+    }
+
+    /// <summary>RN-TX-009: no PostgreSQL, a transação com erro só aceita o Rollback; nada vai ao banco.</summary>
+    private static DatabaseFailure TransactionFailed(Session session)
+        => new(EDatabaseFailure.TransactionFailed, "A transação tem um erro: desfaça com Rollback. Até lá o banco não aceita outro comando nesta aba.", Transaction: TransactionOf(session));
 
     /// <summary>
     /// RN-EDIT-005: o alvo de antes é o que o `edit-target` respondeu (sem ele, o catálogo é consultado aqui, na própria sessão, cujo cursor o "Salvar" e a
@@ -1040,6 +1194,11 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         public CancellationTokenSource CountCancellation = new();
 
         public volatile bool Closed;
+
+        /// <summary>RN-TX-003: os comandos sem commit da transação manual aberta (cada execução e cada "Salvar" contam um) e quando ela abriu.</summary>
+        public int Commands;
+
+        public DateTimeOffset? OpenedAt;
 
         /// <summary>RN-VERIF-002: a vez está com a verificação periódica, e não com um comando da pessoa: quem chega espera, em vez de ouvir "ocupada".</summary>
         public volatile bool Verifying;

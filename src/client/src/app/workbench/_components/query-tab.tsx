@@ -60,6 +60,7 @@ import { ScriptErrorDialog } from "./script-error-dialog";
 import { ScriptStatistics } from "./script-statistics";
 import { ResultTabs, ScriptTabs, ScriptWaitingMark, scriptTabId } from "./script-tabs";
 import { SentSqlDialog } from "./sent-sql-dialog";
+import { TransactionControl } from "./transaction-control";
 import { VariablesPanel } from "./variables-panel";
 import { variablesPanelCopy } from "../_lib/variables-panel.copy";
 import { RecordsFilter } from "./table-tab/records-filter";
@@ -720,6 +721,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           onCancel={handleCancel}
           connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
           database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
+          transaction={connectionId === null ? null : <TransactionControl transaction={runner.transaction} busy={busy} />}
         />
   
         <div ref={area} className="flex min-h-0 flex-1 flex-col">
