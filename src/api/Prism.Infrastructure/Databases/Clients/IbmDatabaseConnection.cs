@@ -93,6 +93,8 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
     protected override bool IsTransactionControl(string sql)
         => SqlText.IsTransactionControl(sql, Dialect);
 
+    protected override bool RollbackWorkEndsTheTransaction => true;
+
     protected override bool HasSeveralStatements(string sql)
         => SqlText.HasSeveralStatements(sql, Dialect);
 

@@ -547,7 +547,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   e grava de novo; o Renomear não pede, e a recusa que chegasse nele iria ao aviso central. No diálogo, a senha errada (`INVALID_PASSWORD`) e a que
   faltou ficam no campo, que volta vazio; o 401 `VAULT_LOCKED` do quinto erro dá o aviso de atenção na `onSuccess` da própria mutação, e o
   `VaultGuard` leva ao login; o resto volta a quem abriu (`onDone`: o 422 dos campos vai a eles; `null` quando a falha já foi ao aviso central). A
-  senha não fica guardada (`gcTime: 0` e `reset`). Não há transação aberta a avisar: a tela ainda não tem o Commit manual (RN-TX-001). O diálogo
+  senha não fica guardada (`gcTime: 0` e `reset`). O aviso de que cinco erros desfazem as transações abertas (RN-TX-008) ainda não está aqui. O diálogo
   fica fora do `<form>` de quem o abre, como o de revelar.
 - Em desenvolvimento o `StrictMode` roda o efeito do `Dialog` duas vezes e o foco cai no painel, não no campo com
   `autoFocus`; sem o `StrictMode` cai no campo (conferido em dev; o app empacotado não foi aberto).
@@ -888,8 +888,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `aria-live="polite"` sempre montada, que só anuncia o "Nenhum item começa com “xyz”". Testes: `type-ahead.test.ts`, `use-type-ahead.test.ts`,
   `navigator.type-ahead.test.ts` (a `NavigatorList` com a lista virtual de mentira), `scripts-section.type-ahead.test.ts` e `type-ahead-indicator.test.ts`.
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
-  na barra do editor, "Explicar plano", "Formatar", o esquema da aba e a transação (a barra tem Executar e Cancelar,
-  seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
+  na barra do editor, "Explicar plano", "Formatar", o esquema da aba e o nível de isolamento (a barra tem Executar e Cancelar,
+  seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, o banco, RN-ARVORE-007, e a transação, RN-TX-001); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
   nos Registros de uma tabela, RN-TABELA-006). A edição de célula já existe nas duas grades: ver "Edição das células", abaixo.
   O canvas pinta em rosa a função do banco (`now`); a gramática do `lang-sql` não a distingue de um nome.
 - **Conferir na tela sem a API ter as rotas**: o `pnpm dev --remoteDebuggingPort 9222` sobe a API de verdade só para a
@@ -1490,6 +1490,39 @@ da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de
   `script-dialogs.test.ts`, `tab-transfer.test.ts` e `workbench-state.connection.test.ts`. O que não tem teste: o foco de verdade na linha depois de criar
   (o vitest não tem DOM; o efeito sai cedo sem `document`), e o app não foi aberto nesta mudança.
 
+## Commit manual da aba (seção 22: RN-TX-001 a 014)
+
+- **O estado é do executor** (`runner.transaction`, `_lib/transaction.ts`): o modo, se há transação aberta, se ela tem erro, os comandos sem commit, quando
+  abriu, se o banco tem transação (`available`) e se um Commit, Rollback ou troca de modo está a caminho (`pending`). Quem o escreve é o `call()` do executor:
+  toda resposta (e toda recusa, pelas extensões) que traz `transaction` vira o estado da aba (`noteTransaction`), e `transactionUndone` sobre a transação
+  que estava aberta dá o aviso de atenção com os comandos que se perderam. O "Salvar" da grade não passa pelo executor: `use-record-edits.ts` entrega o
+  `transaction` da resposta a `runner.transaction.note`. Os schemas aceitam o campo fora da forma como nulo, e o resultado só o leva quando a API o manda
+  (`withTransaction` em `query.schema.ts`), para a forma de antes continuar igual.
+- **A sessão abre no modo da aba** (`transactionMode: "manual"` no `POST`, só no Commit manual: o pedido de Auto-commit é o de sempre). Sem sessão, trocar
+  o modo só muda o estado; com ela, vai ao `PATCH`. A recusa `TRANSACTIONS_NOT_AVAILABLE` (Informix sem log, RN-TX-013), na abertura ou na troca, passa a
+  aba a Auto-commit e deixa o "Commit manual" desabilitado com o motivo; o aviso central diz por quê, e o comando não foi executado.
+- **A barra do editor** (`TransactionControl`, no fim dela, como o canvas): "Transação", o seletor e "Commit" e "Rollback", sempre à vista e desabilitados
+  sem sair do Tab (`aria-disabled`, com o motivo na dica e para o leitor de tela) sem transação aberta, com comando em andamento, ou, o Commit, com a
+  transação com erro. Sair do Commit manual com a transação aberta pergunta antes (RN-TX-005): Commit, Rollback ou Cancelar (com erro, sem o Commit), e só
+  troca depois de a transação acabar. Os Registros de uma tabela não têm a barra: são sempre Auto-commit.
+- **A barra de status** (`TransactionStatus`, com a chave da aba ativa) escreve o texto da RN-TX-003 (`transactionStatus`): "Auto-commit · Padrão do
+  banco", "Commit manual · Padrão do banco · sem transação aberta", "… · 3 comandos sem commit · há 4 min" (tom de atenção a partir de 10 minutos, com um
+  relógio de 30 s só enquanto a transação está aberta) e "… · transação com erro: só resta o Rollback" (tom de erro), num `role="status"`.
+- **Os avisos** (RN-TX-014): o comando e o "Salvar" que deram certo com a transação aberta dizem "sem commit" (`withUncommitted`); o Commit e o Rollback
+  dizem quantos comandos. **A sessão que cai com a transação aberta** (RN-TX-008) não é reaberta em silêncio: o executor não repete o comando, avisa quantos
+  comandos não foram confirmados, e a aba fica sem sessão até o próximo comando, que abre uma nova, no mesmo modo.
+- **Fechar abas com transação aberta pergunta** (RN-TX-006, em `workbench-tabs.tsx`), depois das alterações não salvas e antes dos scripts: "Commit e
+  fechar", "Rollback e fechar" ou "Cancelar", e a escolha vale para todas; o Commit recusado para a saída ali. Vale também para fechar a janela, que passa
+  pela mesma cadeia.
+- **O que não foi feito**: a pergunta nas outras saídas da RN-TX-006 (desconectar, excluir a conexão, trocar a conexão ou o banco da aba, "Sair",
+  reiniciar o serviço, atualizar: nelas a API desfaz a transação ao fechar a sessão, sem perguntar); o modo padrão de Configurações › Transações
+  (RN-CONFIG-007: a aba nova começa em Auto-commit, e a seção continua "em breve"); o seletor de nível de isolamento (RN-ISOL-*); a pergunta do "Cancelar"
+  do PostgreSQL com transação aberta (RN-TX-010); o aviso dos cinco erros de senha e o do bloqueio (RN-TX-007 e 008); e o "o total não inclui o que esta aba
+  ainda não confirmou" do "Contar total" (RN-TX-012). A aba levada para outra janela leva a sessão no modo dela, mas a outra janela só fica sabendo do
+  modo na primeira resposta.
+- **Os testes**: `transaction.test.ts` (o texto da barra de status e a leitura da API) e `use-query-runner.transaction.test.ts` (o modo na abertura, os
+  avisos, o Commit, a transação desfeita, a sessão perdida, o banco sem log e a troca recusada).
+
 ## A conexão da aba de consulta (RN-ARVORE-008)
 
 Seção 27 da especificação (issue #9 do repositório público: ao reabrir um script, não se sabia em qual servidor ele ia rodar). A barra do editor mostra, depois de
@@ -1562,8 +1595,8 @@ que a aba roda ("Banco", um `Select` com rótulo visível ligado a ele) e deixa 
   automática não segura a troca: o `retire()` a desliga, RN-GRADE-014). O editor segue o banco com ele montado: o completar e os
   links de tabela leem o cache da árvore do banco novo.
 - **Pergunta antes** com alterações não salvas na grade (RN-EDIT-007): a troca passa pelo `guard` da edição, o mesmo diálogo de executar outro comando
-  ("Salvar" grava pela sessão de antes e só então troca; "Descartar" troca sem elas; "Cancelar" fica no banco). A aba de consulta ainda não tem o Commit manual
-  (RN-TX-001), então não há transação aberta a perguntar; quando ele entrar, a troca é uma das saídas da RN-TX-006.
+  ("Salvar" grava pela sessão de antes e só então troca; "Descartar" troca sem elas; "Cancelar" fica no banco). Com a transação manual aberta a troca ainda
+  não pergunta (RN-TX-006): a sessão de antes fecha, e a API a desfaz (ver "Commit manual da aba").
 - **O que acompanha a troca**: a barra de status escreve a conexão e o banco da aba ativa (`conexão / banco`, o da conexão quando a aba não tem outro); o
   Ctrl+S grava o banco da aba (`PATCH`/`POST` com `database`, nulo para o da conexão), e a aba de um script fica com o ponto enquanto o banco não é o salvo;
   a aba que vai para outra janela leva o banco novo e o banco salvo do script; o bloqueio por inatividade dá à aba um executor no banco dela.
@@ -2038,8 +2071,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     pessoa não preencheu ficam em `RowsState.generated` ("gerado pelo banco — execute de novo para ver", em itálico e `text-subtle`): a célula não
     se edita e, com a chave entre elas, a linha também não (`cellAccess`, `deleteRowAccess`). `generated` viaja com a aba para outra janela
     (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
-    trata o Ctrl+S do script: vão por portal, e o teclado deles subiria até ela. Fechar a aba pergunta pelo mesmo registro `unsaved-edits.ts`. A
-    aba de consulta ainda não tem o Commit manual na tela (RN-TX-001): o Salvar é sempre uma transação própria.
+    trata o Ctrl+S do script: vão por portal, e o teclado deles subiria até ela. Fechar a aba pergunta pelo mesmo registro `unsaved-edits.ts`. No
+    Commit manual da aba de consulta o Salvar fica na transação dela (ver "Commit manual da aba"); nos Registros é sempre uma transação própria.
   - **Num resultado de junção** (RN-EDIT-002, pedido do dono de 2026-10-14; só a aba de consulta tem junção, os Registros são de uma tabela só e
     ficam como estavam): o `edit-target` diz a tabela de cada coluna (`columns[].table`) e a chave de cada tabela, e cada coluna se edita na
     tabela de onde veio (`cell-editing.ts`: `cellAccess` olha a tabela DA COLUNA, e numa tabela só, sempre a 0, como antes; a chave cortada,
@@ -2415,7 +2448,7 @@ literal da faixa), `_lib/record-edits.ts` (o grupo, a coluna inteira e o pedido 
   tolerado); `changes` ganhou `{ kind: "updateAll", table: 0, set, rows? }` (`ApiChange`); o preview lê o `note` de cada comando (o que não é texto vira nulo);
   as recusas do Salvar, do preview e da contagem ganharam `EDIT_ALL_ROWS_NOT_SUPPORTED`, e a da contagem também `TRANSACTION_FAILED`; o `editErrorDetails`
   lê o `outcome`. O endereço é `prismEndpoints.userDatabaseSessionQueriesEditsCount`.
-- **O que não foi feito**: o Commit manual (a tela não o tem: a frase das travas e o "sem commit" do aviso ficam para quando ele entrar); conferir na tela (o
+- **O que não foi feito**: a frase das travas no Commit manual (o "sem commit" do aviso já sai, `withUncommitted`); conferir na tela (o
   vitest não tem DOM: a dica do campo, o ponto do cabeçalho e a pergunta foram vistos só nos testes); o teste dos Registros com o `partial` (a ligação é uma
   linha, e o gancho tem o teste dele, `use-record-edits.multi.test.ts`).
 
@@ -3426,7 +3459,7 @@ arquivo das importações de dados", em "Processo principal"). Tudo em `_lib/dat
   fora. As outras fixtures da importação (o campo do CSV, os números e as datas, a ordem do nulo, o `_xHHHH_` lido) são só da API.
 - **O que não tem teste**: os assistentes montados com as consultas de verdade (as decisões, as etapas e o gancho da cópia têm), o diálogo de abrir do
   sistema, a cópia de um arquivo de 2 GiB e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato das seções 6 e
-  36, com a API simulada nos testes. A aba em Commit manual (o aviso da transação aberta da RN-IMPORT-013) não existe ainda na tela, e o aviso não sai.
+  36, com a API simulada nos testes. O aviso da transação aberta da aba em Commit manual (RN-IMPORT-013) ainda não sai.
 
 ## Gerar SQL (seção 37, RN-GRADE-006 e 018 a 020)
 

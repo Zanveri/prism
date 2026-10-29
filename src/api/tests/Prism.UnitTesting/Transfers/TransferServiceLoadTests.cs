@@ -645,6 +645,19 @@ public sealed partial class TransferServiceTests
 
         public bool HasOpenCursor => false;
 
+        public bool ManualCommit { get; set; }
+
+        public ETransactionState Transaction => ETransactionState.None;
+
+        public Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken)
+            => Task.FromResult(Result.Success<bool, DatabaseFailure>(true));
+
+        public Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken)
+            => Task.FromResult(UnitResult.Success<DatabaseFailure>());
+
+        public Task<UnitResult<DatabaseFailure>> RollbackAsync(CancellationToken cancellationToken)
+            => Task.FromResult(UnitResult.Success<DatabaseFailure>());
+
         /// <summary>A conexão cai: a recusa da confirmação que o teste devolve.</summary>
         public DatabaseFailure Lose()
         {

@@ -36,6 +36,6 @@ internal sealed class CountWholeColumnHandler(IConnectionQueries connectionQueri
         if (readOnly.Value)
             return Result.Failure<WholeColumnCountDto, ApiErrorDto>(SessionProtections.EditsRefusal());
 
-        return (await databaseSessionService.CountWholeColumnAsync(request.SessionID, request.ResultID, request.Changes.ToChanges(), cancellationToken)).Map(rows => new WholeColumnCountDto(rows)).MapError(DatabaseSessionErrors.From);
+        return (await databaseSessionService.CountWholeColumnAsync(request.SessionID, request.ResultID, request.Changes.ToChanges(), cancellationToken)).Map(rows => new WholeColumnCountDto(rows, databaseSessionService.TransactionOf(request.SessionID)?.ToDto())).MapError(DatabaseSessionErrors.From);
     }
 }

@@ -15,5 +15,16 @@ public sealed class OpenDatabaseSessionValidator : AbstractValidator<OpenDatabas
             .Must(database => database is null || (!string.IsNullOrWhiteSpace(database) && database.Length <= MaxDatabaseLength && !database.Any(char.IsControl)))
             .WithMessage($"O nome do banco deve ter de 1 a {MaxDatabaseLength} caracteres, sem caractere de controle.")
             .WithErrorCode("DATABASE_NAME_INVALID");
+
+        // Seção 22 da especificação: as mesmas recusas do `PATCH` da sessão.
+        RuleFor(request => request.TransactionMode)
+            .Must(mode => mode is null or "autoCommit" or "manual")
+            .WithMessage("O modo de transação deve ser autoCommit ou manual.")
+            .WithErrorCode("TRANSACTION_MODE_INVALID");
+
+        RuleFor(request => request.IsolationLevel)
+            .Must(level => level is null or "default")
+            .WithMessage("O nível de isolamento deve ser default.")
+            .WithErrorCode("ISOLATION_LEVEL_INVALID");
     }
 }

@@ -11,8 +11,8 @@ public sealed record EditTableDto(string Schema, string Name, IReadOnlyList<int>
 /// <param name="Table">A posição da tabela em `tables`; nulo na coluna calculada.</param>
 public sealed record EditColumnDto(int? Table, string? BaseColumn, bool Editable, string? Reason, bool Nullable, string? Generated);
 
-/// <summary>A resposta do "Salvar": quantas alterações foram gravadas.</summary>
-public sealed record EditsAppliedDto(int Applied);
+/// <summary>A resposta do "Salvar": quantas alterações foram gravadas, e a transação da sessão depois dele (no Commit manual, ficaram pendentes nela).</summary>
+public sealed record EditsAppliedDto(int Applied, TransactionDto? Transaction = null);
 
 /// <summary>RN-EDIT-019 e 023: quantas linhas o comando do resultado devolve agora, que a pergunta da coluna inteira mostra e o "Salvar" leva em `rows`.</summary>
-public sealed record WholeColumnCountDto(long Rows);
+public sealed record WholeColumnCountDto(long Rows, TransactionDto? Transaction = null);

@@ -21,6 +21,9 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
 
     protected override string? BeginReadOnlySql => null;
 
+    /// <summary>RN-TX-013: os motores analíticos não têm transação, e o driver deles recusa a do ADO.NET.</summary>
+    protected override bool HasTransactions => engine is not (EDatabaseEngine.ClickHouse or EDatabaseEngine.BigQuery or EDatabaseEngine.Databricks);
+
     protected override string PingSql => engine switch
     {
         EDatabaseEngine.Oracle => "SELECT 1 FROM DUAL",

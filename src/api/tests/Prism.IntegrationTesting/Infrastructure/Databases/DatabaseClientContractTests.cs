@@ -13,7 +13,7 @@ namespace Prism.IntegrationTesting.Infrastructure.Databases;
 /// 1.000 linhas, a visão `pedido_resumo`, a rotina `dobro` e a tabela de nome com aspas) e o SQL que só existe naquele banco.
 /// Os testes só leem a carga; o que um deles cria, ele mesmo apaga.
 /// </summary>
-public abstract class DatabaseClientContractTests
+public abstract partial class DatabaseClientContractTests
 {
     protected const string PedidoQuery = "SELECT numero, valor, criado_em, observacao FROM loja.pedido ORDER BY numero";
 

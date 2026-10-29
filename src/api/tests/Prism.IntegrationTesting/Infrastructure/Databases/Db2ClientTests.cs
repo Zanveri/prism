@@ -18,6 +18,9 @@ public sealed class Db2ClientTests : IbmClientContractTests
 
     protected override string SyntaxErrorSqlState => "42601";
 
+    protected override string TypedSavepoint(string name)
+        => $"SAVEPOINT {name} ON ROLLBACK RETAIN CURSORS";
+
     // O valor seguinte de uma sequência só pode ser pedido uma vez por comando num `VALUES` de um `WITH`: é o que soma um por execução.
     protected override string ExecutionCounterSetup => "VALUES NEXT VALUE FOR loja.execucoes";
 
