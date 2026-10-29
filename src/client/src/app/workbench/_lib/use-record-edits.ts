@@ -569,7 +569,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const readCount = shown?.rows.length ?? 0;
   const columnCount = shown?.columns.length ?? 0;
   const layout = useMemo<GridLayout>(() => ({ read: readCount, added: edits.added.map((row) => row.id), columns: columnCount }), [readCount, columnCount, edits.added]);
-  const active = activeCell(selection, layout);
+  const active = useMemo(() => activeCell(selection, layout), [selection, layout]);
   const [editorState, setEditorState] = useState<(CellEditorState & { resultId: string | null; scope?: OpenScope }) | null>(null);
   const editor: CellEditorState | null = editorState !== null && editorState.resultId === resultId ? editorState : null;
   // RN-EDIT-019: o "Salvar" toma a grade da contagem até a resposta (`saving`, que as ações leem como "há um comando em andamento na aba"); `phase` diz à
