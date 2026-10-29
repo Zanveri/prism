@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   commit,
@@ -41,100 +41,110 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
 } {
   const queryClient = useQueryClient();
   const id = initialDto?.id ?? "";
-  const parsedInitial = initialDto
-    ? (parseModelBody(initialDto.body) ?? emptyModel("postgresql", "public", false))
-    : null;
+  const initialUpdatedAt = initialDto?.updatedAt ?? "";
 
-  const [name, setName] = useState<string>(initialDto?.name ?? "modelo");
-  const [history, setHistory] = useState<History | null>(() =>
-    parsedInitial ? startHistory(parsedInitial) : null,
-  );
-  const [state, setState] = useState<SaveState>({
-    status: "saved",
-    savedAt: null,
-    message: null,
+  const [docState, setDocState] = useState<{
+    id: string;
+    name: string;
+    history: History | null;
+    state: SaveState;
+  }>(() => {
+    const parsedInitial = initialDto
+      ? (parseModelBody(initialDto.body) ?? emptyModel("postgresql", "public", false))
+      : null;
+    return {
+      id,
+      name: initialDto?.name ?? "modelo",
+      history: parsedInitial ? startHistory(parsedInitial) : null,
+      state: { status: "saved", savedAt: null, message: null },
+    };
   });
 
-  const nameRef = useRef(name);
-  nameRef.current = name;
-  const historyRef = useRef(history);
-  historyRef.current = history;
+  if (docState.id !== id) {
+    const parsedInitial = initialDto
+      ? (parseModelBody(initialDto.body) ?? emptyModel("postgresql", "public", false))
+      : null;
+    setDocState({
+      id,
+      name: initialDto?.name ?? "modelo",
+      history: parsedInitial ? startHistory(parsedInitial) : null,
+      state: { status: "saved", savedAt: null, message: null },
+    });
+  }
 
   const schedulerRef = useRef<ReturnType<typeof createSaveScheduler> | null>(
     null,
   );
 
+  const performSave = useEffectEvent(
+    (docId: string, model: BuildModel, expectedUpdatedAt: string) =>
+      updateBuildModel(docId, {
+        name: docState.name,
+        body: serializeModel(model),
+        expectedUpdatedAt,
+      }),
+  );
+
+  const handleSaved = useEffectEvent((dto: BuildModelDto) => {
+    setDocState((prev) => ({ ...prev, name: dto.name }));
+    void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
+  });
+
+  const handleStateChange = useEffectEvent((nextState: SaveState) => {
+    setDocState((prev) => ({ ...prev, state: nextState }));
+  });
+
   useEffect(() => {
     schedulerRef.current?.dispose();
-    if (!initialDto) {
+    if (!id) {
       schedulerRef.current = null;
-      setHistory(null);
-      historyRef.current = null;
-      setState({ status: "saved", savedAt: null, message: null });
       return;
     }
 
-    const nextModel =
-      parseModelBody(initialDto.body) ?? emptyModel("postgresql", "public", false);
-    const nextHistory = startHistory(nextModel);
-    setName(initialDto.name);
-    nameRef.current = initialDto.name;
-    setHistory(nextHistory);
-    historyRef.current = nextHistory;
-    setState({ status: "saved", savedAt: null, message: null });
-
     const scheduler = createSaveScheduler({
-      id: initialDto.id,
-      initialUpdatedAt: initialDto.updatedAt,
+      id,
+      initialUpdatedAt,
       now: () => Date.now(),
       setTimer: (ms, run) => {
         const handle = setTimeout(run, ms);
         return () => clearTimeout(handle);
       },
       save: (model, expectedUpdatedAt) =>
-        updateBuildModel(initialDto.id, {
-          name: nameRef.current,
-          body: serializeModel(model),
-          expectedUpdatedAt,
-        }),
-      onSaved: (dto) => {
-        setName(dto.name);
-        void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
-      },
-      onStateChange: setState,
+        performSave(id, model, expectedUpdatedAt),
+      onSaved: handleSaved,
+      onStateChange: handleStateChange,
     });
     schedulerRef.current = scheduler;
 
     return () => {
       scheduler.dispose();
     };
-  }, [initialDto?.id, queryClient]);
+  }, [id, initialUpdatedAt]);
 
   function applyModel(nextHistory: History) {
-    setHistory(nextHistory);
-    historyRef.current = nextHistory;
+    setDocState((prev) => ({ ...prev, history: nextHistory }));
     schedulerRef.current?.change(nextHistory.present);
   }
 
   return {
-    name,
-    history: history ?? { past: [], present: null, future: [] },
-    state,
+    name: docState.name,
+    history: docState.history ?? { past: [], present: null, future: [] },
+    state: docState.state,
     change(next: BuildModel) {
-      if (!historyRef.current) return;
-      applyModel(commit(historyRef.current, next));
+      if (!docState.history) return;
+      applyModel(commit(docState.history, next));
     },
     undo() {
-      if (!historyRef.current) return;
-      const next = undoHistory(historyRef.current);
-      if (next !== historyRef.current) {
+      if (!docState.history) return;
+      const next = undoHistory(docState.history);
+      if (next !== docState.history) {
         applyModel(next);
       }
     },
     redo() {
-      if (!historyRef.current) return;
-      const next = redoHistory(historyRef.current);
-      if (next !== historyRef.current) {
+      if (!docState.history) return;
+      const next = redoHistory(docState.history);
+      if (next !== docState.history) {
         applyModel(next);
       }
     },
@@ -146,25 +156,28 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
       void (async () => {
         const res = await getBuildModel(id);
         if (res.ok) {
-          setName(res.data.name);
           const freshModel =
             parseModelBody(res.data.body) ?? emptyModel("postgresql", "public", false);
           const freshHistory = startHistory(freshModel);
-          setHistory(freshHistory);
-          historyRef.current = freshHistory;
+          setDocState((prev) => ({
+            ...prev,
+            name: res.data.name,
+            history: freshHistory,
+            state: { status: "saved", savedAt: Date.now(), message: null },
+          }));
           schedulerRef.current?.setExpectedUpdatedAt(res.data.updatedAt);
-          setState({ status: "saved", savedAt: Date.now(), message: null });
           void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
         }
       })();
     },
     keepMine() {
-      if (!id || !historyRef.current) return;
+      const currentHistory = docState.history;
+      if (!id || !currentHistory) return;
       void (async () => {
         const res = await getBuildModel(id);
-        if (res.ok && historyRef.current) {
+        if (res.ok) {
           schedulerRef.current?.setExpectedUpdatedAt(res.data.updatedAt);
-          schedulerRef.current?.change(historyRef.current.present);
+          schedulerRef.current?.change(currentHistory.present);
           void schedulerRef.current?.flush();
         }
       })();

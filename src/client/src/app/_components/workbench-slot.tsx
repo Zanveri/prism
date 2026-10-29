@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 
 import { pathsConfig } from "@/config/paths.config";
@@ -21,8 +21,8 @@ import { isLost } from "../workbench/_lib/tab-focus";
  */
 export function KeepAliveSlot({ path = pathsConfig.workbench, mountOnFirstVisit = false, children }: { path?: string; mountOnFirstVisit?: boolean; children: ReactNode }) {
   const visible = useLocation().pathname === path;
-  const visited = useRef(!mountOnFirstVisit || visible);
-  if (visible) visited.current = true;
+  const [visited, setVisited] = useState(!mountOnFirstVisit || visible);
+  if (visible && !visited) setVisited(true);
   const lastFocused = useRef<HTMLElement | null>(null);
   const wasVisible = useRef(visible);
 
@@ -35,7 +35,7 @@ export function KeepAliveSlot({ path = pathsConfig.workbench, mountOnFirstVisit 
     wasVisible.current = visible;
   }, [visible]);
 
-  if (!visited.current) return null;
+  if (!visited) return null;
 
   return (
     <div

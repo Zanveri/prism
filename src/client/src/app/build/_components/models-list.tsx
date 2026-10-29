@@ -278,8 +278,8 @@ export function ModelsList({
 
                       {isMenuOpen && (
                         <ContextMenu
-                          aria-label={`Ações de ${entry.name}`}
-                          className="top-8 right-0 z-20 w-60"
+                          label={`Ações de ${entry.name}`}
+                          point={{ x: 0, y: 32 }}
                           onClose={() => setMenuOpenForId(null)}
                           groups={[
                             [
@@ -330,7 +330,6 @@ export function ModelsList({
                               {
                                 id: "delete",
                                 label: buildCopy.deleteModelAction,
-                                tone: "danger",
                                 onSelect: () => {
                                   setMenuOpenForId(null);
                                   setDeletingModel(entry);

@@ -101,8 +101,8 @@ export function createSaveScheduler(deps: {
         } else {
           const isConflict =
             result.error.status === 409 ||
-            result.error.type === "BUILD_MODEL_CONFLICT" ||
-            result.error.type === "BUILD_MODEL_CHANGED";
+            result.error.code === "BUILD_MODEL_CONFLICT" ||
+            result.error.code === "BUILD_MODEL_CHANGED";
           updateState({
             status: isConflict ? "conflict" : "failed",
             savedAt: currentState.savedAt,

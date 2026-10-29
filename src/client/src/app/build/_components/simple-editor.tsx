@@ -119,7 +119,7 @@ export function SimpleEditor({
           baseLabel={
             baseLabel ??
             (model.base
-              ? `${model.base.connectionName}${model.base.database ? ` / ${model.base.database}` : ""}`
+              ? `${model.base.connectionId}${model.base.database ? ` / ${model.base.database}` : ""}`
               : "banco de base")
           }
           changes={changes}

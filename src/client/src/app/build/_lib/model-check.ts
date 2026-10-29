@@ -99,7 +99,13 @@ export type CheckContext = {
   notes: { code: "W8" | "W13"; message: string }[];
 };
 
-const CONTROL_CHAR_REGEX = /[\u0000-\u001F\u007F]/;
+function hasControlChar(name: string): boolean {
+  for (let i = 0; i < name.length; i++) {
+    const code = name.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
 
 function buildProblemKey(
   code: ProblemCode,
@@ -113,7 +119,7 @@ function buildProblemKey(
 }
 
 function isInvalidName(name: string): boolean {
-  return name.trim().length === 0 || CONTROL_CHAR_REGEX.test(name);
+  return name.trim().length === 0 || hasControlChar(name);
 }
 
 function byteLength(text: string): number {
@@ -1299,7 +1305,7 @@ export function applyFix(model: BuildModel, fix: ProblemFix): BuildModel {
       if (!col) return model;
       const norm = normalizeType(model.engine, col.type);
       const fallbackDefault =
-        norm.family === "number"
+        norm.family === "integer" || norm.family === "decimal" || norm.family === "float"
           ? "0"
           : norm.family === "boolean"
             ? "false"

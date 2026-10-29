@@ -15,8 +15,8 @@ import {
   tableKey,
   type BuildModel,
   type ModelForeignKey,
-  type Problem,
 } from "./build-model";
+import type { Problem } from "./model-check";
 
 const boxPadding = 12;
 const margin = 64;

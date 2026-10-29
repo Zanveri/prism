@@ -87,7 +87,7 @@ export function mergeTextTables(
         const prevUq = prev.uniques.find((u) => sameColumnList(engine, u.columns, idx.columns));
         if (prevUq) {
           restoredUniquesFromIndexes.push({
-            name: idx.name ?? prevUq.name,
+            name: (idx.name || null) ?? prevUq.name,
             columns: idx.columns,
           });
           return false;

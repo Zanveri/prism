@@ -4,17 +4,17 @@ import {
   quoteName,
   sameName,
 } from "@/app/build/_lib/build-engines";
-import type {
-  BuildEngine,
-  BuildModel,
-  FkAction,
-  IdentityMode,
-  ModelCheck,
-  ModelColumn,
-  ModelForeignKey,
-  ModelIndex,
-  ModelTable,
-  ModelUnique,
+import {
+  engineIdOf,
+  type BuildEngine,
+  type BuildModel,
+  type FkAction,
+  type IdentityMode,
+  type ModelCheck,
+  type ModelColumn,
+  type ModelForeignKey,
+  type ModelTable,
+  type ModelUnique,
 } from "@/app/build/_lib/build-model.schema";
 import {
   constraintClause,
@@ -264,6 +264,8 @@ export function printModelSql(model: BuildModel): string {
   return blocks.join("\n\n");
 }
 
+export const writeModelSql = printModelSql;
+
 type OffsetToken = SqlToken & { raw: string };
 
 function lineAndCol(sql: string, offset: number): { line: number; column: number } {
@@ -374,9 +376,6 @@ function parseActionClause(
     const next = tokens[startIdx + 1];
     if (next?.word && next.text === "null") {
       return { action: "setNull", nextIdx: startIdx + 2 };
-    }
-    if (next?.word && next.text === "default") {
-      return { action: "setDefault", nextIdx: startIdx + 2 };
     }
   }
   return null;
@@ -668,7 +667,7 @@ function parseDefaultExpression(
 
 export function readModelSql(text: string, before: BuildModel): TextRead {
   const engine = before.engine;
-  const engineNum = engineRules[engine].number;
+  const engineNum = engineIdOf(engine);
   const statements = splitStatements(text, engineNum);
 
   const tables: ModelTable[] = [];

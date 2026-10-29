@@ -50,8 +50,6 @@ function formatFkAction(action: FkAction): string {
       return "cascade";
     case "setNull":
       return "set null";
-    case "setDefault":
-      return "set default";
   }
 }
 
@@ -66,8 +64,6 @@ function parseFkAction(raw: string): FkAction | null {
       return "cascade";
     case "set null":
       return "setNull";
-    case "set default":
-      return "setDefault";
     default:
       return null;
   }
@@ -577,8 +573,8 @@ export function readDbml(text: string, before: BuildModel): TextRead {
 
     // Standalone Ref
     if (/^Ref(?:\s+[^\s:{]+)?\s*[:{]/i.test(trimmed)) {
-      let refBody = trimmed;
-      let refName: string | null = null;
+      let refBody: string;
+      let refName: string | null;
 
       if (trimmed.includes("{") && !trimmed.includes(":")) {
         const headerMatch = /^Ref(?:\s+([^\s{]+))?\s*\{/i.exec(trimmed);
@@ -772,7 +768,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
               }
             } else {
               indexes.push({
-                name: idxName,
+                name: idxName ?? "",
                 columns: idxCols,
                 unique: isUnique,
               });
@@ -1068,3 +1064,5 @@ export function readDbml(text: string, before: BuildModel): TextRead {
     warnings,
   };
 }
+
+export const writeDbml = printDbml;

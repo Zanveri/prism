@@ -213,8 +213,8 @@ export function ModelToolbar({
         </button>
         {exportOpen && (
           <ContextMenu
-            aria-label={buildCopy.toolbarExport}
-            className="top-9 right-0 z-20 w-52"
+            label={buildCopy.toolbarExport}
+            point={{ x: 0, y: 36 }}
             onClose={() => setExportOpen(false)}
             groups={[
               [

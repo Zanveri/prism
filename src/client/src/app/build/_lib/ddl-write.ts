@@ -32,8 +32,6 @@ export function fkActionSql(action: FkAction): string | null {
       return "CASCADE";
     case "setNull":
       return "SET NULL";
-    case "setDefault":
-      return "SET DEFAULT";
   }
 }
 

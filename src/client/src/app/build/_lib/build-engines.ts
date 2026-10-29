@@ -810,7 +810,7 @@ export const engineRules: Record<BuildEngine, EngineRules> = {
   },
 };
 
-export function needsQuotes(engine: BuildEngine, name: string, exactName: boolean): boolean {
+export function needsQuotes(engine: BuildEngine, name: string, exactName = false): boolean {
   if (exactName) {
     return true;
   }

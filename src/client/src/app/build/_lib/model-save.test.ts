@@ -76,11 +76,12 @@ describe("model-save", () => {
     const conflictResult: ApiResult<BuildModelDto> = {
       ok: false,
       error: {
-        type: "BUILD_MODEL_CONFLICT",
+        code: "BUILD_MODEL_CONFLICT",
         title: "Conflito",
         detail: "Este modelo mudou em outra janela.",
         status: 409,
-        raw: {},
+        errors: null,
+        extensions: {},
       },
     };
     const save = vi.fn().mockResolvedValue(conflictResult);

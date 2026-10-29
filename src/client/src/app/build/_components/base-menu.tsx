@@ -54,18 +54,20 @@ export function BaseMenu({
 
       {menuOpen && (
         <ContextMenu
-          aria-label={buildCopy.toolbarBaseAria}
-          className="left-0 top-9 min-w-44"
+          label={buildCopy.toolbarBaseAria}
+          point={{ x: 0, y: 36 }}
           onClose={() => setMenuOpen(false)}
-          items={[
-            {
-              key: "change-base",
-              label: buildCopy.changeBaseMenuLabel,
-              onSelect: () => {
-                setMenuOpen(false);
-                setDialogOpen(true);
+          groups={[
+            [
+              {
+                id: "change-base",
+                label: buildCopy.changeBaseMenuLabel,
+                onSelect: () => {
+                  setMenuOpen(false);
+                  setDialogOpen(true);
+                },
               },
-            },
+            ],
           ]}
         />
       )}
@@ -117,8 +119,9 @@ export function ChangeBaseDialog({
 
   return (
     <Dialog
+      open={true}
       title={buildCopy.changeBaseTitle}
-      width={480}
+      size="sm"
       onClose={onCancel}
       footer={
         <>

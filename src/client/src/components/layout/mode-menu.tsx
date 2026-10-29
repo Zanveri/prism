@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 import { BuildIcon, ChevronIcon, ContextMenu, WorkbenchIcon, type ContextMenuItem } from "@/components/ui";
@@ -55,11 +55,11 @@ export function modeMenuGroups(current: AppMode, onSelect?: (mode: AppMode) => v
 export function ModeMenu() {
   const location = useLocation();
   const navigate = useNavigate();
-  const lastMode = useRef<AppMode>("workbench");
+  const [lastMode, setLastMode] = useState<AppMode>("workbench");
   const [menu, setMenu] = useState<{ point: { x: number; y: number }; keyboard: boolean } | null>(null);
 
-  const mode = modeOf(location.pathname, lastMode.current);
-  lastMode.current = mode;
+  const mode = modeOf(location.pathname, lastMode);
+  if (mode !== lastMode) setLastMode(mode);
 
   const isModeRoute =
     location.pathname === pathsConfig.workbench ||

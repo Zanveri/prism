@@ -15,6 +15,7 @@ import {
   getSchemaDiagram,
   getTableChecks,
 } from "@/app/workbench/_lib/database-sessions.service";
+import type { SchemaDiagram } from "@/app/workbench/_lib/database-sessions.schema";
 
 export type CatalogTable = {
   schema: string;
@@ -159,7 +160,7 @@ export function tableFromCatalog(engine: BuildEngine, table: CatalogTable): Mode
   const indexes = table.indexes
     .filter((idx) => idx !== pkIndex)
     .map((idx) => ({
-      name: idx.name || null,
+      name: idx.name,
       columns: [...idx.columns],
       unique: idx.isUnique,
     }));
@@ -222,10 +223,7 @@ export async function readCatalog(
   const knownTables: string[] = [];
   const failures: { table: string; message: string }[] = [];
 
-  const diagramsBySchema = new Map<
-    string,
-    Awaited<ReturnType<typeof getSchemaDiagram>>["data"] | null
-  >();
+  const diagramsBySchema = new Map<string, SchemaDiagram | null>();
   const commentsBySchemaTable = new Map<string, string | null>();
 
   for (const group of selection) {

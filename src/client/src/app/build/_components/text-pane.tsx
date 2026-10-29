@@ -40,8 +40,6 @@ export function TextPane({ model, format, onChange }: TextPaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestModelRef = useRef(model);
-  latestModelRef.current = model;
 
   const [initialText] = useState(() => printText(model, format));
   const [status, setStatus] = useState<TextStatus>({
@@ -55,7 +53,7 @@ export function TextPane({ model, format, onChange }: TextPaneProps) {
     }
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      const res = applyText(latestModelRef.current, format, nextText);
+      const res = applyText(model, format, nextText);
       setStatus(res.status);
       if (res.model !== null && res.status.kind === "applied") {
         onChange(res.model, res.status.warnings);

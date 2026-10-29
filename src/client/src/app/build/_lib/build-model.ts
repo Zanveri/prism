@@ -12,6 +12,19 @@ import type {
   TableShape,
 } from "./build-model.schema";
 
+export type {
+  BuildEngine,
+  BuildModel,
+  ModelCheck,
+  ModelColumn,
+  ModelForeignKey,
+  ModelIndex,
+  ModelPrimaryKey,
+  ModelTable,
+  ModelUnique,
+  TableShape,
+};
+
 function sameIdentifier(
   engine: BuildEngine,
   left: string,
@@ -32,8 +45,8 @@ export function tableKey(table: { schema: string; name: string }): string {
 
 export function emptyModel(
   engine: BuildEngine,
-  defaultSchema: string,
-  createSchema: boolean,
+  defaultSchema = engine === "db2" ? "DB2INST1" : engine === "informix" ? "informix" : "public",
+  createSchema = false,
 ): BuildModel {
   return {
     version: 1,
@@ -1149,6 +1162,16 @@ export function tableChanges(engine: BuildEngine, table: ModelTable): TableChang
     removedIndexes: indexesDiff.removed,
     commentChanged,
     forbidden,
+  };
+}
+
+export function ignoreWarning(model: BuildModel, key: string): BuildModel {
+  if (model.ignoredWarnings.includes(key)) {
+    return model;
+  }
+  return {
+    ...model,
+    ignoredWarnings: [...model.ignoredWarnings, key],
   };
 }
 

@@ -80,11 +80,14 @@ export function ImportTablesDialog({
     validConnections[0] ??
     null;
 
-  const availableDatabases = useMemo(() => {
-    if (databases && databases.length > 0) return databases;
-    if (model.base?.database) return [model.base.database];
-    return selectedConnection ? [selectedConnection.database] : [];
-  }, [databases, model.base?.database, selectedConnection]);
+  const availableDatabases: readonly string[] =
+    databases && databases.length > 0
+      ? databases
+      : model.base?.database
+        ? [model.base.database]
+        : selectedConnection
+          ? [selectedConnection.database]
+          : [];
 
   const [database, setDatabase] = useState<string>(
     model.base?.database ?? availableDatabases[0] ?? "",

@@ -8,9 +8,9 @@ import {
   tableKey,
   type BuildModel,
   type ModelForeignKey,
-  type Problem,
 } from "../_lib/build-model";
 import { buildCopy } from "../_lib/build.copy";
+import type { Problem } from "../_lib/model-check";
 import {
   connectColumn,
   modelDiagram,

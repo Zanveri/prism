@@ -685,7 +685,8 @@ export function generateChangesDdl(model: BuildModel, context: DdlContext): DdlR
   };
 }
 
-export function tableChangesDdl(model: BuildModel, key: string, _context: DdlContext): string {
+export function tableChangesDdl(model: BuildModel, key: string, context?: DdlContext): string {
+  void context;
   const { blocks } = buildChangesBody(model, key);
   return blocks.map((block) => block.join("\n")).join("\n");
 }

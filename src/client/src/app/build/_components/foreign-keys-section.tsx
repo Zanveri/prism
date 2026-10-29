@@ -12,7 +12,6 @@ const deleteActionLabels: Record<FkAction, string> = {
   restrict: "Ao excluir: restringir",
   cascade: "Ao excluir: cascata",
   setNull: "Ao excluir: anular",
-  setDefault: "Ao excluir: valor padrão",
 };
 
 export type ForeignKeysSectionProps = {

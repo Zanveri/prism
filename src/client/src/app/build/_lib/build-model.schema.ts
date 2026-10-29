@@ -11,6 +11,7 @@ export type FkAction = (typeof fkActions)[number];
 
 export const identitySchema = z.enum(["always", "byDefault"]).nullable();
 export type Identity = z.infer<typeof identitySchema>;
+export type IdentityMode = Identity;
 
 export const modelColumnSchema = z.object({
   name: z.string(),
@@ -72,6 +73,9 @@ export const tableShapeSchema = z.object({
 });
 
 export type TableShape = z.infer<typeof tableShapeSchema>;
+export type ModelPrimaryKey = NonNullable<TableShape["primaryKey"]>;
+export type ModelUnique = TableShape["uniques"][number];
+export type ModelCheck = TableShape["checks"][number];
 export type ModelForeignKey = TableShape["foreignKeys"][number];
 export type ModelIndex = TableShape["indexes"][number];
 
@@ -135,6 +139,8 @@ export function parseModelBody(body: string): BuildModel | null {
 export function serializeModel(model: BuildModel): string {
   return JSON.stringify(model);
 }
+
+export const serializeModelBody = serializeModel;
 
 export function engineIdOf(engine: BuildEngine): 1 | 2 | 3 {
   if (engine === "postgresql") return 1;

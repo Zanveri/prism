@@ -1,13 +1,32 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BaseMenu } from "@/app/build/_components/base-menu";
+import { BuildDiagram } from "@/app/build/_components/build-diagram";
 import { BuildFooter } from "@/app/build/_components/build-footer";
 import { BuildSidebar } from "@/app/build/_components/build-sidebar";
+import { ConnectionChoiceDialog } from "@/app/build/_components/connection-choice-dialog";
+import { DdlView } from "@/app/build/_components/ddl-view";
+import { ImportTablesDialog } from "@/app/build/_components/import-tables-dialog";
 import { ModelTabs, type OpenModelTab } from "@/app/build/_components/model-tabs";
 import { ModelToolbar } from "@/app/build/_components/model-toolbar";
 import { ModelsList, type SavedModelEntry } from "@/app/build/_components/models-list";
+import {
+  NewModelDialog,
+  type NewModelSubmitPayload,
+} from "@/app/build/_components/new-model-dialog";
+import { ScopeDialog } from "@/app/build/_components/scope-dialog";
+import { SimpleEditor } from "@/app/build/_components/simple-editor";
+import { TextPane } from "@/app/build/_components/text-pane";
+import {
+  fileNameOf,
+  modelFromFile,
+  needsScopeQuestion,
+} from "@/app/build/_lib/build-files";
 import { addTable, emptyModel, tableKey } from "@/app/build/_lib/build-model";
 import {
   parseModelBody,
+  serializeModelBody,
   type BuildModel,
 } from "@/app/build/_lib/build-model.schema";
 import {
@@ -23,13 +42,37 @@ import {
   writeBuildTabs,
 } from "@/app/build/_lib/build-tabs";
 import { buildCopy } from "@/app/build/_lib/build.copy";
+import {
+  addCatalogTables,
+  modelFromCatalog,
+  readCatalog,
+  rereadModel,
+  type CatalogSelection,
+} from "@/app/build/_lib/catalog-import";
+import { writeDbml } from "@/app/build/_lib/dbml";
 import { checkModel, type Problem } from "@/app/build/_lib/model-check";
+import { modelDiagram } from "@/app/build/_lib/model-layout";
 import type { SaveState } from "@/app/build/_lib/model-save";
+import { writeModelSql } from "@/app/build/_lib/sql-model";
 import { useModelDocument } from "@/app/build/_lib/use-model-document";
+import { workbenchTarget } from "@/app/build/_lib/workbench-target";
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
+import {
+  closeDatabaseSession,
+  getObjectNames,
+  openDatabaseSession,
+} from "@/app/workbench/_lib/database-sessions.service";
+import {
+  exportDiagramPng,
+  resolveDiagramStyle,
+} from "@/app/workbench/_lib/diagram-export";
+import { saveText } from "@/app/workbench/_lib/save-file";
+import { useWorkbench } from "@/app/workbench/_lib/workbench-state";
 import { TopBar } from "@/components/layout/top-bar";
 import { WorkbenchIcon } from "@/components/ui";
+import { pathsConfig } from "@/config/paths.config";
 import { cn } from "@/lib/utils/cn";
 
 export type BuildEditorPane = "simple" | "sql" | "dbml";
@@ -49,6 +92,7 @@ export type BuildPageViewProps = {
   saveState?: SaveState;
   problems?: readonly Problem[];
   topBar?: ReactNode;
+  baseMenuSlot?: ReactNode;
   editorContent?: ReactNode;
   diagramContent?: ReactNode;
   ddlOverlay?: ReactNode;
@@ -95,6 +139,7 @@ export function BuildPageView({
   saveState,
   problems: problemsProp,
   topBar,
+  baseMenuSlot,
   editorContent,
   diagramContent,
   ddlOverlay,
@@ -102,7 +147,6 @@ export function BuildPageView({
   connectionName,
   connectionEnvironment,
   connectionEnvironmentColor,
-  onToggleSidebar,
   onSelectTab,
   onCloseTab,
   onNewModel,
@@ -228,6 +272,7 @@ export function BuildPageView({
               baseEnvironmentColor={
                 baseConnId ? (connectionEnvironmentColor?.(baseConnId) ?? null) : null
               }
+              baseMenuSlot={baseMenuSlot}
               canUndo={canUndo}
               canRedo={canRedo}
               saveState={saveState}
@@ -313,29 +358,49 @@ export function BuildPageView({
 }
 
 /** Página do modo Construir (RN-CONSTRUIR-001). */
-export default function BuildPage() {
+export function BuildPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { openQueryTab } = useWorkbench();
+  const { preferences } = usePreferences();
   const session = useQuery({ ...sessionQuery, staleTime: Infinity });
   const userName = session.data?.userName ?? "";
 
   const modelsQuery = useQuery(buildModelsQuery);
   const connections = useQuery(connectionsQuery);
 
+  const [loadedUser, setLoadedUser] = useState(userName);
   const [tabsState, setTabsState] = useState<{ open: string[]; active: string | null }>(() =>
     readBuildTabs(userName),
   );
   const [sidebarHidden, setSidebarHidden] = useState<boolean>(
     () => readBuildLayout(userName).sidebarHidden,
   );
-  const [selectedTableKey, setSelectedTableKey] = useState<string | null>(null);
-  const [editorPane, setEditorPane] = useState<BuildEditorPane>("simple");
-
-  useEffect(() => {
+  if (loadedUser !== userName) {
+    setLoadedUser(userName);
     if (userName !== "") {
       setTabsState(readBuildTabs(userName));
       setSidebarHidden(readBuildLayout(userName).sidebarHidden);
     }
-  }, [userName]);
+  }
+  const [selectedTableKey, setSelectedTableKey] = useState<string | null>(null);
+  const [editorPane, setEditorPane] = useState<BuildEditorPane>("simple");
+  const [ddlViewOpen, setDdlViewOpen] = useState(false);
+  const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
+  const [newModelOpen, setNewModelOpen] = useState(false);
+  const [importTablesOpen, setImportTablesOpen] = useState(false);
+  const [pendingWorkbenchSql, setPendingWorkbenchSql] = useState<string | null>(null);
+  const [rereadNotes, setRereadNotes] = useState<{ code: "W8" | "W13"; message: string }[]>([]);
+  const [catalogSchemas, setCatalogSchemas] = useState<
+    { schema: string; tables: string[] }[]
+  >([]);
+  const [readingProgress, setReadingProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const readingAbortRef = useRef<AbortController | null>(null);
 
   const savedModels: SavedModelEntry[] = (modelsQuery.data ?? []).map((dto) => {
     const parsed = parseModelBody(dto.body) ?? emptyModel("postgresql", "public", false);
@@ -354,15 +419,35 @@ export default function BuildPage() {
       : null;
 
   const doc = useModelDocument(activeDto);
+  const activeModel = doc.history.present;
+  const activeModelName = activeDto?.name ?? "modelo";
 
-  useEffect(() => {
-    if (doc.history.present && selectedTableKey === null && doc.history.present.tables.length > 0) {
-      setSelectedTableKey(tableKey(doc.history.present.tables[0]));
-    }
-  }, [doc.history.present, selectedTableKey]);
+  const connectionsList = connections.data ?? [];
+  const connMap = new Map(connectionsList.map((c) => [c.id, c]));
+
+  const baseConnId = activeModel?.base?.connectionId ?? null;
+  const baseConn = baseConnId ? (connMap.get(baseConnId) ?? null) : null;
+  const baseLabel =
+    activeModel?.base !== null && activeModel?.base !== undefined
+      ? `${baseConn?.name ?? activeModel.base.connectionId} / ${activeModel.base.database ?? ""}`
+      : null;
+
+  const problems = activeModel
+    ? checkModel(activeModel, {
+        scope: activeModel.ddl.scope ?? "changes",
+        baseLabel,
+        baseEnvironment: baseConn?.environmentName ?? null,
+        notes: rereadNotes,
+      })
+    : [];
+
+  const effectiveSelectedTableKey =
+    selectedTableKey ??
+    (activeModel && activeModel.tables.length > 0 ? tableKey(activeModel.tables[0]) : null);
 
   function updateTabs(next: { open: string[]; active: string | null }) {
     setTabsState(next);
+    setDdlViewOpen(false);
     if (userName !== "") writeBuildTabs(userName, next);
   }
 
@@ -387,10 +472,244 @@ export default function BuildPage() {
   }
 
   function handleAddTable() {
-    if (!doc.history.present) return;
-    const { model: next, key } = addTable(doc.history.present);
+    if (!activeModel) return;
+    const { model: next, key } = addTable(activeModel);
     doc.change(next);
     setSelectedTableKey(key);
+  }
+
+  function handleGenerateDdl() {
+    if (!activeModel) return;
+    if (needsScopeQuestion(activeModel)) {
+      setScopeDialogOpen(true);
+    } else {
+      setDdlViewOpen(true);
+    }
+  }
+
+  function handleExportModelContent(
+    model: BuildModel,
+    modelName: string,
+    kind: "dbml" | "sql" | "png",
+  ) {
+    if (kind === "dbml") {
+      saveText(fileNameOf(modelName, "dbml"), writeDbml(model), "text/plain;charset=utf-8");
+      return;
+    }
+    if (kind === "sql") {
+      saveText(fileNameOf(modelName, "sql"), writeModelSql(model), "text/sql;charset=utf-8");
+      return;
+    }
+    const modelProblems = checkModel(model, {
+      scope: model.ddl.scope ?? "changes",
+      baseLabel: null,
+      baseEnvironment: null,
+      notes: [],
+    });
+    const layout = modelDiagram(model, modelProblems);
+    void exportDiagramPng(modelName, layout, resolveDiagramStyle(preferences));
+  }
+
+  function handleOpenInWorkbench(sql: string) {
+    if (!activeModel) return;
+    const target = workbenchTarget(activeModel);
+    if (target.kind === "base") {
+      openQueryTab(target.connectionId, sql, target.database ?? undefined);
+      void navigate(pathsConfig.workbench);
+      return;
+    }
+    setPendingWorkbenchSql(sql);
+  }
+
+  async function loadCatalogPreview(connectionId: string, database?: string) {
+    setCatalogError(null);
+    const sessionRes = await openDatabaseSession(connectionId, database);
+    if (!sessionRes.ok) {
+      setCatalogError(sessionRes.error.detail ?? sessionRes.error.title);
+      return;
+    }
+    const sessionId = sessionRes.data.id;
+    try {
+      const namesRes = await getObjectNames(sessionId);
+      if (!namesRes.ok) {
+        setCatalogError(namesRes.error.detail ?? namesRes.error.title);
+        return;
+      }
+      setCatalogSchemas(
+        namesRes.data.schemas
+          .filter((s) => !s.isSystem)
+          .map((s) => ({ schema: s.name, tables: [...s.tables] })),
+      );
+    } finally {
+      await closeDatabaseSession(sessionId);
+    }
+  }
+
+  async function handleNewModelSubmit(payload: NewModelSubmitPayload) {
+    setCatalogError(null);
+    if (payload.mode === "zero") {
+      const initial = emptyModel(
+        payload.engine,
+        payload.defaultSchema,
+        payload.createSchema,
+      );
+      const res = await createBuildModel({
+        name: payload.name,
+        body: serializeModelBody(initial),
+      });
+      if (!res.ok) {
+        setCatalogError(res.error.detail ?? res.error.title);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
+      setNewModelOpen(false);
+      handleOpenModel(res.data.id);
+      return;
+    }
+
+    const sessionRes = await openDatabaseSession(payload.connectionId, payload.database);
+    if (!sessionRes.ok) {
+      setCatalogError(sessionRes.error.detail ?? sessionRes.error.title);
+      return;
+    }
+    const sessionId = sessionRes.data.id;
+    const abort = new AbortController();
+    readingAbortRef.current = abort;
+    try {
+      const { snapshot } = await readCatalog(sessionId, payload.selection, {
+        signal: abort.signal,
+        onProgress: (done, total) => setReadingProgress({ done, total }),
+      });
+      const built = modelFromCatalog({
+        engine: payload.engine,
+        defaultSchema: payload.defaultSchema,
+        createSchema: payload.createSchema,
+        base: { connectionId: payload.connectionId, database: payload.database },
+        snapshot,
+        readAt: "agora",
+      });
+      const res = await createBuildModel({
+        name: payload.name,
+        body: serializeModelBody(built),
+      });
+      if (!res.ok) {
+        setCatalogError(res.error.detail ?? res.error.title);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
+      setNewModelOpen(false);
+      handleOpenModel(res.data.id);
+    } finally {
+      readingAbortRef.current = null;
+      setReadingProgress(null);
+      await closeDatabaseSession(sessionId);
+    }
+  }
+
+  async function handleImportTablesSubmit(payload: {
+    connectionId: string;
+    database: string;
+    selection: CatalogSelection;
+  }) {
+    if (!activeModel) return;
+    setCatalogError(null);
+    const sessionRes = await openDatabaseSession(payload.connectionId, payload.database);
+    if (!sessionRes.ok) {
+      setCatalogError(sessionRes.error.detail ?? sessionRes.error.title);
+      return;
+    }
+    const sessionId = sessionRes.data.id;
+    const abort = new AbortController();
+    readingAbortRef.current = abort;
+    try {
+      const { snapshot } = await readCatalog(sessionId, payload.selection, {
+        signal: abort.signal,
+        onProgress: (done, total) => setReadingProgress({ done, total }),
+      });
+      const baseAttached: BuildModel =
+        activeModel.base !== null
+          ? activeModel
+          : {
+              ...activeModel,
+              base: {
+                connectionId: payload.connectionId,
+                database: payload.database,
+                readAt: "agora",
+                knownSchemas: [...snapshot.schemas],
+                knownTables: [...snapshot.knownTables],
+              },
+            };
+      const updated = addCatalogTables(baseAttached, snapshot, "agora");
+      doc.change(updated);
+      setImportTablesOpen(false);
+    } finally {
+      readingAbortRef.current = null;
+      setReadingProgress(null);
+      await closeDatabaseSession(sessionId);
+    }
+  }
+
+  async function handleReread(overrideBase?: {
+    connectionId: string;
+    database: string | null;
+  }) {
+    if (!activeModel) return;
+    const targetBase = overrideBase ?? activeModel.base;
+    if (!targetBase) return;
+
+    const bySchema = new Map<string, string[]>();
+    for (const table of activeModel.tables) {
+      if (table.origin === null) continue;
+      const list = bySchema.get(table.origin.schema) ?? [];
+      if (!list.includes(table.origin.name)) list.push(table.origin.name);
+      bySchema.set(table.origin.schema, list);
+    }
+    const selection: CatalogSelection = Array.from(bySchema.entries()).map(
+      ([schema, tables]) => ({ schema, tables }),
+    );
+
+    const sessionRes = await openDatabaseSession(
+      targetBase.connectionId,
+      targetBase.database ?? undefined,
+    );
+    if (!sessionRes.ok) return;
+    const sessionId = sessionRes.data.id;
+    try {
+      const { snapshot } = await readCatalog(sessionId, selection);
+      const baseModel: BuildModel = overrideBase
+        ? {
+            ...activeModel,
+            base: {
+              connectionId: overrideBase.connectionId,
+              database: overrideBase.database,
+              readAt: "agora",
+              knownSchemas: activeModel.base?.knownSchemas ?? [],
+              knownTables: activeModel.base?.knownTables ?? [],
+            },
+          }
+        : activeModel;
+      const { model: nextModel, notes } = rereadModel(baseModel, snapshot, "agora");
+      setRereadNotes(notes.map((message) => ({ code: "W8" as const, message })));
+      doc.change(nextModel);
+    } finally {
+      await closeDatabaseSession(sessionId);
+    }
+  }
+
+  async function handleFileSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const text = await file.text();
+    const parsed = modelFromFile(file.name, text, "postgresql");
+    if (!parsed.ok) return;
+    const res = await createBuildModel({
+      name: parsed.name,
+      body: serializeModelBody(parsed.model),
+    });
+    if (!res.ok) return;
+    await queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
+    handleOpenModel(res.data.id);
   }
 
   const renameMutation = useMutation({
@@ -430,6 +749,16 @@ export default function BuildPage() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "F5" && activeModel) {
+        e.preventDefault();
+        handleGenerateDdl();
+        return;
+      }
+      if (e.key === "Escape" && ddlViewOpen) {
+        e.preventDefault();
+        setDdlViewOpen(false);
+        return;
+      }
       const key = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && key === "b") {
         e.preventDefault();
@@ -465,63 +794,240 @@ export default function BuildPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  const connMap = new Map(
-    (connections.data?.connections ?? []).map((c) => [c.id, c]),
-  );
+  const ddlContext = {
+    modelName: activeModelName,
+    prismVersion: "0.6.0",
+    generatedAt: "hoje",
+    baseLabel,
+  };
 
   return (
-    <BuildPageView
-      userName={userName}
-      sidebarHidden={sidebarHidden}
-      savedModels={savedModels}
-      openTabs={tabsState.open}
-      activeModelId={tabsState.active}
-      activeModel={doc.history.present}
-      activeModelName={activeDto?.name ?? null}
-      selectedTableKey={selectedTableKey}
-      editorPane={editorPane}
-      canUndo={doc.history.past.length > 0}
-      canRedo={doc.history.future.length > 0}
-      saveState={doc.state}
-      connectionName={(id) => connMap.get(id)?.name ?? null}
-      connectionEnvironment={(id) => connMap.get(id)?.environmentName ?? null}
-      connectionEnvironmentColor={(id) => connMap.get(id)?.environmentColor ?? null}
-      onToggleSidebar={toggleSidebar}
-      onSelectTab={handleOpenModel}
-      onCloseTab={handleCloseTab}
-      onShowModelsList={() => updateTabs({ ...tabsState, active: null })}
-      onSelectTable={setSelectedTableKey}
-      onAddTable={handleAddTable}
-      onChangePane={setEditorPane}
-      onUndo={doc.undo}
-      onRedo={doc.redo}
-      onReloadConflict={() => void doc.reload()}
-      onKeepMineConflict={() => void doc.keepMine()}
-      onRenameModel={(id, newName) => renameMutation.mutate({ id, newName })}
-      onDuplicateModel={(id) => duplicateMutation.mutate(id)}
-      onDeleteModel={(id) => deleteMutation.mutate(id)}
-      topBar={
-        <TopBar
-          leading={
-            <button
-              type="button"
-              aria-label={
-                sidebarHidden ? buildCopy.showSidebarLabel : buildCopy.hideSidebarLabel
-              }
-              aria-pressed={!sidebarHidden}
-              onClick={toggleSidebar}
-              className={cn(
-                "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-0",
-                !sidebarHidden
-                  ? "bg-selected text-ink"
-                  : "bg-transparent text-muted hover:bg-selected hover:text-ink",
-              )}
-            >
-              <WorkbenchIcon />
-            </button>
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".sql,.dbml"
+        className="hidden"
+        onChange={(e) => void handleFileSelected(e)}
+      />
+      <BuildPageView
+        userName={userName}
+        sidebarHidden={sidebarHidden}
+        savedModels={savedModels}
+        openTabs={tabsState.open}
+        activeModelId={tabsState.active}
+        activeModel={activeModel}
+        activeModelName={activeDto?.name ?? null}
+        selectedTableKey={effectiveSelectedTableKey}
+        editorPane={editorPane}
+        canUndo={doc.history.past.length > 0}
+        canRedo={doc.history.future.length > 0}
+        saveState={doc.state}
+        problems={problems}
+        connectionName={(id) => connMap.get(id)?.name ?? null}
+        connectionEnvironment={(id) => connMap.get(id)?.environmentName ?? null}
+        connectionEnvironmentColor={(id) => connMap.get(id)?.environmentColor ?? null}
+        onToggleSidebar={toggleSidebar}
+        onSelectTab={handleOpenModel}
+        onCloseTab={handleCloseTab}
+        onNewModel={() => {
+          setCatalogError(null);
+          setNewModelOpen(true);
+        }}
+        onOpenFile={() => fileInputRef.current?.click()}
+        onShowModelsList={() => updateTabs({ ...tabsState, active: null })}
+        onSelectTable={setSelectedTableKey}
+        onAddTable={handleAddTable}
+        onImportTables={() => {
+          setCatalogError(null);
+          setImportTablesOpen(true);
+        }}
+        onChangePane={setEditorPane}
+        onUndo={doc.undo}
+        onRedo={doc.redo}
+        onReread={() => void handleReread()}
+        onReloadConflict={() => void doc.reload()}
+        onKeepMineConflict={() => void doc.keepMine()}
+        onExport={(kind) => {
+          if (activeModel) {
+            handleExportModelContent(activeModel, activeModelName, kind);
           }
-        />
-      }
-    />
+        }}
+        onGenerateDdl={handleGenerateDdl}
+        onRenameModel={(id, newName) => renameMutation.mutate({ id, newName })}
+        onDuplicateModel={(id) => duplicateMutation.mutate(id)}
+        onExportModel={(id, kind) => {
+          const found = savedModels.find((m) => m.id === id);
+          if (found) handleExportModelContent(found.model, found.name, kind);
+        }}
+        onDeleteModel={(id) => deleteMutation.mutate(id)}
+        baseMenuSlot={
+          activeModel?.base ? (
+            <BaseMenu
+              model={activeModel}
+              connections={connectionsList}
+              baseLabel={baseLabel}
+              baseEnvironmentName={baseConn?.environmentName ?? null}
+              baseEnvironmentColor={baseConn?.environmentColor ?? null}
+              onChangeBase={(target) => void handleReread(target)}
+            />
+          ) : null
+        }
+        editorContent={
+          activeModel ? (
+            editorPane === "simple" ? (
+              <SimpleEditor
+                model={activeModel}
+                tableKey={effectiveSelectedTableKey}
+                baseLabel={baseLabel}
+                ddlContext={ddlContext}
+                onChange={(next, nextKey) => {
+                  doc.change(next);
+                  if (nextKey !== undefined) setSelectedTableKey(nextKey);
+                }}
+              />
+            ) : (
+              <TextPane
+                key={`${tabsState.active ?? "none"}-${editorPane}`}
+                model={activeModel}
+                format={editorPane}
+                onChange={(next) => doc.change(next)}
+              />
+            )
+          ) : null
+        }
+        diagramContent={
+          activeModel ? (
+            <BuildDiagram
+              model={activeModel}
+              problems={problems}
+              selectedTableKey={effectiveSelectedTableKey}
+              onSelectTable={setSelectedTableKey}
+              onChange={doc.change}
+            />
+          ) : null
+        }
+        ddlOverlay={
+          ddlViewOpen && activeModel ? (
+            <DdlView
+              model={activeModel}
+              modelName={activeModelName}
+              baseLabel={baseLabel}
+              baseEnvironment={baseConn?.environmentName ?? null}
+              notes={rereadNotes}
+              onBackToDiagram={() => setDdlViewOpen(false)}
+              onChangeModel={doc.change}
+              onCopy={(sql) => {
+                void navigator.clipboard?.writeText(sql);
+              }}
+              onSaveSql={(sql) =>
+                saveText(
+                  fileNameOf(activeModelName, "sql"),
+                  sql,
+                  "text/sql;charset=utf-8",
+                )
+              }
+              onOpenInWorkbench={(sql) => handleOpenInWorkbench(sql)}
+              onGoToColumn={(table) => {
+                setSelectedTableKey(table);
+                setDdlViewOpen(false);
+                setEditorPane("simple");
+              }}
+              onReread={() => void handleReread()}
+            />
+          ) : undefined
+        }
+        dialogs={
+          <>
+            {newModelOpen && (
+              <NewModelDialog
+                connections={connectionsList}
+                schemas={catalogSchemas}
+                readingProgress={readingProgress}
+                errorMessage={catalogError}
+                onSelectConnection={(connId) => void loadCatalogPreview(connId)}
+                onSelectDatabase={(db) => {
+                  const firstConn = connectionsList[0]?.id;
+                  if (firstConn) void loadCatalogPreview(firstConn, db);
+                }}
+                onCancel={() => setNewModelOpen(false)}
+                onCancelReading={() => readingAbortRef.current?.abort()}
+                onSubmit={(payload) => void handleNewModelSubmit(payload)}
+              />
+            )}
+            {importTablesOpen && activeModel && (
+              <ImportTablesDialog
+                model={activeModel}
+                connections={connectionsList}
+                schemas={catalogSchemas}
+                readingProgress={readingProgress}
+                errorMessage={catalogError}
+                onSelectConnection={(connId) => void loadCatalogPreview(connId)}
+                onCancel={() => setImportTablesOpen(false)}
+                onCancelReading={() => readingAbortRef.current?.abort()}
+                onSubmit={(payload) => void handleImportTablesSubmit(payload)}
+              />
+            )}
+            {scopeDialogOpen && activeModel && (
+              <ScopeDialog
+                model={activeModel}
+                modelName={activeModelName}
+                baseLabel={baseLabel ?? ""}
+                onCancel={() => setScopeDialogOpen(false)}
+                onConfirm={(scope) => {
+                  doc.change({
+                    ...activeModel,
+                    ddl: { ...activeModel.ddl, scope },
+                  });
+                  setScopeDialogOpen(false);
+                  setDdlViewOpen(true);
+                }}
+              />
+            )}
+            {pendingWorkbenchSql !== null && activeModel && (
+              <ConnectionChoiceDialog
+                engine={activeModel.engine}
+                connections={connectionsList}
+                baseConnectionId={activeModel.base?.connectionId ?? null}
+                onCancel={() => setPendingWorkbenchSql(null)}
+                onConfirm={(target) => {
+                  openQueryTab(
+                    target.connectionId,
+                    pendingWorkbenchSql,
+                    target.database ?? undefined,
+                  );
+                  setPendingWorkbenchSql(null);
+                  void navigate(pathsConfig.workbench);
+                }}
+              />
+            )}
+          </>
+        }
+        topBar={
+          <TopBar
+            leading={
+              <button
+                type="button"
+                aria-label={
+                  sidebarHidden ? buildCopy.showSidebarLabel : buildCopy.hideSidebarLabel
+                }
+                aria-pressed={!sidebarHidden}
+                onClick={toggleSidebar}
+                className={cn(
+                  "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-0",
+                  !sidebarHidden
+                    ? "bg-selected text-ink"
+                    : "bg-transparent text-muted hover:bg-selected hover:text-ink",
+                )}
+              >
+                <WorkbenchIcon />
+              </button>
+            }
+          />
+        }
+      />
+    </>
   );
 }
+
+export default BuildPage;
