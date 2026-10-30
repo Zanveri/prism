@@ -200,19 +200,24 @@ export function ColumnRow({
         <button
           type="button"
           aria-pressed={isPk}
-          disabled={rowState.locks.primaryKey}
+          aria-disabled={rowState.locks.primaryKey}
           title={
             rowState.locks.primaryKey
-              ? "Trocar a chave primária de uma tabela existente não é suportado nesta versão"
-              : undefined
+              ? "PK — Chave primária (Primary Key) · Trocar a chave primária de uma tabela existente não é suportado nesta versão"
+              : isPk
+                ? "PK — Chave primária (Primary Key): ativa nesta coluna"
+                : "PK — Chave primária (Primary Key): clique para marcar como chave primária"
           }
           aria-label={`${column.name}: chave primária`}
-          onClick={onTogglePk}
+          onClick={() => {
+            if (rowState.locks.primaryKey) return;
+            onTogglePk();
+          }}
           className={`h-6 rounded border p-0 font-mono text-[10px] font-semibold ${
             isPk
               ? "border-accent bg-accent/16 text-accent"
               : "border-border bg-transparent text-subtle"
-          } ${rowState.locks.primaryKey ? "cursor-not-allowed" : "cursor-pointer"}`}
+          } ${rowState.locks.primaryKey ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
         >
           PK
         </button>
@@ -220,6 +225,11 @@ export function ColumnRow({
         <button
           type="button"
           aria-pressed={!column.nullable}
+          title={
+            !column.nullable
+              ? "NN — Não nulo (Not Null): obrigatório, não aceita NULL"
+              : "NN — Não nulo (Not Null): opcional, aceita NULL"
+          }
           aria-label={`${column.name}: não aceita nulo`}
           onClick={() => onUpdateColumn({ nullable: !column.nullable })}
           className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
@@ -234,6 +244,11 @@ export function ColumnRow({
         <button
           type="button"
           aria-pressed={isUnique}
+          title={
+            isUnique
+              ? "UQ — Valor único (Unique): ativo nesta coluna (não permite valores repetidos)"
+              : "UQ — Valor único (Unique): clique para impedir valores repetidos nesta coluna"
+          }
           aria-label={`${column.name}: valor único`}
           onClick={onToggleUnique}
           className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
@@ -248,18 +263,26 @@ export function ColumnRow({
         <button
           type="button"
           aria-pressed={column.identity !== null}
-          disabled={rowState.locks.identity}
+          aria-disabled={rowState.locks.identity}
+          title={
+            rowState.locks.identity
+              ? "AI — Auto-incremento (Identity / Serial): gerado automaticamente pelo banco · Não editável em tabela existente ou para este tipo"
+              : column.identity !== null
+                ? "AI — Auto-incremento (Identity / Serial): ativo nesta coluna"
+                : "AI — Auto-incremento (Identity / Serial): clique para gerar valor sequencial automaticamente"
+          }
           aria-label={`${column.name}: gerado pelo banco`}
-          onClick={() =>
+          onClick={() => {
+            if (rowState.locks.identity) return;
             onUpdateColumn({
               identity: column.identity === null ? "always" : null,
-            })
-          }
+            });
+          }}
           className={`h-6 rounded border p-0 font-mono text-[10px] font-semibold ${
             column.identity !== null
               ? "border-subtle bg-selected text-ink"
               : "border-border bg-transparent text-subtle"
-          } ${rowState.locks.identity ? "cursor-not-allowed" : "cursor-pointer"}`}
+          } ${rowState.locks.identity ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
         >
           AI
         </button>
@@ -268,6 +291,11 @@ export function ColumnRow({
           type="button"
           variant="ghost"
           size="compact"
+          title={
+            expanded
+              ? `Recolher opções avançadas de ${column.name}`
+              : `Mais opções de ${column.name} (tipo/tamanho, valor padrão, check, comentário)`
+          }
           aria-label={
             expanded
               ? `Menos opções de ${column.name}`

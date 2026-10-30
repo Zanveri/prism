@@ -139,4 +139,57 @@ describe("BuildPage", () => {
       "producao.operador",
     );
   });
+
+  it("permite recolher e expandir tanto a sidebar 'Tabelas do modelo' quanto o editor de DDL", () => {
+    const manutencao = fixture<BuildModel>("build/models/manutencao.json");
+    const modelId = "0199c3a0-0000-7000-8000-000000000001";
+    const expandedHtml = renderToStaticMarkup(
+      createElement(BuildPageView, {
+        userName: "marina.costa",
+        sidebarHidden: false,
+        editorHidden: false,
+        savedModels: [
+          {
+            id: modelId,
+            name: "manutencao",
+            engine: "postgresql",
+            model: manutencao,
+            updatedAt: "hoje, 14:32",
+          },
+        ],
+        openTabs: [modelId],
+        activeModelId: modelId,
+        connectionName: () => "MES Produção",
+        connectionEnvironment: () => "production",
+      }),
+    );
+
+    expect(expandedHtml).toContain('aria-label="Ocultar tabelas do modelo"');
+    expect(expandedHtml).toContain('aria-label="Ocultar editor do modelo"');
+
+    const collapsedHtml = renderToStaticMarkup(
+      createElement(BuildPageView, {
+        userName: "marina.costa",
+        sidebarHidden: true,
+        editorHidden: true,
+        savedModels: [
+          {
+            id: modelId,
+            name: "manutencao",
+            engine: "postgresql",
+            model: manutencao,
+            updatedAt: "hoje, 14:32",
+          },
+        ],
+        openTabs: [modelId],
+        activeModelId: modelId,
+        connectionName: () => "MES Produção",
+        connectionEnvironment: () => "production",
+      }),
+    );
+
+    expect(collapsedHtml).toContain('aria-label="Mostrar tabelas do modelo"');
+    expect(collapsedHtml).toContain('aria-label="Mostrar editor do modelo"');
+    expect(collapsedHtml).not.toContain('aria-label="Editor do modelo"');
+  });
 });

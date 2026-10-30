@@ -103,6 +103,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import {
   AlertIcon,
   Button,
+  ChevronIcon,
   CloseIcon,
   EngineTag,
   Segmented,
@@ -162,6 +163,7 @@ export type BuildEditorPane = "simple" | "sql" | "dbml";
 export type BuildPageViewProps = {
   userName: string;
   sidebarHidden: boolean;
+  editorHidden?: boolean;
   savedModels: readonly SavedModelEntry[];
   openTabs: readonly string[];
   activeModelId: string | null;
@@ -183,6 +185,7 @@ export type BuildPageViewProps = {
   connectionEnvironment?: (id: string) => string | null;
   connectionEnvironmentColor?: (id: string) => string | null;
   onToggleSidebar?: () => void;
+  onToggleEditor?: () => void;
   onSelectTab?: (id: string) => void;
   onCloseTab?: (id: string) => void;
   onNewModel?: () => void;
@@ -282,6 +285,7 @@ function PaneResizeHandle({
 export function BuildPageView({
   userName,
   sidebarHidden,
+  editorHidden,
   savedModels,
   openTabs,
   activeModelId,
@@ -302,6 +306,8 @@ export function BuildPageView({
   connectionName,
   connectionEnvironment,
   connectionEnvironmentColor,
+  onToggleSidebar,
+  onToggleEditor,
   onSelectTab,
   onCloseTab,
   onNewModel,
@@ -332,6 +338,27 @@ export function BuildPageView({
 }: BuildPageViewProps) {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [editorWidth, setEditorWidth] = useState(EDITOR_DEFAULT_WIDTH);
+  const [localSidebarHidden, setLocalSidebarHidden] = useState(sidebarHidden);
+  const [localEditorHidden, setLocalEditorHidden] = useState(editorHidden ?? false);
+
+  const isSidebarHidden = onToggleSidebar ? sidebarHidden : localSidebarHidden;
+  const isEditorHidden = onToggleEditor ? (editorHidden ?? false) : localEditorHidden;
+
+  const handleToggleSidebar = () => {
+    if (onToggleSidebar) {
+      onToggleSidebar();
+    } else {
+      setLocalSidebarHidden((prev) => !prev);
+    }
+  };
+
+  const handleToggleEditor = () => {
+    if (onToggleEditor) {
+      onToggleEditor();
+    } else {
+      setLocalEditorHidden((prev) => !prev);
+    }
+  };
 
   const activeEntry =
     activeModelId !== null
@@ -380,7 +407,7 @@ export function BuildPageView({
       {topBar}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {!sidebarHidden && (
+        {!isSidebarHidden ? (
           <>
             <BuildSidebar
               model={activeModel}
@@ -396,6 +423,7 @@ export function BuildPageView({
               onAddTable={onAddTable}
               onImportTables={onImportTables}
               onOpenDdlView={onShowProblems ?? onGenerateDdl}
+              onCollapse={handleToggleSidebar}
             />
             <PaneResizeHandle
               label="Ajustar a largura das tabelas do modelo"
@@ -405,6 +433,31 @@ export function BuildPageView({
               onResize={setSidebarWidth}
             />
           </>
+        ) : (
+          <aside
+            id="build-sidebar"
+            aria-label={buildCopy.sidebarTitle}
+            className="flex w-9 flex-none flex-col items-center gap-2 border-r border-border bg-panel py-2"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={buildCopy.showSidebarLabel}
+              title={buildCopy.showSidebarTitle}
+              onClick={handleToggleSidebar}
+            >
+              <ChevronIcon direction="right" />
+            </Button>
+            <button
+              type="button"
+              title={buildCopy.showSidebarTitle}
+              onClick={handleToggleSidebar}
+              className="cursor-pointer border-0 bg-transparent py-2 text-2xs font-semibold tracking-wider text-muted uppercase hover:text-ink [writing-mode:vertical-rl]"
+            >
+              {buildCopy.sidebarTitle}
+            </button>
+          </aside>
         )}
 
         {activeModel === null ? (
@@ -467,53 +520,97 @@ export function BuildPageView({
 
             {ddlOverlay ?? (
               <div className="flex min-h-0 flex-1 overflow-hidden">
-                <section
-                  aria-label="Editor do modelo"
-                  style={{ width: editorWidth }}
-                  className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
-                >
-                  <div
-                    role="group"
-                    aria-label={buildCopy.editorGroupLabel}
-                    className="flex items-center gap-1 border-b border-border px-3"
+                {!isEditorHidden ? (
+                  <>
+                    <section
+                      aria-label="Editor do modelo"
+                      style={{ width: editorWidth }}
+                      className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
+                    >
+                      <div
+                        role="group"
+                        aria-label={buildCopy.editorGroupLabel}
+                        className="flex items-center gap-1 border-b border-border px-3"
+                      >
+                        {(
+                          [
+                            ["simple", buildCopy.paneSimple],
+                            ["sql", buildCopy.paneSql],
+                            ["dbml", buildCopy.paneDbml],
+                          ] as const
+                        ).map(([paneKey, label]) => {
+                          const active = editorPane === paneKey;
+                          return (
+                            <button
+                              key={paneKey}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => onChangePane?.(paneKey)}
+                              className={cn(
+                                "h-9 cursor-pointer border-0 border-b-2 bg-transparent px-2.5",
+                                active
+                                  ? "border-accent font-semibold text-ink"
+                                  : "border-transparent font-normal text-muted hover:text-ink",
+                              )}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                        <div className="ml-auto flex items-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={buildCopy.hideEditorLabel}
+                            title={buildCopy.hideEditorTitle}
+                            onClick={handleToggleEditor}
+                          >
+                            <ChevronIcon direction="left" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {editorContent}
+                    </section>
+
+                    <PaneResizeHandle
+                      label="Ajustar a largura do editor do modelo"
+                      width={editorWidth}
+                      minWidth={EDITOR_MIN_WIDTH}
+                      maxWidth={EDITOR_MAX_WIDTH}
+                      onResize={setEditorWidth}
+                    />
+                  </>
+                ) : (
+                  <aside
+                    aria-label="Editor do modelo recolhido"
+                    className="flex w-9 flex-none flex-col items-center gap-2 border-r border-border bg-panel py-2"
                   >
-                    {(
-                      [
-                        ["simple", buildCopy.paneSimple],
-                        ["sql", buildCopy.paneSql],
-                        ["dbml", buildCopy.paneDbml],
-                      ] as const
-                    ).map(([paneKey, label]) => {
-                      const active = editorPane === paneKey;
-                      return (
-                        <button
-                          key={paneKey}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => onChangePane?.(paneKey)}
-                          className={cn(
-                            "h-9 cursor-pointer border-0 border-b-2 bg-transparent px-2.5",
-                            active
-                              ? "border-accent font-semibold text-ink"
-                              : "border-transparent font-normal text-muted hover:text-ink",
-                          )}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {editorContent}
-                </section>
-
-                <PaneResizeHandle
-                  label="Ajustar a largura do editor do modelo"
-                  width={editorWidth}
-                  minWidth={EDITOR_MIN_WIDTH}
-                  maxWidth={EDITOR_MAX_WIDTH}
-                  onResize={setEditorWidth}
-                />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={buildCopy.showEditorLabel}
+                      title={buildCopy.showEditorTitle}
+                      onClick={handleToggleEditor}
+                    >
+                      <ChevronIcon direction="right" />
+                    </Button>
+                    <button
+                      type="button"
+                      title={buildCopy.showEditorTitle}
+                      onClick={handleToggleEditor}
+                      className="cursor-pointer border-0 bg-transparent py-2 text-2xs font-semibold tracking-wider text-muted uppercase hover:text-ink [writing-mode:vertical-rl]"
+                    >
+                      {editorPane === "sql"
+                        ? buildCopy.paneSql
+                        : editorPane === "dbml"
+                          ? buildCopy.paneDbml
+                          : buildCopy.paneSimple}
+                    </button>
+                  </aside>
+                )}
 
                 <section
                   aria-label="Diagrama do modelo"
@@ -567,11 +664,16 @@ export function BuildPage() {
   const [sidebarHidden, setSidebarHidden] = useState<boolean>(
     () => readBuildLayout(userName).sidebarHidden,
   );
+  const [editorHidden, setEditorHidden] = useState<boolean>(
+    () => readBuildLayout(userName).editorHidden ?? false,
+  );
   if (loadedUser !== userName) {
     setLoadedUser(userName);
     if (userName !== "") {
+      const layout = readBuildLayout(userName);
       setTabsState(readBuildTabs(userName));
-      setSidebarHidden(readBuildLayout(userName).sidebarHidden);
+      setSidebarHidden(layout.sidebarHidden);
+      setEditorHidden(layout.editorHidden ?? false);
     }
   }
   const [selectedTableKey, setSelectedTableKey] = useState<string | null>(null);
@@ -801,7 +903,15 @@ export function BuildPage() {
   function toggleSidebar() {
     setSidebarHidden((prev) => {
       const next = !prev;
-      if (userName !== "") writeBuildLayout(userName, { sidebarHidden: next });
+      if (userName !== "") writeBuildLayout(userName, { sidebarHidden: next, editorHidden });
+      return next;
+    });
+  }
+
+  function toggleEditor() {
+    setEditorHidden((prev) => {
+      const next = !prev;
+      if (userName !== "") writeBuildLayout(userName, { sidebarHidden, editorHidden: next });
       return next;
     });
   }
@@ -1263,6 +1373,7 @@ export function BuildPage() {
       <BuildPageView
         userName={userName}
         sidebarHidden={sidebarHidden}
+        editorHidden={editorHidden}
         savedModels={savedModels}
         openTabs={tabsState.open}
         activeModelId={tabsState.active}
@@ -1278,6 +1389,7 @@ export function BuildPage() {
         connectionEnvironment={(id) => connMap.get(id)?.environmentName ?? null}
         connectionEnvironmentColor={(id) => connMap.get(id)?.environmentColor ?? null}
         onToggleSidebar={toggleSidebar}
+        onToggleEditor={toggleEditor}
         onSelectTab={handleOpenModel}
         onCloseTab={handleCloseTab}
         onNewModel={() => {

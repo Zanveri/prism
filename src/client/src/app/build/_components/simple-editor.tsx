@@ -240,6 +240,7 @@ export function SimpleEditor({
           type="button"
           variant="secondary"
           size="icon"
+          title="Mais ações da tabela"
           aria-label="Mais ações da tabela"
           aria-haspopup="menu"
           aria-expanded={menuPoint !== null}
@@ -283,18 +284,27 @@ export function SimpleEditor({
           <span />
           <span>Nome</span>
           <span>Tipo</span>
-          <span title="Chave primária" className="text-center">
+          <span
+            title="PK — Chave primária (Primary Key): identifica cada registro da tabela"
+            className="cursor-help text-center"
+          >
             PK
           </span>
-          <span title="Não aceita nulo" className="text-center">
+          <span
+            title="NN — Não nulo (Not Null): coluna obrigatória, não aceita NULL"
+            className="cursor-help text-center"
+          >
             NN
           </span>
-          <span title="Valor único" className="text-center">
+          <span
+            title="UQ — Valor único (Unique): não permite valores repetidos nesta coluna"
+            className="cursor-help text-center"
+          >
             UQ
           </span>
           <span
-            title="Gerado pelo banco (identity, serial)"
-            className="text-center"
+            title="AI — Auto-incremento (Identity / Serial): valor sequencial gerado automaticamente pelo banco"
+            className="cursor-help text-center"
           >
             AI
           </span>

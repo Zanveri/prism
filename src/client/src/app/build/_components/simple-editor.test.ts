@@ -98,4 +98,27 @@ describe("SimpleEditor", () => {
     expect(html).toContain("Ao excluir: impedir");
     expect(html).not.toContain("Ao excluir: anular");
   });
+
+  it("exibe tooltips descritivos nos botões PK, NN, UQ, AI e de expandir detalhes da coluna", () => {
+    const model = readCanvasModel();
+    const html = renderToStaticMarkup(
+      createElement(SimpleEditor, {
+        model,
+        tableKey: "manutencao.ordem_manutencao",
+        baseLabel: "MES Produção / mes",
+        ddlContext,
+        onChange: () => {},
+      }),
+    );
+
+    expect(html).toContain('title="PK — Chave primária (Primary Key): ativa nesta coluna"');
+    expect(html).toContain('title="NN — Não nulo (Not Null): obrigatório, não aceita NULL"');
+    expect(html).toContain(
+      'title="UQ — Valor único (Unique): clique para impedir valores repetidos nesta coluna"',
+    );
+    expect(html).toContain('title="AI — Auto-incremento (Identity / Serial): ativo nesta coluna"');
+    expect(html).toContain(
+      'title="Mais opções de id (tipo/tamanho, valor padrão, check, comentário)"',
+    );
+  });
 });

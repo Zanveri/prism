@@ -35,6 +35,7 @@ type BuildSidebarProps = {
   onAddTable?: () => void;
   onImportTables?: () => void;
   onOpenDdlView?: () => void;
+  onCollapse?: () => void;
 };
 
 type SchemaGroup = {
@@ -86,6 +87,7 @@ export function BuildSidebar({
   onAddTable,
   onImportTables,
   onOpenDdlView,
+  onCollapse,
 }: BuildSidebarProps) {
   const [filterText, setFilterText] = useState("");
   const [collapsedSchemas, setCollapsedSchemas] = useState<Record<string, boolean>>({});
@@ -129,10 +131,23 @@ export function BuildSidebar({
         style={{ width }}
         className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
       >
-        <div className="flex min-h-8 items-center py-2 pr-2 pl-3">
+        <div className="flex min-h-8 items-center gap-1 py-2 pr-2 pl-3">
           <span className="text-xs font-semibold tracking-wider text-muted uppercase">
             {buildCopy.sidebarTitle}
           </span>
+          {onCollapse && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={buildCopy.hideSidebarLabel}
+              title={buildCopy.hideSidebarTitle}
+              onClick={onCollapse}
+              className="ml-auto text-muted hover:text-ink"
+            >
+              <ChevronIcon direction="left" />
+            </Button>
+          )}
         </div>
         <div className="mx-3 my-2 flex flex-col gap-3 rounded-lg border border-dashed border-border-strong p-4">
           <span className="text-subtle">
@@ -219,6 +234,19 @@ export function BuildSidebar({
         >
           <DatabaseIcon />
         </Button>
+        {onCollapse && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={buildCopy.hideSidebarLabel}
+            title={buildCopy.hideSidebarTitle}
+            onClick={onCollapse}
+            className="text-muted hover:text-ink"
+          >
+            <ChevronIcon direction="left" />
+          </Button>
+        )}
       </div>
 
       <label className="mx-2 mb-2 flex h-8 shrink-0 items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-subtle">
