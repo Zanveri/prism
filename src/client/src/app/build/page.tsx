@@ -1,5 +1,8 @@
 import {
+  useCallback,
+  useDeferredValue,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -31,7 +34,7 @@ import {
   modelFromFile,
   needsScopeQuestion,
 } from "@/app/build/_lib/build-files";
-import { addTable, emptyModel, tableKey } from "@/app/build/_lib/build-model";
+import { addTable, emptyModel, removeTable, tableKey } from "@/app/build/_lib/build-model";
 import {
   parseModelBody,
   serializeModelBody,
@@ -175,7 +178,9 @@ export type BuildPageViewProps = {
   onNewModel?: () => void;
   onOpenFile?: () => void;
   onShowModelsList?: () => void;
-  onSelectTable?: (tableKey: string) => void;
+  onSelectTable?: (tableKey: string | null) => void;
+  onDeleteTable?: (tableKey: string) => void;
+  onFocusTableInDiagram?: (tableKey: string) => void;
   onAddTable?: () => void;
   onImportTables?: () => void;
   onChangePane?: (pane: BuildEditorPane) => void;
@@ -289,6 +294,8 @@ export function BuildPageView({
   onOpenFile,
   onShowModelsList,
   onSelectTable,
+  onDeleteTable,
+  onFocusTableInDiagram,
   onAddTable,
   onImportTables,
   onChangePane,
@@ -362,7 +369,9 @@ export function BuildPageView({
               selectedTableKey={selectedTableKey}
               problems={problems}
               width={sidebarWidth}
-              onSelectTable={onSelectTable}
+              onSelectTable={(key) => onSelectTable?.(key)}
+              onDeleteTable={onDeleteTable}
+              onFocusTableInDiagram={onFocusTableInDiagram}
               onAddTable={onAddTable}
               onImportTables={onImportTables}
               onOpenDdlView={onGenerateDdl}
@@ -540,6 +549,11 @@ export function BuildPage() {
     }
   }
   const [selectedTableKey, setSelectedTableKey] = useState<string | null>(null);
+  const [lastEditedTableKey, setLastEditedTableKey] = useState<string | null>(null);
+  const [diagramFocusRequest, setDiagramFocusRequest] = useState<{
+    key: string;
+    seq: number;
+  } | null>(null);
   const [editorPane, setEditorPane] = useState<BuildEditorPane>("simple");
   const [ddlViewOpen, setDdlViewOpen] = useState(false);
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
@@ -566,16 +580,20 @@ export function BuildPage() {
   const readingAbortRef = useRef<AbortController | null>(null);
   const previewRequestIdRef = useRef(0);
 
-  const savedModels: SavedModelEntry[] = (modelsQuery.data ?? []).map((dto) => {
-    const parsed = parseModelBody(dto.body) ?? emptyModel("postgresql", "public", false);
-    return {
-      id: dto.id,
-      name: dto.name,
-      engine: parsed.engine,
-      model: parsed,
-      updatedAt: dto.updatedAt,
-    };
-  });
+  const savedModels: SavedModelEntry[] = useMemo(
+    () =>
+      (modelsQuery.data ?? []).map((dto) => {
+        const parsed = parseModelBody(dto.body) ?? emptyModel("postgresql", "public", false);
+        return {
+          id: dto.id,
+          name: dto.name,
+          engine: parsed.engine,
+          model: parsed,
+          updatedAt: dto.updatedAt,
+        };
+      }),
+    [modelsQuery.data],
+  );
 
   const activeDto =
     tabsState.active !== null
@@ -584,10 +602,14 @@ export function BuildPage() {
 
   const doc = useModelDocument(activeDto);
   const activeModel = doc.history.present;
+  const deferredModel = useDeferredValue(activeModel);
   const activeModelName = activeDto?.name ?? "modelo";
 
   const connectionsList = connections.data ?? [];
-  const connMap = new Map(connectionsList.map((c) => [c.id, c]));
+  const connMap = useMemo(
+    () => new Map((connections.data ?? []).map((c) => [c.id, c])),
+    [connections.data],
+  );
 
   const baseConnId = activeModel?.base?.connectionId ?? null;
   const baseConn = baseConnId ? (connMap.get(baseConnId) ?? null) : null;
@@ -596,22 +618,71 @@ export function BuildPage() {
       ? `${baseConn?.name ?? activeModel.base.connectionId} / ${activeModel.base.database ?? ""}`
       : null;
 
-  const problems = activeModel
-    ? checkModel(activeModel, {
-        scope: activeModel.ddl.scope ?? "changes",
-        baseLabel,
-        baseEnvironment: baseConn?.environmentName ?? null,
-        notes: rereadNotes,
-      })
-    : [];
+  const problems = useMemo(
+    () =>
+      deferredModel
+        ? checkModel(deferredModel, {
+            scope: deferredModel.ddl.scope ?? "changes",
+            baseLabel,
+            baseEnvironment: baseConn?.environmentName ?? null,
+            notes: rereadNotes,
+          })
+        : [],
+    [baseConn?.environmentName, baseLabel, deferredModel, rereadNotes],
+  );
 
-  const effectiveSelectedTableKey =
-    selectedTableKey ??
-    (activeModel && activeModel.tables.length > 0 ? tableKey(activeModel.tables[0]) : null);
+  const effectiveEditorTableKey = useMemo(() => {
+    if (!activeModel || activeModel.tables.length === 0) return null;
+    if (selectedTableKey && activeModel.tables.some((t) => tableKey(t) === selectedTableKey)) {
+      return selectedTableKey;
+    }
+    if (
+      lastEditedTableKey &&
+      activeModel.tables.some((t) => tableKey(t) === lastEditedTableKey)
+    ) {
+      return lastEditedTableKey;
+    }
+    return tableKey(activeModel.tables[0]);
+  }, [activeModel, lastEditedTableKey, selectedTableKey]);
+
+  const handleSelectTable = useCallback((key: string | null) => {
+    setSelectedTableKey(key);
+    if (key !== null) {
+      setLastEditedTableKey(key);
+    }
+  }, []);
+
+  const handleFocusTableInDiagram = useCallback((key: string) => {
+    setSelectedTableKey(key);
+    setLastEditedTableKey(key);
+    setDiagramFocusRequest((prev) => ({ key, seq: (prev?.seq ?? 0) + 1 }));
+  }, []);
+
+  const handleDeleteTable = useCallback(
+    (key: string) => {
+      if (!activeModel) return;
+      const target = activeModel.tables.find((t) => tableKey(t) === key);
+      if (!target) return;
+      doc.change(removeTable(activeModel, key));
+      if (selectedTableKey === key) {
+        setSelectedTableKey(null);
+      }
+      if (lastEditedTableKey === key) {
+        setLastEditedTableKey(null);
+      }
+      toast.success(
+        buildCopy.diagramTableRemoved(target.name),
+        undefined,
+        { label: buildCopy.undoAction, run: () => doc.undo() },
+      );
+    },
+    [activeModel, doc, lastEditedTableKey, selectedTableKey, toast],
+  );
 
   function updateTabs(next: { open: string[]; active: string | null }) {
     if (next.active !== tabsState.active) {
       setSelectedTableKey(null);
+      setLastEditedTableKey(null);
       setRereadNotes([]);
     }
     setTabsState(next);
@@ -644,6 +715,7 @@ export function BuildPage() {
     const { model: next, key } = addTable(activeModel);
     doc.change(next);
     setSelectedTableKey(key);
+    setLastEditedTableKey(key);
   }
 
   function handleGenerateDdl() {
@@ -1080,9 +1152,9 @@ export function BuildPage() {
         savedModels={savedModels}
         openTabs={tabsState.open}
         activeModelId={tabsState.active}
-        activeModel={activeModel}
+        activeModel={deferredModel ?? activeModel}
         activeModelName={activeDto?.name ?? null}
-        selectedTableKey={effectiveSelectedTableKey}
+        selectedTableKey={selectedTableKey}
         editorPane={editorPane}
         canUndo={doc.history.past.length > 0}
         canRedo={doc.history.future.length > 0}
@@ -1106,7 +1178,9 @@ export function BuildPage() {
         }}
         onOpenFile={() => fileInputRef.current?.click()}
         onShowModelsList={() => updateTabs({ ...tabsState, active: null })}
-        onSelectTable={setSelectedTableKey}
+        onSelectTable={handleSelectTable}
+        onDeleteTable={handleDeleteTable}
+        onFocusTableInDiagram={handleFocusTableInDiagram}
         onAddTable={handleAddTable}
         onImportTables={() => {
           setCatalogError(null);
@@ -1157,12 +1231,18 @@ export function BuildPage() {
             editorPane === "simple" ? (
               <SimpleEditor
                 model={activeModel}
-                tableKey={effectiveSelectedTableKey}
+                tableKey={effectiveEditorTableKey}
                 baseLabel={baseLabel}
                 ddlContext={ddlContext}
+                onFocusTableInDiagram={handleFocusTableInDiagram}
                 onChange={(next, nextKey) => {
                   doc.change(next);
-                  if (nextKey !== undefined) setSelectedTableKey(nextKey);
+                  if (nextKey !== undefined) {
+                    setLastEditedTableKey(nextKey);
+                    if (selectedTableKey !== null) {
+                      setSelectedTableKey(nextKey);
+                    }
+                  }
                 }}
               />
             ) : (
@@ -1171,6 +1251,7 @@ export function BuildPage() {
                 model={activeModel}
                 format={editorPane}
                 onChange={(next) => doc.change(next)}
+                onFocusTableInDiagram={handleFocusTableInDiagram}
               />
             )
           ) : null
@@ -1178,10 +1259,11 @@ export function BuildPage() {
         diagramContent={
           activeModel ? (
             <BuildDiagram
-              model={activeModel}
+              model={deferredModel ?? activeModel}
               problems={problems}
-              selectedTableKey={effectiveSelectedTableKey}
-              onSelectTable={setSelectedTableKey}
+              selectedTableKey={selectedTableKey}
+              focusRequest={diagramFocusRequest}
+              onSelectTable={handleSelectTable}
               onChange={doc.change}
               onUndo={doc.undo}
               onTableRemovedToast={(tableName) =>

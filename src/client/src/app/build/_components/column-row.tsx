@@ -11,35 +11,39 @@ const parameterizedPresets: Record<string, readonly string[]> = {
   numeric: ["numeric(12,2)"],
 };
 
-function buildTypeOptions(
+export function buildTypeOptions(
   catalogTypes: readonly string[],
   currentType: string,
 ): SelectOption[] {
   const expanded: string[] = [];
   for (const t of catalogTypes) {
-    expanded.push(t);
+    const upperT = t.toUpperCase();
+    if (!expanded.includes(upperT)) {
+      expanded.push(upperT);
+    }
     const presets = parameterizedPresets[t.toLowerCase()];
     if (presets) {
       for (const p of presets) {
-        if (!expanded.some((e) => e.toLowerCase() === p.toLowerCase())) {
-          expanded.push(p);
+        const upperP = p.toUpperCase();
+        if (!expanded.includes(upperP)) {
+          expanded.push(upperP);
         }
       }
     }
   }
 
-  const currentLower = currentType.trim().toLowerCase();
+  const currentUpper = currentType.trim().toUpperCase();
   let matchedCurrent = false;
-  const options: SelectOption[] = expanded.map((t) => {
-    if (!matchedCurrent && t.toLowerCase() === currentLower) {
+  const options: SelectOption[] = expanded.map((upper) => {
+    if (!matchedCurrent && upper === currentUpper) {
       matchedCurrent = true;
-      return { value: currentType, label: currentType };
+      return { value: currentType, label: upper };
     }
-    return { value: t, label: t };
+    return { value: upper, label: upper };
   });
 
   if (!matchedCurrent && currentType.trim() !== "") {
-    options.unshift({ value: currentType, label: currentType });
+    options.unshift({ value: currentType, label: currentUpper });
   }
 
   return options;
@@ -63,6 +67,7 @@ export type ColumnRowProps = {
   onRemove: () => void;
   onRevert: () => void;
   onAddNextColumn?: () => void;
+  onCtrlClickFk?: () => void;
 };
 
 export function ColumnRow({
@@ -83,6 +88,7 @@ export function ColumnRow({
   onRemove,
   onRevert,
   onAddNextColumn,
+  onCtrlClickFk,
 }: ColumnRowProps) {
   const [expanded, setExpanded] = useState(false);
   const typeOptions = useMemo(
@@ -159,7 +165,16 @@ export function ColumnRow({
           {fkTargetDisplay ? (
             <span
               title={`Chave estrangeira para ${fkTargetDisplay}`}
-              className="absolute top-[5px] right-[7px] font-mono text-[10px] font-semibold text-accent"
+              onClick={(e) => {
+                if ((e.ctrlKey || e.metaKey) && onCtrlClickFk) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCtrlClickFk();
+                }
+              }}
+              className={`absolute top-[5px] right-[7px] font-mono text-[10px] font-semibold text-accent ${
+                onCtrlClickFk ? "cursor-pointer hover:underline" : ""
+              }`}
             >
               FK
             </span>

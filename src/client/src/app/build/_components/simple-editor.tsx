@@ -37,27 +37,26 @@ import {
   updateIndex,
 } from "../_lib/build-model";
 import type { BuildModel, ModelColumn } from "../_lib/build-model.schema";
-import { tableChangesDdl } from "../_lib/ddl-changes";
 import type { DdlContext } from "../_lib/ddl-full";
 import { columnRowState, removedColumns } from "../_lib/editor-rows";
 import { ColumnRow, RemovedColumnRow } from "./column-row";
 import { ForeignKeysSection } from "./foreign-keys-section";
 import { IndexesSection } from "./indexes-section";
-import { TableCommands } from "./table-commands";
 
 export type SimpleEditorProps = {
   model: BuildModel;
   tableKey: string | null;
   baseLabel: string | null;
-  ddlContext: DdlContext;
+  ddlContext?: DdlContext;
   onChange: (next: BuildModel, nextSelectedTableKey?: string | null) => void;
+  onFocusTableInDiagram?: (tableKey: string) => void;
 };
 
 export function SimpleEditor({
   model,
   tableKey,
-  ddlContext,
   onChange,
+  onFocusTableInDiagram,
 }: SimpleEditorProps) {
   const uid = useId();
   const tableInputId = `${uid}-table-name`;
@@ -110,10 +109,6 @@ export function SimpleEditor({
       columnCountParts.push(`${removedCols.length} a remover`);
     }
   }
-
-  const tableDdl = isExisting
-    ? tableChangesDdl(model, currentKey, ddlContext)
-    : "";
 
   const handleDuplicateColumn = (col: ModelColumn) => {
     const next = addColumn(model, currentKey, {
@@ -177,13 +172,29 @@ export function SimpleEditor({
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pb-10">
       <div className="grid grid-cols-[minmax(0,1fr)_140px_32px] items-end gap-2">
         <Field className="gap-1">
-          <FieldLabel htmlFor={tableInputId} className="text-xs">
+          <FieldLabel
+            htmlFor={tableInputId}
+            onClick={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                onFocusTableInDiagram?.(currentKey);
+              }
+            }}
+            className="text-xs"
+          >
             Tabela
           </FieldLabel>
           <Input
             id={tableInputId}
             type="text"
             value={table.name}
+            title="Ctrl+clique para ir até a tabela no diagrama"
+            onClick={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                onFocusTableInDiagram?.(currentKey);
+              }
+            }}
             onChange={(e) => {
               const nextName = e.target.value;
               const nextModel = renameTable(model, currentKey, nextName);
@@ -365,6 +376,11 @@ export function SimpleEditor({
                   ? () => onChange(addColumn(model, currentKey))
                   : undefined
               }
+              onCtrlClickFk={
+                fk && onFocusTableInDiagram
+                  ? () => onFocusTableInDiagram(`${fk.target.schema}.${fk.target.table}`)
+                  : undefined
+              }
             />
           );
         })}
@@ -412,6 +428,7 @@ export function SimpleEditor({
         onRemoveForeignKey={(index) =>
           onChange(removeForeignKey(model, currentKey, index))
         }
+        onFocusTableInDiagram={onFocusTableInDiagram}
       />
 
       <IndexesSection
@@ -426,12 +443,7 @@ export function SimpleEditor({
         }
       />
 
-      {isExisting ? (
-        <TableCommands
-          ddl={tableDdl}
-          removedColumnNames={removedCols.map((c) => c.name)}
-        />
-      ) : (
+      {!isExisting ? (
         <section
           aria-labelledby="h-comentario"
           className="flex flex-col gap-1.5 border-t border-border pt-3"
@@ -457,7 +469,7 @@ export function SimpleEditor({
             className="box-border resize-y rounded-md border border-border-strong bg-raised px-2.5 py-2 text-ink outline-none focus-visible:border-accent focus-visible:ring-1 focus-visible:ring-accent"
           />
         </section>
-      )}
+      ) : null}
 
       <ConfirmDialog
         open={confirmDropOpen}

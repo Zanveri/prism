@@ -411,7 +411,14 @@ function TableCard({
         role="group"
         aria-label={title}
         style={positionStyle}
-        onClick={onSelect ? () => onSelect(box.key) : undefined}
+        onClick={
+          onSelect
+            ? (event) => {
+                event.stopPropagation();
+                onSelect(box.key);
+              }
+            : undefined
+        }
         onPointerUp={onDropConnect ? () => onDropConnect(box.key) : undefined}
         className={cn("pointer-events-auto absolute", dimmed && "opacity-30 transition-opacity")}
       >
@@ -449,7 +456,14 @@ function TableCard({
       title={copy.openHint}
       style={positionStyle}
       onMouseDown={(event) => event.preventDefault()}
-      onClick={onSelect ? () => onSelect(box.key) : undefined}
+      onClick={
+        onSelect
+          ? (event) => {
+              event.stopPropagation();
+              onSelect(box.key);
+            }
+          : undefined
+      }
       onPointerUp={onDropConnect ? () => onDropConnect(box.key) : undefined}
       onDoubleClick={() => onOpen(box.ref)}
       onKeyDown={handleKeyDown}
@@ -546,8 +560,10 @@ export type DiagramCanvasProps = {
   enableTableFilter?: boolean;
   /** Chave da caixa selecionada externamente (ex.: no Construir). */
   selectedKey?: string | null;
-  /** Callback ao selecionar uma caixa no diagrama. */
-  onSelect?: (key: string) => void;
+  /** Pedido de foco/centralização numa tabela específica do diagrama. */
+  focusRequest?: { key: string; seq: number } | null;
+  /** Callback ao selecionar (ou desmarcar com `null`) uma caixa no diagrama. */
+  onSelect?: (key: string | null) => void;
   /** Callback ao arrastar uma caixa para uma nova posição `(x, y)`. */
   onMoveTable?: (key: string, x: number, y: number) => void;
   /** Callback ao arrastar uma coluna de `fromKey` e soltar sobre a caixa `toKey`. */
@@ -592,6 +608,7 @@ export function DiagramCanvas({
   showIncomingNotice = true,
   enableTableFilter = false,
   selectedKey: controlledSelectedKey,
+  focusRequest = null,
   onSelect: onSelectBox,
   onMoveTable,
   onConnect,
@@ -727,6 +744,34 @@ export function DiagramCanvas({
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+
+  const lastFocusedSeq = useRef<number | null>(null);
+  useEffect(() => {
+    if (!focusRequest || lastFocusedSeq.current === focusRequest.seq) return;
+    const element = scroller.current;
+    const targetLower = focusRequest.key.toLowerCase();
+    const targetBox = displayBoxes.find(
+      (b) =>
+        b.key === focusRequest.key ||
+        b.key.toLowerCase() === targetLower ||
+        `${b.ref.schema}.${b.ref.name}`.toLowerCase() === targetLower ||
+        b.ref.name.toLowerCase() === targetLower,
+    );
+    if (!element || !targetBox) return;
+    lastFocusedSeq.current = focusRequest.seq;
+    setPanOffset({ x: 0, y: 0 });
+    const currentZoom = zoomRef.current;
+    const centerX = (targetBox.x + targetBox.width / 2) * currentZoom;
+    const centerY = (targetBox.y + targetBox.height / 2) * currentZoom;
+    const nextLeft = Math.max(0, Math.round(centerX - element.clientWidth / 2));
+    const nextTop = Math.max(0, Math.round(centerY - element.clientHeight / 2));
+    if (typeof element.scrollTo === "function") {
+      element.scrollTo({ left: nextLeft, top: nextTop, behavior: "smooth" });
+    } else {
+      element.scrollLeft = nextLeft;
+      element.scrollTop = nextTop;
+    }
+  }, [displayBoxes, focusRequest]);
 
   const settle = useCallback(
     (element: HTMLDivElement) => {
@@ -967,8 +1012,9 @@ export function DiagramCanvas({
         event.preventDefault();
         return;
       }
-      if (internalSelectedKey !== null) {
+      if (selectedKey !== null) {
         setInternalSelectedKey(null);
+        onSelectBox?.(null);
         event.preventDefault();
         return;
       }
@@ -1136,18 +1182,14 @@ export function DiagramCanvas({
           onScroll={report}
           onMouseDown={handleMouseDown}
           onContextMenu={(event) => event.preventDefault()}
-          onClick={(event) => {
+          onClick={() => {
             if (suppressClick.current) {
               suppressClick.current = false;
               return;
             }
             if (exportMenuOpen) setExportMenuOpen(false);
-            if (
-              event.target === event.currentTarget ||
-              (event.target instanceof SVGElement && event.target.tagName.toLowerCase() === "svg")
-            ) {
-              setInternalSelectedKey(null);
-            }
+            setInternalSelectedKey(null);
+            onSelectBox?.(null);
           }}
           className={cn(
             "min-h-0 flex-1 cursor-grab overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2 select-none",
@@ -1457,8 +1499,7 @@ export function DiagramCanvas({
             <div className="flex items-start justify-between gap-2 border-b border-border px-3 py-2.5">
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="rounded bg-selected px-1.5 py-0.5 font-mono text-[10px] text-muted">{selectedBox.ref.schema}</span>
-                  <h3 className="truncate font-sans text-sm font-semibold text-ink">{selectedBox.title ?? selectedBox.ref.name}</h3>
+                  <h3 className="truncate font-sans text-sm font-semibold text-ink">{selectedBox.ref.name}</h3>
                 </div>
                 <p className="mt-0.5 font-mono text-[11px] text-subtle">
                   {selectedBox.columns?.length ?? 0} colunas

@@ -8,6 +8,7 @@ import {
   BuildIcon,
   Button,
   ChevronIcon,
+  ContextMenu,
   DatabaseIcon,
   FolderIcon,
   ForeignKeyIcon,
@@ -25,6 +26,8 @@ type BuildSidebarProps = {
   selectedTableKey?: string | null;
   problems?: readonly Problem[];
   onSelectTable?: (tableKey: string) => void;
+  onFocusTableInDiagram?: (tableKey: string) => void;
+  onDeleteTable?: (tableKey: string) => void;
   onAddTable?: () => void;
   onImportTables?: () => void;
   onOpenDdlView?: () => void;
@@ -71,6 +74,8 @@ export function BuildSidebar({
   selectedTableKey = null,
   problems = [],
   onSelectTable,
+  onFocusTableInDiagram,
+  onDeleteTable,
   onAddTable,
   onImportTables,
   onOpenDdlView,
@@ -79,6 +84,11 @@ export function BuildSidebar({
   const [collapsedSchemas, setCollapsedSchemas] = useState<Record<string, boolean>>({});
   const [relationsExpanded, setRelationsExpanded] = useState(false);
   const [indexesExpanded, setIndexesExpanded] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    tableKey: string;
+    tableName: string;
+    point: { x: number; y: number };
+  } | null>(null);
 
   if (!model) {
     return (
@@ -207,7 +217,27 @@ export function BuildSidebar({
                       key={tKey}
                       type="button"
                       aria-current={isSelected ? "true" : undefined}
-                      onClick={() => onSelectTable?.(tKey)}
+                      onClick={(e) => {
+                        onSelectTable?.(tKey);
+                        if (e.ctrlKey || e.metaKey) {
+                          onFocusTableInDiagram?.(tKey);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Delete" && onDeleteTable) {
+                          e.preventDefault();
+                          onDeleteTable(tKey);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        if (!onDeleteTable) return;
+                        e.preventDefault();
+                        setContextMenu({
+                          tableKey: tKey,
+                          tableName: table.name,
+                          point: { x: e.clientX, y: e.clientY },
+                        });
+                      }}
                       className={cn(
                         "flex h-[30px] w-full shrink-0 cursor-pointer items-center gap-1.5 pr-3 pl-8 text-left",
                         isSelected
@@ -299,6 +329,24 @@ export function BuildSidebar({
           <span className="ml-auto text-xs text-subtle">{indexes}</span>
         </button>
       </div>
+
+      {contextMenu !== null ? (
+        <ContextMenu
+          label={`Ações de ${contextMenu.tableName}`}
+          point={contextMenu.point}
+          groups={[
+            [
+              {
+                id: "delete-table",
+                label: "Deletar",
+                shortcut: "Delete",
+                onSelect: () => onDeleteTable?.(contextMenu.tableKey),
+              },
+            ],
+          ]}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
 
       {(errorCount > 0 || warningCount > 0) && (
         <button

@@ -18,6 +18,8 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { highlight } from "@/app/workbench/_lib/completion-theme";
 import { Button } from "@/components/ui";
 
+import { sameName } from "../_lib/build-engines";
+import { tableKey } from "../_lib/build-model";
 import type { BuildModel } from "../_lib/build-model.schema";
 import { buildCopy } from "../_lib/build.copy";
 import { dbmlLanguage } from "../_lib/dbml-language";
@@ -32,6 +34,71 @@ export interface TextPaneProps {
   model: BuildModel;
   format: "sql" | "dbml";
   onChange: (next: BuildModel, warnings: TextWarning[]) => void;
+  onFocusTableInDiagram?: (tableKey: string) => void;
+}
+
+function unquoteIdent(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).replace(/""/g, '"');
+  }
+  return trimmed;
+}
+
+/**
+ * Dado o texto do editor SQL/DBML e a posição `pos` onde houve Ctrl+clique,
+ * identifica se o cursor está sobre o nome de uma tabela do modelo e devolve a chave dela (`schema.tabela`).
+ */
+export function resolveTableAtPosition(
+  docText: string,
+  pos: number,
+  model: BuildModel,
+): string | null {
+  if (model.tables.length === 0 || docText.length === 0) return null;
+  const clampedPos = Math.max(0, Math.min(pos, docText.length));
+  const lineStart = docText.lastIndexOf("\n", Math.max(0, clampedPos - 1)) + 1;
+  const nextNewline = docText.indexOf("\n", clampedPos);
+  const lineEnd = nextNewline === -1 ? docText.length : nextNewline;
+  const lineText = docText.slice(lineStart, lineEnd);
+  const col = clampedPos - lineStart;
+
+  const pattern = /(?:"[^"]+"|[a-zA-Z0-9_$]+)(?:\.(?:"[^"]+"|[a-zA-Z0-9_$]+))*/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(lineText)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (col < start || col > end) continue;
+
+    const parts = (match[0].match(/"[^"]+"|[a-zA-Z0-9_$]+/g) ?? []).map(unquoteIdent);
+    if (parts.length >= 2) {
+      const [first, second] = parts;
+      if (first && second) {
+        const bySchemaAndTable = model.tables.find(
+          (t) =>
+            sameName(model.engine, { name: t.schema, exactName: false }, { name: first, exactName: false }) &&
+            sameName(model.engine, { name: t.name, exactName: t.exactName }, { name: second, exactName: false }),
+        );
+        if (bySchemaAndTable) return tableKey(bySchemaAndTable);
+
+        const byFirstAsTable = model.tables.find((t) =>
+          sameName(model.engine, { name: t.name, exactName: t.exactName }, { name: first, exactName: false }),
+        );
+        if (byFirstAsTable) return tableKey(byFirstAsTable);
+
+        const bySecondAsTable = model.tables.find((t) =>
+          sameName(model.engine, { name: t.name, exactName: t.exactName }, { name: second, exactName: false }),
+        );
+        if (bySecondAsTable) return tableKey(bySecondAsTable);
+      }
+    } else if (parts.length === 1 && parts[0]) {
+      const single = parts[0];
+      const found = model.tables.find((t) =>
+        sameName(model.engine, { name: t.name, exactName: t.exactName }, { name: single, exactName: false }),
+      );
+      if (found) return tableKey(found);
+    }
+  }
+  return null;
 }
 
 function buildLanguageExtension(format: "sql" | "dbml", engine: BuildModel["engine"]) {
@@ -88,7 +155,7 @@ function buildThemeExtension(
   );
 }
 
-export function TextPane({ model, format, onChange }: TextPaneProps) {
+export function TextPane({ model, format, onChange, onFocusTableInDiagram }: TextPaneProps) {
   const { preferences } = usePreferences();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -106,6 +173,14 @@ export function TextPane({ model, format, onChange }: TextPaneProps) {
   const [status, setStatus] = useState<TextStatus>({
     kind: "applied",
     warnings: [],
+  });
+
+  const handleCtrlClickAtPos = useEffectEvent((docText: string, pos: number): boolean => {
+    if (!onFocusTableInDiagram) return false;
+    const foundKey = resolveTableAtPosition(docText, pos, model);
+    if (!foundKey) return false;
+    onFocusTableInDiagram(foundKey);
+    return true;
   });
 
   const handleTextChanged = useEffectEvent((nextText: string) => {
@@ -147,6 +222,18 @@ export function TextPane({ model, format, onChange }: TextPaneProps) {
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         languageCompartmentRef.current.of(buildLanguageExtension(format, model.engine)),
         themeCompartmentRef.current.of(buildThemeExtension(font, dark)),
+        EditorView.domEventHandlers({
+          mousedown(event, view) {
+            if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (pos === null) return false;
+            if (handleCtrlClickAtPos(view.state.doc.toString(), pos)) {
+              event.preventDefault();
+              return true;
+            }
+            return false;
+          },
+        }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !syncingRef.current) {
             handleTextChanged(update.state.doc.toString());

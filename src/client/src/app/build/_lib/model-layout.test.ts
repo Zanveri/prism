@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { addTable } from "./build-model";
 import { readCanvasModel } from "./fixtures";
 import { checkModel } from "./model-check";
 import {
@@ -62,6 +63,27 @@ describe("model-layout", () => {
       pinned: true,
     });
     expect(organized.layout["manutencao.plano_manutencao"]?.pinned).toBe(false);
+  });
+
+  it("não sobrepõe tabelas ao adicionar novas tabelas ou quando há coordenadas conflitantes", () => {
+    let model = readCanvasModel();
+    model = addTable(model).model;
+    model = addTable(model).model;
+    model = addTable(model).model;
+
+    const layout = modelDiagram(model, []);
+    for (let i = 0; i < layout.boxes.length; i++) {
+      for (let j = i + 1; j < layout.boxes.length; j++) {
+        const a = layout.boxes[i]!;
+        const b = layout.boxes[j]!;
+        const overlaps =
+          a.x < b.x + b.width &&
+          a.x + a.width > b.x &&
+          a.y < b.y + b.height &&
+          a.y + a.height > b.y;
+        expect(overlaps).toBe(false);
+      }
+    }
   });
 
   it("connectColumn cria FK direta para tabela com PK simples e devolve needsDialog para PK composta", () => {

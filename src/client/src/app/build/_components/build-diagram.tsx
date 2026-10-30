@@ -64,7 +64,8 @@ export interface BuildDiagramProps {
   model: BuildModel;
   problems: readonly Problem[];
   selectedTableKey: string | null;
-  onSelectTable: (key: string) => void;
+  focusRequest?: { key: string; seq: number } | null;
+  onSelectTable: (key: string | null) => void;
   onChange: (next: BuildModel) => void;
   onUndo?: () => void;
   onTableRemovedToast?: (tableName: string) => void;
@@ -75,6 +76,7 @@ export function BuildDiagram({
   model,
   problems,
   selectedTableKey,
+  focusRequest = null,
   onSelectTable,
   onChange,
   onUndo,
@@ -190,6 +192,7 @@ export function BuildDiagram({
         fetching={false}
         showIncomingNotice={false}
         selectedKey={selectedTableKey}
+        focusRequest={focusRequest}
         onSelect={onSelectTable}
         onOpenTable={handleOpenTable}
         onRefresh={handleOrganize}

@@ -158,11 +158,14 @@ describe("o diagrama (RN-TABELA-004)", () => {
     expect(markup).toContain('role="img"');
   });
 
-  it("ao selecionar uma tabela, exibe o painel flutuante lateral com Referencia e Referenciada por", () => {
+  it("ao selecionar uma tabela, exibe o painel flutuante lateral apenas com o nome da tabela (sem badge de esquema), Referencia e Referenciada por", () => {
     const layout = build(withKeys, ["ordem_producao", "maquina"]);
     const markup = render(layout, { selectedKey: "producao.apontamento" });
 
     expect(markup).toContain('aria-label="Tabela selecionada"');
+    const inspectorSlice = markup.slice(markup.indexOf('aria-label="Tabela selecionada"'));
+    expect(inspectorSlice).toContain(">apontamento<");
+    expect(inspectorSlice).not.toContain(">producao<");
     expect(markup).toContain("Referencia (2)");
     expect(markup).toContain("ordem_producao.id");
     expect(markup).toContain("maquina.id");

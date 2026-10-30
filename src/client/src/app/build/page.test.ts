@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { resolveTableAtPosition } from "@/app/build/_components/text-pane";
 import { emptyModel } from "@/app/build/_lib/build-model";
 import type { BuildModel } from "@/app/build/_lib/build-model.schema";
 import { fixture } from "@/app/build/_lib/fixtures";
@@ -117,5 +118,25 @@ describe("BuildPage", () => {
     if (!errRes.ok) {
       expect(errRes.error).toContain("sem_colunas");
     }
+  });
+
+  it("resolveTableAtPosition localiza a tabela sob o cursor (Ctrl+clique) em SQL e DBML", () => {
+    const manutencao = fixture<BuildModel>("build/models/manutencao.json");
+    const sqlText = "CREATE TABLE manutencao.ordem_manutencao (\n  id bigint NOT NULL\n);";
+    const posInSql = sqlText.indexOf("ordem_manutencao") + 4;
+    expect(resolveTableAtPosition(sqlText, posInSql, manutencao)).toBe(
+      "manutencao.ordem_manutencao",
+    );
+
+    const dbmlText =
+      "Table producao.maquina {\n  id bigint [pk, ref: > producao.operador.id]\n}";
+    const posInDbmlTable = dbmlText.indexOf("maquina") + 2;
+    expect(resolveTableAtPosition(dbmlText, posInDbmlTable, manutencao)).toBe(
+      "producao.maquina",
+    );
+    const posInDbmlRef = dbmlText.indexOf("operador") + 2;
+    expect(resolveTableAtPosition(dbmlText, posInDbmlRef, manutencao)).toBe(
+      "producao.operador",
+    );
   });
 });
