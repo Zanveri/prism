@@ -4,11 +4,12 @@ export { ContextMenu, ContextMenuItems, type ContextMenuGroup, type ContextMenuI
 export { Dialog, type DialogDismissal, type DialogProps, type DialogSize } from "./dialog";
 export { EngineTag, type Engine } from "./engine-tag";
 export { EnvironmentPill, environmentTextColor } from "./environment-pill";
-export { Field, FieldLabel, Input } from "./field";
+export { controlClassName, Field, FieldLabel, Input } from "./field";
 export { FieldError, FormMessage, type FormMessageProps } from "./form-message";
 export { HostProvider, useHost } from "./host-context";
 export { iconColorStyle, readableIconColor } from "./icon-color";
 export {
+  AlertCircleIcon,
   AlertIcon,
   ArrowDownIcon,
   ArrowsUpDownIcon,
@@ -43,6 +44,7 @@ export {
   LockOpenIcon,
   MinusIcon,
   NoColorIcon,
+  OctagonAlertIcon,
   PackageIcon,
   PaletteIcon,
   PencilIcon,

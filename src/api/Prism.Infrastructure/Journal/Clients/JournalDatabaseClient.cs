@@ -509,8 +509,10 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
         command.Parameters.AddWithValue("@connectionName", (object?)snapshot.Name ?? DBNull.Value);
         command.Parameters.AddWithValue("@engine", (object?)snapshot.Engine ?? DBNull.Value);
         command.Parameters.AddWithValue("@folderPath", (object?)snapshot.FolderPath ?? DBNull.Value);
-        command.Parameters.AddWithValue("@environmentName", (object?)snapshot.EnvironmentName ?? DBNull.Value);
-        command.Parameters.AddWithValue("@environmentColor", (object?)snapshot.EnvironmentColor ?? DBNull.Value);
+        var environmentName = string.IsNullOrWhiteSpace(snapshot.EnvironmentName) ? null : snapshot.EnvironmentName.Trim();
+        var environmentColor = environmentName is null || string.IsNullOrWhiteSpace(snapshot.EnvironmentColor) ? null : snapshot.EnvironmentColor.Trim();
+        command.Parameters.AddWithValue("@environmentName", (object?)environmentName ?? DBNull.Value);
+        command.Parameters.AddWithValue("@environmentColor", (object?)environmentColor ?? DBNull.Value);
         command.Parameters.AddWithValue("@databaseName", (object?)snapshot.Database ?? DBNull.Value);
         command.Parameters.AddWithValue("@sessionId", (object?)start.SessionId?.ToString("D") ?? DBNull.Value);
         command.Parameters.AddWithValue("@scriptRunId", (object?)start.ScriptRunId?.ToString("D") ?? DBNull.Value);
@@ -650,9 +652,9 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
             }
 
             if (hasNull && envParts.Count > 0)
-                clauses.Add($"(environment_name IS NULL OR environment_name IN ({string.Join(", ", envParts)}))");
+                clauses.Add($"(environment_name IS NULL OR TRIM(environment_name) = '' OR environment_name IN ({string.Join(", ", envParts)}))");
             else if (hasNull)
-                clauses.Add("environment_name IS NULL");
+                clauses.Add("(environment_name IS NULL OR TRIM(environment_name) = '')");
             else if (envParts.Count > 0)
                 clauses.Add($"environment_name IN ({string.Join(", ", envParts)})");
         }
@@ -772,9 +774,10 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
             envCmd.CommandText = """
                 SELECT environment_name, environment_color
                 FROM entries
-                GROUP BY COALESCE(environment_name, '')
+                WHERE environment_name IS NOT NULL AND TRIM(environment_name) <> ''
+                GROUP BY environment_name
                 HAVING MAX(id)
-                ORDER BY CASE WHEN environment_name IS NULL THEN 1 ELSE 0 END, environment_name COLLATE NOCASE;
+                ORDER BY environment_name COLLATE NOCASE;
                 """;
             using var reader = envCmd.ExecuteReader();
             while (reader.Read())

@@ -155,8 +155,8 @@ describe("Configurações › Auditoria (RN-AUDIT-010 a 016)", () => {
     expect(html).toContain("Tudo o que foi executado e as ações da conta, cifrado no diário de marina.costa.");
     expect(html).toContain("37 registros encontrados");
     // RN-AUDIT-005: nível sempre com ícone e nome (nunca só a cor)
-    expect(html).toMatch(/<span aria-hidden="true">◆<\/span><span>Crítico<\/span>/);
-    expect(html).toMatch(/<span aria-hidden="true">▲<\/span><span>Alto<\/span>/);
+    expect(html).toMatch(/<svg[^>]*aria-hidden="true"[^>]*>.*?<\/svg><span>Crítico<\/span>/);
+    expect(html).toMatch(/<svg[^>]*aria-hidden="true"[^>]*>.*?<\/svg><span>Alto<\/span>/);
     // RN-AUDIT-011: conexão excluída marcada como "(excluída)"
     expect(html).toContain("Legado Antigo");
     expect(html).toContain("(excluída)");

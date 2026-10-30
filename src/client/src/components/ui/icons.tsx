@@ -555,3 +555,23 @@ export function ShieldCheckIcon(props: ComponentProps<"svg">) {
     </Icon>
   );
 }
+
+/** RN-AUDIT-005: nível Atenção — a exclamação dentro de um círculo. */
+export function AlertCircleIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M8 5v3.25M8 10.75h.01" />
+    </Icon>
+  );
+}
+
+/** RN-AUDIT-005: nível Crítico — a exclamação dentro de um octógono de parada. */
+export function OctagonAlertIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M5.5 2h5l3.5 3.5v5L10.5 14h-5L2 10.5v-5z" />
+      <path d="M8 5.25v3.25M8 11h.01" />
+    </Icon>
+  );
+}

@@ -1,7 +1,16 @@
 import { useEffect } from "react";
 
 import { HighlightedSql } from "@/app/workbench/_components/highlighted-sql";
-import { CloseIcon, EnvironmentPill, useToast } from "@/components/ui";
+import {
+  AlertCircleIcon,
+  AlertIcon,
+  Button,
+  CloseIcon,
+  EnvironmentPill,
+  InfoIcon,
+  OctagonAlertIcon,
+  useToast,
+} from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { auditCopy } from "../_lib/audit.copy";
@@ -16,6 +25,19 @@ const levelBadgeStyles: Record<AuditLevelCode, string> = {
   critical: "bg-level-critical/15 text-level-critical",
 };
 
+function LevelIcon({ level }: { level: AuditLevelCode }) {
+  switch (level) {
+    case "info":
+      return <InfoIcon className="size-3.5" />;
+    case "warning":
+      return <AlertCircleIcon className="size-3.5" />;
+    case "high":
+      return <AlertIcon className="size-3.5" />;
+    case "critical":
+      return <OctagonAlertIcon className="size-3.5" />;
+  }
+}
+
 export function AuditLevelBadge({ level }: { level: AuditLevelCode }) {
   const meta = copy.levels[level];
   return (
@@ -25,7 +47,7 @@ export function AuditLevelBadge({ level }: { level: AuditLevelCode }) {
         levelBadgeStyles[level],
       )}
     >
-      <span aria-hidden="true">{meta.mark}</span>
+      <LevelIcon level={level} />
       <span>{meta.label}</span>
     </span>
   );
@@ -239,20 +261,24 @@ export function AuditDetail({
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <span className="text-xs text-subtle">{copy.detail.sqlSent}</span>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="compact"
               onClick={() => void handleCopy()}
-              className="ml-auto h-7 rounded-md border border-border-strong px-2.5 text-xs text-ink transition-colors hover:bg-selected"
+              className="ml-auto h-7 px-2.5 text-xs"
             >
               {copy.detail.copy}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
+              size="compact"
               onClick={() => onOpenInEditor(entry)}
-              className="h-7 rounded-md border border-border-strong px-2.5 text-xs text-ink transition-colors hover:bg-selected"
+              className="h-7 px-2.5 text-xs"
             >
               {copy.detail.openInEditor}
-            </button>
+            </Button>
           </div>
           <pre className="m-0 max-h-60 overflow-auto rounded-md border border-border bg-background px-3 py-2.5 font-mono text-xs leading-[18px] whitespace-pre-wrap text-body">
             <HighlightedSql text={sqlText} />

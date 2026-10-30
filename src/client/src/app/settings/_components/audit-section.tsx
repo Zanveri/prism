@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type UIEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { useNavigate } from "react-router";
 
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
@@ -7,14 +7,18 @@ import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { openFromHistory } from "@/app/workbench/_lib/history";
 import { useOptionalWorkbench } from "@/app/workbench/_lib/workbench-state";
 import {
+  Button,
   ChevronIcon,
   CloseIcon,
   EnvironmentPill,
+  Input,
   SearchIcon,
+  Select,
   ShieldCheckIcon,
   useToast,
 } from "@/components/ui";
 import { pathsConfig } from "@/config/paths.config";
+import { isNode } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
 import {
@@ -97,6 +101,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
   const [openDropdown, setOpenDropdown] = useState<OpenDropdown>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [purgeOpen, setPurgeOpen] = useState(false);
+  const filterBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -104,6 +109,34 @@ export function AuditSection({ anchor }: { anchor: string }) {
     }, 150);
     return () => window.clearTimeout(timer);
   }, [searchDraft]);
+
+  useEffect(() => {
+    if (openDropdown === null) return;
+
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      const activeContainer = filterBarRef.current?.querySelector(
+        `[data-audit-dropdown="${openDropdown}"]`,
+      );
+      if (isNode(target) && activeContainer?.contains(target)) return;
+      setOpenDropdown(null);
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpenDropdown(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [openDropdown]);
 
   const facetsQuery = useQuery({
     queryKey: auditFacetsQueryKey,
@@ -251,11 +284,12 @@ export function AuditSection({ anchor }: { anchor: string }) {
 
       {/* Barra de filtros que quebra linha (RN-AUDIT-011) */}
       <div
+        ref={filterBarRef}
         role="search"
         aria-label={copy.filters.regionLabel}
         className="flex flex-wrap items-center gap-2"
       >
-        <label className="flex h-[34px] min-w-[240px] flex-1 basis-[260px] items-center gap-2 rounded-md border border-border-strong bg-raised px-2.5">
+        <label className="flex h-[34px] min-w-[240px] flex-1 basis-[260px] items-center gap-2 rounded-md border border-border-strong bg-raised px-2.5 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
           <SearchIcon className="size-3.5 text-subtle" />
           <span className="sr-only">{copy.filters.searchLabel}</span>
           <input
@@ -263,20 +297,22 @@ export function AuditSection({ anchor }: { anchor: string }) {
             value={searchDraft}
             onChange={(event) => setSearchDraft(event.target.value)}
             placeholder={copy.filters.searchPlaceholder}
-            className="h-full min-w-0 flex-1 border-0 bg-transparent text-ink outline-none placeholder:text-subtle"
+            className="h-full min-w-0 flex-1 border-0 bg-transparent text-xs text-ink outline-none placeholder:text-subtle"
           />
         </label>
 
         {/* Período */}
-        <div className="relative">
+        <div className="relative" data-audit-dropdown="period">
           <button
             type="button"
             aria-haspopup="listbox"
             aria-expanded={openDropdown === "period"}
             onClick={() => setOpenDropdown((current) => (current === "period" ? null : "period"))}
             className={cn(
-              "flex h-[34px] items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
-              filters.period !== "all" ? "border-postgres" : "border-border-strong",
+              "flex h-[34px] cursor-pointer items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
+              openDropdown === "period" || filters.period !== "all"
+                ? "border-accent"
+                : "border-border-strong",
             )}
           >
             <span className="text-subtle">{copy.filters.periodLabel}</span>
@@ -284,7 +320,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
             <ChevronIcon className="size-3" />
           </button>
           {openDropdown === "period" ? (
-            <div className="absolute top-full left-0 z-20 mt-1 flex w-64 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-lg">
+            <div className="absolute top-full left-0 z-20 mt-1 flex w-64 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-2xl">
               {auditPeriods.map((period: AuditPeriod) => (
                 <button
                   key={period}
@@ -294,7 +330,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
                     if (period !== "custom") setOpenDropdown(null);
                   }}
                   className={cn(
-                    "flex items-center justify-between rounded px-2 py-1.5 text-left text-xs",
+                    "flex cursor-pointer items-center justify-between rounded px-2 py-1.5 text-left text-xs",
                     filters.period === period ? "bg-selected font-semibold text-ink" : "text-body hover:bg-selected",
                   )}
                 >
@@ -305,7 +341,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
                 <div className="mt-1 flex flex-col gap-2 border-t border-border pt-2">
                   <label className="flex flex-col gap-1 text-[11px] text-subtle">
                     <span>{copy.filters.customFrom}</span>
-                    <input
+                    <Input
                       type="datetime-local"
                       value={filters.customRange.from}
                       onChange={(event) =>
@@ -314,12 +350,12 @@ export function AuditSection({ anchor }: { anchor: string }) {
                           customRange: { ...current.customRange, from: event.target.value },
                         }))
                       }
-                      className="h-8 rounded border border-border-strong bg-background px-2 text-xs text-ink"
+                      className="h-8 bg-background px-2 text-xs"
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-[11px] text-subtle">
                     <span>{copy.filters.customTo}</span>
-                    <input
+                    <Input
                       type="datetime-local"
                       value={filters.customRange.to}
                       onChange={(event) =>
@@ -328,7 +364,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
                           customRange: { ...current.customRange, to: event.target.value },
                         }))
                       }
-                      className="h-8 rounded border border-border-strong bg-background px-2 text-xs text-ink"
+                      className="h-8 bg-background px-2 text-xs"
                     />
                   </label>
                 </div>
@@ -338,15 +374,17 @@ export function AuditSection({ anchor }: { anchor: string }) {
         </div>
 
         {/* Conexões */}
-        <div className="relative">
+        <div className="relative" data-audit-dropdown="connections">
           <button
             type="button"
             aria-haspopup="listbox"
             aria-expanded={openDropdown === "connections"}
             onClick={() => setOpenDropdown((current) => (current === "connections" ? null : "connections"))}
             className={cn(
-              "flex h-[34px] items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
-              filters.connectionIds.length > 0 ? "border-postgres" : "border-border-strong",
+              "flex h-[34px] cursor-pointer items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
+              openDropdown === "connections" || filters.connectionIds.length > 0
+                ? "border-accent"
+                : "border-border-strong",
             )}
           >
             <span className="text-subtle">{copy.filters.connectionsLabel}</span>
@@ -358,13 +396,13 @@ export function AuditSection({ anchor }: { anchor: string }) {
             <ChevronIcon className="size-3" />
           </button>
           {openDropdown === "connections" ? (
-            <div className="absolute top-full left-0 z-20 mt-1 flex max-h-72 w-72 flex-col gap-1.5 overflow-y-auto rounded-md border border-border-strong bg-raised p-2 shadow-lg">
-              <input
+            <div className="absolute top-full left-0 z-20 mt-1 flex max-h-72 w-72 flex-col gap-1.5 overflow-y-auto rounded-md border border-border-strong bg-raised p-2 shadow-2xl">
+              <Input
                 type="search"
                 value={connectionFilterSearch}
                 onChange={(event) => setConnectionFilterSearch(event.target.value)}
                 placeholder={copy.filters.connectionSearchPlaceholder}
-                className="h-8 rounded border border-border-strong bg-background px-2 text-xs text-ink"
+                className="h-8 bg-background px-2 text-xs"
               />
               {filteredConnections.map((conn) => {
                 const checked = filters.connectionIds.includes(conn.id);
@@ -382,6 +420,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
                           connectionIds: toggleFilterItem(current.connectionIds, conn.id),
                         }))
                       }
+                      className="m-0 size-4 flex-none cursor-pointer accent-accent"
                     />
                     <span className="truncate">{conn.name}</span>
                     {conn.deleted ? (
@@ -395,15 +434,17 @@ export function AuditSection({ anchor }: { anchor: string }) {
         </div>
 
         {/* Ambientes */}
-        <div className="relative">
+        <div className="relative" data-audit-dropdown="environments">
           <button
             type="button"
             aria-haspopup="listbox"
             aria-expanded={openDropdown === "environments"}
             onClick={() => setOpenDropdown((current) => (current === "environments" ? null : "environments"))}
             className={cn(
-              "flex h-[34px] items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
-              filters.environments.length > 0 ? "border-postgres" : "border-border-strong",
+              "flex h-[34px] cursor-pointer items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
+              openDropdown === "environments" || filters.environments.length > 0
+                ? "border-accent"
+                : "border-border-strong",
             )}
           >
             <span className="text-subtle">{copy.filters.environmentsLabel}</span>
@@ -417,31 +458,34 @@ export function AuditSection({ anchor }: { anchor: string }) {
             <ChevronIcon className="size-3" />
           </button>
           {openDropdown === "environments" ? (
-            <div className="absolute top-full left-0 z-20 mt-1 flex w-60 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-lg">
-              {(facets?.environments ?? []).map((env) => {
-                const checked = filters.environments.includes(env.name);
-                return (
-                  <label
-                    key={env.name}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-ink hover:bg-selected"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() =>
-                        setFilters((current) => ({
-                          ...current,
-                          environments: toggleFilterItem(current.environments, env.name),
-                        }))
-                      }
-                    />
-                    <EnvironmentPill
-                      name={env.name}
-                      color={env.color?.startsWith("#") ? env.color : null}
-                    />
-                  </label>
-                );
-              })}
+            <div className="absolute top-full left-0 z-20 mt-1 flex w-60 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-2xl">
+              {(facets?.environments ?? [])
+                .filter((env) => env.name.trim().length > 0)
+                .map((env) => {
+                  const checked = filters.environments.includes(env.name);
+                  return (
+                    <label
+                      key={env.name}
+                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-ink hover:bg-selected"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setFilters((current) => ({
+                            ...current,
+                            environments: toggleFilterItem(current.environments, env.name),
+                          }))
+                        }
+                        className="m-0 size-4 flex-none cursor-pointer accent-accent"
+                      />
+                      <EnvironmentPill
+                        name={env.name}
+                        color={env.color?.startsWith("#") ? env.color : null}
+                      />
+                    </label>
+                  );
+                })}
               <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-muted hover:bg-selected">
                 <input
                   type="checkbox"
@@ -452,6 +496,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
                       environments: toggleFilterItem(current.environments, AUDIT_NO_ENVIRONMENT),
                     }))
                   }
+                  className="m-0 size-4 flex-none cursor-pointer accent-accent"
                 />
                 <span>{copy.filters.noEnvironment}</span>
               </label>
@@ -460,15 +505,17 @@ export function AuditSection({ anchor }: { anchor: string }) {
         </div>
 
         {/* Nível */}
-        <div className="relative">
+        <div className="relative" data-audit-dropdown="levels">
           <button
             type="button"
             aria-haspopup="listbox"
             aria-expanded={openDropdown === "levels"}
             onClick={() => setOpenDropdown((current) => (current === "levels" ? null : "levels"))}
             className={cn(
-              "flex h-[34px] items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
-              filters.levels.length > 0 ? "border-postgres" : "border-border-strong",
+              "flex h-[34px] cursor-pointer items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
+              openDropdown === "levels" || filters.levels.length > 0
+                ? "border-accent"
+                : "border-border-strong",
             )}
           >
             <span className="text-subtle">{copy.filters.levelsLabel}</span>
@@ -480,7 +527,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
             <ChevronIcon className="size-3" />
           </button>
           {openDropdown === "levels" ? (
-            <div className="absolute top-full left-0 z-20 mt-1 flex w-56 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-lg">
+            <div className="absolute top-full left-0 z-20 mt-1 flex w-56 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-2xl">
               <button
                 type="button"
                 onClick={() =>
@@ -490,9 +537,9 @@ export function AuditSection({ anchor }: { anchor: string }) {
                   }))
                 }
                 className={cn(
-                  "mb-1 rounded border px-2 py-1 text-left text-xs font-medium",
+                  "mb-1 cursor-pointer rounded border px-2 py-1 text-left text-xs font-medium",
                   isHighAndCriticalSelected(filters.levels)
-                    ? "border-postgres bg-selected text-ink"
+                    ? "border-accent bg-selected text-ink"
                     : "border-border text-body hover:bg-selected",
                 )}
               >
@@ -512,6 +559,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
                         levels: toggleFilterItem(current.levels, lv),
                       }))
                     }
+                    className="m-0 size-4 flex-none cursor-pointer accent-accent"
                   />
                   <AuditLevelBadge level={lv} />
                 </label>
@@ -521,15 +569,17 @@ export function AuditSection({ anchor }: { anchor: string }) {
         </div>
 
         {/* Tipo */}
-        <div className="relative">
+        <div className="relative" data-audit-dropdown="kinds">
           <button
             type="button"
             aria-haspopup="listbox"
             aria-expanded={openDropdown === "kinds"}
             onClick={() => setOpenDropdown((current) => (current === "kinds" ? null : "kinds"))}
             className={cn(
-              "flex h-[34px] items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
-              filters.kinds.length > 0 ? "border-postgres" : "border-border-strong",
+              "flex h-[34px] cursor-pointer items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
+              openDropdown === "kinds" || filters.kinds.length > 0
+                ? "border-accent"
+                : "border-border-strong",
             )}
           >
             <span className="text-subtle">{copy.filters.kindsLabel}</span>
@@ -541,7 +591,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
             <ChevronIcon className="size-3" />
           </button>
           {openDropdown === "kinds" ? (
-            <div className="absolute top-full left-0 z-20 mt-1 flex w-48 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-lg">
+            <div className="absolute top-full left-0 z-20 mt-1 flex w-48 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-2xl">
               {auditKinds.map((kind: AuditKind) => (
                 <label
                   key={kind}
@@ -556,6 +606,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
                         kinds: toggleFilterItem(current.kinds, kind),
                       }))
                     }
+                    className="m-0 size-4 flex-none cursor-pointer accent-accent"
                   />
                   <span>{copy.kinds[kind]}</span>
                 </label>
@@ -565,15 +616,17 @@ export function AuditSection({ anchor }: { anchor: string }) {
         </div>
 
         {/* Resultado */}
-        <div className="relative">
+        <div className="relative" data-audit-dropdown="outcomes">
           <button
             type="button"
             aria-haspopup="listbox"
             aria-expanded={openDropdown === "outcomes"}
             onClick={() => setOpenDropdown((current) => (current === "outcomes" ? null : "outcomes"))}
             className={cn(
-              "flex h-[34px] items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
-              filters.outcomes.length > 0 ? "border-postgres" : "border-border-strong",
+              "flex h-[34px] cursor-pointer items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
+              openDropdown === "outcomes" || filters.outcomes.length > 0
+                ? "border-accent"
+                : "border-border-strong",
             )}
           >
             <span className="text-subtle">{copy.filters.outcomesLabel}</span>
@@ -585,7 +638,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
             <ChevronIcon className="size-3" />
           </button>
           {openDropdown === "outcomes" ? (
-            <div className="absolute top-full left-0 z-20 mt-1 flex w-48 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-lg">
+            <div className="absolute top-full left-0 z-20 mt-1 flex w-48 flex-col gap-1 rounded-md border border-border-strong bg-raised p-2 shadow-2xl">
               {auditOutcomes.map((outcome: AuditFilterOutcome) => (
                 <label
                   key={outcome}
@@ -600,6 +653,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
                         outcomes: toggleFilterItem(current.outcomes, outcome),
                       }))
                     }
+                    className="m-0 size-4 flex-none cursor-pointer accent-accent"
                   />
                   <span>{copy.outcomes[outcome]}</span>
                 </label>
@@ -608,13 +662,15 @@ export function AuditSection({ anchor }: { anchor: string }) {
           ) : null}
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="compact"
           onClick={handleResetFilters}
           className="h-[34px] px-2.5 text-xs text-link hover:underline"
         >
           {copy.filters.clearFilters}
-        </button>
+        </Button>
       </div>
 
       {/* Faixa de filtros ativos e total encontrado */}
@@ -773,14 +829,16 @@ export function AuditSection({ anchor }: { anchor: string }) {
 
           {entriesQuery.hasNextPage ? (
             <div className="flex justify-center p-3">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="compact"
                 disabled={entriesQuery.isFetchingNextPage}
                 onClick={() => void entriesQuery.fetchNextPage()}
-                className="h-8 rounded-md border border-border-strong px-3 text-xs text-ink hover:bg-selected"
+                className="px-3 text-xs"
               >
                 {entriesQuery.isFetchingNextPage ? copy.table.loadingMore : copy.table.loadMore}
-              </button>
+              </Button>
             </div>
           ) : null}
         </div>
@@ -808,30 +866,32 @@ export function AuditSection({ anchor }: { anchor: string }) {
             <label htmlFor="aud-guarda" className="text-xs font-medium text-ink">
               {copy.retention.label}
             </label>
-            <select
-              id="aud-guarda"
-              value={retentionDays}
-              disabled={retentionMutation.isPending}
-              onChange={(event) => retentionMutation.mutate(Number(event.target.value))}
-              className="h-8 rounded-md border border-border-strong bg-background px-2.5 text-xs text-ink"
-            >
-              {copy.retention.options.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <div className="w-36">
+              <Select
+                id="aud-guarda"
+                value={String(retentionDays)}
+                disabled={retentionMutation.isPending}
+                options={copy.retention.options.map((opt) => ({
+                  value: String(opt.value),
+                  label: opt.label,
+                }))}
+                onChange={(value) => retentionMutation.mutate(Number(value))}
+                className="min-h-8 py-1.5 text-xs"
+              />
+            </div>
           </div>
           <p className="m-0 text-xs text-subtle">{copy.retention.hint}</p>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="danger"
+          size="compact"
           onClick={() => setPurgeOpen(true)}
-          className="h-8 rounded-md border border-danger/50 px-3 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+          className="px-3 text-xs"
         >
           {copy.retention.purgeButton}
-        </button>
+        </Button>
       </div>
 
       <AuditPurgeDialog open={purgeOpen} onClose={() => setPurgeOpen(false)} />

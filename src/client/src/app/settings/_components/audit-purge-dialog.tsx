@@ -2,8 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
-import { Button, Dialog, FieldError, Input, LockIcon, useToast } from "@/components/ui";
-import { fieldAria } from "@/lib/utils/form";
+import { Button, Dialog, LockIcon, TextField, useToast } from "@/components/ui";
 
 import { auditCopy } from "../_lib/audit.copy";
 import { purgeAuditOrRefuse } from "../_lib/audit.service";
@@ -104,41 +103,31 @@ export function AuditPurgeDialog({ open, onClose }: { open: boolean; onClose: ()
       <form id="audit-purge-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <input type="text" name="userName" autoComplete="username" value={userName} readOnly hidden />
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="audit-purge-before" className="text-xs font-medium text-ink">
-            {copy.beforeLabel}
-          </label>
-          <Input
-            id="audit-purge-before"
-            type="date"
-            value={beforeDate}
-            onChange={(event) => {
-              setBeforeDate(event.target.value);
-              setBeforeError(undefined);
-            }}
-            disabled={mutation.isPending}
-            {...fieldAria("audit-purge-before", beforeError)}
-          />
-          <FieldError id="audit-purge-before-error">{beforeError}</FieldError>
-        </div>
+        <TextField
+          id="audit-purge-before"
+          label={copy.beforeLabel}
+          type="date"
+          value={beforeDate}
+          error={beforeError}
+          onChange={(event) => {
+            setBeforeDate(event.target.value);
+            setBeforeError(undefined);
+          }}
+          disabled={mutation.isPending}
+        />
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="audit-purge-password" className="text-xs font-medium text-ink">
-            {copy.passwordLabel}
-          </label>
-          <Input
-            ref={passwordRef}
-            id="audit-purge-password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            autoFocus
-            onChange={() => setPasswordError(undefined)}
-            disabled={mutation.isPending}
-            {...fieldAria("audit-purge-password", passwordError)}
-          />
-          <FieldError id="audit-purge-password-error">{passwordError}</FieldError>
-        </div>
+        <TextField
+          ref={passwordRef}
+          id="audit-purge-password"
+          label={copy.passwordLabel}
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          autoFocus
+          error={passwordError}
+          onChange={() => setPasswordError(undefined)}
+          disabled={mutation.isPending}
+        />
       </form>
     </Dialog>
   );

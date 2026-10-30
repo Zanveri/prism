@@ -5,6 +5,7 @@ import {
   Button,
   CheckIcon,
   CloseIcon,
+  controlClassName,
   DuplicateIcon,
   EnvironmentPill,
   HistoryIcon,
@@ -57,7 +58,7 @@ function OutcomeBadge({ outcome }: { outcome: HistoryOutcome }) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-muted-fg">
+    <span className="inline-flex items-center gap-1 text-[11px] text-muted">
       <MinusIcon className="h-3 w-3 shrink-0" />
       <span>{label}</span>
     </span>
@@ -222,13 +223,13 @@ export function HistoryPanel({
     <aside
       aria-label={historyCopy.title}
       onKeyDown={handleKeyDown}
-      className="flex h-full w-[420px] max-w-[420px] min-w-0 flex-none flex-col border-l border-border bg-panel text-fg"
+      className="flex h-full w-[420px] max-w-[420px] min-w-0 flex-none flex-col border-l border-border bg-panel text-ink"
     >
       {/* Cabeçalho */}
       <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-fg">
-            <HistoryIcon className="h-3.5 w-3.5 text-muted-fg" />
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+            <HistoryIcon className="h-3.5 w-3.5 text-muted" />
             <span>{historyCopy.title}</span>
           </div>
           <button
@@ -236,7 +237,7 @@ export function HistoryPanel({
             aria-label={historyCopy.close}
             title={historyCopy.close}
             onClick={onClose}
-            className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-fg hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-selected hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
           >
             <CloseIcon className="h-3.5 w-3.5" />
           </button>
@@ -244,7 +245,7 @@ export function HistoryPanel({
 
         {/* Busca */}
         <div className="relative flex items-center">
-          <SearchIcon className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-fg" />
+          <SearchIcon className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted" />
           <input
             ref={searchRef}
             type="search"
@@ -253,7 +254,7 @@ export function HistoryPanel({
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder={historyCopy.searchPlaceholder}
             aria-label={historyCopy.searchPlaceholder}
-            className="h-7 w-full rounded border border-border bg-surface pl-8 pr-7 text-xs text-fg placeholder:text-subtle-fg focus:border-accent focus:outline-none"
+            className={cn(controlClassName, "h-8 bg-background pl-8 pr-7 text-xs")}
           />
           {searchInput.length > 0 && (
             <button
@@ -264,7 +265,7 @@ export function HistoryPanel({
                 setDebouncedSearch("");
                 searchRef.current?.focus();
               }}
-              className="absolute right-1.5 inline-flex h-4 w-4 items-center justify-center rounded text-muted-fg hover:text-fg"
+              className="absolute right-1.5 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded text-muted hover:text-ink"
             >
               <CloseIcon className="h-3 w-3" />
             </button>
@@ -275,7 +276,7 @@ export function HistoryPanel({
         <div
           role="radiogroup"
           aria-label={historyCopy.scopeAria}
-          className="grid grid-cols-2 gap-1 rounded bg-surface p-0.5 text-xs"
+          className="grid grid-cols-2 gap-1 rounded bg-background p-0.5 text-xs"
         >
           <button
             type="button"
@@ -284,10 +285,10 @@ export function HistoryPanel({
             disabled={!connectionId}
             onClick={() => setScope("connection")}
             className={cn(
-              "h-6 rounded px-2 text-[11px] font-medium transition-colors",
+              "h-6 cursor-pointer rounded px-2 text-[11px] font-medium transition-colors",
               scope === "connection"
-                ? "bg-elevated text-fg shadow-xs"
-                : "text-muted-fg hover:text-fg",
+                ? "bg-raised text-ink shadow-xs"
+                : "text-muted hover:text-ink",
               !connectionId && "cursor-not-allowed opacity-50"
             )}
           >
@@ -299,10 +300,10 @@ export function HistoryPanel({
             aria-checked={scope === "all"}
             onClick={() => setScope("all")}
             className={cn(
-              "h-6 rounded px-2 text-[11px] font-medium transition-colors",
+              "h-6 cursor-pointer rounded px-2 text-[11px] font-medium transition-colors",
               scope === "all"
-                ? "bg-elevated text-fg shadow-xs"
-                : "text-muted-fg hover:text-fg"
+                ? "bg-raised text-ink shadow-xs"
+                : "text-muted hover:text-ink"
             )}
           >
             {historyCopy.scopeAllConnections}
@@ -316,11 +317,11 @@ export function HistoryPanel({
         className="min-h-0 flex-1 overflow-y-auto"
       >
         {historyQuery.isLoading ? (
-          <div className="px-3 py-6 text-center text-xs text-muted-fg">
+          <div className="px-3 py-6 text-center text-xs text-muted">
             {historyCopy.loading}
           </div>
         ) : groups.length === 0 ? (
-          <div className="px-3 py-8 text-center text-xs text-muted-fg">
+          <div className="px-3 py-8 text-center text-xs text-muted">
             {debouncedSearch.length > 0
               ? historyCopy.emptyFiltered
               : historyCopy.empty}
@@ -328,7 +329,7 @@ export function HistoryPanel({
         ) : (
           groups.map((group) => (
             <div key={group.day} className="border-b border-border/60 last:border-b-0">
-              <div className="sticky top-0 z-10 border-b border-border/60 bg-panel/95 px-3 py-1 text-[10px] font-semibold tracking-wider text-subtle-fg uppercase backdrop-blur-xs">
+              <div className="sticky top-0 z-10 border-b border-border/60 bg-panel/95 px-3 py-1 text-[10px] font-semibold tracking-wider text-subtle uppercase backdrop-blur-xs">
                 {group.day}
               </div>
               <div className="divide-y divide-border/50">
@@ -348,24 +349,24 @@ export function HistoryPanel({
                         "cursor-pointer px-3 py-2 transition-colors",
                         isSelected
                           ? "bg-selected"
-                          : "hover:bg-hover/60"
+                          : "hover:bg-selected/60"
                       )}
                     >
                       <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-                        <span className="font-mono text-subtle-fg">{time}</span>
+                        <span className="font-mono text-subtle">{time}</span>
                         <OutcomeBadge outcome={item.outcome} />
-                        <span className="font-mono text-muted-fg">
+                        <span className="font-mono text-muted">
                           {historyCopy.durationFormat(item.durationMs)}
                         </span>
                         {item.rows !== null && (
-                          <span className="text-muted-fg">
+                          <span className="text-muted">
                             · {historyCopy.rowsFormat(item.rows)}
                           </span>
                         )}
                         {item.repeat > 1 && (
                           <span
                             title={historyCopy.repeatTitle(item.repeat)}
-                            className="ml-auto rounded bg-elevated px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-fg"
+                            className="ml-auto rounded bg-raised px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted"
                           >
                             {historyCopy.repeatBadge(item.repeat)}
                           </span>
@@ -373,18 +374,18 @@ export function HistoryPanel({
                       </div>
 
                       {scope === "all" && item.connectionName && (
-                        <div className="mb-1 flex items-center gap-1.5 text-[11px] text-muted-fg">
+                        <div className="mb-1 flex items-center gap-1.5 text-[11px] text-muted">
                           {item.environmentName && item.environmentColor && (
                             <EnvironmentPill
                               name={item.environmentName}
                               color={item.environmentColor}
                             />
                           )}
-                          <span className="truncate font-medium text-fg">
+                          <span className="truncate font-medium text-ink">
                             {item.connectionName}
                           </span>
                           {item.database && (
-                            <span className="truncate font-mono text-[10px] text-subtle-fg">
+                            <span className="truncate font-mono text-[10px] text-subtle">
                               / {item.database}
                             </span>
                           )}
@@ -395,7 +396,7 @@ export function HistoryPanel({
                         <HighlightedSql text={preview} />
                       </pre>
                       {extraLines > 0 && (
-                        <div className="mt-0.5 text-[10px] text-subtle-fg">
+                        <div className="mt-0.5 text-[10px] text-subtle">
                           {historyCopy.moreLines(extraLines)}
                         </div>
                       )}
@@ -423,7 +424,7 @@ export function HistoryPanel({
 
       {/* Prévia do item selecionado + ações */}
       {selected && (
-        <div className="flex flex-col border-t border-border bg-surface">
+        <div className="flex flex-col border-t border-border bg-background">
           <div className="flex flex-wrap items-center gap-1 border-b border-border px-2.5 py-1.5">
             <Button
               size="sm"
@@ -460,7 +461,7 @@ export function HistoryPanel({
               aria-label={historyCopy.removeFromHistory}
               title={historyCopy.removeFromHistoryHint}
               onClick={() => hideEntryMutation.mutate(selected.id)}
-              className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded text-muted-fg hover:bg-hover hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-selected hover:text-danger focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
             >
               <TrashIcon className="h-3.5 w-3.5" />
             </button>
@@ -485,18 +486,18 @@ export function HistoryPanel({
             <button
               type="button"
               onClick={() => setConfirmingClear(true)}
-              className="text-[11px] text-muted-fg underline-offset-2 hover:text-danger hover:underline"
+              className="cursor-pointer text-[11px] text-muted underline-offset-2 hover:text-danger hover:underline"
             >
               {historyCopy.clearConnectionTrigger}
             </button>
           ) : (
             <div className="flex flex-col gap-1.5 text-xs">
-              <div className="font-medium text-fg">
+              <div className="font-medium text-ink">
                 {historyCopy.clearConnectionConfirmTitle(
                   connectionName ?? connectionId
                 )}
               </div>
-              <div className="text-[11px] text-muted-fg">
+              <div className="text-[11px] text-muted">
                 {historyCopy.clearConnectionConfirmNote}
               </div>
               <div className="flex items-center justify-end gap-1.5 pt-1">

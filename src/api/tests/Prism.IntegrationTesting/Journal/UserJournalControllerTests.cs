@@ -314,6 +314,8 @@ public sealed class UserJournalControllerTests
 
         Assert.That(activeFacet.GetProperty("deleted").GetBoolean(), Is.False);
         Assert.That(deletedFacet.GetProperty("deleted").GetBoolean(), Is.True);
+        var environmentNames = facets.GetProperty("environments").EnumerateArray().Select(env => env.GetProperty("name").GetString()).ToList();
+        Assert.That(environmentNames, Is.EquivalentTo(new[] { "Homologação", "Produção" }));
         Assert.That(facets.GetProperty("count").GetInt64(), Is.GreaterThanOrEqualTo(3));
         Assert.That(facets.GetProperty("sizeBytes").GetInt64(), Is.GreaterThan(0));
     }

@@ -60,9 +60,10 @@ internal sealed class GetAuditFacetsHandler(IJournalService journalService, IVau
         }
 
         var environments = facetsResult.Value.Environments
+            .Where(env => !string.IsNullOrWhiteSpace(env.Name))
             .Select(env => new AuditEnvironmentFacetDto
             {
-                Name = env.Name ?? string.Empty,
+                Name = env.Name!.Trim(),
                 Color = env.Color
             })
             .ToList();
