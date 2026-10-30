@@ -773,6 +773,10 @@ export function useWorkbench(): WorkbenchState {
   return context;
 }
 
+export function useOptionalWorkbench(): WorkbenchState | null {
+  return useContext(WorkbenchContext);
+}
+
 /** RN-CONFIG-010: o lugar do resultado das abas novas, nas preferências do usuário do cofre aberto (a sessão que o guard já buscou), lido na hora. */
 function defaultTabTransaction(queryClient: QueryClient, connectionId: string | null) {
   const userName = queryClient.getQueryData(sessionQuery.queryKey)?.userName;

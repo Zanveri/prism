@@ -3,11 +3,13 @@ import { apiRequest, unwrap } from "@/lib/api/prism-api";
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
 export const historyOutcomeSchema = z.enum([
+  "ok",
   "succeeded",
   "error",
   "cancelled",
   "interrupted",
   "refused",
+  "inProgress",
   "running"
 ]);
 
@@ -32,7 +34,15 @@ export const historyItemSchema = z.object({
 
 export type HistoryItem = z.infer<typeof historyItemSchema>;
 
-const historyListSchema = z.array(historyItemSchema);
+const historyListSchema = z.union([
+  z.array(historyItemSchema),
+  z
+    .object({
+      items: z.array(historyItemSchema),
+      next: z.number().nullable().optional()
+    })
+    .transform((page) => page.items)
+]);
 
 export type GetHistoryParams = {
   connectionId?: string | null;

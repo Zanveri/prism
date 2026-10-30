@@ -11,6 +11,18 @@ describe("as seções da tela de Configurações", () => {
     expect(settingsSections[0].id).toBe("account");
   });
 
+  it("Auditoria vem logo depois de Segurança (RN-AUDIT-010), com a âncora cfg-auditoria, e funciona", () => {
+    const securityIndex = settingsSections.findIndex((section) => section.id === "security");
+
+    expect(securityIndex).toBeGreaterThanOrEqual(0);
+    expect(settingsSections[securityIndex + 1]).toEqual({
+      id: "audit",
+      anchor: "cfg-auditoria",
+      label: "Auditoria",
+      soon: false,
+    });
+  });
+
   it("Importar vem logo depois de Conta (RN-CONFIG-011), e funciona", () => {
     expect(settingsSections.slice(0, 2).map((section) => [section.id, section.label, section.anchor, section.soon])).toEqual([
       ["account", "Conta", "cfg-conta", false],

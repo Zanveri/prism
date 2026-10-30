@@ -40,7 +40,7 @@ const PAGE_LIMIT = 100;
 
 function OutcomeBadge({ outcome }: { outcome: HistoryOutcome }) {
   const label = historyCopy.outcomes[outcome] ?? historyCopy.outcomes.interrupted;
-  if (outcome === "succeeded") {
+  if (outcome === "ok" || outcome === "succeeded") {
     return (
       <span className="inline-flex items-center gap-1 text-[11px] text-success">
         <CheckIcon className="h-3 w-3 shrink-0" />

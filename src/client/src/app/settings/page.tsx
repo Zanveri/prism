@@ -9,6 +9,7 @@ import { pathsConfig } from "@/config/paths.config";
 import { AboutSection } from "./_components/about-section";
 import { AccountSection } from "./_components/account-section";
 import { AppearanceSection } from "./_components/appearance-section";
+import { AuditSection } from "./_components/audit-section";
 import { DriversSection } from "./_components/drivers-section";
 import { EditorSection } from "./_components/editor-section";
 import { ImportSection } from "./_components/import-section";
@@ -44,6 +45,8 @@ function SectionBody({ section, highlightedDriver }: { section: SettingsSection;
       return <ResultsSection anchor={section.anchor} />;
     case "security":
       return <SecuritySection anchor={section.anchor} />;
+    case "audit":
+      return <AuditSection anchor={section.anchor} />;
     case "account":
       return <AccountSection anchor={section.anchor} />;
     case "import":

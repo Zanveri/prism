@@ -11,11 +11,13 @@ export const historyCopy = {
   today: "Hoje",
   yesterday: "Ontem",
   outcomes: {
+    ok: "concluído",
     succeeded: "concluído",
     error: "erro",
     cancelled: "cancelado",
     interrupted: "interrompido",
-    refused: "erro",
+    refused: "recusado",
+    inProgress: "interrompido",
     running: "interrompido"
   },
   rowsFormat: (count: number) =>

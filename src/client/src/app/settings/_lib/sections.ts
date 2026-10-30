@@ -1,6 +1,6 @@
 import { settingsCopy } from "./settings.copy";
 
-export type SettingsSectionId = "appearance" | "editor" | "updates" | "drivers" | "about" | "plugins" | "results" | "account" | "import" | "transactions" | "security";
+export type SettingsSectionId = "appearance" | "editor" | "updates" | "drivers" | "about" | "plugins" | "results" | "account" | "import" | "transactions" | "security" | "audit";
 
 export type SettingsSection = {
   id: SettingsSectionId;
@@ -23,6 +23,7 @@ export const settingsSections: readonly SettingsSection[] = [
   { id: "results", anchor: "cfg-resultados", label: settingsCopy.sections.results, soon: false },
   { id: "transactions", anchor: "cfg-transacoes", label: settingsCopy.sections.transactions, soon: false },
   { id: "security", anchor: "cfg-seguranca", label: settingsCopy.sections.security, soon: false },
+  { id: "audit", anchor: "cfg-auditoria", label: settingsCopy.sections.audit, soon: false },
   { id: "updates", anchor: "cfg-atualizacoes", label: settingsCopy.sections.updates, soon: false },
   { id: "drivers", anchor: "cfg-drivers", label: settingsCopy.sections.drivers, soon: false },
   { id: "about", anchor: "cfg-sobre", label: settingsCopy.sections.about, soon: false },
