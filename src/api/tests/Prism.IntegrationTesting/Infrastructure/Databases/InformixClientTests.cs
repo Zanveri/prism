@@ -88,6 +88,22 @@ public sealed class InformixClientTests : IbmClientContractTests
         Assert.That(last.Rows.Select(row => row[0]!.Trim()), Has.Member("SELECT 1 FROM systables WHERE tabid = 1"));
     }
 
+    /// <summary>RN-TX-013: o banco com log tem transação, e o sem log (`prism_sem_log`), não: nele o Commit manual não existe.</summary>
+    [Test]
+    public async Task Informix_TransactionsAvailable_OnlyInTheLoggedDatabase()
+    {
+        await using var logged = await OpenAsync();
+        var unloggedOpened = await Client.OpenAsync(await InformixSingleton.GetUnloggedSettingsAsync(), CancellationToken.None);
+        Assert.That(unloggedOpened.IsSuccess, Is.True, unloggedOpened.IsFailure ? unloggedOpened.Error.Message : null);
+        await using var unlogged = unloggedOpened.Value;
+
+        var inLogged = await logged.TransactionsAvailableAsync(CancellationToken.None);
+        var inUnlogged = await unlogged.TransactionsAvailableAsync(CancellationToken.None);
+
+        Assert.That((inLogged.IsSuccess, inLogged.IsSuccess && inLogged.Value), Is.EqualTo((true, true)));
+        Assert.That((inUnlogged.IsSuccess, inUnlogged.IsSuccess && inUnlogged.Value), Is.EqualTo((true, false)));
+    }
+
     /// <summary>RN-ARVORE-004: no Informix "esquema" é o dono do objeto. De sistema é o `informix`, dono do catálogo, que vem por último.</summary>
     [Test]
     public async Task Informix_Schemas_AreObjectOwners()
@@ -388,6 +404,37 @@ public sealed class InformixClientTests : IbmClientContractTests
         var full = page.FullValues!.Select(value => value.Write()).ToArray();
         Assert.That(full.Select(Encoding.Latin1.GetBytes), Is.EqualTo(new[] { clob, text, lvarchar }.Select(Encoding.Latin1.GetBytes)));
         Assert.That(full, Is.EqualTo(new[] { clob, text, lvarchar }));
+    }
+
+    /// <summary>
+    /// Rotinas do Informix declaradas como `RETURNING LVARCHAR` sem comprimento explícito (como `sysadmin:task`) têm precisão
+    /// estática de 2.048 bytes em `sysprocedures`, e o servidor DRDA do Informix trunca o retorno de `EXECUTE FUNCTION` em 2.048
+    /// bytes. A conexão envolve a chamada em `SELECT CAST(... AS CLOB) FROM TABLE(SET{1})`, trazendo o texto inteiro
+    /// para a página e para `FullValues` (F7).
+    /// </summary>
+    [Test]
+    public async Task Execute_RoutineReturningDefaultLvarchar_DoesNotTruncateAt2048Bytes()
+    {
+        var table = await CreateWriteTableAsync();
+        var writingRoutine = $"grava_{Guid.NewGuid():N}";
+        await using var connection = await OpenAsync();
+        var created = await connection.ExecuteAsync($"CREATE FUNCTION teste.{writingRoutine}() RETURNING LVARCHAR; UPDATE {table} SET versao = 5 WHERE numero = 1001; RETURN 'atualizado'; END FUNCTION;", CancellationToken.None);
+
+        var taskPage = await ExecutePageAsync(connection, "execute function sysadmin:task ('onstat', '-a')");
+        var writingPage = await ExecutePageAsync(connection, $"EXECUTE FUNCTION teste.{writingRoutine}()");
+        var updated = await ReadFromAnotherConnectionAsync($"SELECT COUNT(*) FROM {table} WHERE versao = 5");
+        var dropped = await connection.ExecuteAsync($"DROP FUNCTION teste.{writingRoutine}", CancellationToken.None);
+        await DropAsync(table);
+
+        Assert.That(created.IsSuccess, Is.True, created.IsFailure ? created.Error.Message : null);
+        Assert.That(dropped.IsSuccess, Is.True, dropped.IsFailure ? dropped.Error.Message : null);
+        Assert.That(taskPage.Columns[0].Name, Is.Empty);
+        Assert.That(taskPage.Columns[0].Type, Is.EqualTo("CLOB"));
+        Assert.That(taskPage.Rows[0][0]!.Length, Is.EqualTo(10000));
+        Assert.That(taskPage.TruncatedCells, Is.EqualTo(new[] { new[] { 0, 0 } }));
+        Assert.That(taskPage.FullValues![0].Write().Length, Is.GreaterThan(10000));
+        Assert.That(writingPage.Rows[0][0], Is.EqualTo("atualizado"));
+        Assert.That(updated, Is.EqualTo(1));
     }
 
     /// <summary>

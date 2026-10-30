@@ -99,6 +99,7 @@ import { recordsCopy } from "./records.copy";
 import { sqlTargetKey } from "./sql-target-key";
 import { recall, remember } from "./tab-memory";
 import { nextSort, type RecordsSort } from "./table-sql";
+import { withUncommitted } from "./transaction";
 import { unsavedEdits } from "./unsaved-edits";
 import { wholeColumnQuestion } from "./whole-column-question";
 import { isBusyState, isPersonBusy, type LoadMoreOutcome, type QueryRunner, type RowsState, type RunnerState } from "./use-query-runner";
@@ -461,6 +462,26 @@ const countReachedTheSession = (error: { code: string }) => !countRefusedBeforeT
 /** RN-SQL-017: as recusas com que as células pedidas ficam cortadas, sem o aviso central: o resultado mudou, a sessão caiu, a célula está fora dele. */
 const cellRefusals = ["RESULT_NOT_FOUND", "DATABASE_SESSION_NOT_FOUND", "CELLS_INVALID"];
 
+/** Quantos valores completos buscados para o painel "Valor" (`F7`) ficam lembrados na aba. */
+const fullCellValuesKept = 64;
+
+/** A chave de uma célula lida no resultado da API (`resultId:resultRow:column`), para guardar o valor completo buscado pelo painel "Valor". */
+function fullCellKeyOf(shown: RowsState | null, row: number, column: number): string | null {
+  if (shown === null || shown.resultId === null || row >= shown.rows.length) return null;
+  const resultRow = shown.sourceRows === undefined ? row : (shown.sourceRows[row] ?? null);
+  return resultRow === null ? null : `${shown.resultId}:${resultRow}:${column}`;
+}
+
+/** A linha da grade para o painel "Valor": quando o valor completo da célula já chegou (e a coluna não faz parte da chave), ela deixa de contar como cortada. */
+function valueViewerRowContextOf(shown: RowsState | null, edits: PendingEdits, row: number, column: number, hasFullValue: boolean, target: EditTarget | null): RowContext {
+  const base = rowContextOf(shown, edits, row);
+  if (!hasFullValue || base.kind !== "read" || base.truncated?.has(column) !== true) return base;
+  if (target !== null && target.tables.some((table) => table.key.includes(column))) return base;
+  const nextTruncated = new Set(base.truncated);
+  nextTruncated.delete(column);
+  return { ...base, truncated: nextTruncated };
+}
+
 /** A área de transferência do navegador, como o "Copiar nome" do navegador: escreve e dá o aviso de sucesso, ou o de atenção quando falha. */
 async function writeClipboard(text: string, toast: ReturnType<typeof useToast>, success: () => void): Promise<boolean> {
   try {
@@ -549,7 +570,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const readCount = shown?.rows.length ?? 0;
   const columnCount = shown?.columns.length ?? 0;
   const layout = useMemo<GridLayout>(() => ({ read: readCount, added: edits.added.map((row) => row.id), columns: columnCount }), [readCount, columnCount, edits.added]);
-  const active = activeCell(selection, layout);
+  const active = useMemo(() => activeCell(selection, layout), [selection, layout]);
   const [editorState, setEditorState] = useState<(CellEditorState & { resultId: string | null; scope?: OpenScope }) | null>(null);
   const editor: CellEditorState | null = editorState !== null && editorState.resultId === resultId ? editorState : null;
   // RN-EDIT-019: o "Salvar" toma a grade da contagem até a resposta (`saving`, que as ações leem como "há um comando em andamento na aba"); `phase` diz à
@@ -581,6 +602,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const copyingRef = useRef<AbortController | null>(null);
   // RN-GRADE-023: o carregar das linhas que faltam, que a faixa mostra ("Carregando as linhas que faltam… 1.400 linhas") e deixa cancelar.
   const [loadingRest, setLoadingRest] = useState<string | null>(null);
+  const [valueViewerOpen, setValueViewerOpen] = useState(false);
+  const [fullCellValues, setFullCellValues] = useState<ReadonlyMap<string, string>>(() => new Map());
   const loadingRef = useRef<AbortController | null>(null);
 
   // RN-EDIT-002: numa junção, a pendência de uma linha de uma tabela aparece em todas as linhas da grade que a mostram.
@@ -1702,7 +1725,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         if (result === null) return "failed";
         if (!result.ok) return refuseSave(result.error, plan, known, current, pending, id);
 
-        toast.success(multi.saved(columns, rows, Math.max(result.data.applied - 1, 0)));
+        runner.transaction.note(result.data.transaction);
+        toast.success(withUncommitted(multi.saved(columns, rows, Math.max(result.data.applied - 1, 0)), runner.transaction.getState()));
         putEdits(noEdits);
         setBanner(noBanner);
         const saved = savedResultOf(current, pending, current.columns.length);
@@ -1715,7 +1739,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         release();
       }
     },
-    [sessionOfShown, startSaving, stopSaving, hold, ensureTarget, say, queryClient, closeCursor, subject, refuseSave, toast, putEdits, updateSelection, onSaved],
+    [sessionOfShown, startSaving, stopSaving, hold, ensureTarget, say, queryClient, closeCursor, subject, refuseSave, toast, putEdits, updateSelection, onSaved, runner.transaction],
   );
 
   /**
@@ -1762,7 +1786,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       if (result === null) return "failed";
 
       if (result.ok) {
-        toast.success(copy.saved(result.data.applied));
+        runner.transaction.note(result.data.transaction);
+        toast.success(withUncommitted(copy.saved(result.data.applied), runner.transaction.getState()));
         putEdits(noEdits);
         setBanner(noBanner);
         // RN-EDIT-009: numa junção, o valor salvo fica em todas as linhas que mostram a mesma linha da tabela.
@@ -1778,7 +1803,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     } finally {
       stopSaving();
     }
-  }, [cancelBuild, sessionOfShown, saveWholeColumn, startSaving, stopSaving, ensureTarget, say, queryClient, toast, putEdits, updateSelection, onSaved, refuseSave]);
+  }, [cancelBuild, sessionOfShown, saveWholeColumn, startSaving, stopSaving, ensureTarget, say, queryClient, toast, putEdits, updateSelection, onSaved, refuseSave, runner.transaction]);
 
   /** O Salvar como booleano (gravou tudo), para quem só quer saber disso (o registro da aba, o Ctrl+S). */
   const save = useCallback(async (reread = true): Promise<boolean> => (await saveNow(reread)) === "saved", [saveNow]);
@@ -1982,6 +2007,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         rows: wholeColumns ? 1 : rows.length,
         several,
         hasActive: activeCell(chosen, grid) !== null,
+        viewValue: activeCell(chosen, grid) !== null ? { editable: true } : { editable: false, reason: selectionCopy.copy.chooseCell },
         newRow: rowAccess,
         duplicateRow: !rowAccess.editable ? rowAccess : wholeColumns ? chooseRows : duplicateRowsAccess(rows.length),
         deleteRow: wholeColumns ? (rowAccess.editable ? chooseRows : rowAccess) : deleteRowsAccess(selectedRowsOf(current, pending, rows), reason, known, writing || running),
@@ -2056,6 +2082,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
                 .finally(reading);
               break;
             }
+            case "viewValue":
+              setValueViewerOpen(true);
+              break;
             case "edit":
               openEditor(cell);
               break;
@@ -2169,6 +2198,106 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const sortApplied = sort === undefined ? null : sort.applied();
   const sortReason = shown === null ? null : sortReasonFor({ personBusy, saving, busy, shown, subject });
 
+  // RN-SQL-017: quando o painel "Valor" (`F7`) está aberto numa célula que chegou cortada na página (ex.: textos > 10.000 caracteres ou binários > 32 bytes),
+  // pede o valor completo dela à API (`POST .../results/{resultID}/cells`) para exibir todo o valor sem corte.
+  useEffect(() => {
+    if (
+      !valueViewerOpen ||
+      shown === null ||
+      resultId === null ||
+      active === null ||
+      active.row >= shown.rows.length ||
+      shown.truncated.get(active.row)?.has(active.column) !== true
+    ) {
+      return;
+    }
+    const resultRow = shown.sourceRows === undefined ? active.row : (shown.sourceRows[active.row] ?? null);
+    if (resultRow === null) return;
+    const key = `${resultId}:${resultRow}:${active.column}`;
+    if (fullCellValues.has(key)) return;
+    const sessionId = shown.sessionId ?? runner.sessionOf();
+    if (sessionId === null) return;
+
+    const controller = new AbortController();
+    void resultCells(sessionId, resultId, [{ row: resultRow, column: active.column }], controller.signal).then((answer) => {
+      if (controller.signal.aborted || !answer.ok) return;
+      const full = answer.data[0];
+      if (full === null || full === undefined) return;
+      setFullCellValues((prev) => {
+        if (prev.get(key) === full) return prev;
+        const next = new Map(prev);
+        next.set(key, full);
+        while (next.size > fullCellValuesKept) {
+          const oldest = next.keys().next().value;
+          if (oldest === undefined) break;
+          next.delete(oldest);
+        }
+        return next;
+      });
+    });
+    return () => controller.abort();
+  }, [valueViewerOpen, shown, resultId, active, fullCellValues, runner]);
+
+  const activeFullValue = useMemo(() => {
+    if (shown === null || active === null) return undefined;
+    const key = fullCellKeyOf(shown, active.row, active.column);
+    return key === null ? undefined : fullCellValues.get(key);
+  }, [shown, active, fullCellValues]);
+
+  const valueViewerValue: EditValue = useMemo(() => {
+    if (shown === null || active === null) return null;
+    const read = shown.rows.length;
+    if (active.row < read) {
+      const changed = pendingCell(view, active.row, active.column);
+      if (changed !== null) return changed.value;
+      const whole = columnEditOf(edits, active.column);
+      if (whole !== null && !edits.deleted.includes(active.row)) return whole.value;
+      return activeFullValue ?? shown.rows[active.row]?.[active.column] ?? null;
+    }
+    return edits.added[active.row - read]?.values[active.column] ?? null;
+  }, [shown, active, view, edits, activeFullValue]);
+
+  const valueViewerAccess: EditAccess = useMemo(() => {
+    if (shown === null || active === null) return { editable: false, reason: selectionCopy.copy.chooseCell };
+    const row = valueViewerRowContextOf(shown, edits, active.row, active.column, activeFullValue !== undefined, target);
+    const access = cellAccess({ readOnly: readOnlyReason, target, busy: saving || busy, column: active.column, row });
+    return access.editable && building !== null ? { editable: false, reason: multi.applyingBusy } : access;
+  }, [shown, active, readOnlyReason, target, saving, busy, edits, building, activeFullValue]);
+
+  const commitValueViewer = useCallback(
+    async (cell: GridCell, nextValue: EditValue) => {
+      const from = latest.current.resultId;
+      if (moved(from)) return;
+      const currentKey = fullCellKeyOf(latest.current.shown, cell.row, cell.column);
+      const fullLoaded = currentKey !== null ? fullCellValues.get(currentKey) : undefined;
+      const rowCtx = (known: EditTarget | null) =>
+        valueViewerRowContextOf(latest.current.shown, latest.current.edits, cell.row, cell.column, fullLoaded !== undefined, known);
+      const early = accessOf(cell, latest.current.target, rowCtx(latest.current.target));
+      if (!early.editable) return say(early.reason);
+      const release = hold();
+      try {
+        const known = await ensureTarget();
+        if (moved(from)) return;
+        const access = accessOf(cell, known, rowCtx(known));
+        if (!access.editable) return say(access.reason);
+        if (known === null) return;
+        say(null);
+        const { shown: current, edits: pending } = latest.current;
+        const read = current?.rows.length ?? 0;
+        if (cell.row < read) {
+          const original = fullLoaded ?? current!.rows[cell.row][cell.column];
+          putEdits(editCell(pending, cell.row, cell.column, nextValue, referenceOf(pending, cell.column, original), changeAt(cell)));
+        } else {
+          const row = pending.added[cell.row - read];
+          if (row !== undefined) putEdits(editNewCell(pending, row.id, cell.column, nextValue));
+        }
+      } finally {
+        release();
+      }
+    },
+    [moved, fullCellValues, accessOf, say, hold, ensureTarget, putEdits, changeAt],
+  );
+
   const editing: GridEditing | undefined =
     shown === null
       ? undefined
@@ -2206,6 +2335,24 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onNewRow: () => void newRow(),
           onDuplicateRow: () => rowAction("duplicateRow"),
           onDeleteRow: () => rowAction("deleteRow"),
+          onToggleValueViewer: () => setValueViewerOpen((prev) => !prev),
+          valueViewer: {
+            open: valueViewerOpen,
+            active,
+            column: active !== null ? (shown.columns[active.column] ?? null) : null,
+            value: valueViewerValue,
+            editable: valueViewerAccess,
+            setNullAccess:
+              active !== null && valueViewerAccess.editable
+                ? (target?.columns[active.column]?.nullable ?? true)
+                  ? { editable: true }
+                  : { editable: false, reason: copy.menu.notNullable }
+                : valueViewerAccess,
+            onCommitValue: (nextValue: string | null) => {
+              if (active !== null) void commitValueViewer(active, nextValue);
+            },
+            onClose: () => setValueViewerOpen(false),
+          },
           bar: {
             buttons,
             onAction: (id: EditBarAction) => {

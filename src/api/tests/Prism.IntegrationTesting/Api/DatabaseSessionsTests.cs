@@ -155,6 +155,7 @@ public sealed class DatabaseSessionsTests
         {
             (HttpMethod.Delete, session),
             (HttpMethod.Get, $"{session}/schemas"),
+            (HttpMethod.Get, $"{session}/object-names"),
             (HttpMethod.Get, $"{session}/schemas/loja/objects?kind=tables"),
             (HttpMethod.Get, $"{session}/schemas/loja/tables/pedido/columns"),
             (HttpMethod.Get, $"{session}/schemas/loja/tables/pedido/indexes"),
@@ -243,7 +244,7 @@ public sealed class DatabaseSessionsTests
         await using var host = await ApiHost.StartAsync();
         var sessionID = await StartSessionAsync(host);
 
-        foreach (var path in new[] { "/schemas/loja/objects?kind=sequences", "/schemas/loja/objects?kind=", "/schemas/loja/objects" })
+        foreach (var path in new[] { "/schemas/loja/objects?kind=triggers", "/schemas/loja/objects?kind=", "/schemas/loja/objects" })
             await AssertProblemAsync(await host.Client.GetAsync(Url(sessionID, path)), HttpStatusCode.UnprocessableEntity, "OBJECT_KIND_INVALID");
     }
 
@@ -377,6 +378,80 @@ public sealed class DatabaseSessionsTests
         Assert.That(current.GetProperty("rows")[0][0].GetString(), Is.EqualTo("postgres"));
     }
 
+    /// <summary>
+    /// RN-BUSCA-002: o índice de nomes, no contrato `{ schemas: [{ name, isSystem, tables, views }], truncated }`. Em `loja` as tabelas e as visões
+    /// são as das listas `objects?kind=tables|views`, nos mesmos nomes e na mesma ordem (com a tabela de aspas e espaço); a rotina não entra;
+    /// os esquemas de sistema vêm depois dos demais.
+    /// </summary>
+    [Test]
+    public async Task ObjectNames_Return200()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var sessionID = await StartSessionAsync(host);
+
+        var response = await host.Client.GetAsync(Url(sessionID, "/object-names"));
+        var body = await ReadJsonAsync(response);
+        var tables = await GetListAsync(host, Url(sessionID, "/schemas/loja/objects?kind=tables"));
+        var views = await GetListAsync(host, Url(sessionID, "/schemas/loja/objects?kind=views"));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), body.ToString());
+        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "schemas", "truncated" }));
+        Assert.That(body.GetProperty("truncated").GetBoolean(), Is.False);
+        var schemas = body.GetProperty("schemas").EnumerateArray().ToList();
+        Assert.That(schemas.Select(schema => schema.EnumerateObject().Select(property => property.Name)), Is.All.EqualTo(new[] { "name", "isSystem", "tables", "views" }));
+        // RN-ARVORE-004: os esquemas de sistema vêm depois dos demais.
+        Assert.That(schemas.Select(schema => schema.GetProperty("isSystem").GetBoolean()), Is.Ordered);
+        var loja = schemas.Single(schema => schema.GetProperty("name").GetString() == "loja");
+        Assert.That(loja.GetProperty("isSystem").GetBoolean(), Is.False);
+        Assert.That(loja.GetProperty("tables").EnumerateArray().Select(name => name.GetString()), Is.EqualTo(tables.Select(item => item.GetProperty("name").GetString())));
+        Assert.That(loja.GetProperty("views").EnumerateArray().Select(name => name.GetString()), Is.EqualTo(views.Select(item => item.GetProperty("name").GetString())));
+        Assert.That(loja.GetProperty("tables").EnumerateArray().Select(name => name.GetString()), Does.Contain("pedido").And.Contain("O'Brien \"x\""));
+        Assert.That(loja.GetProperty("views").EnumerateArray().Select(name => name.GetString()), Is.EqualTo(new[] { "pedido_resumo" }));
+        // A rotina `dobro` não é tabela nem visão.
+        Assert.That(schemas.SelectMany(schema => schema.GetProperty("tables").EnumerateArray().Concat(schema.GetProperty("views").EnumerateArray())).Select(name => name.GetString()), Does.Not.Contain("dobro"));
+        var catalog = schemas.Single(schema => schema.GetProperty("name").GetString() == "pg_catalog");
+        Assert.That(catalog.GetProperty("isSystem").GetBoolean(), Is.True);
+        Assert.That(catalog.GetProperty("tables").EnumerateArray().Select(name => name.GetString()), Does.Contain("pg_class"));
+    }
+
+    /// <summary>RN-BUSCA-002 e RN-ARVORE-006: o outro banco do servidor tem a sessão dele, e o índice que ela devolve é o dele, e não o do banco da conexão.</summary>
+    [Test]
+    public async Task ObjectNames_OfAnotherDatabaseOfTheServer_AreTheOnesOfThatDatabase()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(_settings);
+        var mainID = await host.Client.OpenSessionAsync(connectionID);
+        var openedResponse = await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database = "postgres" });
+        var opened = await ReadJsonAsync(openedResponse);
+        Assert.That(openedResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created), opened.ToString());
+        var otherID = opened.GetProperty("id").GetGuid();
+
+        var fromMain = await ReadJsonAsync(await host.Client.GetAsync(Url(mainID, "/object-names")));
+        var fromOther = await ReadJsonAsync(await host.Client.GetAsync(Url(otherID, "/object-names")));
+        var otherSchemas = await GetListAsync(host, Url(otherID, "/schemas"));
+
+        var mainNames = fromMain.GetProperty("schemas").EnumerateArray().Select(schema => schema.GetProperty("name").GetString()).ToList();
+        var otherNames = fromOther.GetProperty("schemas").EnumerateArray().Select(schema => schema.GetProperty("name").GetString()).ToList();
+        Assert.That(mainNames, Does.Contain("loja"));
+        Assert.That(otherNames, Does.Not.Contain("loja"));
+        // O índice do outro banco são os esquemas dele que têm tabela ou visão, na ordem da lista dos esquemas.
+        Assert.That(otherNames, Is.EqualTo(otherSchemas.Where(schema => schema.GetProperty("tables").GetInt32() + schema.GetProperty("views").GetInt32() > 0).Select(schema => schema.GetProperty("name").GetString())));
+    }
+
+    /// <summary>RN-BUSCA-002: a sessão que foi fechada responde 404, como as outras rotas de catálogo.</summary>
+    [Test]
+    public async Task ObjectNames_OfAClosedSession_Return404DatabaseSessionNotFound()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var sessionID = await StartSessionAsync(host);
+        Assert.That((await host.Client.DeleteAsync(Url(sessionID))).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+
+        var response = await host.Client.GetAsync(Url(sessionID, "/object-names"));
+
+        await AssertProblemAsync(response, HttpStatusCode.NotFound, "DATABASE_SESSION_NOT_FOUND");
+    }
+
     /// <summary>Seção 6: o nome de outro banco vazio, com mais de 128 caracteres ou com caractere de controle é recusado antes de conectar.</summary>
     [Test]
     public async Task Open_DatabaseNameInvalid_Returns422DatabaseNameInvalid()
@@ -413,7 +488,7 @@ public sealed class DatabaseSessionsTests
         await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
         var unknown = Guid.CreateVersion7();
 
-        foreach (var path in new[] { Url(unknown, "/schemas"), Url(unknown, "/schemas/loja/objects?kind=tables"), TableUrl(unknown, "loja", "pedido", "columns"), TableUrl(unknown, "loja", "pedido", "indexes"), TableUrl(unknown, "loja", "pedido", "foreign-keys"), TableUrl(unknown, "loja", "cliente", "referenced-by"), TableUrl(unknown, "loja", "pedido", "checks"), Url(unknown, "/schemas/loja/views/pedido_resumo/definition"), Url(unknown, "/schemas/loja/diagram"), Url(unknown, "/properties"), Url(unknown, "/databases") })
+        foreach (var path in new[] { Url(unknown, "/schemas"), Url(unknown, "/schemas/loja/objects?kind=tables"), TableUrl(unknown, "loja", "pedido", "columns"), TableUrl(unknown, "loja", "pedido", "indexes"), TableUrl(unknown, "loja", "pedido", "foreign-keys"), TableUrl(unknown, "loja", "cliente", "referenced-by"), TableUrl(unknown, "loja", "pedido", "checks"), Url(unknown, "/schemas/loja/views/pedido_resumo/definition"), Url(unknown, "/schemas/loja/diagram"), Url(unknown, "/properties"), Url(unknown, "/databases"), Url(unknown, "/object-names") })
             await AssertProblemAsync(await host.Client.GetAsync(path), HttpStatusCode.NotFound, "DATABASE_SESSION_NOT_FOUND");
     }
 

@@ -15,12 +15,26 @@ const readme = readFileSync(new URL("README.md", folder), "utf8");
 /** O catálogo de drivers da API (RN-DRIVER-002): é dele que sai a grade de bancos. */
 const catalog = JSON.parse(readFileSync(new URL("../../../../api/Prism.Infrastructure/Drivers/drivers.catalog.json", folder), "utf8")) as { drivers: { id: string; engines?: number[]; kind?: string }[] };
 /** Os bancos que o Prism conecta, pelo número da API, com a chave da marca. */
-const engineBrands: Record<number, string> = { 1: "postgresql", 2: "db2", 3: "informix" };
+const engineBrands: Record<number, string> = {
+  1: "postgresql",
+  2: "db2",
+  3: "informix",
+  4: "sqlite",
+  5: "mysql",
+  6: "mariadb",
+  7: "sql-server",
+  8: "oracle",
+  9: "firebird",
+  10: "duckdb",
+  11: "clickhouse",
+  12: "bigquery",
+  13: "databricks",
+};
 /** Cada banco da grade: os que o Prism conecta (pelo número) e os "em breve" (pelo id do driver). */
 const catalogBrands = catalog.drivers.flatMap((driver) => (driver.kind === "comingSoon" ? [driver.id] : (driver.engines ?? []).map((engine) => engineBrands[engine])));
 
-const withLogo = ["clickhouse", "duckdb", "mariadb", "mysql", "postgresql", "sqlite"];
-const withoutLogo = ["db2", "firebird", "informix", "oracle", "sql-server"];
+const withLogo = ["bigquery", "clickhouse", "databricks", "db2", "duckdb", "firebird", "informix", "mariadb", "mysql", "oracle", "postgresql", "sql-server", "sqlite"];
+const withoutLogo: string[] = [];
 
 /** As superfícies em que a marca aparece na grade: o fundo do diálogo (`raised`) e o do banco escolhido ou sob o ponteiro (`selected`). */
 const surfacesOf = (theme: ThemeId) => {
@@ -30,17 +44,34 @@ const surfacesOf = (theme: ThemeId) => {
 const themes = Object.keys(themeSchemes) as ThemeId[];
 
 describe("as logos dos bancos da grade de nova conexão (RN-NAV-005, Ruling 136)", () => {
-  it("o catálogo de drivers tem os onze bancos de que o README fala: os três que o Prism conecta e os oito em breve", () => {
+  it("o catálogo de drivers tem os treze bancos de que o README fala", () => {
     expect([...catalogBrands].sort()).toEqual([...withLogo, ...withoutLogo].sort());
   });
 
-  it("cada banco do catálogo está no README: com o arquivo da logo, ou com o motivo de ficar com a ficha de hoje", () => {
+  it("cada banco do catálogo está no README com o arquivo da logo", () => {
     for (const brand of withLogo) expect(readme).toMatch(new RegExp(`^\\| [^|]+ \\| \`${brand}\\.(svg|png)\``, "m"));
-    for (const brand of withoutLogo) expect(readme).toMatch(new RegExp(`^\\| [^|]+ \\| sem logo \\(\`${brand}\`\\)`, "m"));
   });
 
-  it("a pasta tem só as seis logos, o README, o registro e o teste dele, e o .gitattributes", () => {
-    expect(readdirSync(folder).sort()).toEqual([".gitattributes", "README.md", "clickhouse.svg", "database-logos.test.ts", "database-logos.ts", "duckdb.svg", "mariadb.svg", "mysql.svg", "postgresql.png", "sqlite.svg"]);
+  it("a pasta tem só as treze logos, o README, o registro e o teste dele, e o .gitattributes", () => {
+    expect(readdirSync(folder).sort()).toEqual([
+      ".gitattributes",
+      "README.md",
+      "bigquery.svg",
+      "clickhouse.svg",
+      "database-logos.test.ts",
+      "database-logos.ts",
+      "databricks.svg",
+      "db2.png",
+      "duckdb.svg",
+      "firebird.png",
+      "informix.png",
+      "mariadb.svg",
+      "mysql.svg",
+      "oracle.png",
+      "postgresql.png",
+      "sql-server.png",
+      "sqlite.svg",
+    ]);
   });
 
   it("o registro tem uma logo para cada arquivo, e nenhuma para quem fica com a ficha", () => {
@@ -49,16 +80,18 @@ describe("as logos dos bancos da grade de nova conexão (RN-NAV-005, Ruling 136)
     for (const brand of [...withoutLogo, "outro-banco"]) expect(databaseLogoOf(brand)).toBeNull();
   });
 
-  it.each(withLogo)("o SHA-256 de %s é o que o README registra: o arquivo é o da fonte, sem redesenho nem cor nova", (brand) => {
+  it.each(withLogo)("o SHA-256 de %s é o que o README registra", (brand) => {
     const file = readdirSync(folder).find((name) => name.startsWith(`${brand}.`)) ?? "";
     const hash = createHash("sha256").update(readFileSync(new URL(file, folder))).digest("hex");
 
     expect(readme).toMatch(new RegExp(`^\\| [^|]+ \\| \`${file}\` \\|[^\\n]*\`${hash}\``, "m"));
   });
 
-  it("o PostgreSQL é o arquivo do fabricante (o Slonik da página de marca), desenhado como está; os outros são os glifos do Simple Icons, na cor que ele dá à marca", () => {
-    expect(databaseLogos.postgresql).toMatchObject({ kind: "image", color: null });
-    for (const brand of ["clickhouse", "duckdb", "mariadb", "mysql", "sqlite"] as const) {
+  it("as imagens coloridas (PostgreSQL, Db2, Informix, SQL Server, Oracle, Firebird) são desenhadas como estão; os outros são os glifos do Simple Icons, na cor que ele dá à marca", () => {
+    for (const brand of ["postgresql", "db2", "informix", "sql-server", "oracle", "firebird"] as const) {
+      expect(databaseLogos[brand]).toMatchObject({ kind: "image", color: null });
+    }
+    for (const brand of ["bigquery", "clickhouse", "databricks", "duckdb", "mariadb", "mysql", "sqlite"] as const) {
       const logo = databaseLogos[brand];
       expect(logo.kind).toBe("glyph");
       expect(logo.color).toMatch(/^#[0-9A-F]{6}$/);
@@ -69,7 +102,7 @@ describe("as logos dos bancos da grade de nova conexão (RN-NAV-005, Ruling 136)
   });
 
   it("o glifo do Simple Icons é de uma cor só e não traz cor no arquivo: quem pinta é a grade, com a cor da marca", () => {
-    for (const brand of ["clickhouse", "duckdb", "mariadb", "mysql", "sqlite"]) {
+    for (const brand of ["bigquery", "clickhouse", "databricks", "duckdb", "mariadb", "mysql", "sqlite"]) {
       const svg = readFileSync(new URL(`${brand}.svg`, folder), "utf8");
       expect(svg).toMatch(/^<svg role="img" viewBox="0 0 24 24" xmlns="http:\/\/www.w3.org\/2000\/svg"><title>[^<]+<\/title><path d="[^"]+"\/><\/svg>$/);
     }
@@ -84,7 +117,7 @@ describe("as logos dos bancos da grade de nova conexão (RN-NAV-005, Ruling 136)
 
     it.each(cases)("%s no tema %s", (_brand, theme, logo) => {
       const scheme = themeSchemes[theme];
-      const grounds = logo.chip === scheme ? [logoChips[scheme]] : surfacesOf(theme);
+      const grounds = logo.chip === scheme || logo.chip === "both" ? [logoChips[scheme]] : surfacesOf(theme);
 
       for (const ground of grounds) expect(contrast(logo.edge, ground)).toBeGreaterThanOrEqual(3);
     });
@@ -93,8 +126,11 @@ describe("as logos dos bancos da grade de nova conexão (RN-NAV-005, Ruling 136)
   it("a ficha só entra onde a logo some: em algum tema daquele esquema, sem ela, a logo fica abaixo de 3:1", () => {
     for (const logo of Object.values(databaseLogos)) {
       if (logo.chip === null) continue;
-      const vanishes = themes.filter((theme) => themeSchemes[theme] === logo.chip).some((theme) => surfacesOf(theme).some((ground) => contrast(logo.edge, ground) < 3));
-      expect(vanishes).toBe(true);
+      const schemes = logo.chip === "both" ? (["dark", "light"] as const) : [logo.chip];
+      for (const scheme of schemes) {
+        const vanishes = themes.filter((theme) => themeSchemes[theme] === scheme).some((theme) => surfacesOf(theme).some((ground) => contrast(logo.edge, ground) < 3));
+        expect(vanishes).toBe(true);
+      }
     }
   });
 

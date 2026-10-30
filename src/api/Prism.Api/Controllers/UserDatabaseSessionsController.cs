@@ -3,13 +3,16 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Prism.Application.DatabaseSessions.Features.ApplyEdits;
 using Prism.Application.DatabaseSessions.Features.CancelQuery;
+using Prism.Application.DatabaseSessions.Features.ChangeTransactionMode;
 using Prism.Application.DatabaseSessions.Features.CloseDatabaseSession;
 using Prism.Application.DatabaseSessions.Features.CountQuery;
 using Prism.Application.DatabaseSessions.Features.CountWholeColumn;
+using Prism.Application.DatabaseSessions.Features.EndTransaction;
 using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Features.FetchNextPage;
 using Prism.Application.DatabaseSessions.Features.GetDatabases;
 using Prism.Application.DatabaseSessions.Features.GetEditTarget;
+using Prism.Application.DatabaseSessions.Features.GetObjectNames;
 using Prism.Application.DatabaseSessions.Features.GetResultCells;
 using Prism.Application.DatabaseSessions.Features.GetDatabaseProperties;
 using Prism.Application.DatabaseSessions.Features.GetSchemaDiagram;
@@ -81,6 +84,20 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
     public async Task<IActionResult> GetSchemas(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new GetSchemasCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-BUSCA-002: os nomes das tabelas e das visões de todos os esquemas do banco da sessão, para a busca do navegador. Sem corpo nem
+    /// parâmetro, então sem validator: vale o `{id:guid}` da rota.
+    /// </summary>
+    [HttpGet("{id:guid}/object-names")]
+    public async Task<IActionResult> GetObjectNames(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetObjectNamesCommand(id), cancellationToken);
         if (result.IsFailure)
             return result.ToIActionResult();
 
@@ -283,6 +300,39 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
             return result.ToIActionResult();
 
         return NoContent();
+    }
+
+    /// <summary>RN-TX-001 e 005: o modo de transação da aba, com o `id` da sessão no corpo (seção 22 da especificação).</summary>
+    [HttpPatch]
+    public async Task<IActionResult> ChangeTransactionMode([FromBody] ChangeTransactionModeCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-TX-002: o "Commit" da barra do editor.</summary>
+    [HttpPost("{id:guid}/transaction/commit")]
+    public async Task<IActionResult> CommitTransaction(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new EndTransactionCommand(id, Commit: true), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-TX-002: o "Rollback" da barra do editor.</summary>
+    [HttpPost("{id:guid}/transaction/rollback")]
+    public async Task<IActionResult> RollbackTransaction(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new EndTransactionCommand(id, Commit: false), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
     }
 
     /// <summary>

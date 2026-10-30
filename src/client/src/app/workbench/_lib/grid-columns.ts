@@ -1,15 +1,16 @@
+import { monoGridText, type GridText } from "./grid-text";
 import type { QueryColumn, QueryRow } from "./query.schema";
 
 /*
  * As larguras das colunas da grade do resultado (RN-GRADE-009), em funções puras. Todas as medidas daqui são as de 100% de zoom: quem desenha
  * multiplica pelo zoom (RN-GRADE-010), e a largura que a pessoa arrasta é guardada já dividida por ele, para valer igual em qualquer zoom.
+ *
+ * A grade usa a fonte da interface (RN-CONFIG-008), que é proporcional: o texto é medido por quem a conhece (`GridText`, em `grid-text.ts`, que mede cada
+ * caractere no `canvas` e guarda), e nada é medido no DOM. Sem medidor (os testes) vale a conta de antes, a da mono: caracteres × 7,8 px.
  */
 
 /** O respiro da célula: 12 px de cada lado (o `px-3`) e a divisória. */
 export const cellPadding = 25;
-/** A IBM Plex Mono a 13 px tem 0,6 em por caractere; o tipo, no cabeçalho, vai a 11 px. Como a fonte é de largura fixa, contar caracteres dispensa medir o DOM. */
-export const charWidth = 7.8;
-const typeCharWidth = 6.6;
 /** O espaço entre o nome e o tipo, no cabeçalho (`gap-1.5`). */
 const nameTypeGap = 6;
 /**
@@ -33,22 +34,25 @@ export const fitCap = 600;
  * A largura do cabeçalho de uma coluna: o nome, o tipo (quando o cabeçalho o mostra, RN-CONFIG-006), a marca da coluna que não se edita (RN-EDIT-002,
  * depois do tipo, com ` · `) e, quando o cabeçalho ordena, o espaço do botão de ordenar.
  */
-function headerWidth(column: QueryColumn, { sortable, showType, mark = null }: { sortable: boolean; showType: boolean; mark?: string | null }): number {
+function headerWidth(column: QueryColumn, { sortable, showType, mark = null }: { sortable: boolean; showType: boolean; mark?: string | null }, text: GridText): number {
   const note = showType ? (mark === null ? column.type : `${column.type} · ${mark}`) : (mark ?? "");
-  return column.name.length * charWidth + (note.length > 0 || showType ? nameTypeGap + note.length * typeCharWidth : 0) + (sortable ? sortArrowWidth : 0);
+  return text.name(column.name) + (note.length > 0 || showType ? nameTypeGap + text.type(note) : 0) + (sortable ? sortArrowWidth : 0);
 }
 
-/** A largura do texto de uma célula (o nulo conta com o texto que a pessoa escolheu para ele). */
-const valueWidth = (value: string | null, nullText: string) => (value?.length ?? nullText.length) * charWidth;
+/**
+ * A largura do texto de uma célula (o nulo conta com o texto que a pessoa escolheu para ele). Só interessa até o teto da coluna: o valor que passa dele não
+ * custa mais que o que cabe (`limit`).
+ */
+const valueWidth = (value: string | null, nullText: string, text: GridText, limit: number) => text.cell(value ?? nullText, limit);
 
 /**
  * A largura de saída de cada coluna, pelo cabeçalho e pelos valores das linhas dadas (a grade passa a PRIMEIRA página: carregar mais não muda o que está na
  * tela). Valor mais largo que o teto termina em reticências. Sem o tipo no cabeçalho (RN-CONFIG-006) a coluna não reserva lugar para ele.
  */
-export function baseWidths(columns: readonly QueryColumn[], rows: readonly QueryRow[], nullText: string, showType = true, marks: readonly (string | null)[] | null = null): number[] {
+export function baseWidths(columns: readonly QueryColumn[], rows: readonly QueryRow[], nullText: string, showType = true, marks: readonly (string | null)[] | null = null, text: GridText = monoGridText): number[] {
   return columns.map((column, index) => {
-    let width = headerWidth(column, { sortable: false, showType, mark: marks?.[index] ?? null });
-    for (const row of rows) width = Math.max(width, valueWidth(row[index] ?? null, nullText));
+    let width = headerWidth(column, { sortable: false, showType, mark: marks?.[index] ?? null }, text);
+    for (const row of rows) width = Math.max(width, valueWidth(row[index] ?? null, nullText, text, maxBaseWidth - cellPadding));
     return Math.min(maxBaseWidth, Math.max(minBaseWidth, Math.ceil(width) + cellPadding));
   });
 }
@@ -57,9 +61,9 @@ export function baseWidths(columns: readonly QueryColumn[], rows: readonly Query
  * O ajuste ao conteúdo (o duplo clique na divisa, e o Enter com o foco nela): o maior valor entre TODAS as linhas carregadas e o cabeçalho, com a seta da
  * ordem quando ele ordena, até o teto do ajuste. O que passa do teto continua com reticências.
  */
-export function fitWidth(column: QueryColumn, index: number, rows: readonly QueryRow[], nullText: string, { sortable = false, showType = true, mark = null }: { sortable?: boolean; showType?: boolean; mark?: string | null } = {}): number {
-  let width = headerWidth(column, { sortable, showType, mark });
-  for (const row of rows) width = Math.max(width, valueWidth(row[index] ?? null, nullText));
+export function fitWidth(column: QueryColumn, index: number, rows: readonly QueryRow[], nullText: string, { sortable = false, showType = true, mark = null, text = monoGridText }: { sortable?: boolean; showType?: boolean; mark?: string | null; text?: GridText } = {}): number {
+  let width = headerWidth(column, { sortable, showType, mark }, text);
+  for (const row of rows) width = Math.max(width, valueWidth(row[index] ?? null, nullText, text, fitCap - cellPadding));
   return Math.min(fitCap, Math.max(minWidth, Math.ceil(width) + cellPadding));
 }
 

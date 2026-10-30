@@ -22,7 +22,6 @@ internal static class EditTargetResolver
 {
     private const string Computed = "coluna calculada";
     private const string GeneratedByTheDatabase = "gerada pelo banco";
-    private const string Binary = "coluna binária";
     private const string UnsupportedType = "o Prism ainda não edita este tipo neste banco";
     private const string KeyInAJoin = "coluna da chave numa junção";
     private const string Ambiguous = "a coluna sem tabela pode ser de mais de uma tabela do comando";
@@ -305,7 +304,6 @@ internal static class EditTargetResolver
 
         return EditValues.TypeOf(dialect, origin.Type, column.Kind) switch
         {
-            EEditType.Binary => Binary,
             EEditType.Unsupported => UnsupportedType,
             _ => null
         };

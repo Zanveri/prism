@@ -1,31 +1,32 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { environmentLookup } from "@/app/connections/_lib/environment";
-import { ConfirmDialog, useToast } from "@/components/ui";
+import { Button, ConfirmDialog, Dialog, useToast } from "@/components/ui";
 import { currentWindowId, endTabDrag, onTabWanted, onWindowCloseRequested, sendTabAway, tellWindows } from "@/lib/api/bridge";
 import { vaultLock } from "@/lib/api/vault-lock";
 
 import type { TabMoveTarget } from "../../../../electron/window-messages";
 
-import { createDisconnectLog } from "../_lib/connection-intent";
 import { exportTracker } from "../_lib/data-export/data-exports";
 import { loadTracker, windowTransfers } from "../_lib/data-import/data-imports";
 import { exitQuestion, totalOf, type ExitQuestion } from "../_lib/data-import/transfer-exits";
 import { windowCloseStep } from "../_lib/data-export/export-exits";
 import { liveEditors } from "../_lib/live-editors";
 import { recall, recallForTransfer } from "../_lib/tab-memory";
-import { afterPlaceChange, f6Action, isF6, placeAnnouncement, placeMenu, placeOf, resultOnView, resultPanelElementId, type PlaceVia } from "../_lib/result-place";
+import { afterPlaceChange, f6Action, isF6, placeAnnouncement, placeMenu, placeOf, resultOnView, resultPanelElementId, resultTabElementId, type PlaceVia } from "../_lib/result-place";
 import { resultPlaceCopy } from "../_lib/result-place.copy";
 import { resultWindows } from "../_lib/result-windows";
 import { resultFocus, resultSlots } from "../_lib/result-slots";
 import { createTabDragSession, dragEndRequest, isOnlyTab, type DragEndEvent } from "../_lib/tab-drag";
+import { focusAfterChange, isLost, navigatorRow, popupOpen, popupTakesFocus, regionOf, stillWithRequester, tabEntries, tabFocus, type FocusRegion } from "../_lib/tab-focus";
 import { tabMoveShortcut } from "../_lib/tab-order";
 import { stripTitles } from "../_lib/tab-titles";
 import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
 import { scriptsQuery } from "../_lib/scripts.service";
+import { transactionCopy } from "../_lib/transaction.copy";
 import { handOffTab } from "../_lib/tab-handoff";
 import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
@@ -33,7 +34,7 @@ import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
 import { isBusyState } from "../_lib/use-query-runner";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { useWorkbench } from "../_lib/workbench-state";
-import { isTableTab, type ResultPlace, type TableView } from "../_lib/workbench-model";
+import { isDatabaseTab, isSchemaTab, isTableTab, type ResultPlace, type SchemaView, type TableView } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { QueryTabPanel } from "./query-tab";
 import { focusResultIn, releaseFocusIn, resultHostOf } from "./result-host";
@@ -42,6 +43,8 @@ import { UnsavedScriptsDialog } from "./script-dialogs";
 import { ScriptWaitingMark } from "./script-tabs";
 import { TabDragVeil } from "./tab-drag-veil";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
+import { DatabaseTabPanel } from "./database-tab/database-tab";
+import { SchemaTabPanel } from "./schema-tab/schema-tab";
 import { TableTabPanel } from "./table-tab/table-tab";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
 import { useScriptSaving, type SaveMode } from "./use-script-saving";
@@ -57,7 +60,7 @@ const askEverything = closeAsks({ closesTheApp: false });
  */
 function ResultTabPanel({ tabId, label, hidden }: { tabId: string; label: string; hidden: boolean }) {
   const register = useCallback((element: HTMLDivElement | null) => resultSlots.set(tabId, "tab", element), [tabId]);
-  return <div ref={register} role="tabpanel" id={resultPanelElementId(tabId)} aria-label={label} hidden={hidden} className={hidden ? undefined : "flex min-h-0 min-w-0 flex-1 flex-col"} />;
+  return <div ref={register} role="tabpanel" id={resultPanelElementId(tabId)} aria-label={label} hidden={hidden} data-tab-content="" className={hidden ? undefined : "flex min-h-0 min-w-0 flex-1 flex-col"} />;
 }
 
 /**
@@ -67,9 +70,10 @@ function ResultTabPanel({ tabId, label, hidden }: { tabId: string; label: string
  * trocar de aba não desfaz o editor da outra. O que cada aba executa e mostra fica no estado da
  * área de trabalho (`runnerOf`), que sobrevive a sair desta tela.
  *
- * Ctrl+W fecha a aba ativa quando o foco está aqui (a faixa, o editor, a vista da tabela). O app empacotado não tem menu no Windows e no
- * Linux, então nada mais responde a esse atalho; no macOS o menu do app não tem "Fechar janela". Os diálogos e o menu de contexto ficam
- * fora desta árvore de teclado (o menu para a propagação), e a tela de bloqueio é um diálogo por cima de tudo: nenhum fecha aba por engano.
+ * Ctrl+W fecha a aba ativa com o foco em qualquer lugar da janela da área de trabalho (a faixa, o editor, a vista da tabela, o navegador, ou perdido no corpo da
+ * página): o `section` abaixo trata o que nasce dentro dele, e um ouvinte da janela, o resto. O app empacotado não tem menu no Windows e no Linux, então nada
+ * mais responde a esse atalho; no macOS o menu do app não tem "Fechar janela". Os diálogos e o menu de contexto ficam fora desta árvore de teclado (o menu para
+ * a propagação), e a tela de bloqueio é um diálogo por cima de tudo: nenhum fecha aba por engano. Depois de fechar, o foco vai à aba que ficou ativa (RN-ABAS-019).
  *
  * As abas mudam de lugar (RN-ABAS-001: arrastando, ou Ctrl+Shift+PageUp e PageDown na ativa) e passam para outra janela (RN-ABAS-002, 003 e 010: pelo
  * menu da aba; soltando-a em qualquer lugar que não seja uma faixa, dentro ou fora da janela, numa janela nova; ou soltando-a sobre outra janela, que a
@@ -77,7 +81,7 @@ function ResultTabPanel({ tabId, label, hidden }: { tabId: string; label: string
  * janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, resultActive, showEntry, setResultPlace, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, resultActive, showEntry, setResultPlace, setActiveTab, closeTab, updateTab, setTableView, openTableTab, setSchemaView, openSchemaTab, setDatabaseView, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, disconnectLog, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   // RN-ABAS-008: o nome curto das abas (o do painel da aba do resultado também).
   const shortTitles = useMemo(() => stripTitles(tabs), [tabs]);
@@ -88,7 +92,6 @@ export function WorkbenchTabs() {
   const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
   // RN-SCRIPT-006: o ícone e a cor da aba de um script vêm da lista dos scripts, que se atualiza depois do "Editar script…".
   const scripts = useQuery(scriptsQuery);
-  const queryClient = useQueryClient();
 
   // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S da aba de consulta, e o diálogo do nome. A função é estável: o painel memorizado de cada aba a recebe.
   const { save: saveScript, dialog: saveDialog } = useScriptSaving();
@@ -101,23 +104,19 @@ export function WorkbenchTabs() {
   const [drag] = useState(() => createTabDragSession());
   const area = useRef<HTMLElement>(null);
 
-  // Quem a pessoa desconectou: as vistas das tabelas dessas conexões esperam o clique, em vez de reabrir a sessão (`connection-intent.ts`).
-  const [disconnectLog] = useState(() => createDisconnectLog(queryClient));
+  // Quem a pessoa desconectou, e as conexões das abas de tabela que voltaram na entrada (RN-ABAS-006, marcadas pelo provedor antes de as abas existirem): as
+  // vistas das tabelas dessas conexões esperam o clique, em vez de reabrir a sessão (`connection-intent.ts`).
   const disconnected = useSyncExternalStore(disconnectLog.subscribe, disconnectLog.getSnapshot);
   // Uma aba com sessão é uma conexão conectada de novo: o "Atualizar" dos registros abre a sessão da aba, sem passar pela da árvore.
   useEffect(() => {
     for (const tab of tabs) if (tab.sessionId !== null && tab.connectionId !== null) disconnectLog.forget(tab.connectionId);
   }, [tabs, disconnectLog]);
-  // RN-ABAS-006: as abas de tabela que voltaram na entrada voltam desconectadas, e nada conecta sozinho: as vistas delas esperam o clique, como as de uma
-  // conexão que a pessoa desconectou.
-  useEffect(() => {
-    for (const connectionId of restoredTableConnections) disconnectLog.mark(connectionId);
-  }, [restoredTableConnections, disconnectLog]);
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
   // O mesmo com a troca do banco (RN-ARVORE-007) e da conexão (RN-ARVORE-008) da aba de consulta, que também consultam a lista de abas.
   const latestOpenTable = useRef(openTableTab);
+  const latestOpenSchema = useRef(openSchemaTab);
   const latestOpenQuery = useRef(openQueryTab);
   const latestSwitchDatabase = useRef(switchDatabase);
   const latestSwitchConnection = useRef(switchConnection);
@@ -125,12 +124,14 @@ export function WorkbenchTabs() {
   const latestTabs = useRef(tabs);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
+    latestOpenSchema.current = openSchemaTab;
     latestOpenQuery.current = openQueryTab;
     latestSwitchDatabase.current = switchDatabase;
     latestSwitchConnection.current = switchConnection;
     latestTabs.current = tabs;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
+  const handleOpenSchema = useCallback((connectionId: string, target: { schema: string; view?: SchemaView; database?: string }) => latestOpenSchema.current(connectionId, target), []);
   // RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL", nos Registros e no resultado.
   const handleOpenQuery = useCallback((connectionId: string, sql: string, database?: string) => latestOpenQuery.current(connectionId, sql, database), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
@@ -140,6 +141,7 @@ export function WorkbenchTabs() {
   const [moving, setMoving] = useState<ReadonlySet<string>>(() => new Set());
   const [announcement, setAnnouncement] = useState({ text: "", seq: 0 });
   useEffect(() => resultFocus.forgetExcept(new Set(tabs.map((tab) => tab.id))), [tabs]);
+  useEffect(() => tabFocus.forgetExcept(new Set(tabs.map((tab) => tab.id))), [tabs]);
   // RN-ABAS-015: as abas cuja janela do resultado está aberta e não minimizada: o resultado delas está à vista, qualquer que seja a aba ativa.
   const shownWindows = useSyncExternalStore(resultWindows.subscribe, resultWindows.shownTabs, resultWindows.shownTabs);
   const locked = useSyncExternalStore(vaultLock.subscribe, vaultLock.isLocked, vaultLock.isLocked);
@@ -250,11 +252,81 @@ export function WorkbenchTabs() {
    * no meio do primeiro se junta à fila (`mergeCloseQueue`), e o id que já saiu é pulado (`nextToClose`): a fila nunca fica parada.
    */
   const pendingClose = useRef<string[]>([]);
+  // Esta rodada fechou uma da fila: ainda falta ver a lista mudar, e o foco só se decide no fim (RN-ABAS-019).
+  const closingStep = useRef(false);
   useEffect(() => {
     const { next, rest } = nextToClose(pendingClose.current, new Set(tabs.map((tab) => tab.id)));
     pendingClose.current = rest;
+    closingStep.current = next !== null;
     if (next !== null) closeTab(next);
   }, [tabs, closeTab]);
+
+  /**
+   * RN-ABAS-019: o foco depois de a aba aparecer ou sair. Um lugar só decide QUANDO (cada aba diz COMO, em `tabEntries`), num efeito passivo: ele roda depois dos
+   * efeitos dos painéis e do campo de filtro, que cria o CodeMirror num efeito. Só age com a fila de fechar vazia, no fim dela (várias abas fecham de uma vez).
+   *
+   * - O pedido de quem abriu a aba (`tabFocus`) é atendido e consumido em qualquer caso; a `version` refaz o efeito quando a aba pedida já é a ativa e nada mais
+   *   mudou. O pedido de uma aba que ainda não é a ativa espera: a loja avisa antes de a lista de abas chegar a quem pede depois de uma espera (o script que
+   *   vem da API).
+   * - Sem pedido, só age se o foco se perdeu: a aba em que ele estava saiu da página (fechada, levada a outra janela, a conexão excluída) ou ficou escondida (a troca
+   *   que esconde o painel, como seguir uma chave estrangeira). Então vai à aba que ficou ativa, no mesmo lugar em que estava (`lastRegion`: a faixa ou o conteúdo),
+   *   e sem nenhuma aba, ao navegador. O foco que estava fora das abas fica onde está.
+   *
+   * A volta da tela (as Configurações por baixo) não é uma mudança de aba: o foco perdido por ela é do `WorkbenchSlot`, que o devolve ao elemento que o tinha.
+   */
+  const requestVersion = useSyncExternalStore(tabFocus.subscribe, tabFocus.version, tabFocus.version);
+  const lastRegion = useRef<FocusRegion | null>(null);
+  useEffect(() => {
+    // Todo foco que entra, na captura (o `focusin` borbulha, mas um componente que para a tecla ou o clique não pode escondê-lo): fora dos diálogos, dos menus e
+    // das listas, que o fechar não pode confundir com um lugar da pessoa.
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target as Element | null;
+      if (target === null || typeof target.closest !== "function") return;
+      const region = regionOf(target);
+      if (region !== null) lastRegion.current = region;
+    };
+    document.addEventListener("focusin", onFocusIn, true);
+    return () => document.removeEventListener("focusin", onFocusIn, true);
+  }, []);
+  // As abas que o efeito viu da última vez que decidiu: a lista de abas muda a cada texto, título e sessão, e o foco perdido por um clique no vazio não é razão para
+  // levá-lo de volta ao editor quando uma consulta termina. Só a mudança das abas, da ativa ou da entrada ativa (o resultado numa aba) pode ter tirado o foco de onde ele estava.
+  const idsKey = tabs.map((tab) => tab.id).join("\n");
+  const seen = useRef({ idsKey, activeTabId, resultActive, onScreen });
+  useEffect(() => {
+    const before = seen.current;
+    if (closingStep.current || pendingClose.current.length > 0) return;
+    seen.current = { idsKey, activeTabId, resultActive, onScreen };
+    const changed = before.idsKey !== idsKey || before.activeTabId !== activeTabId || before.resultActive !== resultActive;
+    // A tela acabou de voltar (as Configurações por baixo): o foco que ela perdeu é do `WorkbenchSlot`, que o devolve ao elemento que o tinha.
+    const returned = onScreen && !before.onScreen;
+
+    const request = activeTabId === null ? null : tabFocus.take(activeTabId);
+    if (request === null && (!changed || returned)) return;
+    const active = document.activeElement;
+    const lost = isLost(active, document);
+    // O foco está onde a pessoa o pôs e ninguém pediu nada.
+    if (request === null && !lost) return;
+
+    const decision = focusAfterChange({
+      request: request !== null,
+      lastRegion: lastRegion.current,
+      lost,
+      atRequester: request !== null && stillWithRequester(request, active),
+      hasTabs: idsKey !== "",
+      // Um diálogo, um menu ou uma lista que tomou o foco, o cofre bloqueado ou outra tela à mostra: o foco não é de ninguém aqui. A lista de sugestões do editor, que fica
+      // aberta quando o Ctrl+clique no nome de uma tabela esconde o painel dele, não toma o foco (`popupTakesFocus`).
+      blocked: !onScreen || vaultLock.isLocked() || popupTakesFocus(document),
+      // O F6 e a troca do lugar do resultado já prometeram o foco (RN-ABAS-014): quem os pediu o leva quando puder.
+      promised: activeTabId !== null && resultFocus.pending(activeTabId),
+    });
+    if (decision === null) return;
+    if (decision === "navigator") return void navigatorRow(document)?.focus({ preventScroll: true });
+    if (activeTabId === null) return;
+
+    // A aba na faixa: onde o foco estava, ou o lugar que sobra quando a aba não diz como se foca (a entrada ainda não montou, ou o foco não chegou).
+    const inStrip = () => document.getElementById(resultActive ? resultTabElementId(activeTabId) : tabElementId(activeTabId))?.focus({ preventScroll: true });
+    if (decision === "strip" || !tabEntries.focus(activeTabId)) inStrip();
+  }, [requestVersion, activeTabId, resultActive, idsKey, onScreen]);
 
   const closeNow = useCallback(
     (scope: CloseScope, tabId: string) => {
@@ -314,6 +386,33 @@ export function WorkbenchTabs() {
     latestAskAboutSql.current(question.scope, question.tabId);
   }
 
+  // RN-TX-006: depois das alterações não salvas e antes dos scripts, as transações abertas das abas que fecham: Commit, Rollback ou Cancelar, e a escolha vale
+  // para todas; com erro, só o Rollback. Fechar a sessão desfaz a transação na API de qualquer jeito: a pergunta é para a pessoa não a perder sem saber.
+  const [transactionQuestion, setTransactionQuestion] = useState<{ scope: CloseScope; tabId: string; asks: CloseAsks; open: string[]; commands: number; failed: boolean; ending: boolean } | null>(null);
+  const askAboutTransactions = useCallback(
+    (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
+      const open = tabsToClose(scope, tabs, tabId).filter((id) => runnerOf(id).transaction.getState().open);
+      if (open.length === 0) return askAboutScripts(scope, tabId, asks);
+      const states = open.map((id) => runnerOf(id).transaction.getState());
+      setTransactionQuestion({ scope, tabId, asks, open, commands: states.reduce((sum, state) => sum + state.commands, 0), failed: states.some((state) => state.failed), ending: false });
+    },
+    [tabs, runnerOf, askAboutScripts, setTransactionQuestion],
+  );
+
+  async function endTransactionsAndClose(question: { scope: CloseScope; tabId: string; asks: CloseAsks; open: string[] }, commit: boolean) {
+    setTransactionQuestion((current) => (current === null ? null : { ...current, ending: true }));
+    for (const id of question.open) {
+      if (await runnerOf(id).transaction.end(commit)) continue;
+      // O banco recusou o Commit: a saída para ali, aquela aba mostra o erro, e o que ainda não foi feito fica como estava.
+      setTransactionQuestion(null);
+      setWindowClosing(false);
+      releaseWindowClose();
+      return;
+    }
+    setTransactionQuestion(null);
+    askAboutScripts(question.scope, question.tabId, question.asks);
+  }
+
   // RN-EDIT-007: antes, as alterações não salvas dos Registros das abas que fecham: uma aba oferece Salvar; várias, só Descartar e Cancelar. Levar a aba
   // para outra janela pergunta o mesmo (as alterações não salvas não mudam de janela): Salvar e levar, ou Descartar e levar.
   // Elas não voltam na próxima entrada, e perguntam também ao fechar o app (RN-ABAS-007); `asks` diz o que vem depois.
@@ -322,10 +421,10 @@ export function WorkbenchTabs() {
   const handleClose = useCallback(
     (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
       const question = unsavedQuestion(tabsToClose(scope, tabs, tabId), unsavedEdits.countOf, unsavedEdits.saveOf);
-      if (question === null) askAboutScripts(scope, tabId, asks);
+      if (question === null) askAboutTransactions(scope, tabId, asks);
       else setUnsaved({ intent: { kind: "close", scope, asks }, tabId, ...question, saving: false });
     },
-    [tabs, askAboutScripts, setUnsaved],
+    [tabs, askAboutTransactions, setUnsaved],
   );
 
   /**
@@ -394,7 +493,7 @@ export function WorkbenchTabs() {
   // Depois da pergunta: fecha (com a pergunta do SQL, se for o caso) ou leva a aba. Levar depois de "Descartar" é levá-la sem as alterações: elas
   // ficam na memória desta janela, que a aba deixa, e não vão.
   function proceed(intent: Intent, tabId: string, saved = false) {
-    if (intent.kind === "close") askAboutScripts(intent.scope, tabId, intent.asks);
+    if (intent.kind === "close") askAboutTransactions(intent.scope, tabId, intent.asks);
     else void sendTab(tabId, intent.target, saved);
   }
 
@@ -469,6 +568,39 @@ export function WorkbenchTabs() {
     if (windowClosing && tabs.length === 0) finishWindow();
   }, [windowClosing, tabs, finishWindow]);
 
+  /**
+   * RN-ABAS-001 e 012: fecha a aba ativa, com as perguntas de fechar (RN-ABAS-004); com a aba do resultado ativa, só volta o resultado ao painel, sem perguntar
+   * nada. O foco vai à aba que ficou ativa (RN-ABAS-019), e o Ctrl+W seguinte fecha a próxima.
+   */
+  function closeActive() {
+    if (activeTabId === null) return;
+    if (resultActive) changePlace(activeTabId, "panel", "close");
+    else handleClose("one", activeTabId);
+  }
+  const latestCloseActive = useRef(closeActive);
+  useEffect(() => {
+    latestCloseActive.current = closeActive;
+  });
+
+  // RN-ABAS-001 e 019: o Ctrl+W vale em TODA a janela da área de trabalho, como no DBeaver: com o foco na faixa, numa aba, no navegador (também na busca) ou perdido no
+  // corpo da página (fechar uma aba tira o elemento que tinha o foco da página, e o `section` abaixo, que só ouve o que nasce dentro dele, não via mais a tecla).
+  // O ouvinte é da janela, na bolha: quem trata a tecla antes (o campo de edição de uma célula, um diálogo, que param a propagação, ou o `section`, que a marca
+  // como tratada) fica com ela. Não age com um diálogo, um menu ou uma lista aberta, com o cofre bloqueado ou com outra tela à mostra (não há ouvinte), e
+  // trata a tecla até sem aba nenhuma, e ela nunca fecha a janela: o menu padrão do Electron, que só existe no desenvolvimento e tem o Ctrl+W de fechar a janela, não
+  // a recebe (`menuShortcutIgnored`, no processo principal), com a tecla tratada aqui ou não. A tecla segurada (`repeat`) é tratada mas não fecha outra: uma aba por toque.
+  useEffect(() => {
+    if (!onScreen) return;
+
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.defaultPrevented || !isCloseShortcut(event) || vaultLock.isLocked() || popupOpen()) return;
+      event.preventDefault();
+      if (!event.repeat) latestCloseActive.current();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onScreen]);
+
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.defaultPrevented || activeTabId === null) return;
 
@@ -496,9 +628,7 @@ export function WorkbenchTabs() {
 
     if (!isCloseShortcut(event)) return;
     event.preventDefault();
-    // RN-ABAS-012: com a aba do resultado ativa, o Ctrl+W volta o resultado ao painel, sem perguntar nada.
-    if (resultActive) changePlace(activeTabId, "panel", "close");
-    else handleClose("one", activeTabId);
+    if (!event.repeat) closeActive();
   }
 
   // RN-ABAS-003: a aba de outra janela, solta na faixa desta (no lugar da soltura) ou no véu dela (no fim da faixa; também na janela sem abas).
@@ -577,14 +707,19 @@ export function WorkbenchTabs() {
 
             return (
               <Fragment key={tab.id}>
-                <div role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!queryShown} className={queryShown ? "flex min-h-0 flex-1 flex-col" : undefined}>
+                <div role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!queryShown} data-tab-content="" className={queryShown ? "flex min-h-0 flex-1 flex-col" : undefined}>
                   {isTableTab(tab) ? (
                     <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} />
+                  ) : isSchemaTab(tab) ? (
+                    <SchemaTabPanel tab={tab} schemaTarget={tab.schemaTarget} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setSchemaView} onOpenTable={handleOpenTable} />
+                  ) : isDatabaseTab(tab) ? (
+                    <DatabaseTabPanel tab={tab} databaseTarget={tab.databaseTarget} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setDatabaseView} onOpenSchema={handleOpenSchema} onOpenTable={handleOpenTable} />
                   ) : (
                     <QueryTabPanel
                       tab={tab}
                       runner={runnerOf(tab.id)}
                       engine={connectionOf(tab.connectionId)?.engine}
+                      environmentColor={environmentOf(tab.connectionId)?.color ?? null}
                       active={selected}
                       place={place ?? "panel"}
                       editorShown={queryShown}
@@ -646,6 +781,46 @@ export function WorkbenchTabs() {
             setWindowClosing(false);
             releaseWindowClose();
           }}
+        />
+      )}
+
+      {transactionQuestion === null ? null : (
+        <Dialog
+          open
+          role="alertdialog"
+          title={transactionCopy.closing.title(transactionQuestion.open.length)}
+          description={transactionCopy.closing.description(transactionQuestion.commands, transactionQuestion.failed)}
+          pending={transactionQuestion.ending}
+          onClose={() => {
+            setTransactionQuestion(null);
+            setWindowClosing(false);
+            releaseWindowClose();
+          }}
+          footer={
+            <>
+              <Button
+                autoFocus
+                type="button"
+                variant="secondary"
+                disabled={transactionQuestion.ending}
+                onClick={() => {
+                  setTransactionQuestion(null);
+                  setWindowClosing(false);
+                  releaseWindowClose();
+                }}
+              >
+                {transactionCopy.closing.cancel}
+              </Button>
+              <Button type="button" variant="danger" disabled={transactionQuestion.ending} onClick={() => void endTransactionsAndClose(transactionQuestion, false)}>
+                {transactionCopy.closing.rollback}
+              </Button>
+              {transactionQuestion.failed ? null : (
+                <Button type="button" disabled={transactionQuestion.ending} onClick={() => void endTransactionsAndClose(transactionQuestion, true)}>
+                  {transactionCopy.closing.commit}
+                </Button>
+              )}
+            </>
+          }
         />
       )}
 

@@ -4,7 +4,8 @@ import { isMacPlatform } from "@/lib/utils/platform";
 import type { EditBarAction, EditBarButton } from "./edit-bar";
 import type { GridCell } from "./grid-cursor";
 import type { GridLayout, GridSelection } from "./grid-selection";
-import type { QueryRow } from "./query.schema";
+import type { QueryColumn, QueryRow } from "./query.schema";
+import type { EditAccess } from "./cell-editing";
 import type { ChangeOrigin, EditValue, PendingEdits } from "./record-edits";
 import { recordsCopy } from "./records.copy";
 import type { RecordsSort } from "./table-sql";
@@ -62,6 +63,18 @@ export type HeaderSort = { applied: RecordsSort | null; reason: string | null; o
  * apagar; começar a digitar já é mexer); `hint`, para quantas células a edição vale ("Vale para as 37 células escolhidas da coluna preco."), nula com uma só.
  */
 export type CellEditorState = GridCell & { draft: string; touched?: boolean; hint?: string | null };
+
+/** O estado do painel "Valor" (F7), que exibe o conteúdo da célula ativa ao lado da grade de resultados. */
+export type CellValueViewerState = {
+  open: boolean;
+  active: GridCell | null;
+  column: QueryColumn | null;
+  value: string | null;
+  editable?: EditAccess;
+  setNullAccess?: EditAccess;
+  onCommitValue?: (value: string | null) => void;
+  onClose: () => void;
+};
 
 /**
  * A edição que a vista Registros e a aba de consulta entregam à grade (RN-EDIT-001). A grade só desenha e avisa: quem decide o que cada célula
@@ -145,6 +158,10 @@ export type GridEditing = {
    * grade tem a edição: no rodapé dos Registros e numa linha própria sob a grade do resultado da aba de consulta e das abas do script.
    */
   bar: { buttons: readonly EditBarButton[]; onAction: (id: EditBarAction) => void };
+  /** Alterna a exibição do painel "Valor" (F7) ao lado da grade de resultados. */
+  onToggleValueViewer?: () => void;
+  /** Estado do painel "Valor" (F7), exibido ao lado da grade quando `open === true`. */
+  valueViewer?: CellValueViewerState;
 };
 
 /**
@@ -212,6 +229,11 @@ export function filterKey(event: { key: string; ctrlKey: boolean; metaKey: boole
  */
 export function refreshKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
   return event.key === "F5" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+}
+
+/** F7 sozinho (sem modificadores) alterna o painel "Valor" da célula ativa, igual ao DBeaver. */
+export function valueViewerKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+  return event.key === "F7" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
 
 /** As ações da linha que têm atalho com o foco na grade (RN-EDIT-015): adicionar, duplicar e excluir. */

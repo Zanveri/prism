@@ -79,6 +79,7 @@ export const recordsCopy = {
       paste: "Colar",
       // Os rótulos da RN-EDIT-001 (seção 33: "Linha nova" passou a se chamar "Adicionar linha"; as marcas da linha nova na grade continuam).
       edit: "Editar célula",
+      viewValue: "Visualizar valor",
       setNull: "Definir como nulo",
       undo: "Desfazer alteração",
       newRow: "Adicionar linha",
@@ -97,6 +98,7 @@ export const recordsCopy = {
     // RN-EDIT-015: os atalhos da edição como o menu da célula (e a barra de edição) os escrevem. No macOS o Option faz o papel do Alt e o Cmd o do Ctrl.
     shortcuts: {
       edit: "F2",
+      viewValue: "F7",
       newRow: "Alt+Insert",
       newRowMac: "Option+Insert",
       duplicateRow: "Ctrl+Alt+Insert",
@@ -153,5 +155,31 @@ export const recordsCopy = {
     // RN-CONFIG-006.
     showColumnTypes: "Mostrar o tipo de dado no cabeçalho das colunas",
     showColumnTypesHint: "Desligado, o cabeçalho mostra só o nome da coluna, na grade da consulta e na dos registros.",
+  },
+  valueViewer: {
+    title: "Valor",
+    formatLabel: "Formato de exibição",
+    formatted: "Formatado",
+    raw: "Cru",
+    wordWrap: "Quebrar linhas",
+    copy: "Copiar valor",
+    saveFile: "Salvar em arquivo…",
+    openExternal: "Abrir no editor externo",
+    editValue: "Editar valor",
+    loadFile: "Carregar de arquivo…",
+    setNull: "Definir NULL",
+    apply: "Aplicar",
+    revert: "Reverter",
+    close: "Fechar painel Valor (F7)",
+    resize: "Ajustar a largura do painel Valor",
+    noCellSelected: "Selecione uma célula na grade para visualizar o valor.",
+    invalidJson: "O conteúdo não é um JSON válido; exibindo na forma crua.",
+    bytesCount: (bytes: number) => `${bytes.toLocaleString("pt-BR")} ${bytes === 1 ? "byte" : "bytes"}`,
+    charsCount: (chars: number) => `${chars.toLocaleString("pt-BR")} ${chars === 1 ? "caractere" : "caracteres"}`,
+    savedFile: (filename: string) => `Arquivo ${filename} salvo.`,
+    openedExternal: "Aberto no editor externo.",
+    openExternalFailed: "Não foi possível abrir o editor externo.",
+    appliedEdit: "Valor aplicado na célula.",
+    readOnlyHint: "Somente leitura",
   },
 } as const;

@@ -55,6 +55,16 @@ describe("engineOptions (RN-CONN-012)", () => {
       [1, "PostgreSQL", "PG", 5432, "SELECT 1"],
       [2, "Db2", "DB2", 50000, "SELECT 1 FROM SYSIBM.SYSDUMMY1"],
       [3, "Informix", "IFX", 9089, "SELECT 1 FROM systables WHERE tabid = 1"],
+      [4, "SQLite", "SQLITE", 1, "SELECT 1"],
+      [5, "MySQL", "MYSQL", 3306, "SELECT 1"],
+      [6, "MariaDB", "MARIA", 3306, "SELECT 1"],
+      [7, "Microsoft SQL Server", "MSSQL", 1433, "SELECT 1"],
+      [8, "Oracle", "ORA", 1521, "SELECT 1 FROM DUAL"],
+      [9, "Firebird", "FB", 3050, "SELECT 1 FROM RDB$DATABASE"],
+      [10, "DuckDB", "DUCK", 1, "SELECT 1"],
+      [11, "ClickHouse", "CH", 8123, "SELECT 1"],
+      [12, "Google BigQuery", "BQ", 443, "SELECT 1"],
+      [13, "Databricks", "DBX", 443, "SELECT 1"],
     ]);
   });
 });
@@ -158,7 +168,7 @@ describe("createConnectionSchema (RN-CONN-010)", () => {
   });
 
   it("recusa banco fora de 1, 2 e 3", () => {
-    expect(fieldErrors(createConnectionSchema, { ...form, engine: "4" })).toHaveProperty("engine");
+    expect(fieldErrors(createConnectionSchema, { ...form, engine: "14" })).toHaveProperty("engine");
     expect(fieldErrors(createConnectionSchema, { ...form, engine: "0" })).toHaveProperty("engine");
   });
 
@@ -281,7 +291,7 @@ describe("connectionSchema (RN-CONN-001)", () => {
   });
 
   it("recusa banco fora de 1, 2 e 3 e resposta sem hasPassword", () => {
-    expect(connectionSchema.safeParse({ ...saved, engine: 9 }).success).toBe(false);
+    expect(connectionSchema.safeParse({ ...saved, engine: 14 }).success).toBe(false);
     expect(connectionSchema.safeParse({ ...saved, hasPassword: undefined }).success).toBe(false);
   });
 
@@ -371,7 +381,7 @@ describe("folderSchema e formulários de pasta (RN-PASTA-001, RN-PASTA-005 e RN-
     const renamed = editFolderSchema.safeParse({ name: "Nova", color: "#B79CFF", environmentName: "QAS", environmentColor: "#F2B644", confirmCommands: "all", readOnly: "true" });
 
     expect(renamed.success && renamed.data).toEqual({ name: "Nova", color: "#B79CFF", environmentName: "QAS", environmentColor: "#F2B644", confirmCommands: "all", readOnly: true });
-    expect(Object.keys(editFolderSchema.shape).sort()).toEqual(["color", "confirmCommands", "environmentColor", "environmentName", "name", "readOnly"]);
+    expect(Object.keys(editFolderSchema.shape).sort()).toEqual(["color", "confirmCommands", "environmentColor", "environmentName", "name", "readOnly", "useInternalDescriptions"]);
     expect(Object.keys(renameFolderSchema.shape)).toEqual(["name"]);
     expect(fieldErrors(editFolderSchema, { name: "", ...noEnvironment })).toHaveProperty("name");
 

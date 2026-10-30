@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
@@ -39,7 +39,9 @@ import { EditsBanner } from "../edits-banner";
 import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
 import { UnsavedEditsDialog } from "../unsaved-edits-dialog";
+import type { FilterFieldHandle } from "../filter-field";
 import { RecordsFilter } from "./records-filter";
+import { TableDescriptionBanner } from "./table-description-banner";
 
 type RecordsViewProps = {
   /** O id da aba: o filtro e a ordem ficam lembrados por ele (`tab-memory.ts`), e sobrevivem a trocar de vista e ao bloqueio, que troca o executor. */
@@ -56,6 +58,11 @@ type RecordsViewProps = {
   name: string;
   /** A aba tem sessão aberta: sem ela não há sobre o que contar. */
   connected: boolean;
+  /**
+   * RN-AMB-002: a cor (`#RRGGBB`) do ambiente da conexão da aba, o próprio ou o herdado da pasta (`ShownEnvironment.color`); nula sem ambiente e com ambiente sem
+   * cor. Vai à área de resultado, que leva os destaques dela (o sublinhado de "Registros", a célula ativa, o foco e a rolagem da grade) para essa cor.
+   */
+  environmentColor: string | null;
   /** A aba está À VISTA (a ativa, com a área de trabalho na tela): a escondida não executa nada, nem a primeira carga (RN-SEG-001). */
   visible: boolean;
   /** A pessoa desconectou a conexão e ainda não a reconectou: nada executa sozinho, e "Atualizar" conecta e carrega. */
@@ -66,6 +73,8 @@ type RecordsViewProps = {
   refreshSlot?: RefreshSlot;
   /** RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL": a aba nova da conexão e do banco desta, com o texto no editor. */
   onOpenQuery?: (connectionId: string, sql: string, database?: string) => void;
+  /** RN-ABAS-019: o campo de filtro, a entrada da aba da tabela na vista Registros: a aba leva o foco a ele ao ser aberta, e ali o Ctrl+Espaço completa. */
+  filterRef?: Ref<FilterFieldHandle>;
 };
 
 /**
@@ -95,7 +104,7 @@ type RecordsViewProps = {
  * O que esta vista DECIDE (a primeira carga, enviar ou não o comando pedido, a entrega do filtro, o aviso de "Carregando…" ou "desconectada") e o que faz com
  * cada decisão está em `table-view.ts`, em funções sem React, com as peças injetadas e com teste: aqui só se entregam o estado do executor e os `setState`.
  */
-export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot, onOpenQuery }: RecordsViewProps) {
+export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, environmentColor, visible, disconnected, onOpenTable, refreshSlot, onOpenQuery, filterRef }: RecordsViewProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const toast = useToast();
@@ -369,6 +378,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <RecordsFilter
+        ref={filterRef}
         draft={draft}
         onDraft={(text) => {
           setDraft(text);
@@ -384,9 +394,11 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         columns={gridColumns ?? seenColumns}
         autocomplete={preferences.editor.autocomplete}
       />
+      <TableDescriptionBanner connectionId={connectionId} database={database} table={name} visible={visible && !disconnected} />
       <ResultPanel
         state={state}
         connected={connected}
+        environmentColor={environmentColor}
         // As larguras das colunas (RN-GRADE-009) ficam lembradas pela aba: esta vista desmonta ao trocar para a Estrutura ou o Diagrama.
         tabId={tabId}
         records={{

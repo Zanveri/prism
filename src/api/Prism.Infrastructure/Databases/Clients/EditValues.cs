@@ -1,12 +1,14 @@
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Buffers;
 using System.Data;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Prism.Infrastructure.Databases.Clients;
 
-/// <summary>Como o Prism converte o texto de uma célula para a coluna (RN-EDIT-006). No PostgreSQL é sempre texto: quem converte é o banco.</summary>
+/// <summary>Como o Prism converte o texto de uma célula para a coluna (RN-EDIT-006). No PostgreSQL é sempre texto (ou binário em `bytea`): quem converte é o banco.</summary>
 internal enum EEditType
 {
     Text,
@@ -19,11 +21,9 @@ internal enum EEditType
     Time,
     Timestamp,
     Boolean,
-
-    /// <summary>Binário: só leitura (o valor chega cortado, RN-SQL-011).</summary>
     Binary,
 
-    /// <summary>Um tipo que o Prism ainda não converte neste banco: intervalo, objeto grande, coleção, tipo do usuário, XML.</summary>
+    /// <summary>Um tipo que o Prism ainda não converte neste banco: intervalo, coleção, tipo do usuário.</summary>
     Unsupported
 }
 
@@ -39,23 +39,25 @@ internal static partial class EditValues
     /// <summary>As casas de fração que a data e hora do C# guarda.</summary>
     private const int MaxDateTimeFraction = 7;
 
+    private static readonly SearchValues<char> HexDigits = SearchValues.Create("0123456789abcdefABCDEF");
+
     public static EEditType TypeOf(ESqlDialect dialect, string type, string kind)
     {
-        if (kind == "binary")
+        var name = type.Trim().ToUpperInvariant();
+        var bare = name.IndexOf('(') is var open and >= 0 ? name[..open].TrimEnd() : name;
+
+        if (kind == "binary" || bare is "BINARY" or "VARBINARY" or "BLOB" or "BYTE" or "BYTEA")
             return EEditType.Binary;
 
         if (dialect == ESqlDialect.PostgreSql)
             return EEditType.Text;
-
-        var name = type.Trim().ToUpperInvariant();
-        var bare = name.IndexOf('(') is var open and >= 0 ? name[..open].TrimEnd() : name;
 
         if (dialect == ESqlDialect.Informix && bare.StartsWith("DATETIME", StringComparison.Ordinal))
             return name.Contains("YEAR TO", StringComparison.Ordinal) ? EEditType.Timestamp : name.Contains("HOUR TO SECOND", StringComparison.Ordinal) ? EEditType.Time : EEditType.Unsupported;
 
         return bare switch
         {
-            "CHARACTER" or "CHAR" or "VARCHAR" or "GRAPHIC" or "VARGRAPHIC" or "NCHAR" or "NVARCHAR" or "LVARCHAR" => EEditType.Text,
+            "CHARACTER" or "CHAR" or "VARCHAR" or "LONG VARCHAR" or "GRAPHIC" or "VARGRAPHIC" or "NCHAR" or "NVARCHAR" or "LVARCHAR" or "CLOB" or "DBCLOB" or "NCLOB" or "TEXT" or "XML" or "JSON" or "JSONB" or "BSON" => EEditType.Text,
             "SMALLINT" => EEditType.Int16,
             "INTEGER" or "INT" or "SERIAL" => EEditType.Int32,
             "BIGINT" or "INT8" or "SERIAL8" or "BIGSERIAL" => EEditType.Int64,
@@ -65,7 +67,6 @@ internal static partial class EditValues
             "TIME" => EEditType.Time,
             "TIMESTAMP" => EEditType.Timestamp,
             "BOOLEAN" => EEditType.Boolean,
-            "BINARY" or "VARBINARY" or "BLOB" or "BYTE" => EEditType.Binary,
             _ => EEditType.Unsupported
         };
     }
@@ -74,7 +75,15 @@ internal static partial class EditValues
     public static Result<EditParameter, string> Convert(ESqlDialect dialect, EEditType type, string? text)
     {
         if (text is null)
-            return new EditParameter(null, type == EEditType.Date ? DbType.Date : null);
+            return new EditParameter(null, type switch
+            {
+                EEditType.Date => DbType.Date,
+                EEditType.Binary => DbType.Binary,
+                _ => null
+            });
+
+        if (type == EEditType.Binary)
+            return BinaryOf(dialect, text);
 
         if (dialect == ESqlDialect.PostgreSql || type == EEditType.Text)
             return new EditParameter(text);
@@ -104,6 +113,19 @@ internal static partial class EditValues
         if (text is null)
             return "NULL";
 
+        if (type == EEditType.Binary)
+        {
+            if (BinaryBytesOf(dialect, text) is not { } bytes)
+                return null;
+
+            return dialect switch
+            {
+                ESqlDialect.PostgreSql => $"decode('{System.Convert.ToHexString(bytes)}', 'hex')",
+                ESqlDialect.Db2 => $"X'{System.Convert.ToHexString(bytes)}'",
+                _ => null
+            };
+        }
+
         if (text.Any(character => character < ' ' || character == '\u007f'))
             return null;
 
@@ -121,6 +143,27 @@ internal static partial class EditValues
             EEditType.Boolean when BooleanText(text) is { } flag => dialect == ESqlDialect.Db2 ? flag ? "TRUE" : "FALSE" : flag ? "'t'" : "'f'",
             _ => quoted
         };
+    }
+
+    private static Result<EditParameter, string> BinaryOf(ESqlDialect dialect, string text)
+        => BinaryBytesOf(dialect, text) is { } bytes
+            ? new EditParameter(bytes, DbType.Binary)
+            : $"«{text}» não é um binário em hexadecimal (0x…).";
+
+    private static byte[]? BinaryBytesOf(ESqlDialect dialect, string text)
+    {
+        var trimmed = text.Trim();
+        var hasHexPrefix = trimmed.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            || (dialect == ESqlDialect.PostgreSql && trimmed.StartsWith(@"\x", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasHexPrefix)
+            return Encoding.UTF8.GetBytes(text);
+
+        var digits = trimmed.AsSpan(2);
+        if (digits.Length % 2 != 0 || digits.ContainsAnyExcept(HexDigits))
+            return null;
+
+        return System.Convert.FromHexString(digits);
     }
 
     private static Result<EditParameter, string> Integer(string text, long minimum, long maximum, Func<long, object> narrow)

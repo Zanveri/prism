@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
@@ -7,7 +7,7 @@ import { MoveConnectionDialog } from "@/app/connections/_components/move-connect
 import { RenameConnectionDialog } from "@/app/connections/_components/rename-connection-dialog";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
-import type { Connection } from "@/app/connections/_lib/connections.schema";
+import type { Connection, Folder } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
 import { dbeaverCopy } from "@/app/connections/_lib/dbeaver.copy";
@@ -15,7 +15,7 @@ import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { userEnvironments } from "@/app/connections/_lib/user-environments";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DownloadIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, UploadIcon, useToast, type ContextMenuItem } from "@/components/ui";
+import { Button, ColumnsIcon, ContextMenu, DatabaseIcon, DiagramIcon, DocumentIcon, DownloadIcon, DuplicateIcon, FolderIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, UploadIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { dbeaverAvailable } from "@/lib/api/bridge";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
@@ -24,15 +24,18 @@ import { connectionReveal } from "../_lib/connection-intent";
 import { credentialsMissingField } from "../_lib/credentials-missing";
 import { openExportWizard } from "../_lib/data-export/data-exports";
 import { openImportWizard } from "../_lib/data-import/data-imports";
-import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
+import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, objectNamesKey, objectNamesQuery, openSessionForSearch, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
-import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { childrenKey, databaseRefOf, databaseTargetOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaTargetOf, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { filterConnected } from "../_lib/navigator-connected";
+import { collapsedAllInFilter, collapsedInFilter, filterFoldersFor, filterViewOf, folderIdOfKey, folderIdsOfKeys, folderKeyOf, noFilterFolders, openTreeKeys, openedInFilter, toggledInFilter } from "../_lib/navigator-folders";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { importArrived, importRevealOf, revealOf } from "../_lib/navigator-reveal";
-import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
+import { indexLevels } from "../_lib/navigator-index";
+import { cachedTree, fold, loadedLevels, searchTree, type CachedNames, type MatchRange } from "../_lib/navigator-search";
+import { cachedTreeSessions, indexesInScope, nothingFoundShown, searchScope, searchStatusOf, type IndexReport, type SearchRetry } from "../_lib/navigator-search-scope";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
 import { invalidateStructure } from "../_lib/table-structure.service";
 import { refreshKey } from "../_lib/grid-editing";
@@ -40,6 +43,7 @@ import { importedReveal, type TransferRequest } from "../_lib/transfer-requests"
 import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useConnectionChecksSnapshot } from "../_lib/use-connection-checks";
+import { useOpenFolders } from "../_lib/use-navigator-layout";
 import { useTypeAhead } from "../_lib/use-type-ahead";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { connectedConnectionIds, isConnected } from "../_lib/workbench-model";
@@ -48,9 +52,9 @@ import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { CheckFailureDialog } from "./connection-check";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
-import { NavigatorConnectedFilter, NavigatorFilteredEmpty } from "./navigator-connected-filter";
-import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
-import { NavigatorSearchField } from "./navigator-search-field";
+import { NavigatorFilteredEmpty } from "./navigator-connected-filter";
+import { NavigatorFilters } from "./navigator-filters";
+import { NavigatorSearchStatus } from "./navigator-search-status";
 import { TypeAheadIndicator } from "./type-ahead-indicator";
 import { NavigatorRow, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
@@ -88,6 +92,10 @@ function lacksCredentials(treeSession: UseQueryResult): boolean {
 const isFetched = (path: NavPath): path is FetchedPath => path.type === "connection" || path.type === "database" || path.type === "objects" || path.type === "tableLevel";
 
 const noKeys: ReadonlySet<string> = new Set();
+const noIndexes: CachedNames[] = [];
+
+/** Os ids de uma lista guardada como texto (separados por espaço), como conjunto. */
+const idsOf = (signature: string): ReadonlySet<string> => new Set(signature === "" ? [] : signature.split(" "));
 
 /** O ícone de cada item do menu, onde o app já tem o desenho. "Copiar" não tem, e os rótulos alinham do mesmo jeito. */
 const menuIcons: Readonly<Record<string, ReactNode>> = {
@@ -104,6 +112,10 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   openRecords: <TableIcon />,
   openStructure: <ColumnsIcon />,
   openDiagram: <DiagramIcon />,
+  openSchema: <FolderIcon />,
+  openSchemaDiagram: <DiagramIcon />,
+  openDatabase: <DatabaseIcon />,
+  openDatabaseDiagram: <DiagramIcon />,
   generateSelect: <DocumentIcon />,
   // RN-EXPORT-001: a seta de baixar que o app já tem (a do "Exportar CSV").
   exportData: <DownloadIcon />,
@@ -151,8 +163,7 @@ type OpenMenu = { /** A linha, ou `null` para o espaço vazio do navegador. */ n
 
 /** A pasta de uma linha de pasta (`NavPath` `folder`). */
 function folderIdOf(node: NavNode): string | null {
-  const path = parseNavKey(node.key);
-  return path.type === "folder" ? path.id : null;
+  return folderIdOfKey(node.key);
 }
 
 /**
@@ -177,18 +188,22 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   const toast = useToast();
   const folders = useQuery(foldersQuery);
   const connections = useQuery(connectionsQuery);
-  const { tabs, expanded, setNodeOpen, openQueryTab, openTableTab, disconnect, disconnecting } = useWorkbench();
+  const { tabs, expanded, setNodeOpen, openQueryTab, openTableTab, openSchemaTab, openDatabaseTab, disconnect, disconnecting } = useWorkbench();
   // RN-NAV-011: a densidade da árvore, que muda ao vivo com a escolha em Configurações › Aparência.
   const density = usePreferences().preferences.ui.navigatorDensity;
-  // As pastas começam abertas; só as recolhidas são estado. Ao ir para Conexões e voltar, elas reabrem.
-  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(new Set());
+  // RN-NAV-014: as pastas abertas são as lembradas (por usuário, nas preferências desta instalação); sem nada lembrado, todas fechadas. Quem escreve é um
+  // evento ou um efeito, nunca a renderização. As conexões não se lembram: abrir a conexão é conectar (RN-SESSAO-001).
+  const [openFolderIds, changeFolders] = useOpenFolders("connections");
+  // Com o seletor de ambiente ou "Só as conectadas" ligado, as pastas no caminho até as conexões à vista abrem só nessa vista, sem gravar; o que a pessoa
+  // recolhe nela vale enquanto o filtro está ligado (como `searchCollapsed` na busca), e desligá-lo devolve as pastas como estavam.
+  const [filterFolders, setFilterFolders] = useState(noFilterFolders);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null);
   const [connectionAction, setConnectionAction] = useState<ConnectionAction | null>(null);
   // RN-TRANSF-014 e RN-DBEAVER-014: o que a importação acabou de criar (o diálogo é da página, e o pedido vem por `importedReveal`), à espera de as listas o
   // trazerem para a árvore mostrá-lo. `handledImport` é o pedido que a árvore já atendeu.
   const importedRequest = useSyncExternalStore(importedReveal.subscribe, importedReveal.pending, importedReveal.pending);
-  const [handledImport, setHandledImport] = useState(0);
+  const [handledImport, setHandledImport] = useState<{ seq: number; folderIds: string[] }>({ seq: 0, folderIds: [] });
   // A linha a trazer à vista e a receber o foco (a conexão salva ou duplicada, RN-NAV-004; a primeira importada, RN-TRANSF-014), uma vez por pedido.
   const [rowFocus, setRowFocus] = useState<{ key: string; seq: number } | null>(null);
   const focusRow = (key: string) => setRowFocus((current) => ({ key, seq: (current?.seq ?? 0) + 1 }));
@@ -198,6 +213,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   const [query, setQuery] = useState("");
   const [searchCollapsed, setSearchCollapsed] = useState<{ query: string; keys: ReadonlySet<string> }>({ query: "", keys: noKeys });
   const searchInput = useRef<HTMLInputElement>(null);
+  const environmentSelect = useRef<HTMLButtonElement>(null);
   const area = useRef<HTMLDivElement>(null);
   // RN-NAV-010: o seletor de ambiente. É estado daqui: a área de trabalho fica montada enquanto o cofre está aberto, então a escolha vale enquanto a
   // janela está aberta, e sair do cofre a apaga, como o resto.
@@ -212,7 +228,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   // A conexão que o formulário acabou de salvar (RN-NAV-004), e a última que esta árvore já mostrou (o número do pedido).
   const onScreen = useWorkbenchOnScreen();
   const revealRequest = useSyncExternalStore(connectionReveal.subscribe, connectionReveal.pending, connectionReveal.pending);
-  const [reveal, setReveal] = useState<{ key: string; seq: number } | null>(null);
+  const [reveal, setReveal] = useState<{ key: string; seq: number; folderIds: string[] } | null>(null);
 
   const connectionList = useMemo(() => connections.data ?? [], [connections.data]);
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
@@ -243,12 +259,25 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     (connectionId) => sessionById.get(connectionId)?.isSuccess === true,
     new Set(notConnectedIds(checks)),
   );
-  const connectedKey = onlyConnected ? connectedIds.join(" ") : null;
+  const connectedSignature = connectedIds.join(" ");
+  const connectedKey = onlyConnected ? connectedSignature : null;
 
   // RN-NAV-010 e 013: o seletor de ambiente e "Só as conectadas" se combinam; a busca filtra depois, sobre a árvore que sai daqui.
   const inEnvironment = useMemo(() => filterByEnvironment(folders.data ?? [], connectionList, environmentChoice, environments), [folders.data, connectionList, environmentChoice, environments]);
   const shown = useMemo(() => filterConnected(inEnvironment.folders, inEnvironment.connections, connectedKey === null ? null : new Set(connectedKey.split(" "))), [inEnvironment, connectedKey]);
   const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
+
+  // RN-BUSCA-002: o escopo da busca, a partir das conexões à vista (acima), das conectadas e das sessões da árvore abertas, que vêm do cache (`cachedTreeSessions`, só lê). Não
+  // é uma loja assinada (`useSyncExternalStore`) de propósito: uma renderização a mais no meio do "Desconectar" (que recolhe os nós, solta as abas e SÓ ENTÃO esquece as
+  // consultas, no mesmo lote) veria o cache já limpo com as abas e os nós ainda no ar, e os observadores refariam a sessão que a pessoa acabou de fechar. As renderizações
+  // que importam já vêm das consultas observadas (a sessão de cada conexão, os níveis abertos e os próprios índices). As conexões entram como texto (como `connectedKey`),
+  // para o escopo, e o filtro que sai dele, só se refazerem quando uma delas muda.
+  const treeSessions = cachedTreeSessions(queryClient);
+  const connectingSignature = shown.connections.filter((connection) => statuses.get(connection.id) === "connecting").map((connection) => connection.id).join(" ");
+  const scope = useMemo(
+    () => searchScope({ connections: shown.connections, connected: idsOf(connectedSignature), connecting: idsOf(connectingSignature), sessions: treeSessions }),
+    [shown.connections, connectedSignature, connectingSignature, treeSessions],
+  );
 
   // RN-TRANSF-016: a conexão que a API recusou por faltar o usuário ou a senha fica fechada, como estava antes do clique; um efeito a fecha de vez.
   const lackingCredentials = connectionList.filter((connection) => {
@@ -257,7 +286,14 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   });
   const lackingKey = lackingCredentials.map((connection) => connection.id).join(" ");
   const lackingKeys = new Set(lackingCredentials.map((connection) => navKey({ type: "connection", connectionId: connection.id })));
-  const open = new Set([...[...expanded].filter((key) => !lackingKeys.has(key)), ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
+  // RN-NAV-014: as pastas abertas são as lembradas; com o seletor de ambiente ou "Só as conectadas" ligado (RN-NAV-010 e 013), as do caminho até as conexões à
+  // vista abrem só nessa vista, menos as que a pessoa recolheu nela. Desligar o filtro encerra a vista e trocá-lo começa outra (ajuste durante a renderização: as
+  // recolhidas saem), e desligar devolve as pastas lembradas.
+  const filterView = filterViewOf(environmentChoice, onlyConnected);
+  const filtering = filterView !== null;
+  const heldFilterFolders = filterFoldersFor(filterFolders, filterView);
+  if (heldFilterFolders !== filterFolders) setFilterFolders(heldFilterFolders);
+  const open = openTreeKeys({ expanded, lackingKeys, folderKeys: tree.folderKeys, openFolderIds, filterCollapsed: collapsedInFilter(filterFolders, filterView) });
 
   const paths = [...expanded].map(parseNavKey);
   const fetchedPaths = paths.filter(isFetched);
@@ -283,24 +319,38 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   });
 
   const searching = searchText.trim() !== "";
-  // A busca olha o que o cache da árvore já guarda, aberto ou não, e nunca abre nó nem busca nível: só lê (`cachedTree`). O que ela precisa do cache é tudo o
-  // que há de carregado (os níveis dos nós abertos são consultas dele), então o ponto de partida são só as pastas e as conexões (`tree.levels`). O filtro só
-  // se refaz quando muda o texto, o que a pessoa recolheu, a árvore ou o cache (`cachedTree` devolve o mesmo objeto enquanto nada dele mudou).
+  // RN-BUSCA-002: o índice de nomes de cada banco do escopo, pedido quando o campo tem texto. Uma vez por banco: depois disso a busca não vai mais à API até o "Atualizar", o
+  // "Desconectar" ou o bloqueio (`keepUntilRefreshed`). Os observadores ficam montados com o campo vazio (`enabled: false`) para a consulta que falhou, ou que o "Atualizar"
+  // deixou velha, buscar de novo na busca seguinte; nada é pedido sem texto. A sessão do banco abre pela consulta, sem abrir o nó (`objectNamesQuery`).
+  const indexQueries = useQueries({ queries: scope.databases.map((database) => objectNamesQuery(database.connectionId, database.database, queryClient, searching)) });
+
+  // A busca olha o que o cache da árvore já guarda, aberto ou não, e os índices de nomes dos bancos do escopo; nunca abre nó nem busca nível, e nada entra em `expanded`: só lê
+  // (`cachedTree`). O que ela precisa do cache é tudo o que há de carregado (os níveis dos nós abertos são consultas dele), então o ponto de partida são só as pastas e as
+  // conexões (`tree.levels`), e o índice só acrescenta o que falta (`indexLevels`). O filtro só se refaz quando muda o texto, o que a pessoa recolheu, a árvore, o cache ou o
+  // escopo (`cachedTree` devolve o mesmo objeto enquanto nada dele mudou, e `scopedIndexes` o mesmo enquanto nenhum índice nem o escopo mudou).
   const cache = searching ? cachedTree(queryClient) : null;
+  const cachedIndexes = cache === null ? noIndexes : cache.indexes;
+  const scopedIndexes = useMemo(() => indexesInScope(cachedIndexes, scope.databases), [cachedIndexes, scope.databases]);
   const collapsedKeys = searchCollapsed.query === searchText ? searchCollapsed.keys : noKeys;
-  const search = useMemo(() => (cache === null ? null : searchTree(tree.roots, loadedLevels(tree.levels, cache.cached), searchText, collapsedKeys)), [cache, tree, searchText, collapsedKeys]);
+  const searched = useMemo(() => {
+    if (cache === null) return null;
+
+    const indexed = indexLevels(loadedLevels(tree.levels, cache.cached), scopedIndexes, fold(searchText.trim()));
+    return { view: searchTree(tree.roots, indexed.levels, searchText, collapsedKeys), cut: indexed.cuts.length > 0, hidden: indexed.hidden };
+  }, [cache, tree, searchText, collapsedKeys, scopedIndexes]);
+  const search = searched === null ? null : searched.view;
   const rows = search === null ? flattenVisible(tree.roots, open, levels) : search.rows;
 
   // Salvar no formulário volta à área de trabalho com a conexão à vista e escolhida (RN-NAV-004): com a área de trabalho de novo na tela e a
-  // conexão já na lista, as pastas acima dela abrem, a linha é escolhida, uma busca que a escondia é limpa, e a lista a traz à vista e lhe dá o
-  // foco. Ajuste durante a renderização (como no provedor), uma vez por pedido; levar o pedido embora e avisar quem mostra o navegador são efeitos.
+  // conexão já na lista, a linha é escolhida, uma busca que a escondia é limpa, e a lista a traz à vista e lhe dá o foco. Ajuste durante a renderização
+  // (como no provedor), uma vez por pedido. As pastas acima dela abrem e se lembram (RN-NAV-014), e isso é escrita numa loja de fora: vai junto do pedido
+  // (`folderIds`) e se faz no efeito que o leva embora, nunca aqui.
   const revealTarget = revealRequest === null || revealRequest.seq === reveal?.seq || !onScreen ? undefined : connectionById.get(revealRequest.connectionId);
   if (revealRequest !== null && revealTarget !== undefined) {
     const plan = revealOf(revealTarget, folders.data ?? []);
-    setReveal({ key: plan.key, seq: revealRequest.seq });
+    setReveal({ key: plan.key, seq: revealRequest.seq, folderIds: folderIdsOfKeys(plan.folderKeys) });
     setSelectedKey(plan.key);
     focusRow(plan.key);
-    setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     if (search !== null && !search.rows.some((row) => row.key === plan.key)) setQuery("");
     // Os filtros que a escondem também saem (RN-NAV-010 e 013): a conexão salva ou duplicada sem o ambiente escolhido, ou desconectada, tem de aparecer.
     if (!shown.connections.includes(revealTarget)) {
@@ -309,13 +359,13 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     }
   }
 
-  // RN-TRANSF-014: depois da importação, com as listas já trazendo o que entrou, as pastas até ele abrem e a primeira linha importada, na ordem da árvore, é
-  // escolhida e recebe o foco. Os filtros ficam como estavam: se um deles a esconde, o foco vai à pasta de destino, ou, quando o destino é a raiz ou também
-  // está escondido, à primeira linha à vista. Ajuste durante a renderização, uma vez, como o da conexão salva.
-  if (importedRequest !== null && importedRequest.seq !== handledImport && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(importedRequest.value, folders.data, connections.data)) {
+  // RN-TRANSF-014: depois da importação, com as listas já trazendo o que entrou, a primeira linha importada, na ordem da árvore, é escolhida e recebe o foco
+  // (as pastas até ela abrem e se lembram no efeito que leva o pedido embora, como no salvar). Os filtros ficam como estavam: se um deles a esconde, o foco vai
+  // à pasta de destino, ou, quando o destino é a raiz ou também está escondido, à primeira linha à vista. Ajuste durante a renderização, uma vez, como o da
+  // conexão salva.
+  if (importedRequest !== null && importedRequest.seq !== handledImport.seq && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(importedRequest.value, folders.data, connections.data)) {
     const plan = importRevealOf(importedRequest.value, folders.data, connections.data);
-    setHandledImport(importedRequest.seq);
-    setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
+    setHandledImport({ seq: importedRequest.seq, folderIds: folderIdsOfKeys(plan.folderKeys) });
     const shownKeys = new Set([...shown.folders.map((folder) => navKey({ type: "folder", id: folder.id })), ...shown.connections.map((connection) => navKey({ type: "connection", connectionId: connection.id }))]);
     const onView = (key: string | null): key is string => key !== null && shownKeys.has(key) && (search === null || search.rows.some((row) => row.key === key));
     const key = onView(plan.first) ? plan.first : onView(plan.target) ? plan.target : (rows[0]?.key ?? null);
@@ -332,12 +382,33 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     }
   }, [lackingKey, setNodeOpen]);
 
+  /**
+   * Abre as pastas e as lembra (RN-NAV-014): o que foi criado, salvo, duplicado, importado, movido ou revelado fica à vista, e à vista na próxima entrada.
+   * Na vista filtrada elas saem também das recolhidas. Só em evento ou em efeito: a loja é de fora, e a renderização não escreve nela.
+   */
+  const openFolders = (ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    changeFolders({ open: ids });
+    setFilterFolders((current) => openedInFilter(current, filterView, ids.map(folderKeyOf)));
+  };
+  // Os efeitos das revelações abrem as pastas com a versão de agora, sem depender dela: cada pedido é atendido uma vez (o número do pedido), e não a cada troca de filtro.
+  const openForRequest = useEffectEvent(openFolders);
+
+  // RN-NAV-014: a pasta excluída sai do que se lembra, na primeira lista de pastas desta montagem (a lida depois dela, e não a que o cache já tinha).
+  const pruned = useRef(false);
+  useEffect(() => {
+    if (pruned.current || folders.data === undefined || !folders.isFetchedAfterMount) return;
+    pruned.current = true;
+    changeFolders({ retain: folders.data.map((folder) => folder.id) });
+  }, [folders.data, folders.isFetchedAfterMount, changeFolders]);
+
   // RN-DBEAVER-014: com o navegador escondido (RN-NAV-008), a importação o mostra antes de levar o foco à linha; o pedido sai quando a árvore o atendeu.
   const announcedImport = useRef(0);
   useEffect(() => {
-    if (handledImport === 0 || announcedImport.current === handledImport) return;
-    announcedImport.current = handledImport;
-    importedReveal.take(handledImport);
+    if (handledImport.seq === 0 || announcedImport.current === handledImport.seq) return;
+    announcedImport.current = handledImport.seq;
+    openForRequest(handledImport.folderIds);
+    importedReveal.take(handledImport.seq);
     onRevealed?.();
   }, [handledImport, onRevealed]);
 
@@ -345,6 +416,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   useEffect(() => {
     if (reveal === null || announcedReveal.current === reveal.seq) return;
     announcedReveal.current = reveal.seq;
+    openForRequest(reveal.folderIds);
     connectionReveal.take(reveal.seq);
     onRevealed?.();
   }, [reveal, onRevealed]);
@@ -354,7 +426,12 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
 
   function toggle(node: NavNode) {
     if (node.kind === "folder") {
-      setCollapsedFolders((current) => new Set(current.has(node.key) ? [...current].filter((key) => key !== node.key) : [...current, node.key]));
+      const id = folderIdOfKey(node.key);
+      if (id === null) return;
+
+      // RN-NAV-014: a pasta abre e fecha lembrada; na vista filtrada (RN-NAV-010 e 013) vale só enquanto o filtro está ligado, sem gravar.
+      if (filtering) setFilterFolders((current) => toggledInFilter(current, filterView, node.key, open.has(node.key)));
+      else changeFolders(open.has(node.key) ? { close: [id] } : { open: [id] });
       return;
     }
 
@@ -378,8 +455,22 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     setNodeOpen(navKey({ type: "database", connectionId }), true);
   }
 
-  /** A pasta fica aberta: o que acaba de ser criado dentro dela tem de aparecer (como a tela de Conexões fazia). */
-  const expandFolder = (folderId: string) => setCollapsedFolders((current) => new Set([...current].filter((key) => key !== navKey({ type: "folder", id: folderId }))));
+  /** A pasta fica aberta, e lembrada: o que acaba de ser criado dentro dela tem de aparecer (como a tela de Conexões fazia). */
+  const expandFolder = (folderId: string) => openFolders([folderId]);
+
+  /**
+   * "Mover para…" numa pasta (RN-NAV-003, RN-NAV-014): as pastas do destino abrem, lembradas, e ela fica escolhida e à vista, como a conexão salva. O pedido de
+   * foco só vale sem busca: a pasta pode não estar na lista filtrada, e o pedido ficaria armado até ela aparecer. A conexão movida pede pelo `connectionReveal`.
+   */
+  function revealMovedFolder(moved: Folder) {
+    const known = queryClient.getQueryData<Folder[]>(foldersQuery.queryKey) ?? folders.data ?? [];
+    openFolders(folderIdsOfKeys(revealOf({ id: moved.id, folderID: moved.parentID }, known).folderKeys));
+    if (search !== null) return;
+
+    const key = folderKeyOf(moved.id);
+    setSelectedKey(key);
+    focusRow(key);
+  }
 
   /**
    * "Duplicar conexão" (RN-CONN-016): a cópia nasce na mesma pasta, desconectada, e aparece escolhida, com as pastas acima dela abertas e o foco nela
@@ -548,6 +639,16 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
         if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name, view: action.view, ...inDatabase(target.database) });
         return;
       // O SELECT vai para uma consulta nova, no editor, sem executar; a citação dos nomes por banco é do `selectAllSql`.
+      case "openSchema": {
+        const schemaTarget = schemaTargetOf(node);
+        if (schemaTarget !== null) openSchemaTab(schemaTarget.connectionId, { schema: schemaTarget.schema, view: action.view, ...inDatabase(schemaTarget.database) });
+        return;
+      }
+      case "openDatabase": {
+        const dbTarget = databaseTargetOf(node);
+        if (dbTarget !== null) openDatabaseTab(dbTarget.connectionId, { name: dbTarget.name, view: action.view, ...inDatabase(dbTarget.database) });
+        return;
+      }
       case "generateSelect": {
         const engine = target === null ? undefined : connectionById.get(target.connectionId)?.engine;
         if (target !== null && engine !== undefined) openQueryTab(target.connectionId, selectAllSql(engine, target.schema, target.name), target.database);
@@ -613,7 +714,7 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   // Uma pasta só está "aberta" se tem o que mostrar; as conexões, os esquemas e as tabelas abertos estão em `expanded`.
   const hasOpenFolder = tree.folderKeys.some((key) => {
     const level = tree.levels.get(childrenKey({ key }));
-    return !collapsedFolders.has(key) && level?.status === "loaded" && level.children.length > 0;
+    return open.has(key) && level?.status === "loaded" && level.children.length > 0;
   });
 
   const toolbar = toolbarFor(
@@ -643,9 +744,11 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
         if (selected !== null) refresh(selected);
         return;
       // Recolher não desconecta: a sessão de cada conexão continua aberta, e o ponto de estado dela continua verde.
+      // As pastas também (RN-NAV-002, RN-NAV-014), e é isso que volta na próxima entrada; na vista filtrada só a vista se recolhe, e o lembrado fica como estava.
       case "collapseAll":
         for (const key of expanded) setNodeOpen(key, false);
-        setCollapsedFolders(new Set(tree.folderKeys));
+        if (filtering) setFilterFolders(collapsedAllInFilter(filterView, tree.folderKeys));
+        else changeFolders({ closeAll: true });
         return;
       // O diálogo de nova conexão (RN-NAV-004), na pasta escolhida (ou na do item escolhido), ou na raiz; sempre habilitado (RN-NAV-002).
       case "newConnection":
@@ -661,6 +764,47 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
   const menuItems = (menu === null ? [] : menuGroupsOf(menu.node)).map((group) =>
     group.map((item): ContextMenuItem => ({ id: item.id, label: item.label, shortcut: item.shortcut, disabled: item.disabled, hint: item.hint, icon: menuIcons[item.id], onSelect: () => menu && runMenuAction(menu.node, item.action) })),
   );
+
+  // RN-BUSCA-002: a linha de estado da busca. Cada banco do escopo diz o que a consulta do índice dele respondeu. A conexão de fora cuja sessão da árvore falhou ao abrir
+  // (por um "Buscar nelas também" ou por um nó aberto antes) diz a mensagem do banco ali, e não no nó, que continua fechado; a recusa por faltar usuário ou senha não entra:
+  // quem a trata é o "Editar conexão" (`lacksCredentials`).
+  const searchStatus =
+    searched === null
+      ? null
+      : searchStatusOf({
+          reports: scope.databases.map((database, index): IndexReport => {
+            const result = indexQueries[index];
+            return { database, names: result.data, failure: result.isError && !result.isFetching ? { message: messageOf(result.error), lost: isSessionLost(result.error) } : null };
+          }),
+          openFailures: scope.openable.flatMap((connection) => {
+            const session = sessionById.get(connection.id);
+            return session !== undefined && session.isError && !session.isFetching && !lacksCredentials(session) ? [{ connection, message: messageOf(session.error) }] : [];
+          }),
+          cut: searched.cut,
+          scope,
+        });
+
+  /**
+   * O "Tentar de novo" da linha de estado: o índice de novo (a sessão que caiu abre outra, como na árvore) ou a abertura da sessão da conexão de fora. O botão sai da
+   * tela assim que o pedido começa (a linha passa a dizer "Buscando…"), e o foco que estava nele iria ao corpo da página: vai ao campo da busca.
+   */
+  function retrySearch(retry: SearchRetry) {
+    searchInput.current?.focus();
+    if (retry.type === "open") {
+      void openSessionForSearch(queryClient, retry.connectionId);
+      return;
+    }
+
+    const { connectionId, database } = retry.database;
+    if (retry.lost) void reopen(connectionId, database);
+    else void queryClient.refetchQueries({ queryKey: objectNamesKey(connectionId, database), exact: true });
+  }
+
+  /** O "Buscar nelas também" (RN-BUSCA-002): abre a sessão da árvore de cada conexão de fora que tem usuário e senha gravados, sem abrir o nó. É conectar, a pedido. */
+  function searchThem() {
+    searchInput.current?.focus();
+    for (const connection of scope.openable) void openSessionForSearch(queryClient, connection.id);
+  }
 
   /** O que há abaixo da barra de ações: a falha das listas, a espera por elas, o estado vazio, ou a busca e a árvore. */
   function body() {
@@ -693,7 +837,6 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
 
     // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página). A árvore vazia pelo
     // filtro de ambiente ou pelo "Só as conectadas" não é o primeiro uso: há o que mostrar, só não com esses filtros.
-    const filtering = environmentChoice.type !== "all" || onlyConnected;
     if (tree.roots.length === 0 && (!filtering || (connectionList.length === 0 && (folders.data ?? []).length === 0))) {
       return (
         <div className="flex flex-col gap-1 px-3 py-2">
@@ -711,23 +854,36 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
 
     return (
       <>
-        {/* RN-NAV-010 e 013: o seletor de ambiente e "Só as conectadas" ao lado do campo de busca; no navegador estreito eles descem para a linha de baixo. */}
-        <div className="mx-2 mb-2 flex flex-none flex-wrap gap-1.5">
-          <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
-          <NavigatorEnvironmentFilter environments={savedEnvironments} value={environmentChoice} onChange={setEnvironmentChoice} />
-          <NavigatorConnectedFilter count={connectedIds.length} on={onlyConnected} onToggle={() => setOnlyConnected((current) => !current)} />
-        </div>
+        {/* RN-BUSCA-001, RN-NAV-010 e 013: o campo de busca sozinho na primeira linha, na largura toda; "Só as conectadas" e o seletor de ambiente na de baixo. */}
+        <NavigatorFilters
+          query={query}
+          onQueryChange={setQuery}
+          onFocusList={focusList}
+          inputRef={searchInput}
+          environments={savedEnvironments}
+          environmentChoice={environmentChoice}
+          onEnvironmentChange={setEnvironmentChoice}
+          environmentRef={environmentSelect}
+          connectedCount={connectedIds.length}
+          onlyConnected={onlyConnected}
+          onToggleConnected={() => setOnlyConnected((current) => !current)}
+        />
+        {/* RN-BUSCA-002: a linha de estado da busca, logo abaixo dos filtros, nunca ao lado do campo. */}
+        {searchStatus === null ? null : <NavigatorSearchStatus {...searchStatus} failures={searchStatus.failures.map(({ retry, ...failure }) => ({ ...failure, onRetry: () => retrySearch(retry) }))} onSearchThem={searchThem} />}
         {/* A lista fica sempre montada: a rolagem da árvore mora nela, e "nada encontrado" não pode levá-la embora. */}
         {filtering && tree.roots.length === 0 ? (
           <NavigatorFilteredEmpty environment={environmentChoice.type === "environment" ? (savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : environmentChoice.type === "none" ? null : undefined} onlyConnected={onlyConnected} onShowAll={() => setOnlyConnected(false)} />
         ) : search === null ? null : search.rows.length === 0 ? (
-          <div role="status" className="flex flex-col gap-1 px-3 py-2">
-            <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
-            <p className="text-xs text-muted">{copy.search.onlyLoaded}</p>
-          </div>
+          // Enquanto um índice ainda vem, ou depois de uma falha, "nada encontrado" não é verdade ainda: a linha de estado acima diz "Buscando…" ou a falha, e é só ela.
+          !nothingFoundShown(searchStatus) ? null : (
+            <div role="status" className="flex flex-col gap-1 px-3 py-2">
+              <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
+              <p className="text-xs text-muted">{copy.search.onlyLoaded}</p>
+            </div>
+          )
         ) : (
           <p role="status" className="sr-only">
-            {copy.search.results(search.count)}
+            {searched !== null && searched.hidden > 0 ? copy.search.resultsShown(search.count + searched.hidden, search.count) : copy.search.results(search.count)}
           </p>
         )}
         <NavigatorList
@@ -758,6 +914,14 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
           onOpenTable={(node) => {
             const target = tableTargetOf(node);
             if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name, ...inDatabase(target.database) });
+          }}
+          onOpenSchema={(node) => {
+            const target = schemaTargetOf(node);
+            if (target !== null) openSchemaTab(target.connectionId, { schema: target.schema, ...inDatabase(target.database) });
+          }}
+          onOpenDatabase={(node) => {
+            const target = databaseTargetOf(node);
+            if (target !== null) openDatabaseTab(target.connectionId, { name: target.name, ...inDatabase(target.database) });
           }}
           onDisconnect={(node) => {
             const connectionId = ownerConnectionId(node);
@@ -793,9 +957,9 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
         />
       )}
       {failure?.kind === "failed" && failureConnection !== undefined ? <CheckFailureDialog connection={failureConnection.name} state={failure} onClose={() => setCheckFailure(null)} /> : null}
-      {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} />}
+      {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} onMoved={revealMovedFolder} />}
       {connectionAction?.type === "rename" ? <RenameConnectionDialog connection={connectionAction.connection} onClose={() => setConnectionAction(null)} /> : null}
-      {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} /> : null}
+      {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} onMoved={(moved) => connectionReveal.request(moved.id)} /> : null}
       {connectionAction?.type === "delete" ? (
         <DeleteConnectionDialog
           connection={connectionAction.connection}
@@ -829,6 +993,8 @@ type NavigatorListProps = {
   onRefresh: (node: NavNode) => void;
   onNewQuery: (node: NavNode) => void;
   onOpenTable: (node: NavNode) => void;
+  onOpenSchema?: (node: NavNode) => void;
+  onOpenDatabase?: (node: NavNode) => void;
   onDisconnect: (node: NavNode) => void;
   /** A ação do menu que uma tecla na linha pede (`keyActionFor`: o F2 do Renomear, RN-NAV-009), executada como se viesse do menu. */
   onKeyAction: (node: NavNode, action: MenuAction) => void;
@@ -854,7 +1020,7 @@ type NavigatorListProps = {
  * nome leva a escolha e o foco ao item visível que começa por elas (RN-ARVORE-009); só uma linha entra na ordem do Tab. Exportada para o teste do teclado, que
  * a monta com os ganchos simulados.
  */
-export function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, checks, onCheckFailure, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+export function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, checks, onCheckFailure, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onOpenSchema, onOpenDatabase, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -1067,6 +1233,8 @@ export function NavigatorList({ rows, density, open, connectionById, environment
                   onNewQuery={onNewQuery}
                   onDisconnect={onDisconnect}
                   onOpenTable={onOpenTable}
+                  onOpenSchema={onOpenSchema}
+                  onOpenDatabase={onOpenDatabase}
                   onContextMenu={(target, point) => onContextMenu(target, point, "menu")}
                   onKeyDown={handleKeyDown}
                 />

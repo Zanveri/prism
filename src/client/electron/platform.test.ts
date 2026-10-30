@@ -1,7 +1,7 @@
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, expect, it } from "vitest";
 
-import { applicationMenuTemplate, isWaylandSession, menuShortcutIgnored, windowIconFile } from "./platform";
+import { applicationMenuTemplate, isSymbolColor, isWaylandSession, menuShortcutIgnored, windowBarOptions, windowBarOverlayHeight, windowIconFile } from "./platform";
 
 describe("windowIconFile (RN-MARCA-001)", () => {
   it(".ico no Windows, PNG no Linux e nenhum no macOS, onde o ícone é o do pacote", () => {
@@ -38,7 +38,7 @@ describe("applicationMenuTemplate", () => {
   });
 });
 
-describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11 chegam à tela (RN-GRADE-012 e RN-GRADE-013)", () => {
+describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, F5 e F11 chegam à tela (RN-GRADE-012 e RN-GRADE-013) e Ctrl+W nunca a fecha (RN-ABAS-019)", () => {
   const input = (key: string, over: Partial<{ type: string; control: boolean; meta: boolean; shift: boolean; alt: boolean }> = {}) => ({ type: "keyDown", key, control: false, meta: false, shift: false, alt: false, ...over });
 
   it("F5, F6 e F11, com ou sem modificador, não vão ao menu (o Recarregar e o Tela cheia do menu de desenvolvimento): a tela os recebe (o F6 alterna entre o editor e o resultado, RN-ABAS-014)", () => {
@@ -56,8 +56,16 @@ describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11
     expect(menuShortcutIgnored(input("r", { meta: true }))).toBe(true);
   });
 
-  it("o resto segue para o menu (no macOS, Cmd+C, Cmd+V e Cmd+Q são do menu; o R sem Ctrl é digitação)", () => {
-    for (const [key, over] of [["c", { meta: true }], ["v", { control: true }], ["q", { meta: true }], ["r", {}], ["F2", {}], ["Enter", { control: true }]] as const) expect(menuShortcutIgnored(input(key, over)), key).toBe(false);
+  it("Ctrl+W e Cmd+W (com ou sem Shift) não vão ao menu: o Janela › Fechar do menu padrão de desenvolvimento fecharia a janela com um diálogo aberto ou na tela de entrada, onde a tela não trata a tecla (RN-ABAS-019)", () => {
+    expect(menuShortcutIgnored(input("w", { control: true }))).toBe(true);
+    expect(menuShortcutIgnored(input("W", { control: true, shift: true }))).toBe(true);
+    expect(menuShortcutIgnored(input("w", { meta: true }))).toBe(true);
+    expect(menuShortcutIgnored(input("W", { meta: true }))).toBe(true);
+    expect(menuShortcutIgnored(input("w", { control: true, type: "keyUp" }))).toBe(true);
+  });
+
+  it("o resto segue para o menu (no macOS, Cmd+C, Cmd+V e Cmd+Q são do menu; o R e o W sem Ctrl são digitação)", () => {
+    for (const [key, over] of [["c", { meta: true }], ["v", { control: true }], ["q", { meta: true }], ["r", {}], ["w", {}], ["w", { shift: true }], ["w", { alt: true }], ["F2", {}], ["Enter", { control: true }]] as const) expect(menuShortcutIgnored(input(key, over)), key).toBe(false);
   });
 });
 
@@ -82,5 +90,25 @@ describe("isWaylandSession: o app no Wayland nativo, onde o ponteiro lido pelo p
   it("fora do Linux, nunca", () => {
     expect(session({ platform: "win32", env: wayland })).toBe(false);
     expect(session({ platform: "darwin", ozonePlatform: "wayland" })).toBe(false);
+  });
+});
+
+describe("a barra da janela (RN-JANELA-001)", () => {
+  it("no Windows a barra do sistema sai e os botões dele ficam sobre a barra do app, transparentes, na altura dela vezes o zoom", () => {
+    expect(windowBarOptions("win32", 1)).toEqual({ titleBarStyle: "hidden", titleBarOverlay: { color: "rgba(0, 0, 0, 0)", symbolColor: "#b4bcc8", height: 53 } });
+    expect(windowBarOptions("win32", 2).titleBarOverlay).toMatchObject({ height: 106 });
+    expect(windowBarOverlayHeight(1.1)).toBe(58);
+    expect(windowBarOverlayHeight(0.67)).toBe(36);
+  });
+
+  it("no Linux e no macOS a janela mantém a barra nativa", () => {
+    expect(windowBarOptions("linux", 1)).toEqual({});
+    expect(windowBarOptions("darwin", 1)).toEqual({});
+  });
+
+  it("a cor dos símbolos só passa como #rrggbb", () => {
+    expect(isSymbolColor("#b4bcc8")).toBe(true);
+    expect(isSymbolColor("#B4BCC8")).toBe(true);
+    for (const value of ["b4bcc8", "#b4bcc", "rgb(180, 188, 200)", "red", "#b4bcc8; x", 0xb4bcc8, null]) expect(isSymbolColor(value)).toBe(false);
   });
 });

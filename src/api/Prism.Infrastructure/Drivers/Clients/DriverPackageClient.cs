@@ -81,7 +81,8 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
 
         // Aprovado: é desta pasta, e só dela, que esta execução carrega o driver. A carga em si acontece quando o primeiro tipo dele é usado.
         var installDirectory = Path.GetFullPath(DriverStore.InstallDirectory(_settings.Directory, driver));
-        _loadable[Path.GetFileNameWithoutExtension(package.ManagedAssembly)] = new LoadableDriver(Path.Combine(installDirectory, DriverStore.Local(package.ManagedAssembly)), Path.Combine(installDirectory, DriverStore.Local(package.NativeLibrary)));
+        var nativeLibrary = package.NativeLibrary is null ? null : Path.Combine(installDirectory, DriverStore.Local(package.NativeLibrary));
+        _loadable[Path.GetFileNameWithoutExtension(package.ManagedAssembly)] = new LoadableDriver(Path.Combine(installDirectory, DriverStore.Local(package.ManagedAssembly)), nativeLibrary);
         _logger.Information("O driver {DriverID} {Version} está instalado e passou na conferência da partida.", driver.ID, driver.Version);
 
         return true;
@@ -102,7 +103,7 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
     /// `libxml2` no sistema a carga falha, e quem diz isso é a mensagem do .NET no erro de conexão.
     /// </summary>
     private IntPtr ResolveNativeLibrary(Assembly assembly, string name)
-        => assembly.GetName().Name is { } owner && _loadable.TryGetValue(owner, out var driver) && (name == Path.GetFileName(driver.NativeLibrary) || name == Path.GetFileNameWithoutExtension(driver.NativeLibrary)) && NativeLibrary.TryLoad(driver.NativeLibrary, out var library) ? library : IntPtr.Zero;
+        => assembly.GetName().Name is { } owner && _loadable.TryGetValue(owner, out var driver) && driver.NativeLibrary is not null && (name == Path.GetFileName(driver.NativeLibrary) || name == Path.GetFileNameWithoutExtension(driver.NativeLibrary)) && NativeLibrary.TryLoad(driver.NativeLibrary, out var library) ? library : IntPtr.Zero;
 
     public async Task<UnitResult<DriverInstallFailure>> InstallAsync(string driverID, DateTimeOffset acceptedAt, Action<long> onProgress, CancellationToken cancellationToken)
     {
@@ -247,8 +248,8 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
     private static DriverInstallFailure Download(string detail)
         => new(EDriverInstallFailure.DownloadFailed, detail);
 
-    /// <summary>Os dois arquivos de um driver aprovado, pelo caminho completo.</summary>
-    private sealed record LoadableDriver(string ManagedAssembly, string NativeLibrary);
+    /// <summary>Os arquivos de um driver aprovado, pelo caminho completo.</summary>
+    private sealed record LoadableDriver(string ManagedAssembly, string? NativeLibrary);
 
     /// <summary>As operações só de disco passam pelo mesmo `Send`: a chamada síncrona já volta concluída, e não há o que esperar.</summary>
     private Result<T, DriverInstallFailure> Send<T>(string operation, DriverDefinition driver, Func<T> call)

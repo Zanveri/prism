@@ -5,13 +5,15 @@ using Prism.Infrastructure.ConnectionFiles.Clients;
 using Prism.Infrastructure.ConnectionFiles.Models;
 using Prism.Infrastructure.ConnectionFiles.Services;
 using Prism.Infrastructure.Databases.Clients;
-using Prism.Infrastructure.DbeaverSources.Clients;
-using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.DbeaverSources.Clients;
+using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Drivers;
 using Prism.Infrastructure.Drivers.Clients;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Plugins.Clients;
+using Prism.Infrastructure.Plugins.Models;
 using Prism.Infrastructure.Transfers.Clients;
 using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Transfers.Services;
@@ -52,6 +54,8 @@ public static class DependencyInjection
         // nas plataformas para as quais a IBM publica o driver (RN-ABERTO-006); nas outras o registro de sessões responde que o Prism
         // daquela plataforma ainda não conecta nesses bancos.
         services.AddTransient<IDatabaseClient, PostgresClient>();
+        foreach (var engine in new[] { EDatabaseEngine.Sqlite, EDatabaseEngine.MySql, EDatabaseEngine.MariaDb, EDatabaseEngine.SqlServer, EDatabaseEngine.Oracle, EDatabaseEngine.Firebird, EDatabaseEngine.DuckDb, EDatabaseEngine.ClickHouse, EDatabaseEngine.BigQuery, EDatabaseEngine.Databricks })
+            services.AddTransient(provider => IbmClient(provider, engine, logger => new ManagedEngineDatabaseClient(engine, logger)));
 #if PRISM_IBM_DRIVER
         services.AddTransient(provider => IbmClient(provider, EDatabaseEngine.Db2, logger => new Db2Client(logger)));
         services.AddTransient(provider => IbmClient(provider, EDatabaseEngine.Informix, logger => new InformixClient(logger)));
@@ -84,15 +88,17 @@ public static class DependencyInjection
         // Singleton, como o registro das transferências: assina o fechamento do cofre para apagar as cópias (resolvido na subida, em `UseApi`).
         services.AddSingleton<IDbeaverSourceService, DbeaverSourceService>();
 
+        // Plugins de terceiros: a pasta `<PRISM_DATA_DIR>/plugins` para os repositórios Git clonados e o client que valida manifestos e bundles.
+        services.AddSingleton(PluginSettings.For(dataDirectory));
+        services.AddTransient<IPluginSourceClient, PluginSourceClient>();
+
         return services;
     }
 
-#if PRISM_IBM_DRIVER
     /// <summary>
-    /// RN-DRIVER-005 e 006. O driver da IBM não vem com a API: o client de verdade do Db2 e do Informix só entra quando a conferência
+    /// RN-DRIVER-005 e 006. Os drivers sob demanda não vêm com a API: o client de verdade só entra quando a conferência
     /// da partida aprovou o driver instalado, que é o que esta execução carrega. Sem isso entra o client que só responde a recusa
-    /// (`DRIVER_NOT_INSTALLED`), e nenhum caminho toca num tipo de `IBM.Data.Db2`, cujo assembly não está ao lado da API. O `create` só
-    /// é chamado no primeiro caso, e é ele quem menciona a classe do client.
+    /// (`DRIVER_NOT_INSTALLED`). O `create` só é chamado no primeiro caso, e é ele quem menciona a classe do client.
     /// </summary>
     private static IDatabaseClient IbmClient(IServiceProvider provider, EDatabaseEngine engine, Func<ILogger, IDatabaseClient> create)
     {
@@ -100,5 +106,4 @@ public static class DependencyInjection
 
         return drivers.RefusalFor(engine) is null ? create(provider.GetRequiredService<ILogger>()) : new MissingDriverDatabaseClient(engine, drivers);
     }
-#endif
 }

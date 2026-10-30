@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { controlClassName } from "@/components/ui/field";
@@ -27,7 +27,7 @@ type SelectProps = {
   name?: string;
   value: string;
   onChange: (value: string) => void;
-  options: SelectOption[];
+  options: readonly SelectOption[];
   /** Primeira opção, de valor vazio. Ausente, não existe escolha nula. */
   placeholder?: string;
   disabled?: boolean;
@@ -41,8 +41,18 @@ type SelectProps = {
   "aria-label"?: string;
   /** O texto que explica o controle (o motivo de ele estar desabilitado, por exemplo). */
   "aria-describedby"?: string;
+  /** Identificador de teste repassado ao gatilho combobox. */
+  "data-testid"?: string;
   /** A lista abriu: quem só busca as opções quando a pessoa as quer (a lista dos bancos da aba) as pede aqui. Elas podem chegar com a lista aberta. */
   onOpen?: () => void;
+  /**
+   * A lista tão larga quanto o maior texto (`wideList`): as opções não quebram, e a lista mede no mínimo o controle e cresce até o maior texto, sem passar da janela
+   * (o que não cabe termina em reticências). Sem ela, a lista tem a largura do controle e o texto quebra. Para o controle estreito, de opções curtas ("Todos os
+   * ambientes" num seletor de 130 px).
+   */
+  wideList?: boolean;
+  /** O botão do controle, para quem leva o foco a ele (limpar o filtro que mora ao lado do seletor, RN-NAV-010). Ausente, o `Select` guarda o dele. */
+  triggerRef?: RefObject<HTMLButtonElement | null>;
   className?: string;
 };
 
@@ -56,7 +66,9 @@ const panelPadding = 10;
 /** Janela em que as teclas digitadas se somam na busca por inicial. */
 const typeaheadMs = 600;
 
-type PanelPosition = { left: number; width: number; maxHeight: number; top?: number; bottom?: number };
+/** A largura da lista: a do controle, ou, na `wideList`, a do maior texto, de no mínimo o controle e no máximo o que resta da janela à direita dele. */
+type PanelWidth = { width: number } | { width: "max-content"; minWidth: number; maxWidth: number };
+type PanelPosition = PanelWidth & { left: number; maxHeight: number; top?: number; bottom?: number };
 
 /** Sem acento e sem caixa: "producao" acha "Produção". */
 function normalizeSearch(value: string) {
@@ -64,18 +76,29 @@ function normalizeSearch(value: string) {
 }
 
 /**
+ * Quanto a lista mede (decisão pura, testada): `trigger` é o retângulo do controle e `viewportWidth` a largura da janela dele. A lista começa no `left` do controle,
+ * então o que resta é a janela menos o `left` e o espaço (`gap`); o máximo nunca fica abaixo do controle, para o mínimo e o máximo não se contradizerem num controle
+ * junto da borda.
+ */
+export function panelWidthOf(trigger: { left: number; width: number }, viewportWidth: number, wideList: boolean): PanelWidth {
+  if (!wideList) return { width: trigger.width };
+  return { width: "max-content", minWidth: trigger.width, maxWidth: Math.max(trigger.width, viewportWidth - trigger.left - gap) };
+}
+
+/**
  * Escolha única numa lista. O gatilho é um botão com o papel de combobox e a lista vai num portal
  * `position: fixed` em `document.body`, para o `overflow-hidden` de um painel não a recortar.
  * Teclado como o de um `<select>`: setas, Home, End, Enter, espaço, Esc e a inicial da opção.
  */
-export function Select({ id, name, value, onChange, options, placeholder, disabled = false, "aria-disabled": ariaDisabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, onOpen, className }: SelectProps) {
+export function Select({ id, name, value, onChange, options, placeholder, disabled = false, "aria-disabled": ariaDisabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, "data-testid": dataTestId, onOpen, wideList = false, triggerRef, className }: SelectProps) {
   const generatedId = useId();
   const triggerId = id ?? `select-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
 
   // RN-ABAS-017: a lista abre na página do controle (a da janela da aba, ou a da janela do resultado) e mede a janela dela.
   const host = useHost();
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const ownButtonRef = useRef<HTMLButtonElement>(null);
+  const buttonRef = triggerRef ?? ownButtonRef;
   const panelRef = useRef<HTMLDivElement>(null);
   const typeahead = useRef({ search: "", at: 0 });
 
@@ -88,7 +111,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
   if (open && inert) setOpen(false);
 
   // O placeholder é uma opção de valor vazio, a primeira da lista.
-  const items: SelectOption[] = placeholder === undefined ? options : [{ value: "", label: placeholder }, ...options];
+  const items: readonly SelectOption[] = placeholder === undefined ? options : [{ value: "", label: placeholder }, ...options];
   const selectedIndex = items.findIndex((item) => item.value === value);
   const selected = selectedIndex >= 0 ? items[selectedIndex] : undefined;
 
@@ -116,7 +139,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
 
       setPosition({
         left: rect.left,
-        width: rect.width,
+        ...panelWidthOf(rect, host.view.innerWidth, wideList),
         maxHeight: Math.max(0, Math.min(maxPanelHeight, dropUp ? above : below)),
         ...(dropUp ? { bottom: host.view.innerHeight - rect.top + gap } : { top: rect.bottom + gap }),
       });
@@ -130,7 +153,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
       host.view.removeEventListener("scroll", place, true);
       host.view.removeEventListener("resize", place);
     };
-  }, [open, items.length, host]);
+  }, [open, items.length, host, wideList, buttonRef]);
 
   // A página da janela do resultado que sai leva a lista (RN-ABAS-011).
   useOnHostGone(host, open, () => setOpen(false));
@@ -147,7 +170,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
 
     host.document.addEventListener("pointerdown", onPointerDown);
     return () => host.document.removeEventListener("pointerdown", onPointerDown);
-  }, [open, host]);
+  }, [open, host, buttonRef]);
 
   // Mantém a opção ativa à vista enquanto as setas a movem.
   useEffect(() => {
@@ -245,6 +268,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         id={triggerId}
         type="button"
         role="combobox"
+        data-testid={dataTestId}
         disabled={disabled}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
@@ -280,7 +304,8 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
                     onPointerEnter={() => setActiveIndex(index)}
                     onClick={() => choose(index)}
                     className={cn(
-                      "rounded-sm px-2.5 py-2 break-words",
+                      "rounded-sm px-2.5 py-2",
+                      wideList ? "overflow-hidden text-ellipsis whitespace-nowrap" : "break-words",
                       item.disabled === true ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                       index === activeIndex ? "bg-selected" : "bg-transparent",
                       isSelected ? "font-semibold text-ink" : item.value === "" ? "text-subtle" : "text-body",

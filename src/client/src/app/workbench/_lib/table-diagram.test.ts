@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { Column, ForeignKey } from "./database-sessions.schema";
-import { boxWidth, clampZoom, fitText, fitZoom, layoutDiagram, maxNeighbors, maxZoom, minZoom, opensNeighbor, referencedTables, rowHeight, settleActions, tableKey, zoomIn, zoomLabel, zoomOut, type DiagramBox, type DiagramEdge, type DiagramLayout, type Point } from "./table-diagram";
+import type { Column, ForeignKey, ReferencingForeignKey } from "./database-sessions.schema";
+import { boxWidth, clampZoom, fitText, fitZoom, layoutDiagram, maxNeighbors, maxZoom, minZoom, opensNeighbor, referencedTables, referencingTables, rowHeight, settleActions, tableKey, zoomIn, zoomLabel, zoomOut, type DiagramBox, type DiagramEdge, type DiagramLayout, type Point } from "./table-diagram";
 
 const column = (name: string, position: number, over: Partial<Column> = {}): Column => ({ name, type: "bigint", isNullable: false, isPrimaryKey: false, position, ...over });
 const fk = (name: string, columns: string[], referencedTable: string, referencedColumns: string[] = ["id"], referencedSchema = "producao"): ForeignKey => ({ name, columns, referencedSchema, referencedTable, referencedColumns });
+const refBy = (name: string, columns: string[], referencingTable: string, referencedColumns: string[] = ["id"], referencingSchema = "producao"): ReferencingForeignKey => ({ name, columns, referencingSchema, referencingTable, referencedColumns });
 
 const centerRef = { schema: "producao", name: "apontamento" };
 const center = { ref: centerRef, columns: [column("id", 1, { isPrimaryKey: true }), column("ordem_id", 2), column("maquina_id", 3), column("operador_id", 4), column("quantidade", 5, { type: "numeric(12,3)" })] };
@@ -49,6 +50,18 @@ describe("referencedTables: quem entra em volta da tabela (RN-TABELA-004)", () =
     expect(tables.tables).toHaveLength(maxNeighbors);
     expect(tables.tables[0].name).toBe("t0");
     expect(tables.omitted).toBe(3);
+  });
+
+  it("referencingTables devolve as tabelas que apontam para a do centro, sem repetir nem incluir a própria", () => {
+    const tables = referencingTables(center.ref, [
+      refBy("fk1", ["apontamento_id"], "lote"),
+      refBy("fk2", ["apontamento_id"], "movimentacao"),
+      refBy("fk3", ["outro_apontamento_id"], "lote"),
+      refBy("fk_self", ["pai_id"], "apontamento"),
+    ]);
+
+    expect(tables.tables.map((table) => table.name)).toEqual(["lote", "movimentacao"]);
+    expect(tables.omitted).toBe(0);
   });
 });
 
@@ -95,13 +108,19 @@ describe("layoutDiagram: as caixas (RN-TABELA-004)", () => {
     expect(layout.width).toBe(other.x + other.width + middle.x);
   });
 
-  it("duas ou mais: repartidas entre a direita e a esquerda do centro", () => {
-    const layout = layoutDiagram({ center, foreignKeys: [fk("a", ["ordem_id"], "ordem_producao"), fk("b", ["maquina_id"], "maquina"), fk("c", ["operador_id"], "operador")], neighbors: [neighbor("ordem_producao"), neighbor("maquina"), neighbor("operador")] });
+  it("as tabelas referenciadas pela tabela do centro ficam à direita, e as que apontam para ela (referencedBy) ficam à esquerda", () => {
+    const layout = layoutDiagram({
+      center,
+      foreignKeys: [fk("a", ["ordem_id"], "ordem_producao"), fk("b", ["maquina_id"], "maquina")],
+      neighbors: [neighbor("ordem_producao"), neighbor("maquina")],
+      referencedBy: [refBy("fk_lote", ["apontamento_id"], "lote")],
+      incomingNeighbors: [neighbor("lote", [column("id", 1, { isPrimaryKey: true }), column("apontamento_id", 2)])],
+    });
     const middle = boxOf(layout, "apontamento");
-    const sides = ["ordem_producao", "maquina", "operador"].map((name) => (boxOf(layout, name).x > middle.x ? "right" : "left"));
 
-    expect(sides.filter((side) => side === "right")).toHaveLength(2);
-    expect(sides.filter((side) => side === "left")).toHaveLength(1);
+    expect(boxOf(layout, "ordem_producao").x).toBeGreaterThan(middle.x);
+    expect(boxOf(layout, "maquina").x).toBeGreaterThan(middle.x);
+    expect(boxOf(layout, "lote").x).toBeLessThan(middle.x);
     // O centro fica entre as duas colunas: nada começa antes da margem.
     expect(Math.min(...layout.boxes.map((box) => box.x))).toBe(48);
   });
@@ -114,11 +133,9 @@ describe("layoutDiagram: as caixas (RN-TABELA-004)", () => {
       neighbors: [neighbor("a_operador"), neighbor("z_ordem"), neighbor("m_maquina"), neighbor("n_outra")],
     });
     const right = layout.boxes.filter((box) => !box.center && box.x > boxOf(layout, "apontamento").x).sort((a, b) => a.y - b.y);
-    const left = layout.boxes.filter((box) => !box.center && box.x < boxOf(layout, "apontamento").x).sort((a, b) => a.y - b.y);
 
-    // Ordem pela linha de origem: ordem_id (2), maquina_id (3), operador_id (4), quantidade (5); lados alternados a partir da direita.
-    expect(right.map((box) => box.ref.name)).toEqual(["z_ordem", "a_operador"]);
-    expect(left.map((box) => box.ref.name)).toEqual(["m_maquina", "n_outra"]);
+    // Ordem pela linha de origem: ordem_id (2), maquina_id (3), operador_id (4), quantidade (5), todas à direita.
+    expect(right.map((box) => box.ref.name)).toEqual(["z_ordem", "m_maquina", "a_operador", "n_outra"]);
   });
 
   it("a pilha de cada lado fica centrada na altura do desenho, e nenhuma caixa sobrepõe outra", () => {
@@ -177,14 +194,26 @@ describe("layoutDiagram: as linhas, uma por chave estrangeira (RN-TABELA-004)", 
     }
   });
 
-  it("para a vizinha da esquerda, sai da borda esquerda do centro e chega à borda direita dela", () => {
-    const layout = layoutDiagram({ center, foreignKeys: [fk("a", ["ordem_id"], "t1"), fk("b", ["maquina_id"], "t2")], neighbors: [neighbor("t1"), neighbor("t2")] });
+  it("para a vizinha da esquerda (que referencia a tabela do centro), a linha sai da borda direita da vizinha e chega à borda esquerda do centro", () => {
+    const loteColumns = [column("id", 1, { isPrimaryKey: true }), column("apontamento_id", 2)];
+    const layout = layoutDiagram({
+      center,
+      foreignKeys: [fk("a", ["ordem_id"], "t1")],
+      neighbors: [neighbor("t1")],
+      referencedBy: [refBy("fk_lote_apontamento", ["apontamento_id"], "lote", ["id"])],
+      incomingNeighbors: [neighbor("lote", loteColumns)],
+    });
     const middle = boxOf(layout, "apontamento");
-    const toLeft = layout.edges.find((edge) => edge.to.x < middle.x);
+    const loteBox = boxOf(layout, "lote");
+    const fromLeft = layout.edges.find((edge) => edge.from.x < middle.x);
 
-    expect(toLeft).toBeDefined();
-    expect(toLeft?.from.x).toBe(middle.x);
-    expect(toLeft?.to.x).toBe(boxOf(layout, "t2").x + boxWidth);
+    expect(fromLeft).toBeDefined();
+    expect(fromLeft?.from).toEqual({ x: loteBox.x + boxWidth, y: rowY(loteBox, 1) });
+    expect(fromLeft?.to).toEqual({ x: middle.x, y: rowY(middle, 0) });
+    expect(loteBox.columns?.map((item) => [item.name, item.foreignKey])).toEqual([
+      ["id", false],
+      ["apontamento_id", true],
+    ]);
   });
 
   it("duas chaves estrangeiras para a mesma tabela são duas linhas para uma caixa só, em corredores diferentes", () => {
@@ -312,6 +341,31 @@ describe("layoutDiagram: as linhas não se cruzam nem se sobrepõem (RN-TABELA-0
 
   it("de 1 a 12 vizinhas, também (as que descem e as que sobem pedem corredores em ordens contrárias)", () => {
     for (let count = 1; count <= 12; count++) expect(tangles(hub(count)), `${count} vizinhas`).toBe(0);
+  });
+
+  it("de 1 a 12 tabelas referenciadoras à esquerda apontando para id (e referenciadas à direita): nenhuma linha cruza nem sobrepõe outra", () => {
+    for (let count = 1; count <= 12; count++) {
+      const referencedBy = Array.from({ length: count }, (_, index) => refBy(`fk_in_${index + 1}`, ["hub_id"], `in_${String(index + 1).padStart(2, "0")}`, ["id"]));
+      const incomingNeighbors = referencingTables({ schema: "producao", name: "hub" }, referencedBy).tables.map((ref) => ({
+        ref,
+        columns: [column("id", 1, { isPrimaryKey: true }), column("hub_id", 2)],
+      }));
+      const base = hub(Math.min(count, 6));
+      const hubBox = boxOf(base, "hub");
+      const layout = layoutDiagram({
+        center: {
+          ref: hubBox.ref,
+          columns: [column("id", 1, { isPrimaryKey: true }), ...Array.from({ length: Math.min(count, 6) }, (_, index) => column(`ref${index + 1}_id`, index + 2))],
+        },
+        foreignKeys: Array.from({ length: Math.min(count, 6) }, (_, index) => fk(`fk${index + 1}`, [`ref${index + 1}_id`], `ref_${String(index + 1).padStart(2, "0")}`)),
+        neighbors: Array.from({ length: Math.min(count, 6) }, (_, index) => ({ ref: { schema: "producao", name: `ref_${String(index + 1).padStart(2, "0")}` }, columns: idOnly })),
+        referencedBy,
+        incomingNeighbors,
+      });
+
+      expect(tangles(layout), `${count} tabelas à esquerda`).toBe(0);
+      expect(overlaps(layout), `${count} tabelas à esquerda`).toBe(0);
+    }
   });
 
   it("a volta da chave para a própria tabela entra na grade de corredores das outras: de 0 a 12 vizinhas, nenhum trecho sobre o de outra linha", () => {
@@ -540,14 +594,18 @@ describe("layoutDiagram: o espaçamento das portas, a pilha e as marcas de chave
   });
 
   it("só se abrem as linhas que dividem a mesma ponta: por bordas ou caixas diferentes, cada uma fica no meio da sua linha", () => {
-    // `ordem_id` aponta para a vizinha da direita e para a da esquerda: duas saídas da mesma linha, uma em cada borda do centro.
-    const layout = layoutDiagram({ center, foreignKeys: [fk("a", ["ordem_id"], "t1"), fk("b", ["ordem_id"], "t2")], neighbors: [neighbor("t1"), neighbor("t2")] });
+    // `t2` à esquerda aponta para `id` (borda esquerda do centro) e `id` aponta para `t1` à direita (borda direita do centro): bordas diferentes, sem abrir.
+    const layout = layoutDiagram({
+      center,
+      foreignKeys: [fk("a", ["id"], "t1")],
+      neighbors: [neighbor("t1")],
+      referencedBy: [refBy("b", ["nome"], "t2", ["id"])],
+      incomingNeighbors: [neighbor("t2")],
+    });
     const middle = boxOf(layout, "apontamento");
 
     expect(boxOf(layout, "t1").y).toBe(boxOf(layout, "t2").y);
-    expect(layout.edges.map((edge) => edge.from.y)).toEqual([rowY(middle, 1), rowY(middle, 1)]);
-    // As duas vizinhas, uma de cada lado, estão à mesma altura: as chegadas também caem na mesma altura, em bordas diferentes.
-    expect(layout.edges.map((edge) => edge.to.y)).toEqual([rowY(boxOf(layout, "t1"), 0), rowY(boxOf(layout, "t2"), 0)]);
+    expect(layout.edges.map((edge) => (edge.from.x > middle.x ? edge.from.y : edge.to.y))).toEqual([rowY(middle, 0), rowY(middle, 0)]);
   });
 
   it("de 2 a 12 linhas no mesmo ponto: pontos todos diferentes, dentro da linha de 24 px com 3 px de folga, e nenhuma sobre outra", () => {
@@ -567,8 +625,9 @@ describe("layoutDiagram: o espaçamento das portas, a pilha e as marcas de chave
     const layout = layoutDiagram({ center, foreignKeys: [fk("a", ["ordem_id"], "t1"), fk("b", ["maquina_id"], "t2"), fk("c", ["operador_id"], "t3")], neighbors: [neighbor("t1"), neighbor("t2"), neighbor("t3")] });
     const right = layout.boxes.filter((box) => !box.center && box.x > boxOf(layout, "apontamento").x).sort((a, b) => a.y - b.y);
 
-    expect(right).toHaveLength(2);
+    expect(right).toHaveLength(3);
     expect(right[1].y - (right[0].y + right[0].height)).toBe(32);
+    expect(right[2].y - (right[1].y + right[1].height)).toBe(32);
   });
 
   it("uma chave composta marca como FK todas as colunas dela, e só elas; as vizinhas não levam marca de FK", () => {

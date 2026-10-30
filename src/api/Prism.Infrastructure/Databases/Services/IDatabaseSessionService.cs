@@ -40,6 +40,9 @@ public interface IDatabaseSessionService
     /// </summary>
     Guid? ConnectionOf(Guid sessionID);
 
+    /// <summary>RN-TX-001: a sessão como ela abriu, para a resposta da troca de modo; nula quando ela não existe.</summary>
+    DatabaseSessionInfo? InfoOf(Guid sessionID);
+
     /// <summary>
     /// Fecha a sessão, interrompendo o comando e a contagem que estiverem rodando nela. Espera o comando parar por no máximo dez
     /// segundos; se o banco não responde, abandona a conexão e volta.
@@ -63,8 +66,14 @@ public interface IDatabaseSessionService
     /// <summary>As consultas de catálogo esperam a vez na sessão (RN-SESSAO-002): a árvore pede vários níveis ao mesmo tempo.</summary>
     Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(Guid sessionID, CancellationToken cancellationToken);
 
-    /// <param name="kind">`tables`, `views` ou `routines`.</param>
+    /// <param name="kind">`tables`, `views`, `routines` ou `sequences`.</param>
     Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(Guid sessionID, string schema, string kind, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-BUSCA-002: os nomes das tabelas e das visões de todos os esquemas do banco da sessão, numa consulta só, até o limite do serviço
+    /// (50.000 nomes). Espera a vez, como as outras consultas de catálogo (RN-SESSAO-002).
+    /// </summary>
+    Task<Result<ObjectNamesInfo, DatabaseFailure>> GetObjectNamesAsync(Guid sessionID, CancellationToken cancellationToken);
 
     Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(Guid sessionID, string schema, string table, CancellationToken cancellationToken);
 
@@ -192,4 +201,22 @@ public interface IDatabaseSessionService
     /// quantas linhas o comando do resultado devolve agora.
     /// </summary>
     Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
+
+    /// <summary>RN-TX-003: o estado da transação da sessão agora, sem tomar a vez; nulo quando a sessão não existe.</summary>
+    TransactionInfo? TransactionOf(Guid sessionID);
+
+    /// <summary>
+    /// RN-TX-001, 005 e 013: troca o modo de transação da sessão, sem esperar a vez (`SessionBusy`). Para Auto-commit com a transação manual aberta:
+    /// `TransactionOpen` (a pessoa a encerra antes, com Commit ou Rollback); para o Commit manual no banco sem transação: `TransactionsNotAvailable`.
+    /// </summary>
+    Task<Result<TransactionInfo, DatabaseFailure>> SetTransactionModeAsync(Guid sessionID, ETransactionMode mode, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-TX-002 e 014: confirma a transação manual da sessão, sem esperar a vez, e devolve quantos comandos ela tinha. Sem transação: `NoOpenTransaction`;
+    /// com erro (PostgreSQL): `TransactionFailed`. A recusa do banco leva `TransactionUndone`: a transação acabou, e nada foi confirmado.
+    /// </summary>
+    Task<Result<int, DatabaseFailure>> CommitAsync(Guid sessionID, CancellationToken cancellationToken);
+
+    /// <summary>RN-TX-002: desfaz a transação manual da sessão, sem esperar a vez, e devolve quantos comandos ela tinha. Sem transação: `NoOpenTransaction`.</summary>
+    Task<Result<int, DatabaseFailure>> RollbackAsync(Guid sessionID, CancellationToken cancellationToken);
 }

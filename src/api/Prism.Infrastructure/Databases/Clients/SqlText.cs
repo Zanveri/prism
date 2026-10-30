@@ -11,6 +11,186 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal static class SqlText
 {
+    private static readonly HashSet<string> ValuePredecessorWords =
+    [
+        "LIKE",
+        "ILIKE",
+        "SIMILAR",
+        "ESCAPE",
+        "BETWEEN",
+        "THEN",
+        "ELSE",
+        "WHEN",
+        "RETURN",
+        "DEFAULT",
+        "CASE"
+    ];
+
+    /// <summary>
+    /// Converte textos entre aspas duplas (<c>"..."</c>) escritos em posição de valor ou parâmetro (comparações, <c>LIKE</c>,
+    /// <c>BETWEEN</c>, <c>IN (...)</c>, <c>VALUES (...)</c>) em constantes de texto entre aspas simples
+    /// (<c>'...'</c>), preservando identificadores qualificados (<c>"esquema"."tabela"</c>, <c>tabela."coluna"</c>) e nomes de tabelas
+    /// ou colunas nas cláusulas da consulta.
+    /// </summary>
+    public static string RewriteDoubleQuotedLiterals(string sql, ESqlDialect dialect)
+    {
+        if (string.IsNullOrEmpty(sql) || !sql.Contains('"', StringComparison.Ordinal))
+            return sql;
+
+        var tokens = EditableSql.Lex(sql, dialect).ToList();
+        if (tokens.Count == 0)
+            return sql;
+
+        StringBuilder? builder = null;
+        var lastCopied = 0;
+
+        for (var index = 0; index < tokens.Count; index++)
+        {
+            var token = tokens[index];
+            if (!IsDoubleQuotedLiteralToken(sql, tokens, index))
+                continue;
+
+            builder ??= new StringBuilder(sql.Length + 8);
+            builder.Append(sql, lastCopied, token.Start - lastCopied);
+            builder.Append('\'').Append(token.Text.Replace("'", "''", StringComparison.Ordinal)).Append('\'');
+            lastCopied = token.End;
+        }
+
+        if (builder is null)
+            return sql;
+
+        builder.Append(sql, lastCopied, sql.Length - lastCopied);
+        return builder.ToString();
+    }
+
+    private static bool IsDoubleQuotedLiteralToken(string sql, List<EditableSql.Token> tokens, int index)
+    {
+        var token = tokens[index];
+        if (token.Kind != EditableSql.ETokenKind.Identifier || token.End - token.Start < 2 || sql[token.Start] != '"' || sql[token.End - 1] != '"')
+            return false;
+
+        if ((index > 0 && tokens[index - 1].Is(".")) || (index + 1 < tokens.Count && tokens[index + 1].Is(".")))
+            return false;
+
+        if (index == 0)
+            return false;
+
+        var prev = tokens[index - 1];
+
+        if (prev.Kind == EditableSql.ETokenKind.Symbol && prev.Text is "=" or "<" or ">" or "!" or "|" or "^" or "~")
+            return true;
+
+        if (prev.Kind == EditableSql.ETokenKind.Word)
+        {
+            if (ValuePredecessorWords.Contains(prev.Upper))
+                return true;
+
+            if (prev.Upper == "FROM" && index >= 2 && tokens[index - 2].IsWord("DISTINCT"))
+                return true;
+
+            if (prev.Upper == "AND" && IsBetweenAnd(tokens, index - 1))
+                return true;
+        }
+
+        if (prev.Is("(") || prev.Is(","))
+            return IsValueParenthesisItem(tokens, index);
+
+        return false;
+    }
+
+    private static bool IsBetweenAnd(List<EditableSql.Token> tokens, int andIndex)
+    {
+        var depth = 0;
+        for (var index = andIndex - 1; index >= 0; index--)
+        {
+            var token = tokens[index];
+            if (token.Is(")"))
+                depth++;
+            else if (token.Is("("))
+            {
+                if (--depth < 0)
+                    return false;
+            }
+            else if (depth == 0 && token.Kind == EditableSql.ETokenKind.Word)
+            {
+                if (token.Upper == "BETWEEN")
+                    return true;
+
+                if (token.Upper is "AND" or "OR" or "WHERE" or "ON" or "HAVING" or "WHEN" or "THEN" or "ELSE" or "CASE" or "SELECT" or "FROM" or "JOIN" or "SET")
+                    return false;
+            }
+            else if (depth == 0 && token.Is(";"))
+                return false;
+        }
+
+        return false;
+    }
+
+    private static bool IsValueParenthesisItem(List<EditableSql.Token> tokens, int itemIndex)
+    {
+        var depth = 0;
+        var openParen = -1;
+
+        for (var index = itemIndex - 1; index >= 0; index--)
+        {
+            if (tokens[index].Is(")"))
+                depth++;
+            else if (tokens[index].Is("("))
+            {
+                if (depth == 0)
+                {
+                    openParen = index;
+                    break;
+                }
+
+                depth--;
+            }
+        }
+
+        if (openParen <= 0)
+            return false;
+
+        var beforeParen = tokens[openParen - 1];
+        return beforeParen.IsWord("IN") || IsValuesTupleParen(tokens, openParen);
+    }
+
+    private static bool IsValuesTupleParen(List<EditableSql.Token> tokens, int openParen)
+    {
+        var cursor = openParen;
+        while (cursor > 0)
+        {
+            var prev = tokens[cursor - 1];
+            if (prev.IsWord("VALUES"))
+                return true;
+
+            if (!prev.Is(",") || cursor < 2 || !tokens[cursor - 2].Is(")"))
+                return false;
+
+            var depth = 0;
+            var previousOpen = -1;
+            for (var index = cursor - 2; index >= 0; index--)
+            {
+                if (tokens[index].Is(")"))
+                    depth++;
+                else if (tokens[index].Is("("))
+                {
+                    if (--depth == 0)
+                    {
+                        previousOpen = index;
+                        break;
+                    }
+                }
+            }
+
+            if (previousOpen <= 0)
+                return false;
+
+            cursor = previousOpen;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// RN-SQL-003: `BEGIN`, `START TRANSACTION`, `COMMIT`, `END`, `ROLLBACK`, `ABORT`, `SAVEPOINT`, `RELEASE` e `PREPARE TRANSACTION` como
     /// primeira palavra do comando. `START` pede `TRANSACTION` depois. `PREPARE TRANSACTION` só é a confirmação em duas fases quando o
@@ -36,6 +216,58 @@ internal static class SqlText
         return first is "BEGIN" or "COMMIT" or "END" or "ROLLBACK" or "ABORT" or "SAVEPOINT" or "RELEASE"
             || (first == "START" && second == "TRANSACTION")
             || (first == "PREPARE" && second == "TRANSACTION" && IsTextConstantAt(sql, next));
+    }
+
+    /// <summary>
+    /// RN-TX-004: o que o controle de transação digitado faz no Commit manual, na forma de cada banco. `COMMIT` e `ROLLBACK` (com `WORK` ou
+    /// `TRANSACTION`, e no PostgreSQL também `END` e `ABORT`) são os botões; os pontos de salvamento vão ao banco, dentro da transação; o `BEGIN`
+    /// não, porque o Prism já abre a transação no primeiro comando; e a confirmação em duas fases e o `AND CHAIN` nunca valem. O que vem depois
+    /// da forma conhecida (`COMMIT COMMENT 'x'`, do Informix) também não vale: o Prism não sabe o que o banco faria com a transação.
+    /// </summary>
+    public static ETransactionControl TransactionControlOf(string sql, ESqlDialect dialect)
+    {
+        if (!IsTransactionControl(sql, dialect))
+            return ETransactionControl.None;
+
+        var words = Tokens(sql, dialect).Select(token => token.Token).Where(token => token != ";").Take(4).ToList();
+        var verb = words[0];
+        if (verb is "BEGIN" or "START")
+            return ETransactionControl.Begin;
+
+        if (verb is "SAVEPOINT" or "RELEASE")
+            return ETransactionControl.Savepoint;
+
+        if (verb is not ("COMMIT" or "END" or "ROLLBACK" or "ABORT"))
+            return ETransactionControl.Never;
+
+        var rest = words.Skip(words.Count > 1 && words[1] is "WORK" or "TRANSACTION" ? 2 : 1).ToList();
+        if (rest.Count == 0 || rest is ["AND", "NO", ..])
+            return verb is "COMMIT" or "END" ? ETransactionControl.Commit : ETransactionControl.Rollback;
+
+        return verb == "ROLLBACK" && rest[0] == "TO" ? ETransactionControl.RollbackToSavepoint : ETransactionControl.Never;
+    }
+
+    /// <summary>RN-TX-004: o comando começa por `ROLLBACK WORK` (a forma que o driver da IBM toma pelo `ROLLBACK` da transação inteira).</summary>
+    public static bool IsRollbackWork(string sql, ESqlDialect dialect)
+        => Tokens(sql, dialect).Select(token => token.Token).Where(token => token != ";").Take(2).SequenceEqual(["ROLLBACK", "WORK"]);
+
+    /// <summary>
+    /// RN-TX-004: no PostgreSQL, o comando que o banco não aceita dentro de transação. A recusa dele estragaria a transação manual inteira
+    /// (RN-TX-009), então o Prism o recusa sem enviar, e ele roda numa aba em Auto-commit. O que a lista não conhece chega ao banco.
+    /// </summary>
+    public static bool RunsOnlyOutsideTransaction(string sql)
+    {
+        var words = Tokens(sql, ESqlDialect.PostgreSql).Select(token => token.Token).Where(token => token != ";").Take(8).ToList();
+
+        return words switch
+        {
+            ["VACUUM", ..] => true,
+            ["CREATE" or "DROP", "DATABASE" or "TABLESPACE", ..] => true,
+            ["ALTER", "SYSTEM", ..] => true,
+            ["CREATE", "INDEX", "CONCURRENTLY", ..] or ["CREATE", "UNIQUE", "INDEX", "CONCURRENTLY", ..] or ["DROP", "INDEX", "CONCURRENTLY", ..] => true,
+            ["REINDEX", ..] => words.Contains("CONCURRENTLY") || words.Contains("DATABASE") || words.Contains("SYSTEM"),
+            _ => false
+        };
     }
 
     /// <summary>
@@ -243,6 +475,46 @@ internal static class SqlText
         }
 
         return started ? sql[start..end] : sql;
+    }
+
+    /// <summary>
+    /// A chamada `<c>rotina(...)</c>` de um `<c>EXECUTE FUNCTION</c>` ou `<c>EXECUTE PROCEDURE</c>` isolado do Informix, como foi
+    /// escrita; nulo quando o texto é outro comando, não tem lista de argumentos ou traz mais alguma coisa além dos parênteses.
+    /// </summary>
+    public static string? InformixRoutineCall(string sql)
+    {
+        var tokens = Tokens(sql, ESqlDialect.Informix).SkipWhile(token => token.Token == ";").ToArray();
+        var end = tokens.Length;
+        while (end > 0 && tokens[end - 1].Token == ";")
+            end--;
+
+        if (end < 5 || tokens[0].Token != "EXECUTE" || tokens[1].Token is not ("FUNCTION" or "PROCEDURE"))
+            return null;
+
+        var depth = 0;
+        var opened = false;
+
+        for (var index = 2; index < end; index++)
+        {
+            var token = tokens[index].Token;
+            if (token == "(")
+            {
+                if (index == 2)
+                    return null;
+
+                opened = true;
+                depth++;
+            }
+            else if (token == ")")
+            {
+                if (--depth <= 0 && index < end - 1)
+                    return null;
+            }
+            else if (!opened && token == ";")
+                return null;
+        }
+
+        return opened && depth == 0 ? sql[tokens[2].Start..tokens[end - 1].End] : null;
     }
 
     /// <summary>

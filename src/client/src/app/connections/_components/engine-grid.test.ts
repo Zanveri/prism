@@ -10,11 +10,18 @@ import type { Driver } from "@/app/drivers/_lib/drivers.schema";
 import type { Engine } from "@/components/ui";
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
+import bigqueryLogo from "@/assets/databases/bigquery.svg";
 import clickhouseLogo from "@/assets/databases/clickhouse.svg";
+import databricksLogo from "@/assets/databases/databricks.svg";
+import db2Logo from "@/assets/databases/db2.png";
 import duckdbLogo from "@/assets/databases/duckdb.svg";
+import firebirdLogo from "@/assets/databases/firebird.png";
+import informixLogo from "@/assets/databases/informix.png";
 import mariadbLogo from "@/assets/databases/mariadb.svg";
 import mysqlLogo from "@/assets/databases/mysql.svg";
+import oracleLogo from "@/assets/databases/oracle.png";
 import postgresqlLogo from "@/assets/databases/postgresql.png";
+import sqlServerLogo from "@/assets/databases/sql-server.png";
 import sqliteLogo from "@/assets/databases/sqlite.svg";
 
 import { engineChoices } from "../_lib/engine-choices";
@@ -25,10 +32,10 @@ const base: Driver = { id: "x", name: "x", vendor: "v", engines: [], state: "ava
 const catalog: Driver[] = [
   { ...base, id: "postgresql", name: "PostgreSQL", engines: [1], state: "bundled", license: null },
   { ...base, id: "ibm-data-server", name: "IBM Data Server", engines: [2, 3] },
-  { ...base, id: "sqlite", name: "SQLite", state: "comingSoon", version: null, license: null },
-  { ...base, id: "oracle", name: "Oracle", state: "comingSoon", version: null, license: null },
+  { ...base, id: "snowflake", name: "Snowflake", state: "comingSoon", version: null, license: null },
+  { ...base, id: "teradata", name: "Teradata", state: "comingSoon", version: null, license: null },
 ];
-const choices = engineChoices(catalog);
+const choices = engineChoices(catalog).filter((choice) => choice.state !== "unknown");
 
 const markupOf = (value: Engine | null, list = choices) => {
   rt.unmount();
@@ -56,17 +63,17 @@ describe("a grade de bancos do diálogo de nova conexão (RN-NAV-005)", () => {
     expect(markup).toMatch(/<div[^>]*role="radiogroup"[^>]*aria-label="Banco de dados"/);
     expect([...markup.matchAll(/<div[^>]*role="radio"[^>]*>/g)]).toHaveLength(5);
     expect(markup).toMatch(new RegExp(`<img[^>]*src="${postgresqlLogo}"[^>]*>[\\s\\S]*?>PostgreSQL</span>[\\s\\S]*?>Driver embutido</span>`));
-    for (const [tag, name, state] of [["DB2", "Db2", "Driver não instalado"], ["IFX", "Informix", "Driver não instalado"]]) {
-      expect(markup).toMatch(new RegExp(`>${tag}</span>[\\s\\S]*?>${name}</span>[\\s\\S]*?>${state}</span>`));
+    for (const [logo, name, state] of [[db2Logo, "Db2", "Driver não instalado"], [informixLogo, "Informix", "Driver não instalado"]]) {
+      expect(markup).toMatch(new RegExp(`<img[^>]*src="${logo}"[^>]*>[\\s\\S]*?>${name}</span>[\\s\\S]*?>${state}</span>`));
     }
   });
 
   it("o 'em breve' e o sem driver para a plataforma aparecem desabilitados, com o motivo ligado como descrição", () => {
     const markup = markupOf(null);
-    const sqlite = /<div[^>]*role="radio"[^>]*>(?=[\s\S]*?>SQLite<)/.exec(markup.slice(markup.indexOf("Informix")))?.[0] ?? "";
+    const snowflake = /<div[^>]*role="radio"[^>]*>(?=[\s\S]*?>Snowflake<)/.exec(markup.slice(markup.indexOf("Informix")))?.[0] ?? "";
 
-    expect(sqlite).toContain('aria-disabled="true"');
-    const described = /aria-describedby="([^"]*)"/.exec(sqlite)?.[1] ?? "";
+    expect(snowflake).toContain('aria-disabled="true"');
+    const described = /aria-describedby="([^"]*)"/.exec(snowflake)?.[1] ?? "";
     expect(markup).toMatch(new RegExp(`id="${described}"[^>]*>[\\s\\S]*?O Prism ainda não conecta neste banco.`));
   });
 
@@ -94,7 +101,7 @@ describe("a grade de bancos do diálogo de nova conexão (RN-NAV-005)", () => {
     expect(right.elements[1].focus).toHaveBeenCalledOnce();
     expect(onChange).toHaveBeenLastCalledWith(2);
 
-    // Em 2 colunas: 0 1 / 2 3 / 4. Para baixo do Db2 (1) é o SQLite (3), desabilitado.
+    // Em 2 colunas: 0 1 / 2 3 / 4. Para baixo do Db2 (1) é o Snowflake (3), desabilitado.
     const down = press(grid, "ArrowDown", 1, 2);
     expect(down.elements[3].focus).toHaveBeenCalledOnce();
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -144,7 +151,20 @@ describe("a grade de bancos do diálogo de nova conexão (RN-NAV-005)", () => {
 
 describe("a marca de cada banco na grade (RN-NAV-005, Ruling 136): a logo do fabricante, ou a ficha de hoje onde não há logo", () => {
   const soon = (id: string, name: string): Driver => ({ ...base, id, name, state: "comingSoon", version: null, license: null });
-  const everything = engineChoices([...catalog.slice(0, 2), soon("sqlite", "SQLite"), soon("mysql", "MySQL"), soon("mariadb", "MariaDB"), soon("sql-server", "Microsoft SQL Server"), soon("oracle", "Oracle"), soon("firebird", "Firebird"), soon("duckdb", "DuckDB"), soon("clickhouse", "ClickHouse")]);
+  const everything = engineChoices([
+    ...catalog.slice(0, 2),
+    { ...base, id: "sqlite", name: "SQLite", engines: [4] },
+    { ...base, id: "mysql", name: "MySQL", engines: [5] },
+    { ...base, id: "mariadb", name: "MariaDB", engines: [6] },
+    { ...base, id: "sql-server", name: "Microsoft SQL Server", engines: [7] },
+    { ...base, id: "oracle", name: "Oracle", engines: [8] },
+    { ...base, id: "firebird", name: "Firebird", engines: [9] },
+    { ...base, id: "duckdb", name: "DuckDB", engines: [10] },
+    { ...base, id: "clickhouse", name: "ClickHouse", engines: [11] },
+    { ...base, id: "bigquery", name: "Google BigQuery", engines: [12] },
+    { ...base, id: "databricks", name: "Databricks", engines: [13] },
+    soon("snowflake", "Snowflake"),
+  ]);
 
   /** A marca de uma opção: o primeiro `<span aria-hidden>` dela, com o que tem dentro, até o nome. */
   function markOf(name: string) {
@@ -154,12 +174,19 @@ describe("a marca de cada banco na grade (RN-NAV-005, Ruling 136): a logo do fab
   }
   const styleOf = (mark: string) => /<span[^>]*aria-hidden="true"[^>]*style="([^"]*)"/.exec(mark)?.[1] ?? "";
 
-  it("o PostgreSQL mostra o arquivo do fabricante, sem nome alternativo (o nome está ao lado), e nos temas escuros fica sobre a ficha clara", () => {
-    const mark = markOf("PostgreSQL");
+  it.each([
+    ["PostgreSQL", postgresqlLogo, ">PG<"],
+    ["Db2", db2Logo, ">DB2<"],
+    ["Informix", informixLogo, ">IFX<"],
+    ["Microsoft SQL Server", sqlServerLogo, ">MSSQL<"],
+    ["Oracle", oracleLogo, ">ORA<"],
+    ["Firebird", firebirdLogo, ">FB<"],
+  ])("%s mostra o arquivo do fabricante, sem nome alternativo (o nome está ao lado), e nos temas escuros fica sobre a ficha clara", (name, logo, fallbackTag) => {
+    const mark = markOf(name);
 
-    expect(mark).toMatch(new RegExp(`<img[^>]*src="${postgresqlLogo}"`));
+    expect(mark).toMatch(new RegExp(`<img[^>]*src="${logo}"`));
     expect(mark).toMatch(/<img[^>]*alt=""/);
-    expect(mark).not.toContain(">PG<");
+    expect(mark).not.toContain(fallbackTag);
     expect(styleOf(mark)).toContain("background-color:light-dark(transparent, #FFFFFF)");
   });
 
@@ -169,6 +196,8 @@ describe("a marca de cada banco na grade (RN-NAV-005, Ruling 136): a logo do fab
     ["MariaDB", mariadbLogo, "#003545", "light-dark(transparent, #FFFFFF)"],
     ["DuckDB", duckdbLogo, "#FFF000", "light-dark(#1B2027, transparent)"],
     ["ClickHouse", clickhouseLogo, "#FFCC01", "light-dark(#1B2027, transparent)"],
+    ["Google BigQuery", bigqueryLogo, "#669DF6", "light-dark(#1B2027, transparent)"],
+    ["Databricks", databricksLogo, "#FF3621", "light-dark(#1B2027, #FFFFFF)"],
   ])("%s: o glifo do arquivo, pintado na cor da marca, e a ficha onde ele some", (name, logo, color, chip) => {
     const mark = markOf(name);
 
@@ -179,22 +208,14 @@ describe("a marca de cada banco na grade (RN-NAV-005, Ruling 136): a logo do fab
     expect(mark).not.toContain("<img");
   });
 
-  it("Db2 e Informix, sem logo em nenhuma das duas fontes, ficam com a ficha colorida de hoje (DB2, IFX)", () => {
-    expect(markOf("Db2")).toContain(">DB2</span>");
-    expect(markOf("Informix")).toContain(">IFX</span>");
-    for (const name of ["Db2", "Informix"]) expect(markOf(name)).not.toMatch(/<img|mask-image/);
-  });
-
-  it("SQL Server, Oracle e Firebird, sem logo nas duas fontes, ficam com o desenho genérico de banco de dados de hoje", () => {
-    for (const name of ["Microsoft SQL Server", "Oracle", "Firebird"]) {
-      const mark = markOf(name);
-      expect(mark).toContain("<svg");
-      expect(mark).not.toMatch(/<img|mask-image|style=/);
-    }
+  it("um banco 'em breve' sem logo fica com o desenho genérico de banco de dados", () => {
+    const mark = markOf("Snowflake");
+    expect(mark).toContain("<svg");
+    expect(mark).not.toMatch(/<img|mask-image|style=/);
   });
 
   it("a marca é enfeite para o leitor de tela: o nome do banco é o texto da opção", () => {
-    for (const name of ["PostgreSQL", "DuckDB", "Db2", "Oracle"]) expect(markOf(name)).toMatch(/^<span[^>]*aria-hidden="true"/);
+    for (const name of ["PostgreSQL", "DuckDB", "Db2", "Oracle", "Snowflake"]) expect(markOf(name)).toMatch(/^<span[^>]*aria-hidden="true"/);
   });
 
   it("o passo das configurações mostra a mesma marca do banco escolhido", () => {
@@ -203,6 +224,6 @@ describe("a marca de cada banco na grade (RN-NAV-005, Ruling 136): a logo do fab
     if (postgres === undefined || db2 === undefined) throw new Error("sem PostgreSQL ou Db2 na lista");
 
     expect(renderToStaticMarkup(createElement(EngineSummary, { choice: postgres }))).toContain(`src="${postgresqlLogo}"`);
-    expect(renderToStaticMarkup(createElement(EngineSummary, { choice: db2 }))).toContain(">DB2</span>");
+    expect(renderToStaticMarkup(createElement(EngineSummary, { choice: db2 }))).toContain(`src="${db2Logo}"`);
   });
 });

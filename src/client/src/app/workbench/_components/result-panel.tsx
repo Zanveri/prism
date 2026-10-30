@@ -12,6 +12,7 @@ import type { GridEditing } from "../_lib/grid-editing";
 import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-columns";
 import { dataExportCopy } from "../_lib/data-export/data-export.copy";
 import { dataImportCopy } from "../_lib/data-import/data-import.copy";
+import { environmentAccent, environmentColorStyle } from "../_lib/environment-accent";
 import { controlHeight, iconControlSize, type ControlSize } from "../_lib/result-bar";
 import { autoLoadArmed } from "../_lib/result-paging";
 import { platformScriptShortcut } from "../_lib/script-run";
@@ -19,6 +20,7 @@ import { recall, remember } from "../_lib/tab-memory";
 import { isPersonBusy, type RowsState, type RunnerState, type VariableErrorsState } from "../_lib/use-query-runner";
 import { variableRunCopy } from "../_lib/variable-run.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { CellValueViewerPanel } from "./cell-value-viewer-panel";
 import { EditBar } from "./edit-bar";
 import { GridZoomControls } from "./grid-zoom-controls";
 import { ResultGrid } from "./result-grid";
@@ -197,6 +199,12 @@ type ResultPanelProps = {
   id?: string;
   /** O `flex` que o pai dá à área; sem ele ela ocupa o que sobra. */
   style?: CSSProperties;
+  /**
+   * RN-AMB-002: a cor (`#RRGGBB`) do ambiente da conexão da aba, o próprio ou o herdado da pasta (`ShownEnvironment.color`); nula sem ambiente, com ambiente sem
+   * cor e na aba sem conexão. A área a põe na própria `<section>` (`--environment-color`), e não quem a chama, porque a da aba de consulta vai por portal para
+   * o painel, a aba do resultado ou a janela do resultado: a variável tem de andar com ela. Uma cor fora do formato conta como nenhuma.
+   */
+  environmentColor?: string | null;
   records?: RecordsMode;
   /**
    * RN-TABELA-007: as colunas do resultado de um comando que são chave estrangeira e o clique no valor delas (a aba de consulta e as abas de resultado do script, em
@@ -290,7 +298,7 @@ export function VariableErrorsView({ state, onGoTo }: { state: VariableErrorsSta
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, placeControl, id, style, records, follow, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics: scriptStatistics, variables, onGoTo, onViewSent, kept, exporter, importer }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, placeControl, id, style, environmentColor, records, follow, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics: scriptStatistics, variables, onGoTo, onViewSent, kept, exporter, importer }: ResultPanelProps) {
   // As Estatísticas e o painel Variáveis tomam o corpo da área da mesma forma: nem grade, nem resumo das linhas na barra.
   const statistics = scriptStatistics ?? variables;
   // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
@@ -356,11 +364,16 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
   const focusGrid = useCallback(() => section.current?.querySelector<HTMLElement>('[role="grid"]')?.focus({ preventScroll: true }), []);
   const editBar = rows === null || editing === undefined ? null : <EditBar buttons={editing.bar.buttons} onAction={editing.bar.onAction} onDone={focusGrid} />;
 
+  // RN-AMB-002: a cor do ambiente, para os destaques de dentro (o sublinhado, o contorno da célula ativa, o foco e a rolagem da grade). Sem cor, o `style` de
+  // quem chama como veio.
+  const environment = environmentColorStyle(environmentColor);
+  const sectionStyle = environment === undefined ? style : { ...style, ...environment };
+
   return (
     // `tabIndex={-1}`: a área recebe o foco quando o botão que o tinha sai da página (`rescueFocus`), sem entrar no Tab.
-    <section ref={section} tabIndex={-1} id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running || progress !== null} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
+    <section ref={section} tabIndex={-1} id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running || progress !== null} style={sectionStyle} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
       <div className={cn("flex flex-none flex-wrap items-center gap-x-1 px-3", !records && "min-h-7", !collapsed && "border-b border-border")}>
-        {tabs === undefined ? <h2 className={cn("mr-auto flex items-center border-b-2 border-accent font-semibold text-ink", records ? "h-9 px-2.5" : "h-7 px-2")}>{records ? copy.recordsTitle : copy.title}</h2> : <>{tabs.list}{tabs.mark}</>}
+        {tabs === undefined ? <h2 className={cn("mr-auto flex items-center border-b-2 font-semibold text-ink", environmentAccent.border, records ? "h-9 px-2.5" : "h-7 px-2")}>{records ? copy.recordsTitle : copy.title}</h2> : <>{tabs.list}{tabs.mark}</>}
         {collapsed ? (
           <span role={running || progress !== null ? "status" : undefined} className="min-w-0 truncate px-2 text-xs text-muted">
             {progress ?? statistics?.summary ?? collapsedSummary(state)}
@@ -440,7 +453,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
           <>
             {banner ?? null}
             {/* O mesmo lugar na árvore com o comando rodando ou não: a grade não é refeita, e a rolagem fica onde estava. */}
-            <div className={cn("flex min-h-0 flex-1 flex-col", running && "opacity-50")}>
+            <div className={cn("flex min-h-0 flex-1 flex-row", running && "opacity-50")}>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <ResultGrid
                 key={rows.id}
                 columns={rows.columns}
@@ -456,9 +470,13 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 onResize={resize}
                 showTypes={preferences.results.showColumnTypes}
                 zoom={zoom}
+                font={preferences.ui.fontFamily}
                 onZoom={zoomTo}
                 editing={editing}
               />
+            </div>
+
+              {editing?.valueViewer?.open ? <CellValueViewerPanel state={editing.valueViewer} nullText={nullText} /> : null}
             </div>
 
             {/* RN-EDIT-013: no resultado de um comando, a barra de edição numa linha própria, alinhada à esquerda, entre a grade e os rodapés dela. */}
@@ -514,7 +532,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 </div>
               )
             ) : shown.status === "affected" ? (
-              <p className="font-mono text-ink">{copy.affected(shown.rowsAffected, shown.elapsedMs)}</p>
+              <p className="text-ink">{copy.affected(shown.rowsAffected, shown.elapsedMs)}</p>
             ) : shown.status === "notice" ? (
               // RN-SQL-001: o comando não foi enviado, e a frase diz o que fazer.
               <p className="flex items-baseline gap-2 text-ink">

@@ -40,6 +40,16 @@ const dialects: Record<Engine, Dialect> = {
   1: postgres,
   2: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
   3: { nestedComments: false, braceComments: true, dollarQuotes: false, carriageReturnEndsComment: false, body: informixBody, beginBlock: false, escapeStrings: false, slashComments: false },
+  4: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  5: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  6: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  7: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  8: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  9: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  10: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  11: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  12: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
+  13: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true, escapeStrings: false, slashComments: false },
 };
 
 /** Sem o banco, vale o PostgreSQL. */

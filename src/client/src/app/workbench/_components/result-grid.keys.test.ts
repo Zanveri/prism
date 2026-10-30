@@ -22,7 +22,7 @@ const columns = [
 const layout: GridLayout = { read: 3, added: [], columns: 2 };
 
 function editingWith(selection: GridSelection) {
-  const calls = { deleteRows: vi.fn(), deleteRow: vi.fn(), edit: vi.fn() };
+  const calls = { deleteRows: vi.fn(), deleteRow: vi.fn(), edit: vi.fn(), toggleValueViewer: vi.fn() };
   const editing = {
     rows: [["1", "Ana"], ["2", "Bia"], ["3", "Caio"]],
     selection,
@@ -52,6 +52,7 @@ function editingWith(selection: GridSelection) {
     onDuplicateRow: vi.fn(),
     onDeleteRow: calls.deleteRow,
     bar: { buttons: [], onAction: vi.fn() },
+    onToggleValueViewer: calls.toggleValueViewer,
   } as unknown as GridEditing;
   return { editing, calls };
 }
@@ -146,5 +147,17 @@ describe("abrir o campo de edição pela grade (RN-EDIT-001)", () => {
     (view.grid.props.onDoubleClick as (event: unknown) => void)({ target: element });
 
     expect(calls.edit).toHaveBeenCalledExactlyOnceWith({ row: 2, column: 0 });
+  });
+
+  it("F7 com uma célula selecionada alterna o painel Valor (onToggleValueViewer), e com modificadores não faz nada", () => {
+    const { editing, calls } = editingWith(cell(1, 1));
+    const view = mount(editing);
+
+    view.key({ key: "F7", ctrlKey: true });
+    view.key({ key: "F7", shiftKey: true });
+    expect(calls.toggleValueViewer).not.toHaveBeenCalled();
+
+    view.key({ key: "F7" });
+    expect(calls.toggleValueViewer).toHaveBeenCalledTimes(1);
   });
 });

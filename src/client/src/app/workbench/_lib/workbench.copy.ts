@@ -18,7 +18,7 @@ export const workbenchCopy = {
 
     // As linhas que o modelo cria no lugar de um nível ainda sem filhos.
     loading: "Carregando…",
-    groups: { tables: "Tabelas", views: "Visões", routines: "Rotinas", columns: "Colunas", indexes: "Índices", foreignKeys: "Chaves estrangeiras" },
+    groups: { tables: "Tabelas", views: "Visões", routines: "Rotinas", sequences: "Sequências", columns: "Colunas", indexes: "Índices", foreignKeys: "Chaves estrangeiras" },
     system: "sistema",
     nullable: "nulo",
     primaryKey: "PK",
@@ -27,17 +27,37 @@ export const workbenchCopy = {
     defaultDatabase: "padrão",
     routineKinds: { procedure: "procedimento", function: "função" },
 
-    // A dica da linha de uma tabela ou visão (o canvas a põe na tabela selecionada). Abre a ABA: com ela já aberta noutra vista (a Estrutura, por exemplo), o
-    // duplo clique volta a ela como está, e não aos registros.
-    openHint: { table: "Duplo clique abre a aba da tabela", view: "Duplo clique abre a aba da visão" },
+    // A dica da linha de uma tabela, visão, esquema ou banco (o canvas a põe na linha selecionada). Abre a ABA: com ela já aberta noutra vista, o
+    // duplo clique volta a ela como está.
+    openHint: {
+      table: "Duplo clique abre a aba da tabela",
+      view: "Duplo clique abre a aba da visão",
+      schema: "Duplo clique abre a aba do esquema",
+      database: "Duplo clique abre a aba do banco",
+    },
 
     // RN-BUSCA-001: o campo de busca do navegador; o texto do campo é o do canvas.
     search: {
       label: "Filtrar objetos",
       clear: "Limpar a busca",
       nothingFound: (query: string) => `Nada encontrado para “${query}”.`,
-      onlyLoaded: "A busca olha só o que já está carregado na árvore. Abra uma conexão ou um esquema para buscar dentro dele.",
+      onlyLoaded: "A busca olha as tabelas e visões dos bancos conectados e o que já está aberto na árvore.",
       results: (count: number) => formatCount(count, "resultado", "resultados"),
+      // A conta para o leitor de tela quando o corte deixa achados de fora: "1.234 resultados, 600 à vista".
+      resultsShown: (found: number, shown: number) => `${formatCount(found, "resultado", "resultados")}, ${shown.toLocaleString("pt-BR")} à vista`,
+
+      // RN-BUSCA-002: a linha de estado, logo abaixo dos filtros. O nome de um banco é "Conexão › banco".
+      databaseName: (connection: string, database: string) => `${connection} › ${database}`,
+      loading: (databases: number) => `Buscando nas tabelas e visões de ${formatCount(databases, "banco", "bancos")}…`,
+      cut: (cap: number) => `Muitos resultados: cada banco mostra as ${cap.toLocaleString("pt-BR")} primeiras tabelas e visões. Escreva mais do nome para ver as outras.`,
+      truncated: (database: string, limit: number) => `${database} tem mais de ${limit.toLocaleString("pt-BR")} tabelas e visões: a busca olhou as ${limit.toLocaleString("pt-BR")} primeiras e o que já está aberto na árvore.`,
+      // A mensagem é a do banco, como veio (RN-SQL-009).
+      failed: (database: string, message: string) => `Não foi possível buscar em ${database}: ${message}`,
+      retry: "Tentar de novo",
+      retryIn: (database: string) => `Tentar de novo: ${database}`,
+      leftOut: (count: number) => (count === 1 ? "1 conexão não está conectada e ficou de fora da busca." : `${count.toLocaleString("pt-BR")} conexões não estão conectadas e ficaram de fora da busca.`),
+      leftOutWithoutCredentials: (count: number) => (count === 1 ? "1 sem usuário ou senha gravada ficou de fora." : `${count.toLocaleString("pt-BR")} sem usuário ou senha gravada ficaram de fora.`),
+      searchThemToo: "Buscar nelas também",
     },
 
     // RN-MENU-001: o menu de contexto de cada linha.
@@ -51,6 +71,10 @@ export const workbenchCopy = {
       openRecords: "Abrir registros",
       openStructure: "Ver estrutura",
       openDiagram: "Ver diagrama",
+      openSchema: "Abrir esquema",
+      openSchemaDiagram: "Ver diagrama do esquema",
+      openDatabase: "Abrir banco",
+      openDatabaseDiagram: "Ver diagrama do banco",
       generateSelect: "Gerar SELECT",
       copyName: "Copiar nome",
       copyQualifiedName: "Copiar nome qualificado",
@@ -121,6 +145,28 @@ export const workbenchCopy = {
     runShortcut: "Ctrl+Enter",
     cancel: "Cancelar",
     cancelling: "Cancelando…",
+    contextMenu: {
+      label: "Ações do editor SQL",
+      autocompleteJoins: "Autocompletar ligações…",
+      autocompleteJoinsShortcut: "Ctrl+.",
+      autocompleteJoinsShortcutMac: "⌘.",
+      formatSql: "Formatar SQL",
+      formatSqlShortcut: "Ctrl+Shift+F",
+      formatSqlShortcutMac: "⇧⌘F",
+    },
+    joinModal: {
+      title: "Sugestão de ligações de tabelas",
+      description: "Marque as tabelas que deseja ligar a partir da cláusula FROM. Ao marcar uma tabela filha, novas ligações a partir dela são abertas abaixo.",
+      loading: "Buscando as tabelas e chaves estrangeiras…",
+      loadingChildren: "Buscando ligações…",
+      noConnection: "Conecte esta aba a um banco para buscar as ligações das tabelas.",
+      noFromTable: "Nenhuma tabela encontrada na cláusula FROM do comando atual.",
+      unresolvedTables: (names: string) => `Não foi possível encontrar no banco: ${names}.`,
+      noLinks: "Esta tabela não possui chaves estrangeiras cadastradas.",
+      previewLabel: "Pré-visualização dos JOINs",
+      cancel: "Cancelar",
+      insert: (count: number) => (count <= 1 ? "Inserir ligação" : `Inserir ${count.toLocaleString("pt-BR")} ligações`),
+    },
     // RN-ARVORE-007: o banco em que a aba roda, e a lista dos bancos do servidor (a mesma da árvore, RN-ARVORE-006).
     database: {
       label: "Banco",
@@ -310,12 +356,90 @@ export const workbenchCopy = {
       zoomIn: "Ampliar",
       zoomOut: "Reduzir",
       fit: "Ajustar à tela",
+      panMode: "Mover pelo diagrama",
+      exportPng: "Exportar PNG",
+      exportMermaid: "Exportar Mermaid (.md)",
+      copyMermaid: "Copiar Mermaid",
+      copiedMermaid: "Mermaid copiado",
+      filterTablesPlaceholder: "Filtrar tabelas…",
+      allColumns: "Todas as colunas",
+      keysOnly: "Mostrar só chaves",
       open: (name: string) => `Abrir ${name}`,
       openHint: "Duplo clique abre a tabela",
       legend: { primaryKey: "chave primária", foreignKey: "chave estrangeira", arrow: "a seta sai da tabela com a chave estrangeira e aponta para a tabela referenciada" },
-      incoming: "Só aparecem as tabelas que esta tabela referencia: a API ainda não informa as que apontam para ela.",
+      incoming: "À esquerda ficam as tabelas que apontam para esta; à direita, as que esta tabela referencia.",
       omitted: (shown: number, total: number) => `Mostrando ${shown} de ${total} tabelas referenciadas.`,
       noForeignKeys: "Esta tabela não tem chaves estrangeiras.",
+    },
+  },
+
+  // RN-ESQUEMA-001 a 003: a aba de um esquema.
+  schemaTab: {
+    views: { tables: "Tabelas", views: "Visões", routines: "Rotinas", diagram: "Diagrama" },
+    viewsLabel: "Vistas do esquema",
+    location: (connection: string, database: string) => `${connection} / ${database}`,
+    refresh: "Atualizar",
+    retry: "Tentar de novo",
+    sessionLost: "A sessão com o banco caiu. Tentar de novo abre outra.",
+    loading: "Carregando…",
+    disconnected: "A conexão está desconectada.",
+    disconnectedHint: "Conecte para carregar os objetos e o diagrama deste esquema.",
+    connect: "Conectar",
+    connecting: "Conectando…",
+    filterPlaceholder: "Filtrar objetos…",
+    emptyTables: "Este esquema não tem tabelas.",
+    emptyViews: "Este esquema não tem visões.",
+    emptyRoutines: "Este esquema não tem rotinas.",
+    emptyDiagram: "Este esquema não tem tabelas para mostrar no diagrama.",
+    columns: {
+      name: "Nome",
+      estimatedRows: "Linhas estimadas",
+      description: "Descrição",
+      kind: "Tipo",
+    },
+    openTable: "Abrir tabela",
+    openView: "Abrir visão",
+    openDiagram: "Ver diagrama",
+    largeDiagramNotice: (count: number) => `Este esquema tem ${formatCount(count, "tabela", "tabelas")}. Recomendamos “Mostrar só chaves” para facilitar a leitura.`,
+    renderAnyway: "Desenhar diagrama",
+  },
+
+  // RN-BANCO-001: a aba de um banco de dados.
+  databaseTab: {
+    views: { schemas: "Esquemas", diagram: "Diagrama", properties: "Propriedades" },
+    viewsLabel: "Vistas do banco",
+    location: (connection: string) => connection,
+    refresh: "Atualizar",
+    retry: "Tentar de novo",
+    sessionLost: "A sessão com o banco caiu. Tentar de novo abre outra.",
+    loading: "Carregando…",
+    disconnected: "A conexão está desconectada.",
+    disconnectedHint: "Conecte para carregar os esquemas, o diagrama e as propriedades deste banco.",
+    connect: "Conectar",
+    connecting: "Conectando…",
+    filterPlaceholder: "Filtrar esquemas…",
+    includeSystemSchemas: "Mostrar esquemas de sistema",
+    emptySchemas: "Nenhum esquema encontrado neste banco.",
+    emptyDiagram: "Este banco não tem tabelas nos esquemas selecionados para mostrar no diagrama.",
+    openSchema: "Abrir esquema",
+    openSchemaDiagram: "Ver diagrama",
+    columns: {
+      name: "Esquema",
+      system: "Tipo",
+      tableCount: "Tabelas",
+      viewCount: "Visões",
+    },
+    userSchema: "usuário",
+    systemSchema: "sistema",
+    largeDiagramNotice: (count: number) => `Este banco tem ${formatCount(count, "tabela", "tabelas")} nos esquemas selecionados. Recomendamos “Mostrar só chaves” para facilitar a leitura.`,
+    renderAnyway: "Desenhar diagrama",
+    properties: {
+      label: "Propriedades do banco",
+      serverVersion: "Versão do servidor",
+      characterSet: "Codificação (charset)",
+      collation: "Collation",
+      currentUser: "Usuário da sessão",
+      notAvailable: "Não informado pelo banco",
     },
   },
 
@@ -324,9 +448,8 @@ export const workbenchCopy = {
     connected: "Conectado",
     disconnected: "Desconectado",
     noTab: "Nenhuma aba ativa",
-    // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na barra do editor.
+    // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na troca na barra do editor.
     place: (connection: string, database: string) => `${connection} / ${database}`,
-    autoCommit: "Auto-commit",
     // RN-PROT-002: a conexão da aba é somente leitura (a dica diz de onde vem).
     readOnly: "Somente leitura",
     vaultOpen: (userName: string) => `Cofre de ${userName} aberto`,

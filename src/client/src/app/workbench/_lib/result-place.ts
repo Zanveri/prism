@@ -20,9 +20,9 @@ export function resultWindowAvailable(): boolean {
   return resultWindowsAvailable();
 }
 
-/** O lugar que vale para a aba: nulo na aba de tabela (o resultado dela fica dentro dela); "Numa janela" sem a janela do resultado vale o painel. */
-export function placeOf(tab: Pick<QueryTab, "table" | "resultPlace">, windowAvailable = resultWindowAvailable()): ResultPlace | null {
-  if (tab.table !== undefined) return null;
+/** O lugar que vale para a aba: nulo na aba de tabela, esquema ou banco (o conteúdo delas fica dentro delas); "Numa janela" sem a janela do resultado vale o painel. */
+export function placeOf(tab: Pick<QueryTab, "table" | "schemaTarget" | "databaseTarget" | "resultPlace">, windowAvailable = resultWindowAvailable()): ResultPlace | null {
+  if (tab.table !== undefined || tab.schemaTarget !== undefined || tab.databaseTarget !== undefined) return null;
   const place = tab.resultPlace ?? "panel";
   return place === "window" && !windowAvailable ? "panel" : place;
 }
@@ -45,7 +45,7 @@ export function preferencePlaces(preference: ResultPlace, windowAvailable = resu
 export type StripEntry<T extends Pick<QueryTab, "id"> = QueryTab> = { key: string; tab: T; result: boolean };
 
 /** As entradas da faixa, na ordem: cada aba, e logo depois dela a aba do resultado, quando o resultado dela está numa aba (RN-ABAS-012). */
-export function stripEntries<T extends Pick<QueryTab, "id" | "table" | "resultPlace">>(tabs: readonly T[], windowAvailable = resultWindowAvailable()): StripEntry<T>[] {
+export function stripEntries<T extends Pick<QueryTab, "id" | "table" | "schemaTarget" | "databaseTarget" | "resultPlace">>(tabs: readonly T[], windowAvailable = resultWindowAvailable()): StripEntry<T>[] {
   return tabs.flatMap((tab) => {
     const entry = { key: tab.id, tab, result: false };
     return placeOf(tab, windowAvailable) === "tab" ? [entry, { key: resultEntryKey(tab.id), tab, result: true }] : [entry];
@@ -196,10 +196,10 @@ export function resultOnView({ place, selected, resultActive, windowShown = fals
   return place === "tab" ? selected && resultActive : selected && !resultActive;
 }
 
-/** A aba de consulta com o lugar trocado; as outras, e a aba de tabela, como estão. Devolve a mesma lista quando nada muda. */
+/** A aba de consulta com o lugar trocado; as outras, e a aba de tabela, esquema ou banco, como estão. Devolve a mesma lista quando nada muda. */
 export function withResultPlace(tabs: readonly QueryTab[], tabId: string, place: ResultPlace): QueryTab[] {
   const tab = tabs.find((candidate) => candidate.id === tabId);
-  if (tab === undefined || tab.table !== undefined || (tab.resultPlace ?? "panel") === place) return tabs as QueryTab[];
+  if (tab === undefined || tab.table !== undefined || tab.schemaTarget !== undefined || tab.databaseTarget !== undefined || (tab.resultPlace ?? "panel") === place) return tabs as QueryTab[];
   return tabs.map((candidate) => (candidate === tab ? { ...candidate, resultPlace: place } : candidate));
 }
 

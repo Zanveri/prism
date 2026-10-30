@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { GridText } from "./grid-text";
+import { measuredGridText, monoGridText } from "./grid-text";
 import type { QueryColumn, QueryRow } from "./query.schema";
 import { baseWidths, clampWidth, columnsKey, dragWidth, fitCap, fitWidth, maxWidth, minWidth, noSizing, resizeKeyAction, sizingFor, withWidth } from "./grid-columns";
 
@@ -7,7 +9,7 @@ const id: QueryColumn = { name: "id", type: "int4", kind: "number" };
 const name: QueryColumn = { name: "name", type: "character varying(255)", kind: "text" };
 const columns = [id, name];
 
-describe("baseWidths: a largura de saída de cada coluna, contada em caracteres (a de sempre)", () => {
+describe("baseWidths: a largura de saída de cada coluna, contada em caracteres (a de sempre, sem medidor)", () => {
   it("cabeçalho (nome e tipo) e valores da primeira página, entre 72 e 480 px", () => {
     const rows: QueryRow[] = [["1", "Universidade"]];
     // `id int4`: 2 × 7,8 + 6 + 4 × 6,6 = 48 px de texto, mais 25 de respiro.
@@ -135,5 +137,66 @@ describe("sem o tipo no cabeçalho (RN-CONFIG-006), a coluna não reserva lugar 
   it("o ajuste ao conteúdo também", () => {
     expect(fitWidth(name, 0, [["a"]], "NULL", { showType: false })).toBe(Math.ceil(4 * 7.8) + 25);
     expect(fitWidth(name, 0, [["a"]], "NULL", { showType: false, sortable: true })).toBe(Math.ceil(4 * 7.8 + 16) + 25);
+  });
+});
+
+describe("as larguras medidas na fonte da interface, e não contadas em caracteres (RN-CONFIG-008)", () => {
+  // Uma fonte proporcional de mentira: a maiúscula larga (como a seminegrito da IBM Plex Sans), a minúscula estreita e o tipo a 11 px, cada um pelo que a fonte da
+  // parte da grade diz. O `measure` recebe a fonte do canvas ("600 13px …"), como o real.
+  const proportional = measuredGridText("proporcional", (font, text) => {
+    const upper = text === text.toUpperCase() && text !== text.toLowerCase();
+    if (font.startsWith("600 13px")) return upper ? 12 : 6;
+    if (font.startsWith("400 11px")) return 5;
+    return upper ? 9 : 6;
+  });
+
+  it("o padrão sem medidor é a conta de antes, número por número", () => {
+    expect(baseWidths([id, name], [["1", "Universidade"]], "NULL")).toEqual(baseWidths([id, name], [["1", "Universidade"]], "NULL", true, null, monoGridText));
+    expect(baseWidths([id], [["1", "Universidade"]], "NULL")).toEqual([73]);
+    expect(fitWidth(name, 1, [["1", "x".repeat(40)]], "NULL")).toBe(fitWidth(name, 1, [["1", "x".repeat(40)]], "NULL", { text: monoGridText }));
+  });
+
+  it("o cabeçalho em maiúsculas reserva a medida da fonte, e não a conta de caracteres (o nome não cede nada)", () => {
+    const upper: QueryColumn = { name: "MMWW", type: "int", kind: "number" };
+    // Nome: 4 × 12 = 48 px (seminegrito); tipo: 3 × 5 = 15 px; mais os 6 px entre os dois e os 25 de respiro.
+    expect(baseWidths([upper], [["1"]], "NULL", true, null, proportional)).toEqual([48 + 1 + 6 + 15 + 1 + 25]);
+    // A conta de antes reservaria 4 × 7,8 + 6 + 3 × 6,6 = 57 px de texto: menos que o nome pede.
+    expect(Math.ceil(monoGridText.name("MMWW") + 6 + monoGridText.type("int")) + 25).toBeLessThan(48 + 1 + 6 + 15 + 1 + 25);
+  });
+
+  it("o valor da primeira página é medido na fonte da célula, 400 13px", () => {
+    const plain: QueryColumn = { name: "n", type: "t", kind: "text" };
+    // 20 minúsculas de 6 px = 120 px, mais a folga e o respiro.
+    expect(baseWidths([plain], [["a".repeat(20)]], "NULL", true, null, proportional)).toEqual([120 + 1 + 25]);
+    // O nulo conta com o texto escolhido, medido do mesmo jeito.
+    expect(baseWidths([plain], [[null]], "ausente", true, null, proportional)).toEqual([Math.max(72, 7 * 6 + 1 + 25)]);
+  });
+
+  it("o tipo e a marca 'somente leitura' são medidos na fonte de 11 px", () => {
+    const plain: QueryColumn = { name: "n", type: "text", kind: "text" };
+    // `n`: 6 + 1 = 7; folga de 6; `text · somente leitura` = 22 caracteres × 5 + 1 = 111.
+    expect(baseWidths([plain], [["a"]], "NULL", true, ["somente leitura"], proportional)).toEqual([7 + 6 + 111 + 25]);
+    expect(fitWidth(plain, 0, [["a"]], "NULL", { mark: "somente leitura", text: proportional })).toBe(7 + 6 + 111 + 25);
+    // Sem o tipo, a marca sozinha.
+    expect(baseWidths([plain], [["a"]], "NULL", false, ["somente leitura"], proportional)).toEqual([Math.max(72, 7 + 6 + 15 * 5 + 1 + 25)]);
+  });
+
+  it("os tetos valem com o medidor: 480 na saída e 600 no ajuste, e o valor longo só custa o que cabe", () => {
+    const plain: QueryColumn = { name: "n", type: "t", kind: "text" };
+    const calls: number[] = [];
+    const counting: GridText = { ...proportional, cell: (text, limit) => (calls.push(limit ?? -1), proportional.cell(text, limit)) };
+
+    expect(baseWidths([plain], [["x".repeat(10_000)]], "NULL", true, null, counting)).toEqual([480]);
+    expect(fitWidth(plain, 0, [["x".repeat(10_000)]], "NULL", { text: counting })).toBe(fitCap);
+    // O limite passado é o do teto menos o respiro: o resto do valor não é medido.
+    expect(calls).toEqual([455, 575]);
+  });
+
+  it("o ajuste olha todas as linhas e, num cabeçalho que ordena, soma a seta", () => {
+    const plain: QueryColumn = { name: "n", type: "t", kind: "text" };
+    const rows: QueryRow[] = [["a"], ["a".repeat(30)]];
+
+    expect(fitWidth(plain, 0, rows, "NULL", { text: proportional })).toBe(30 * 6 + 1 + 25);
+    expect(fitWidth(name, 1, [["1", "a"]], "NULL", { sortable: true, text: proportional }) - fitWidth(name, 1, [["1", "a"]], "NULL", { text: proportional })).toBe(16);
   });
 });

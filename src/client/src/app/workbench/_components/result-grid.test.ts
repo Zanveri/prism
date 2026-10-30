@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { QueryColumn } from "../_lib/query.schema";
 import { recordsCopy } from "../_lib/records.copy";
+import { measuredGridText } from "../_lib/grid-text";
 import { followsActiveRow, GridHeaderCell, GridRow, ResultGrid } from "./result-grid";
 
 const columns: QueryColumn[] = [
@@ -356,6 +357,72 @@ describe("o zoom da grade (RN-GRADE-010)", () => {
   });
 });
 
+describe("a fonte da grade é a da interface (RN-CONFIG-008)", () => {
+  const grid = (extra: Partial<Parameters<typeof ResultGrid>[0]> = {}) => renderToStaticMarkup(createElement(ResultGrid, { columns, rows: [["1", "a"]], truncated: new Map(), ...extra }));
+  const boxClass = (markup: string) => /<div[^>]*role="table"[^>]*class="([^"]*)"/.exec(markup)?.[1] ?? /<div[^>]*class="([^"]*)"[^>]*role="table"/.exec(markup)?.[1] ?? "";
+  const rowOf = (extra: Partial<Parameters<typeof GridRow>[0]> = {}) => renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "a"], columns, virtualColumns, truncated: undefined, nullText: "NULL", ...extra }));
+
+  it("a caixa que rola tem font-sans (a variável da interface, lida do <html>), e não a mono do app: cabeçalho, células e campo de edição herdam", () => {
+    const classes = boxClass(grid());
+
+    expect(classes).toContain("font-sans");
+    expect(classes).not.toContain("font-mono");
+    // Noutro zoom é a mesma caixa.
+    expect(boxClass(grid({ zoom: 150 }))).toContain("font-sans");
+  });
+
+  it("nem o cabeçalho, nem as células, nem o número da linha escolhem outra fonte: todos herdam a da caixa", () => {
+    const markup = grid() + rowOf() + renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[0], item: virtualColumns[0], choosable: true }));
+
+    expect(markup).not.toContain("font-mono");
+    expect(markup).not.toContain("font-editor");
+  });
+
+  it("o número da linha e o canto têm algarismos de largura igual; as células não (o canvas não aplica tnum, e a medida divergiria)", () => {
+    const row = rowOf();
+    const rowNumber = /<div[^>]*role="rowheader"[^>]*>/.exec(row)?.[0] ?? "";
+    const cell = /<div[^>]*role="cell"[^>]*aria-colindex="2"[^>]*>/.exec(row)?.[0] ?? "";
+    const corner = /<div[^>]*role="columnheader"[^>]*>/.exec(grid())?.[0] ?? "";
+
+    expect(rowNumber).toContain("tabular-nums");
+    expect(corner).toContain("tabular-nums");
+    expect(cell).not.toContain("tabular-nums");
+    // O número da linha editável (a grade dos Registros) é o mesmo.
+    expect(rowOf({ cellIdOf: (row, column) => `g-${row}-${column}` })).toMatch(/role="rowheader"[^>]*tabular-nums/);
+  });
+
+  it("a dica do valor cortado usa a medida dada: o 'WWWW' que pela conta da mono cabe na coluna ganha a dica quando a fonte é larga", () => {
+    const narrow = [{ ...virtualColumns[1], size: 80 }];
+    // 4 × 7,8 = 31,2 px cabem nos 55 px de espaço (80 - 25); a maiúscula de 14 px, não: 4 × 14 + 1 = 57.
+    const wide = measuredGridText("larga", (_font, text) => (text === text.toUpperCase() ? 14 : 6));
+    const at = (extra: Partial<Parameters<typeof GridRow>[0]>) => renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "WWWW"], columns, virtualColumns: narrow, truncated: undefined, nullText: "NULL", ...extra }));
+
+    expect(at({})).not.toContain('title="WWWW"');
+    expect(at({ text: wide })).toContain('title="WWWW"');
+  });
+
+  it("a dica com a medida acompanha o zoom (a conta é a de 100%): em 50% a coluna estreita ainda cabe o valor", () => {
+    const narrow = [{ ...virtualColumns[1], size: 55 }];
+    const proportional = measuredGridText("p", () => 6);
+    const at = (scale: number) => renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "0123456789"], columns, virtualColumns: narrow, truncated: undefined, nullText: "NULL", scale, text: proportional }));
+
+    // 10 × 6 + 1 = 61 px de texto. Em 50%, a coluna de 55 px é de 110 px de 100% (85 de espaço): cabe. Em 100%, 30 de espaço: não cabe.
+    expect(at(0.5)).not.toContain('title="0123456789"');
+    expect(at(1)).toContain('title="0123456789"');
+  });
+
+  it("o valor que cabe, ou o nulo, não ganha dica, com a medida larga também", () => {
+    const wide = measuredGridText("larga", () => 14);
+    const roomy = [{ ...virtualColumns[1], size: 200 }];
+    const markup = renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "ab"], columns, virtualColumns: roomy, truncated: undefined, nullText: "NULL", text: wide }));
+
+    expect(markup).not.toContain('title="ab"');
+  });
+});
+
+/** RN-AMB-002: o contorno da célula ativa lê a cor do ambiente da variável da área de resultado, com o acento do tema como reserva. */
+const activeOutline = "outline-[color:var(--environment-color,var(--color-accent))]";
+
 describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
   const cellIdOf = (row: number, column: number) => `g-${row}-${column}`;
   const renderEditable = (extra: Partial<Parameters<typeof GridRow>[0]>, row: (string | null)[] = ["1", "aberta"]) =>
@@ -368,7 +435,7 @@ describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
     expect(markup.match(/role="gridcell"/g)).toHaveLength(2);
     expect(cell(markup, 1)).toMatch(/data-row="0"[^>]*data-col="1"[^>]*aria-selected="true"/);
     expect(cell(markup, 0)).toContain('aria-selected="false"');
-    expect(cell(markup, 1)).toContain("outline-accent");
+    expect(cell(markup, 1)).toContain(activeOutline);
   });
 
   it("RN-GRADE-001: as células escolhidas dizem que estão (`aria-selected`) e têm o fundo de escolha; o número da linha escolhida fica destacado", () => {
@@ -461,7 +528,7 @@ describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
     const markup = renderEditable({ mark: { kind: "read", deleted: true, pending: new Map(), failed: false }, activeColumn: 1, selectedFrom: 1, selectedTo: 1 });
 
     expect(cell(markup, 1)).toContain("bg-selected");
-    expect(cell(markup, 1)).toContain("outline-accent");
+    expect(cell(markup, 1)).toContain(activeOutline);
     expect(cell(markup, 1)).toContain("text-danger");
     expect(cell(markup, 1)).toContain("line-through");
   });
@@ -525,3 +592,91 @@ describe("a coluna inteira pendente na grade (RN-EDIT-018)", () => {
     expect(renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[1], item: virtualColumns[1], choosable: true }))).not.toContain("data-column-pending");
   });
 });
+
+describe("a cor do ambiente na grade (RN-AMB-002)", () => {
+  const cellIdOf = (row: number, column: number) => `g-${row}-${column}`;
+  const renderEditable = (extra: Partial<Parameters<typeof GridRow>[0]> = {}) => renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "aberta"], columns, virtualColumns, truncated: undefined, nullText: "NULL", cellIdOf, ...extra }));
+  const cell = (markup: string, column: number) => markup.match(new RegExp(`<div[^>]*id="g-0-${column}"[^>]*>.*?</div>`, "s"))?.[0] ?? "";
+  const classesOf = (tag: string) => (/class="([^"]*)"/.exec(tag)?.[1] ?? "").split(" ");
+  /** A tag da caixa que rola, conferida pelo papel dela: `grid` com a edição, `table` só de leitura. */
+  const box = (markup: string, role: "grid" | "table") => new RegExp(`<div[^>]*role="${role}"[^>]*>`).exec(markup)?.[0] ?? "";
+  const grid = (extra: Partial<Parameters<typeof ResultGrid>[0]> = {}) => renderToStaticMarkup(createElement(ResultGrid, { columns, rows: [["1", "a"]], truncated: new Map(), ...extra }));
+
+  it("só a célula ativa tem o contorno: de 2 px, por dentro, na cor lida da variável, e nunca o acento direto", () => {
+    const markup = renderEditable({ activeColumn: 1, selectedFrom: 1, selectedTo: 1 });
+    const active = classesOf(cell(markup, 1));
+
+    expect(active).toEqual(expect.arrayContaining(["outline-2", "-outline-offset-2", activeOutline]));
+    expect(active).not.toContain("outline-accent");
+    // A outra célula da mesma linha, a linha sem célula ativa e a linha de leitura (sem edição) não têm contorno nenhum.
+    expect(classesOf(cell(markup, 0)).some((name) => name.includes("outline"))).toBe(false);
+    expect(renderEditable({ selectedFrom: 0, selectedTo: 1 })).not.toContain("outline");
+    expect(renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: ["1", "a"], columns, virtualColumns, truncated: undefined, nullText: "NULL" }))).not.toContain("outline");
+  });
+
+  it("o contorno é o mesmo com a célula pendente, escolhida ou da linha excluída: a cor não depende do que a célula é", () => {
+    const pending = new Map([[1, "paga"]]);
+    const cases = [
+      { mark: { kind: "read" as const, deleted: false, pending, failed: false } },
+      { mark: { kind: "read" as const, deleted: true, pending: new Map(), failed: false } },
+      { mark: { kind: "read" as const, deleted: false, pending: new Map(), failed: true } },
+      { mark: { kind: "new" as const, deleted: false, pending: new Map(), failed: false } },
+      { wholeColumns: new Set([1]) },
+      { columnPending: new Map([[1, { value: "fechada", hint: "h", uncertain: false }]]) },
+    ];
+
+    for (const extra of cases) expect(classesOf(cell(renderEditable({ activeColumn: 1, selectedFrom: 1, selectedTo: 1, ...extra }), 1)), JSON.stringify(extra)).toContain(activeOutline);
+  });
+
+  it("a cor NÃO é propriedade da linha: a linha é memorizada, e a cor chega por herança da variável, sem redesenhar linha nenhuma", () => {
+    // Se a linha ganhasse uma propriedade de cor, trocar o ambiente da aba redesenharia todas. O `@ts-expect-error` falha na verificação de tipos se alguém a criar.
+    // @ts-expect-error a linha da grade não tem propriedade de cor
+    const row = createElement(GridRow, { index: 0, start: 0, row: ["1", "a"], columns, virtualColumns, truncated: undefined, nullText: "NULL", cellIdOf, activeColumn: 1, environmentColor: "#FF8A7A" });
+    const markup = renderToStaticMarkup(row);
+
+    expect(markup).not.toContain("#FF8A7A");
+    expect(markup).not.toContain("--environment-color:");
+    expect(classesOf(cell(markup, 1))).toContain(activeOutline);
+    // `memo` sem comparador próprio: a comparação é a rasa das propriedades que a linha tem, e nenhuma delas é cor.
+    expect((GridRow as unknown as { compare: unknown }).compare).toBeNull();
+  });
+
+  it("a caixa que rola da grade (editável ou só de leitura) lê a variável no anel do foco e nas barras de rolagem", () => {
+    const classes = {
+      table: classesOf(box(grid(), "table")),
+      grid: classesOf(box(grid({ editing: editingFor() }), "grid")),
+    };
+
+    for (const [role, names] of Object.entries(classes)) {
+      expect(names, role).toEqual(
+        expect.arrayContaining([
+          "overflow-auto",
+          "-outline-offset-2",
+          "focus-visible:outline-[color:var(--environment-color,var(--color-accent))]",
+          "[scrollbar-color:var(--environment-color,var(--color-border-strong))_var(--color-panel)]",
+        ]),
+      );
+      // O anel só troca a cor: a espessura e o recuo são os do `:focus-visible` do globals.css e do `-outline-offset-2` da caixa.
+      expect(names.filter((name) => name.includes("outline")), role).toEqual(["-outline-offset-2", "focus-visible:outline-[color:var(--environment-color,var(--color-accent))]"]);
+    }
+  });
+
+  it("a caixa é a mesma em qualquer zoom e com qualquer fonte: a cor não depende deles", () => {
+    const base = classesOf(box(grid(), "table"));
+
+    for (const extra of [{ zoom: 50 as const }, { zoom: 200 as const }, { font: "Inter" }, { showTypes: false }]) expect(classesOf(box(grid(extra), "table")), JSON.stringify(extra)).toEqual(base);
+  });
+
+  it("nada da grade põe a variável: quem a dá é a área de resultado; a caixa só a lê (o `style` dela é o do zoom)", () => {
+    const markup = grid();
+    const style = /<div[^>]*role="table"[^>]*style="([^"]*)"/.exec(markup)?.[1] ?? "";
+
+    expect(style).toContain("--grid-zoom");
+    expect(markup).not.toContain("--environment-color:");
+  });
+});
+
+/** Uma edição mínima, só para a grade se desenhar como editável (o `role` dela passa a `grid`). */
+function editingFor(): NonNullable<Parameters<typeof ResultGrid>[0]["editing"]> {
+  return { rows: [["1", "a"]] } as unknown as NonNullable<Parameters<typeof ResultGrid>[0]["editing"]>;
+}

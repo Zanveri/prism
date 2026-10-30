@@ -4,7 +4,7 @@ import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { newVerification, unprotected, type Connection, type Folder } from "@/app/connections/_lib/connections.schema";
 
 import type { DatabaseObject } from "./database-sessions.schema";
-import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "./navigator-model";
+import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, databaseTargetOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNode, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, schemaTargetOf, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, typeAheadLabels, type LevelState, type NavNode, type NavPath } from "./navigator-model";
 import { workbenchCopy } from "./workbench.copy";
 
 const connectionPath: NavPath = { type: "connection", connectionId: "c1" };
@@ -165,11 +165,11 @@ describe("schemaNodes", () => {
       { name: "public", isSystem: false },
     ]);
 
-    expect(nodes.map((schema) => schema.label)).toEqual(["Álamo", "public", "vendas", "information_schema", "pg_catalog"]);
+    expect(nodes.map((schema) => schema.label)).toEqual(["Álamo", "information_schema", "pg_catalog", "public", "vendas"]);
   });
 
   it("o esquema de sistema é marcado como tal", () => {
-    const [common, system] = schemaNodes("c1", [
+    const [system, common] = schemaNodes("c1", [
       { name: "public", isSystem: false },
       { name: "pg_catalog", isSystem: true },
     ]);
@@ -210,6 +210,25 @@ describe("chaves", () => {
   });
 });
 
+describe("objectNode (a linha de um item, com a posição dele na lista inteira)", () => {
+  const parent = { type: "objects", connectionId: "c1", database: "arquivo", schema: "vendas", objects: "views" } as const;
+  const items: DatabaseObject[] = [{ name: "zeta", kind: "view" }, { name: "alfa", kind: "view" }, { name: "Beta", kind: "view" }];
+
+  it("é a linha que o objectNodes monta: a visão leva a posição na lista em ordem byName, e a tabela e a rotina, o que sempre levaram", () => {
+    const whole = objectNodes("c1", "vendas", "views", items, "arquivo");
+
+    expect(whole.map((row) => row.label)).toEqual(["alfa", "Beta", "zeta"]);
+    expect(objectNode(parent, { name: "zeta", kind: "view" }, 2)).toEqual(whole[2]);
+    expect(objectNode(parent, { name: "alfa", kind: "view" }, 0)).toEqual(whole[0]);
+    expect(objectNode({ ...parent, objects: "tables" }, { name: "t", kind: "table" }, 7)).toEqual(objectNodes("c1", "vendas", "tables", [{ name: "t", kind: "table" }], "arquivo")[0]);
+    expect(objectNode({ ...parent, objects: "routines" }, { name: "p", kind: "procedure" }, 4)).toMatchObject({ kind: "routine", detail: "procedimento", key: `${navKey({ ...parent, objects: "routines" })}#routine:4` });
+  });
+
+  it("a mesma visão com a posição de outra lista tem outra chave (é a posição que identifica a folha)", () => {
+    expect(objectNode(parent, { name: "alfa", kind: "view" }, 0).key).not.toBe(objectNode(parent, { name: "alfa", kind: "view" }, 1).key);
+  });
+});
+
 describe("filhos de um nível", () => {
   it("só tabelas abrem; visões e rotinas são folhas, e a rotina diz se é procedimento ou função", () => {
     const [table] = objectNodes("c1", "public", "tables", [{ name: "t", kind: "table" }]);
@@ -223,6 +242,12 @@ describe("filhos de um nível", () => {
     expect([view.kind, view.hasChildren]).toEqual(["view", false]);
     expect([procedure.kind, procedure.detail, procedure.hasChildren]).toEqual(["routine", "procedimento", false]);
     expect(fn.detail).toBe("função");
+  });
+
+  it("as quatro listas de um esquema são Tabelas, Visões, Rotinas e Sequências, e as sequências são folhas", () => {
+    expect(schemaGroupNodes("c1", "public").map((group) => group.label)).toEqual(["Tabelas", "Visões", "Rotinas", "Sequências"]);
+    const [seq] = objectNodes("c1", "public", "sequences", [{ name: "seq_pedidos", kind: "sequence" }]);
+    expect([seq.kind, seq.label, seq.hasChildren]).toEqual(["sequence", "seq_pedidos", false]);
   });
 
   it("as três listas de uma tabela são Colunas, Índices e Chaves estrangeiras", () => {
@@ -517,5 +542,28 @@ describe("databaseRefOf (de que banco é a linha: a nova consulta e as abas usam
 
     expect(databaseRefOf(folder)).toBeNull();
     expect(databaseRefOf(routine)).toBeNull();
+  });
+});
+
+
+describe("schemaTargetOf e databaseTargetOf (RN-ESQUEMA-001 e RN-BANCO-001)", () => {
+  it("o esquema traz a conexão, o banco opcional e o nome do esquema", () => {
+    const [inDefault] = schemaNodes("c1", [{ name: "public", isSystem: false }]);
+    const [inOther] = schemaNodes("c1", [{ name: "vendas", isSystem: false }], "alfa");
+
+    expect(schemaTargetOf(inDefault)).toEqual({ connectionId: "c1", schema: "public" });
+    expect(schemaTargetOf(inOther)).toEqual({ connectionId: "c1", database: "alfa", schema: "vendas" });
+    expect(schemaTargetOf(connection)).toBeNull();
+  });
+
+  it("o banco traz a conexão, o nome exibido e o banco opcional quando não é o da conexão", () => {
+    const [current, other] = databaseNodes("c1", [
+      { name: "mes", isCurrent: true },
+      { name: "alfa", isCurrent: false },
+    ]);
+
+    expect(databaseTargetOf(current)).toEqual({ connectionId: "c1", name: "mes" });
+    expect(databaseTargetOf(other)).toEqual({ connectionId: "c1", database: "alfa", name: "alfa" });
+    expect(databaseTargetOf(connection)).toBeNull();
   });
 });

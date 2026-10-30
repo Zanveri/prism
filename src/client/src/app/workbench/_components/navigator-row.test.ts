@@ -124,6 +124,15 @@ describe("a linha de uma tabela ou visão (RN-TABELA-001)", () => {
     expect(toggleButton(table).title).toBe("pedido\nDuplo clique abre a aba da tabela");
     expect(toggleButton(view).title).toBe("v_pedido\nDuplo clique abre a aba da visão");
     expect(toggleButton(schema).title).toBe("public");
+    expect(toggleButton(schema, { onOpenSchema: noop }).title).toBe("public\nDuplo clique abre a aba do esquema");
+    const database: NavNode = { key: navKey({ type: "database", connectionId: "c1", database: "erp" }), kind: "database", label: "erp", depth: 1, hasChildren: true };
+    const onOpenSchema = vi.fn();
+    const onOpenDatabase = vi.fn();
+    toggleButton(schema, { onOpenSchema }).onDoubleClick?.();
+    expect(onOpenSchema).toHaveBeenCalledExactlyOnceWith(schema);
+    toggleButton(database, { onOpenDatabase }).onDoubleClick?.();
+    expect(onOpenDatabase).toHaveBeenCalledExactlyOnceWith(database);
+    expect(toggleButton(database, { onOpenDatabase }).title).toBe("erp\nDuplo clique abre a aba do banco");
   });
 });
 
@@ -359,5 +368,28 @@ describe("o indicador da verificação periódica na árvore (RN-VERIF-003)", ()
   it("sem sessão aberta e ainda não verificada têm o desenho deles", () => {
     expect(dot(render(node, { connection, status: "connected", check: { kind: "notConnected" } }))).toEqual(["Sem sessão aberta", "notConnected"]);
     expect(dot(render(node, { connection, status: "connected", check: { kind: "waiting", busy: false } }))).toEqual(["Conectada, ainda não verificada", "waiting"]);
+  });
+});
+
+describe("a fonte da linha é a da interface, em todo nó (RN-CONFIG-008, seção 42)", () => {
+  const nodes: NavNode[] = [
+    { key: navKey({ type: "database", connectionId: "c1", database: "erp" }), kind: "database", label: "erp", depth: 1, hasChildren: true },
+    { key: navKey({ type: "schema", connectionId: "c1", schema: "vendas" }), kind: "schema", label: "vendas", depth: 2, hasChildren: true },
+    { key: navKey({ type: "objects", connectionId: "c1", schema: "vendas", objects: "tables" }), kind: "group", label: "Tabelas", depth: 3, hasChildren: true, detail: "12" },
+    ...objectNodes("c1", "vendas", "tables", [{ name: "pedido", kind: "table" }]),
+    ...objectNodes("c1", "vendas", "views", [{ name: "pedido_resumo", kind: "view" }]),
+    ...objectNodes("c1", "vendas", "routines", [{ name: "calcula_frete", kind: "function" }]),
+    { key: "c", kind: "column", label: "valor_total", depth: 5, hasChildren: false, detail: "numeric(12,2)", badge: "PK" },
+    { key: "i", kind: "index", label: "pedido_pk", depth: 5, hasChildren: false, detail: "(id)" },
+    { key: "f", kind: "foreignKey", label: "pedido_cliente_fk", depth: 5, hasChildren: false, detail: "cliente_id → cliente(id)" },
+  ];
+
+  it.each(nodes.map((node) => [node.kind, node] as const))("%s: nem o nome nem o detalhe escolhem a mono do app (a árvore e a interface têm a mesma fonte)", (_kind, node) => {
+    const markup = render(node);
+
+    expect(markup).toContain(node.label);
+    expect(markup).not.toContain("font-mono");
+    expect(markup).not.toContain("font-editor");
+    if (node.detail !== undefined) expect(markup).toMatch(new RegExp(`<span class="[^"]*text-subtle[^"]*">${node.detail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</span>`));
   });
 });

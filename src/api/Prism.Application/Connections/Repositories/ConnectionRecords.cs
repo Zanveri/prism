@@ -20,8 +20,9 @@ internal static class ConnectionRecords
             ProtectionRules.ToRecord(connection.ReadOnly),
             connection.VerificationEnabled ? null : false,
             connection.VerificationInterval == ConnectionRules.VerificationIntervalDefault ? null : connection.VerificationInterval,
-            connection.VerificationQuery);
+            connection.VerificationQuery,
+            UseInternalDescriptions: connection.UseInternalDescriptions);
 
     public static ConnectionSafeguards SafeguardsOf(VaultConnectionRecord record)
-        => new(record.ConfirmCommands, record.ReadOnly == true, record.VerificationEnabled ?? true, record.VerificationInterval ?? ConnectionRules.VerificationIntervalDefault, record.VerificationQuery);
+        => new(record.ConfirmCommands, record.ReadOnly == true, record.VerificationEnabled ?? true, record.VerificationInterval ?? ConnectionRules.VerificationIntervalDefault, record.VerificationQuery, record.UseInternalDescriptions);
 }

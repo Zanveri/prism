@@ -1,4 +1,4 @@
-import { useId, type FormEvent } from "react";
+import { useId, type FormEvent, type Ref } from "react";
 
 import { Button, type Engine } from "@/components/ui";
 
@@ -7,11 +7,13 @@ import { gridFilterCopy } from "../../_lib/grid-filter.copy";
 import { recordsCopy } from "../../_lib/records.copy";
 import { canClear } from "../../_lib/table-view";
 import { workbenchCopy } from "../../_lib/workbench.copy";
-import { FilterField } from "../filter-field";
+import { FilterField, type FilterFieldHandle } from "../filter-field";
 
 const text = workbenchCopy.tableTab.records;
 
 type RecordsFilterProps = {
+  /** O campo de filtro, para levar o foco a ele: a entrada da aba de uma tabela (RN-ABAS-019). */
+  ref?: Ref<FilterFieldHandle>;
   /** O que está escrito no campo (ainda não aplicado). */
   draft: string;
   onDraft: (text: string) => void;
@@ -46,7 +48,7 @@ type RecordsFilterProps = {
  * completa as colunas e as palavras do filtro (RN-TABELA-011, `FilterField`). Embaixo, nos Registros, o comando que a tela executou, uma parte por linha,
  * como foi enviado (o bloco rola se o filtro for comprido); a dica o repete inteiro.
  */
-export function RecordsFilter({ draft, onDraft, applied, problem, busy, command, onApply, onClear, engine, columns, autocomplete, subject = "table" }: RecordsFilterProps) {
+export function RecordsFilter({ ref, draft, onDraft, applied, problem, busy, command, onApply, onClear, engine, columns, autocomplete, subject = "table" }: RecordsFilterProps) {
   const hintId = useId();
   const problemId = useId();
   const field = subject === "table" ? recordsCopy.filter : gridFilterCopy.result;
@@ -62,6 +64,7 @@ export function RecordsFilter({ draft, onDraft, applied, problem, busy, command,
       <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2">
         <label title={field.hint} className="flex h-8 min-w-60 flex-1 items-center rounded-md border border-border bg-raised px-2.5 has-[.cm-focused]:outline-2 has-[.cm-focused]:outline-accent">
           <FilterField
+            ref={ref}
             value={draft}
             onChange={onDraft}
             onSubmit={() => {

@@ -3,8 +3,25 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { unwrap, type ApiResult } from "@/lib/api/prism-api";
 
 import { forgetFailedLists } from "./catalog-fetch-failures";
-import { databaseMark, databaseOfKey, databaseSessionKey, databaseSessionQuery, getColumns, getForeignKeys, getIndexes, getReferencedBy, isSessionLost, keepUntilRefreshed, reopenDatabaseSession } from "./database-sessions.service";
-import type { NavPath } from "./navigator-model";
+import type { DatabaseObject, DatabaseProperty, DatabaseSchema, SchemaDiagram } from "./database-sessions.schema";
+import {
+  databaseMark,
+  databaseOfKey,
+  databaseSessionKey,
+  databaseSessionQuery,
+  getColumns,
+  getDatabaseProperties,
+  getForeignKeys,
+  getIndexes,
+  getObjects,
+  getReferencedBy,
+  getSchemaDiagram,
+  getSchemas,
+  isSessionLost,
+  keepUntilRefreshed,
+  reopenDatabaseSession,
+} from "./database-sessions.service";
+import type { NavPath, ObjectsKind } from "./navigator-model";
 
 /**
  * As colunas, as chaves estrangeiras e os índices de uma tabela, como a Estrutura e o Diagrama os
@@ -25,6 +42,17 @@ export const structureKey = (connectionId: string, schema: string, table: string
 
 /** Tudo o que uma tabela guarda (as listas), para "Atualizar". */
 export const structurePrefix = (connectionId: string, schema: string, table: string, database?: string) => ["table-structure", connectionId, ...databaseMark(database), schema, table] as const;
+
+/** Tudo o que um esquema guarda na família da Estrutura (tabelas, diagrama e listas de objetos do esquema). */
+export const schemaPrefix = (connectionId: string, schema: string, database?: string) => ["table-structure", connectionId, ...databaseMark(database), schema] as const;
+
+export const schemaDiagramKey = (connectionId: string, schema: string, database?: string) => [...schemaPrefix(connectionId, schema, database), { schemaView: "diagram" as const }] as const;
+
+export const schemaObjectsKey = (connectionId: string, schema: string, kind: ObjectsKind, database?: string) => [...schemaPrefix(connectionId, schema, database), { schemaObjects: kind }] as const;
+
+export const databaseSchemasKey = (connectionId: string, database?: string) => ["table-structure", connectionId, ...databaseMark(database), { databaseView: "schemas" as const }] as const;
+
+export const databasePropertiesKey = (connectionId: string, database?: string) => ["table-structure", connectionId, ...databaseMark(database), { databaseView: "properties" as const }] as const;
 
 /** O que "Atualizar" invalida em um prefixo: o prefixo e, quando o prefixo sozinho pega mais do que o nó, o que filtra. */
 export type StructureScope = { queryKey: readonly unknown[]; predicate?: (query: { queryKey: readonly unknown[] }) => boolean };
@@ -95,6 +123,58 @@ export const foreignKeysQuery = (connectionId: string, schema: string, table: st
  */
 export const referencedByQuery = (connectionId: string, schema: string, table: string, queryClient: QueryClient, enabled = true, database?: string) => structureQuery("referencedBy", connectionId, schema, table, queryClient, enabled, getReferencedBy, database);
 
+/** RN-ESQUEMA-003 e RN-CAT-008: o diagrama completo de um esquema (tabelas com colunas e chaves estrangeiras), na família da Estrutura. */
+export function schemaDiagramQuery(connectionId: string, schema: string, queryClient: QueryClient, enabled = true, database?: string) {
+  return queryOptions({
+    queryKey: schemaDiagramKey(connectionId, schema, database),
+    queryFn: async (): Promise<SchemaDiagram> => {
+      const { id } = await queryClient.ensureQueryData(databaseSessionQuery(connectionId, database));
+      return unwrap(await getSchemaDiagram(id, schema));
+    },
+    enabled,
+    ...keepUntilRefreshed,
+  });
+}
+
+/** RN-ESQUEMA-002 e RN-CAT-009: objetos de um esquema (`tables`, `views` ou `routines`) com estimativa de linhas e comentário, na família da Estrutura. */
+export function schemaObjectsQuery(connectionId: string, schema: string, kind: ObjectsKind, queryClient: QueryClient, enabled = true, database?: string) {
+  return queryOptions({
+    queryKey: schemaObjectsKey(connectionId, schema, kind, database),
+    queryFn: async (): Promise<DatabaseObject[]> => {
+      const { id } = await queryClient.ensureQueryData(databaseSessionQuery(connectionId, database));
+      return unwrap(await getObjects(id, schema, kind));
+    },
+    enabled,
+    ...keepUntilRefreshed,
+  });
+}
+
+/** RN-BANCO-001 e RN-CAT-010: os esquemas do banco com contagens de tabelas, visões e rotinas, na família da Estrutura. */
+export function databaseSchemasQuery(connectionId: string, queryClient: QueryClient, database?: string, enabled = true) {
+  return queryOptions({
+    queryKey: databaseSchemasKey(connectionId, database),
+    queryFn: async (): Promise<DatabaseSchema[]> => {
+      const { id } = await queryClient.ensureQueryData(databaseSessionQuery(connectionId, database));
+      return unwrap(await getSchemas(id));
+    },
+    enabled,
+    ...keepUntilRefreshed,
+  });
+}
+
+/** RN-BANCO-001 e RN-CAT-010: propriedades somente leitura do servidor e do banco da sessão, na família da Estrutura. */
+export function databasePropertiesQuery(connectionId: string, queryClient: QueryClient, database?: string, enabled = true) {
+  return queryOptions({
+    queryKey: databasePropertiesKey(connectionId, database),
+    queryFn: async (): Promise<DatabaseProperty[]> => {
+      const { id } = await queryClient.ensureQueryData(databaseSessionQuery(connectionId, database));
+      return unwrap(await getDatabaseProperties(id));
+    },
+    enabled,
+    ...keepUntilRefreshed,
+  });
+}
+
 /**
  * "Conectar", das vistas Estrutura e Diagrama de uma conexão que a pessoa desconectou: abre a sessão da árvore, como abrir o nó da
  * conexão no navegador. É o clique que reconecta (nada reconecta sozinho): as consultas de catálogo, liberadas em seguida, usam a
@@ -126,7 +206,12 @@ export async function refreshStructure(queryClient: QueryClient, connectionId: s
   const keys = tables.map((table) => structurePrefix(connectionId, table.schema, table.name, database));
   const sessionId = () => queryClient.getQueryData<{ id: string }>(databaseSessionKey(connectionId, database))?.id;
   const lost = () => keys.some((queryKey) => queryClient.getQueryCache().findAll({ queryKey }).some((query) => isSessionLost(query.state.error)));
-  const refetch = () => Promise.all(keys.map((queryKey) => queryClient.refetchQueries({ queryKey })));
+  const refetch = () =>
+    Promise.all([
+      ...keys.map((queryKey) => queryClient.refetchQueries({ queryKey })),
+      ...tables.map((table) => queryClient.refetchQueries({ queryKey: ["plugin-table-enrichment", connectionId, ...databaseMark(database), table.schema, table.name] })),
+      ...tables.map((table) => queryClient.refetchQueries({ queryKey: ["internal-table-description", connectionId, ...databaseMark(database), table.name.trim().toLowerCase()] })),
+    ]);
 
   const before = sessionId();
   let reopened = lost();
@@ -140,6 +225,58 @@ export async function refreshStructure(queryClient: QueryClient, connectionId: s
   }
 
   // Só conta se há uma sessão nova de verdade: quem a abre pode ser esta busca, que pede à consulta da sessão.
+  const after = sessionId();
+  return { sessionReopened: reopened && after !== undefined && after !== before };
+}
+
+/** "Atualizar" e "Tentar de novo" de uma aba de Esquema: invalida e refaz tudo sob o esquema, recuperando sessão caída como em `refreshStructure`. */
+export async function refreshSchema(queryClient: QueryClient, connectionId: string, schema: string, database?: string): Promise<{ sessionReopened: boolean }> {
+  forgetFailedLists(queryClient, connectionId);
+  const queryKey = schemaPrefix(connectionId, schema, database);
+  const sessionId = () => queryClient.getQueryData<{ id: string }>(databaseSessionKey(connectionId, database))?.id;
+  const lost = () => queryClient.getQueryCache().findAll({ queryKey }).some((query) => isSessionLost(query.state.error));
+  const invalidate = () => queryClient.invalidateQueries({ queryKey });
+
+  const before = sessionId();
+  let reopened = lost();
+  if (reopened) await reopenDatabaseSession(queryClient, connectionId, database);
+  await invalidate();
+
+  if (!reopened && lost()) {
+    reopened = true;
+    await reopenDatabaseSession(queryClient, connectionId, database);
+    await invalidate();
+  }
+
+  const after = sessionId();
+  return { sessionReopened: reopened && after !== undefined && after !== before };
+}
+
+/** "Atualizar" e "Tentar de novo" de uma aba de Banco: invalida e refaz tudo sob o banco, recuperando sessão caída como em `refreshStructure`. */
+export async function refreshDatabase(queryClient: QueryClient, connectionId: string, database?: string): Promise<{ sessionReopened: boolean }> {
+  forgetFailedLists(queryClient, connectionId);
+  const scopes = structureScopes({ type: "database", connectionId, ...(database === undefined ? {} : { database }) });
+  const sessionId = () => queryClient.getQueryData<{ id: string }>(databaseSessionKey(connectionId, database))?.id;
+  const lost = () =>
+    scopes.some((scope) =>
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: scope.queryKey, predicate: scope.predicate })
+        .some((query) => isSessionLost(query.state.error)),
+    );
+  const invalidate = () => Promise.all(scopes.map((scope) => queryClient.invalidateQueries({ queryKey: scope.queryKey, predicate: scope.predicate })));
+
+  const before = sessionId();
+  let reopened = lost();
+  if (reopened) await reopenDatabaseSession(queryClient, connectionId, database);
+  await invalidate();
+
+  if (!reopened && lost()) {
+    reopened = true;
+    await reopenDatabaseSession(queryClient, connectionId, database);
+    await invalidate();
+  }
+
   const after = sessionId();
   return { sessionReopened: reopened && after !== undefined && after !== before };
 }

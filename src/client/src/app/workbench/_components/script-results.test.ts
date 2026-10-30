@@ -93,6 +93,21 @@ describe("as Estatísticas (RN-SQL-020)", () => {
     expect(html).toContain(">pulado</td>");
   });
 
+  it("as fontes (RN-CONFIG-008): o número segue a interface, com algarismos de largura igual; o comando é SQL e segue a fonte do editor; a mensagem do banco e o SQLSTATE ficam na mono do app", () => {
+    const html = markup(createElement(ScriptStatistics, { run: finished() }));
+    const number = /<td class="([^"]*)">1<\/td>/.exec(html)?.[1] ?? "";
+    const command = /<td class="([^"]*)" title="-- os pedidos[^"]*">/.exec(html)?.[1] ?? "";
+    const message = /<pre class="([^"]*)">ERROR: relation/.exec(html)?.[1] ?? "";
+    const sqlState = /<span class="([^"]*)">55P03<\/span>/.exec(html)?.[1] ?? "";
+
+    expect(number).toContain("tabular-nums");
+    expect(number).not.toContain("font-mono");
+    expect(command).toContain("font-editor");
+    expect(command).not.toContain("font-mono");
+    expect(message).toContain("font-mono");
+    expect(sqlState).toContain("font-mono");
+  });
+
   it("o erro vem na linha de baixo do comando, como veio, com o SQLSTATE; os totais vêm depois da tabela", () => {
     const html = markup(createElement(ScriptStatistics, { run: finished() }));
 

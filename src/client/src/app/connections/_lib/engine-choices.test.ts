@@ -10,36 +10,66 @@ function driver(id: string, overrides: Partial<Driver> = {}): Driver {
   return { id, name: id, vendor: "Fabricante", engines: [], state: "available", version: "1.0.0", sizeBytes: 1048576, license, platformNote: null, progress: null, error: null, restartRequired: false, ...overrides };
 }
 
-/** O catálogo desta entrega (RN-DRIVER-002), como a API o devolve hoje nesta árvore: o PostgreSQL embutido, o da IBM para baixar e os "em breve". */
+/** O catálogo desta entrega (RN-DRIVER-002), como a API o devolve hoje nesta árvore: o PostgreSQL embutido, os doze para baixar e os "em breve". */
 const postgres = driver("postgresql", { name: "PostgreSQL", vendor: "Npgsql", engines: [1], state: "bundled", license: null, sizeBytes: null });
 const ibm = driver("ibm-data-server", { name: "IBM Data Server", vendor: "IBM", engines: [2, 3] });
-const soon = ["SQLite", "MySQL", "MariaDB"].map((name) => driver(name.toLowerCase(), { name, state: "comingSoon", version: null, license: null, sizeBytes: null }));
-const catalog = [postgres, ibm, ...soon];
+const downloadable = (
+  [
+    ["sqlite", "SQLite", 4],
+    ["mysql", "MySQL", 5],
+    ["mariadb", "MariaDB", 6],
+    ["sql-server", "Microsoft SQL Server", 7],
+    ["oracle", "Oracle", 8],
+    ["firebird", "Firebird", 9],
+    ["duckdb", "DuckDB", 10],
+    ["clickhouse", "ClickHouse", 11],
+    ["bigquery", "Google BigQuery", 12],
+    ["databricks", "Databricks", 13],
+  ] as const
+).map(([id, name, engine]) => driver(id, { name, engines: [engine] }));
+const soon = ["Snowflake"].map((name) => driver(name.toLowerCase(), { name, state: "comingSoon", version: null, license: null, sizeBytes: null }));
+const catalog = [postgres, ibm, ...downloadable, ...soon];
 
 const summary = (choices: EngineChoice[]) => choices.map((choice) => [choice.label, choice.state, choice.stateLabel, choice.disabled]);
 
 describe("engineChoices: a lista de bancos do formulário, montada do catálogo de drivers (RN-NAV-005)", () => {
-  it("os três bancos que o Prism conecta, na ordem de sempre, cada um com o estado do driver que o atende; depois os 'em breve', desabilitados", () => {
+  it("os treze bancos que o Prism conecta, na ordem de sempre, cada um com o estado do driver que o atende; depois os 'em breve', desabilitados", () => {
     expect(summary(engineChoices(catalog))).toEqual([
       ["PostgreSQL", "bundled", "Driver embutido", false],
       ["Db2", "missing", "Driver não instalado", false],
       ["Informix", "missing", "Driver não instalado", false],
-      ["SQLite", "comingSoon", "Em breve", true],
-      ["MySQL", "comingSoon", "Em breve", true],
-      ["MariaDB", "comingSoon", "Em breve", true],
+      ["SQLite", "missing", "Driver não instalado", false],
+      ["MySQL", "missing", "Driver não instalado", false],
+      ["MariaDB", "missing", "Driver não instalado", false],
+      ["Microsoft SQL Server", "missing", "Driver não instalado", false],
+      ["Oracle", "missing", "Driver não instalado", false],
+      ["Firebird", "missing", "Driver não instalado", false],
+      ["DuckDB", "missing", "Driver não instalado", false],
+      ["ClickHouse", "missing", "Driver não instalado", false],
+      ["Google BigQuery", "missing", "Driver não instalado", false],
+      ["Databricks", "missing", "Driver não instalado", false],
+      ["Snowflake", "comingSoon", "Em breve", true],
     ]);
   });
 
-  it("cada banco leva o driver que o atende (o da IBM serve ao Db2 e ao Informix) e o número dele (1, 2, 3); o 'em breve' não tem banco", () => {
+  it("cada banco leva o driver que o atende (o da IBM serve ao Db2 e ao Informix) e o número dele (1 a 13); o 'em breve' não tem banco", () => {
     const choices = engineChoices(catalog);
 
     expect(choices.map((choice) => [choice.engine, choice.driver?.id ?? null])).toEqual([
       [1, "postgresql"],
       [2, "ibm-data-server"],
       [3, "ibm-data-server"],
-      [null, "sqlite"],
-      [null, "mysql"],
-      [null, "mariadb"],
+      [4, "sqlite"],
+      [5, "mysql"],
+      [6, "mariadb"],
+      [7, "sql-server"],
+      [8, "oracle"],
+      [9, "firebird"],
+      [10, "duckdb"],
+      [11, "clickhouse"],
+      [12, "bigquery"],
+      [13, "databricks"],
+      [null, "snowflake"],
     ]);
   });
 
@@ -60,18 +90,28 @@ describe("engineChoices: a lista de bancos do formulário, montada do catálogo 
   });
 
   it("o 'em breve' diz por que não pode ser escolhido", () => {
-    expect(engineChoices(catalog)[3].reason).toBe("O Prism ainda não conecta neste banco.");
+    expect(engineChoices(catalog).at(-1)?.reason).toBe("O Prism ainda não conecta neste banco.");
   });
 
   it("o reinício que um driver espera vai junto (o formulário lembra do 'Reiniciar agora')", () => {
-    expect(engineChoices([postgres, { ...ibm, state: "installed", restartRequired: true }]).map((choice) => choice.restartPending)).toEqual([false, true, true]);
+    expect(engineChoices([postgres, { ...ibm, state: "installed", restartRequired: true }]).slice(0, 3).map((choice) => choice.restartPending)).toEqual([false, true, true]);
   });
 
-  it("sem a lista (ainda a caminho, ou falhou): os três bancos, escolhíveis e sem estado; a conexão pode ser salva sem saber do driver", () => {
+  it("sem a lista (ainda a caminho, ou falhou): os treze bancos, escolhíveis e sem estado; a conexão pode ser salva sem saber do driver", () => {
     expect(summary(engineChoices(undefined))).toEqual([
       ["PostgreSQL", "unknown", "", false],
       ["Db2", "unknown", "", false],
       ["Informix", "unknown", "", false],
+      ["SQLite", "unknown", "", false],
+      ["MySQL", "unknown", "", false],
+      ["MariaDB", "unknown", "", false],
+      ["Microsoft SQL Server", "unknown", "", false],
+      ["Oracle", "unknown", "", false],
+      ["Firebird", "unknown", "", false],
+      ["DuckDB", "unknown", "", false],
+      ["ClickHouse", "unknown", "", false],
+      ["Google BigQuery", "unknown", "", false],
+      ["Databricks", "unknown", "", false],
     ]);
   });
 
@@ -80,7 +120,7 @@ describe("engineChoices: a lista de bancos do formulário, montada do catálogo 
   });
 
   it("um driver de um banco que a tela não conhece (a API mais nova que a tela) aparece como 'em breve', e nunca como um banco escolhível", () => {
-    const novo = driver("novo", { name: "Banco Novo", engines: [9], state: "installed" });
+    const novo = driver("novo", { name: "Banco Novo", engines: [99], state: "installed" });
 
     expect(summary(engineChoices([postgres, ibm, novo])).at(-1)).toEqual(["Banco Novo", "comingSoon", "Em breve", true]);
   });

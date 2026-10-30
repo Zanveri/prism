@@ -47,6 +47,7 @@ export const folderSchema = z.object({
   color: z.string().nullable(),
   confirmCommands: confirmationSchema,
   readOnly: z.boolean(),
+  useInternalDescriptions: z.boolean().optional(),
   protections: protectionsSchema,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -56,7 +57,7 @@ export type Folder = z.infer<typeof folderSchema>;
 
 export const foldersSchema = z.array(folderSchema);
 
-export const engineSchema = z.literal([1, 2, 3], { error: "Escolha o banco de dados." });
+export const engineSchema = z.literal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], { error: "Escolha o banco de dados." });
 
 /**
  * A conexão como a API a devolve: sem a senha, só `hasPassword` (RN-CONN-001). A tela não aceita
@@ -82,6 +83,7 @@ export const connectionSchema = z.object({
   verificationEnabled: z.boolean(),
   verificationInterval: z.number().int(),
   verificationQuery: z.string().nullable(),
+  useInternalDescriptions: z.boolean().nullable().optional(),
   protections: protectionsSchema,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -119,6 +121,16 @@ export const engineOptions = [
   { value: 1, label: "PostgreSQL", tag: engineTags[1], defaultPort: 5432, verificationQuery: "SELECT 1" },
   { value: 2, label: "Db2", tag: engineTags[2], defaultPort: 50000, verificationQuery: "SELECT 1 FROM SYSIBM.SYSDUMMY1" },
   { value: 3, label: "Informix", tag: engineTags[3], defaultPort: 9089, verificationQuery: "SELECT 1 FROM systables WHERE tabid = 1" },
+  { value: 4, label: "SQLite", tag: engineTags[4], defaultPort: 1, verificationQuery: "SELECT 1" },
+  { value: 5, label: "MySQL", tag: engineTags[5], defaultPort: 3306, verificationQuery: "SELECT 1" },
+  { value: 6, label: "MariaDB", tag: engineTags[6], defaultPort: 3306, verificationQuery: "SELECT 1" },
+  { value: 7, label: "Microsoft SQL Server", tag: engineTags[7], defaultPort: 1433, verificationQuery: "SELECT 1" },
+  { value: 8, label: "Oracle", tag: engineTags[8], defaultPort: 1521, verificationQuery: "SELECT 1 FROM DUAL" },
+  { value: 9, label: "Firebird", tag: engineTags[9], defaultPort: 3050, verificationQuery: "SELECT 1 FROM RDB$DATABASE" },
+  { value: 10, label: "DuckDB", tag: engineTags[10], defaultPort: 1, verificationQuery: "SELECT 1" },
+  { value: 11, label: "ClickHouse", tag: engineTags[11], defaultPort: 8123, verificationQuery: "SELECT 1" },
+  { value: 12, label: "Google BigQuery", tag: engineTags[12], defaultPort: 443, verificationQuery: "SELECT 1" },
+  { value: 13, label: "Databricks", tag: engineTags[13], defaultPort: 443, verificationQuery: "SELECT 1" },
 ] as const;
 
 /** O rótulo, a etiqueta, a porta sugerida e a consulta de verificação de um banco. */
@@ -225,6 +237,7 @@ const connectionFields = z.object({
   ...environmentFields,
   ...protectionFields,
   ...verificationFields,
+  useInternalDescriptions: z.enum(["true", "false", ""]).transform((value) => (value === "" ? null : value === "true")).optional(),
 });
 
 /** A senha do banco tem até 1.024 caracteres, contados como veio (RN-CONN-010): ela não é aparada. */
@@ -280,10 +293,10 @@ const folderName = z
  * Criar uma pasta: o nome, onde ela fica (`""` é a raiz), a cor do ícone dela (RN-PASTA-007, no formato da cor do ambiente), o ambiente (RN-PASTA-005) e as
  * proteções (RN-PROT-001 e 002).
  */
-export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull), color: environmentFields.environmentColor, ...environmentFields, ...protectionFields });
+export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull), color: environmentFields.environmentColor, ...environmentFields, ...protectionFields, useInternalDescriptions: z.enum(["true", "false"]).transform((value) => value === "true").optional() });
 
 /** "Editar pasta…" (RN-PASTA-006) pergunta o nome, a cor, o ambiente e as proteções. */
-export const editFolderSchema = createFolderSchema.pick({ name: true, color: true, environmentName: true, environmentColor: true, confirmCommands: true, readOnly: true });
+export const editFolderSchema = createFolderSchema.pick({ name: true, color: true, environmentName: true, environmentColor: true, confirmCommands: true, readOnly: true, useInternalDescriptions: true });
 
 /** O "Renomear" da pasta (F2, RN-NAV-009) pergunta só o nome. */
 export const renameFolderSchema = createFolderSchema.pick({ name: true });

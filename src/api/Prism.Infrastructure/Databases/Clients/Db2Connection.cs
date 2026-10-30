@@ -15,15 +15,30 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger) : IbmDatabaseConnection(settings, logger)
 {
-    /// <summary>As letras de `TYPE` do que a árvore mostra como tabela e como visão, e de `ROUTINETYPE` das rotinas.</summary>
+    /// <summary>As letras de `TYPE` do que a árvore mostra como tabela e como visão, de `ROUTINETYPE` das rotinas e de `SEQTYPE` das sequências.</summary>
     private const string TableTypes = "'T', 'U', 'G', 'N'";
     private const string ViewTypes = "'V', 'W', 'S'";
     private const string RoutineTypes = "'F', 'P'";
+    private const string SequenceTypes = "'S'";
 
     protected override ESqlDialect Dialect => ESqlDialect.Db2;
 
     /// <summary>RN-CONN-013.</summary>
     protected override string PingSql => "SELECT 1 FROM SYSIBM.SYSDUMMY1";
+
+    /// <summary>
+    /// RN-TX-009: o banco desfaz só o comando que falhou, menos no SQLSTATE da classe 40 (impasse, tempo de trava esgotado: SQL0911N), em que ele
+    /// desfaz a transação inteira.
+    /// </summary>
+    protected override bool UndoesTheTransaction(DatabaseFailure failure)
+        => failure.SqlState?.StartsWith("40", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// RN-EDIT-005 e RN-TX-011: o driver da IBM não tem os pontos de salvamento do ADO.NET. O Db2 pede `ON ROLLBACK RETAIN CURSORS`: sem ele, a
+    /// volta ao ponto fecharia os cursores da sessão.
+    /// </summary>
+    protected override (string Save, string RollbackTo, string? Release)? SavepointSql(string name)
+        => ($"SAVEPOINT {name} ON ROLLBACK RETAIN CURSORS", $"ROLLBACK TO SAVEPOINT {name}", $"RELEASE SAVEPOINT {name}");
 
     /// <summary>
     /// RN-ARVORE-004. O prefixo `SYS` é reservado aos esquemas do próprio Db2 (`SYSIBM`, `SYSCAT`, `SYSPROC`); `NULLID` e `SQLJ` também
@@ -199,8 +214,32 @@ internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger)
                               WHERE ROUTINESCHEMA = ?
                                 AND ROUTINETYPE IN ({RoutineTypes})
                               ORDER BY ROUTINENAME, SPECIFICNAME",
+            "sequences" => $@"SELECT SEQNAME AS object_name,
+                                     'sequence' AS object_kind,
+                                     CAST(NULL AS BIGINT) AS estimated_rows,
+                                     REMARKS AS object_comment
+                                FROM SYSCAT.SEQUENCES
+                               WHERE SEQSCHEMA = ?
+                                 AND SEQTYPE IN ({SequenceTypes})
+                               ORDER BY SEQNAME",
             _ => null
         };
+
+    /// <summary>
+    /// RN-BUSCA-002. Os mesmos `TYPE` que a lista de objetos (<see cref="TableTypes"/> e <see cref="ViewTypes"/>; os apelidos ficam de
+    /// fora) e o mesmo critério de sistema do <see cref="SchemasSql"/> (`SYS%`, `NULLID` e `SQLJ`). O `RTRIM` tira os espaços com que o
+    /// catálogo completa o nome de esquema mais curto e o texto mais curto do `CASE`. O índice é sempre do banco da conexão, o único
+    /// que o Db2 lista (RN-ARVORE-006).
+    /// </summary>
+    protected override string ObjectNamesSql(int rows)
+        => $@"SELECT RTRIM(TABSCHEMA) AS schema_name,
+                     CASE WHEN TABSCHEMA LIKE 'SYS%' OR TABSCHEMA IN ('NULLID', 'SQLJ') THEN 1 ELSE 0 END AS is_system,
+                     TABNAME AS object_name,
+                     RTRIM(CASE WHEN TYPE IN ({ViewTypes}) THEN 'view' ELSE 'table' END) AS object_kind
+                FROM SYSCAT.TABLES
+               WHERE TYPE IN ({TableTypes}, {ViewTypes})
+               ORDER BY is_system, TABSCHEMA, TABNAME
+               FETCH FIRST {rows} ROWS ONLY";
 
     /// <summary>O tipo da coluna de `SYSCAT.COLUMNS`, com o tamanho.</summary>
     private static string ColumnType => @"CASE WHEN SYSCAT.COLUMNS.TYPENAME IN ('CHARACTER', 'VARCHAR', 'GRAPHIC', 'VARGRAPHIC', 'BINARY', 'VARBINARY', 'CLOB', 'BLOB', 'DBCLOB') THEN SYSCAT.COLUMNS.TYPENAME || '(' || SYSCAT.COLUMNS.LENGTH || ')'

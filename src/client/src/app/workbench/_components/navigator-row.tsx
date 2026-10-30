@@ -7,14 +7,14 @@ import type { ShownEnvironment } from "@/app/connections/_lib/environment";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
-import { AlertIcon, Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon, iconColorStyle } from "@/components/ui";
+import { AlertIcon, Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, SequenceIcon, TableIcon, iconColorStyle } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { checkView, type CheckState } from "../_lib/connection-checks";
 import { connectionChecksCopy } from "../_lib/connection-checks.copy";
 import { credentialsHint } from "../_lib/credentials-missing";
 import { actionsWidth as actionsWidthOf, navigatorMetrics, rowIndent } from "../_lib/navigator-density";
-import { clickEffect, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
+import { clickEffect, databaseTargetOf, schemaTargetOf, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
 import type { MatchRange } from "../_lib/navigator-search";
 import { isRefreshable } from "../_lib/navigator-toolbar";
 import { navigatorCopy } from "../_lib/navigator.copy";
@@ -33,6 +33,7 @@ const icons: Partial<Record<NavKind, ReactNode>> = {
   table: <TableIcon />,
   view: <EyeIcon />,
   routine: <RoutineIcon />,
+  sequence: <SequenceIcon />,
   column: <ColumnsIcon className="text-subtle" />,
   index: <IndexIcon className="text-subtle" />,
   foreignKey: <ForeignKeyIcon className="text-subtle" />,
@@ -51,9 +52,6 @@ function Highlighted({ text, range: [start, end] }: { text: string; range: Match
     </>
   );
 }
-
-/** O que cada nome aparenta ser no canvas: nome de objeto do banco em mono, os rótulos fixos e a conexão na fonte do app. */
-const monoKinds: ReadonlySet<NavKind> = new Set(["database", "schema", "table", "view", "routine", "column", "index", "foreignKey"]);
 
 function StatusDot({ status }: { status: ConnectionStatus }) {
   const label = status === "connected" ? copy.status.connected : status === "connecting" ? copy.status.connecting : status === "failed" ? copy.status.failed : copy.status.disconnected;
@@ -107,6 +105,8 @@ export type NavigatorRowProps = {
   onDisconnect: (node: NavNode) => void;
   /** Duplo clique numa tabela ou visão: abre a aba dela (RN-TABELA-001). Nas demais linhas não é chamado. */
   onOpenTable: (node: NavNode) => void;
+  onOpenSchema?: (node: NavNode) => void;
+  onOpenDatabase?: (node: NavNode) => void;
   /** O trecho do nome que a busca achou, para o destaque; só na árvore filtrada. */
   match?: MatchRange;
   /**
@@ -123,7 +123,7 @@ export type NavigatorRowProps = {
  * filhos do React, nunca como HTML (RN-SHELL-002). As ações do nó aparecem ao passar o mouse ou
  * receber o foco, sobre o fim da linha; o ponto de estado da conexão fica sob elas.
  */
-export function NavigatorRow({ node, density = "comfortable", index, open, tabbable, selected, connection, environment, folderColor = null, readOnly = null, status, check = null, onCheckFailure, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
+export function NavigatorRow({ node, density = "comfortable", index, open, tabbable, selected, connection, environment, folderColor = null, readOnly = null, status, check = null, onCheckFailure, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onOpenSchema, onOpenDatabase, onContextMenu, onKeyDown }: NavigatorRowProps) {
   const metrics = navigatorMetrics[density];
   const paddingLeft = rowIndent(metrics, node.depth);
 
@@ -173,7 +173,9 @@ export function NavigatorRow({ node, density = "comfortable", index, open, tabba
   // Com o mouse ou o foco na linha, o fim dela é das ações; o conteúdo se afasta delas em vez de ficar escondido.
   const actionsWidth = actionsWidthOf(metrics, Number(isConnection && connection !== undefined) + Number(canRefresh) + Number(isConnection && connected) + Number(failed));
   const opensTab = tableTargetOf(node) !== null;
-  const hint = opensTab ? (node.kind === "view" ? copy.openHint.view : copy.openHint.table) : null;
+  const opensSchema = schemaTargetOf(node) !== null && onOpenSchema !== undefined;
+  const opensDatabase = databaseTargetOf(node) !== null && onOpenDatabase !== undefined;
+  const hint = opensTab ? (node.kind === "view" ? copy.openHint.view : copy.openHint.table) : opensSchema ? copy.openHint.schema : opensDatabase ? copy.openHint.database : null;
   // A conexão mostra na dica o que a lista da tela de Conexões trazia embaixo do nome e a árvore não mostra: o banco e o endereço (RN-NAV-003), e a última
   // verificação (RN-VERIF-003).
   // RN-TRANSF-015: a conexão que chegou sem usuário e senha diz isso no fim da linha do endereço, sem marca na árvore.
@@ -198,7 +200,7 @@ export function NavigatorRow({ node, density = "comfortable", index, open, tabba
           onSelect(node);
           if (clickEffect(node, { detail: event.detail, onChevron: hitsChevron(event.target) }) === "toggle") onToggle(node);
         }}
-        onDoubleClick={opensTab ? () => onOpenTable(node) : undefined}
+        onDoubleClick={opensTab ? () => onOpenTable(node) : opensSchema && onOpenSchema ? () => onOpenSchema(node) : opensDatabase && onOpenDatabase ? () => onOpenDatabase(node) : undefined}
         onFocus={() => onSelect(node)}
         onKeyDown={(event) => onKeyDown(event, node, index)}
         style={{ paddingLeft, "--actions-width": `${actionsWidth}px` } as CSSProperties}
@@ -221,11 +223,11 @@ export function NavigatorRow({ node, density = "comfortable", index, open, tabba
         )}
         {/* O nome tem a prioridade: o detalhe ocupa só o que sobra, encolhe primeiro e some antes de o nome ser cortado. */}
         <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-          <span className={cn("truncate", monoKinds.has(node.kind) && "font-mono", hasDetail ? ["shrink-0", node.badge ? "max-w-[calc(100%-2.5rem)]" : "max-w-full"] : "min-w-0")}>{match === undefined ? name : <Highlighted text={name} range={match} />}</span>
+          <span className={cn("truncate", hasDetail ? ["shrink-0", node.badge ? "max-w-[calc(100%-2.5rem)]" : "max-w-full"] : "min-w-0")}>{match === undefined ? name : <Highlighted text={name} range={match} />}</span>
           <ShownEnvironmentPill environment={environment} />
           {isConnection ? <ReadOnlyMark hint={readOnly} /> : null}
           {node.badge ? <span className="flex-none text-[11px] font-semibold text-accent">{node.badge}</span> : null}
-          {hasDetail ? <span className={cn("min-w-0 flex-1 truncate text-right text-xs text-subtle", node.kind !== "group" && "font-mono")}>{node.detail}</span> : null}
+          {hasDetail ? <span className="min-w-0 flex-1 truncate text-right text-xs text-subtle">{node.detail}</span> : null}
         </span>
         {isConnection && status ? view === null ? <StatusDot status={status} /> : <CheckDot view={view} className="ml-auto" /> : null}
       </button>

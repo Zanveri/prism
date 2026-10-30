@@ -60,10 +60,18 @@ export function sqlName(name: string, engine: Engine | undefined): string {
  * nada, e o que ainda não foi aberto na árvore simplesmente não existe aqui; as colunas de `tabela.` e as chaves da junção que faltam são buscadas por
  * `sql-catalog-completion.ts` (RN-CONFIG-004), e chegam aqui pelo mesmo cache. `database` é o
  * outro banco do servidor da aba (RN-ARVORE-006): cada banco completa com os nomes dele, e a lista dos bancos não é nome de nada.
+ *
+ * Só os NÍVEIS da família `["tree", conexão]` (`levelPathOf`): o índice de nomes da busca (RN-BUSCA-002) mora nela, mas não é `NavNode[]`, e o autocompletar não o usa.
  */
 export function cachedLevels(queryClient: QueryClient, connectionId: string, database?: string): CachedLevel[] {
   return queryClient
-    .getQueriesData<NavNode[]>({ queryKey: ["tree", connectionId], predicate: (query) => databaseOfKey(query.queryKey) === database && levelPathOf(query.queryKey)?.type !== "connection" })
+    .getQueriesData<NavNode[]>({
+      queryKey: ["tree", connectionId],
+      predicate: (query) => {
+        const path = levelPathOf(query.queryKey);
+        return path !== null && path.type !== "connection" && databaseOfKey(query.queryKey) === database;
+      },
+    })
     .flatMap(([key, nodes]) => (nodes === undefined ? [] : [{ key, nodes }]));
 }
 
@@ -103,7 +111,7 @@ export function completionNamespace(levels: readonly CachedLevel[], engine: Engi
 
   for (const { key, nodes } of levels) {
     const path = levelPathOf(key);
-    if (path?.type === "objects" && path.objects !== "routines") {
+    if (path?.type === "objects" && (path.objects === "tables" || path.objects === "views")) {
       see(path.schema);
       objects.set(path.schema, [...(objects.get(path.schema) ?? []), ...nodes.map((node) => ({ name: node.label, view: path.objects === "views" }))]);
     }

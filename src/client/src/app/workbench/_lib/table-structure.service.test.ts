@@ -3,7 +3,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiRequestError } from "@/lib/api/prism-api";
 
-import { columnsQuery, foreignKeysQuery, indexesQuery, invalidateStructure, referencedByQuery, structureKey, structurePrefix, structureScopes } from "./table-structure.service";
+import {
+  columnsQuery,
+  databasePropertiesQuery,
+  databaseSchemasQuery,
+  foreignKeysQuery,
+  indexesQuery,
+  invalidateStructure,
+  referencedByQuery,
+  refreshDatabase,
+  refreshSchema,
+  schemaDiagramKey,
+  schemaDiagramQuery,
+  schemaObjectsKey,
+  schemaObjectsQuery,
+  structureKey,
+  structurePrefix,
+  structureScopes,
+} from "./table-structure.service";
 
 const fakes = vi.hoisted(() => ({
   openSession: vi.fn(),
@@ -11,6 +28,10 @@ const fakes = vi.hoisted(() => ({
   getIndexes: vi.fn(),
   getForeignKeys: vi.fn(),
   getReferencedBy: vi.fn(),
+  getSchemaDiagram: vi.fn(),
+  getObjects: vi.fn(),
+  getSchemas: vi.fn(),
+  getDatabaseProperties: vi.fn(),
 }));
 
 vi.mock("./database-sessions.service", async (importOriginal) => {
@@ -18,11 +39,20 @@ vi.mock("./database-sessions.service", async (importOriginal) => {
   return {
     // O que não é a rede nem a sessão (as constantes, as chaves) é o de verdade: o serviço da estrutura usa `keepUntilRefreshed`.
     ...(await importOriginal<typeof import("./database-sessions.service")>()),
-    databaseSessionQuery: (connectionId: string) => queryOptions({ queryKey: ["database-session", connectionId], queryFn: fakes.openSession, staleTime: Infinity }),
+    databaseSessionQuery: (connectionId: string, database?: string) =>
+      queryOptions({
+        queryKey: database === undefined ? ["database-session", connectionId] : ["database-session", connectionId, { database }],
+        queryFn: () => fakes.openSession(connectionId, database),
+        staleTime: Infinity,
+      }),
     getColumns: fakes.getColumns,
     getIndexes: fakes.getIndexes,
     getForeignKeys: fakes.getForeignKeys,
     getReferencedBy: fakes.getReferencedBy,
+    getSchemaDiagram: fakes.getSchemaDiagram,
+    getObjects: fakes.getObjects,
+    getSchemas: fakes.getSchemas,
+    getDatabaseProperties: fakes.getDatabaseProperties,
   };
 });
 
@@ -39,6 +69,15 @@ beforeEach(() => {
   fakes.getIndexes.mockImplementation(() => ok([{ name: "pk", columns: ["id"], isUnique: true }]));
   fakes.getForeignKeys.mockImplementation(() => ok([]));
   fakes.getReferencedBy.mockImplementation(() => ok([]));
+  fakes.getSchemaDiagram.mockImplementation(() =>
+    ok({
+      tables: [{ name: "pedidos", columns: [{ name: "id", type: "bigint", isNullable: false, isPrimaryKey: true }] }],
+      foreignKeys: [],
+    }),
+  );
+  fakes.getObjects.mockImplementation(() => ok([{ name: "pedidos", kind: "table", estimatedRows: 42, comment: "Pedidos" }]));
+  fakes.getSchemas.mockImplementation(() => ok([{ name: "loja", isSystem: false, tables: 3, views: 1, routines: 2 }]));
+  fakes.getDatabaseProperties.mockImplementation(() => ok([{ name: "server_version", value: "16.4" }]));
 });
 
 describe("as consultas de catálogo da Estrutura e do Diagrama (RN-TABELA-003 e 004)", () => {
@@ -114,6 +153,53 @@ describe("as consultas de catálogo da Estrutura e do Diagrama (RN-TABELA-003 e 
 
     await queryClient.invalidateQueries({ queryKey: structurePrefix(connection, "s", "t") });
     expect(queryClient.getQueryState(structureKey(connection, "s", "t", "referencedBy"))?.isInvalidated).toBe(true);
+  });
+});
+
+describe("as consultas de catálogo do Esquema e do Banco (RN-ESQUEMA-001..003 e RN-BANCO-001)", () => {
+  it("buscam o diagrama e os objetos do esquema pela sessão da conexão e os mantêm no cache do esquema", async () => {
+    const [diagram, tables] = await Promise.all([
+      queryClient.fetchQuery(schemaDiagramQuery(connection, "loja", queryClient)),
+      queryClient.fetchQuery(schemaObjectsQuery(connection, "loja", "tables", queryClient)),
+    ]);
+
+    expect(fakes.getSchemaDiagram).toHaveBeenCalledWith("sessao-1", "loja");
+    expect(fakes.getObjects).toHaveBeenCalledWith("sessao-1", "loja", "tables");
+    expect(diagram.tables).toHaveLength(1);
+    expect(tables).toEqual([{ name: "pedidos", kind: "table", estimatedRows: 42, comment: "Pedidos" }]);
+  });
+
+  it("refreshSchema invalida o diagrama, os objetos e as tabelas do esquema sem tocar em outro esquema", async () => {
+    await Promise.all([
+      queryClient.fetchQuery(schemaDiagramQuery(connection, "loja", queryClient)),
+      queryClient.fetchQuery(schemaObjectsQuery(connection, "loja", "tables", queryClient)),
+      queryClient.fetchQuery(schemaDiagramQuery(connection, "estoque", queryClient)),
+    ]);
+
+    await refreshSchema(queryClient, connection, "loja");
+
+    expect(queryClient.getQueryState(schemaDiagramKey(connection, "loja"))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(schemaObjectsKey(connection, "loja", "tables"))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(schemaDiagramKey(connection, "estoque"))?.isInvalidated).toBe(false);
+  });
+
+  it("buscam os esquemas e as propriedades do banco e refreshDatabase invalida só o banco alvo", async () => {
+    const [schemas, properties] = await Promise.all([
+      queryClient.fetchQuery(databaseSchemasQuery(connection, queryClient, "alfa")),
+      queryClient.fetchQuery(databasePropertiesQuery(connection, queryClient, "alfa")),
+      queryClient.fetchQuery(databaseSchemasQuery(connection, queryClient)),
+    ]);
+
+    expect(fakes.getSchemas).toHaveBeenCalledWith("sessao-1");
+    expect(fakes.getDatabaseProperties).toHaveBeenCalledWith("sessao-1");
+    expect(schemas).toEqual([{ name: "loja", isSystem: false, tables: 3, views: 1, routines: 2 }]);
+    expect(properties).toEqual([{ name: "server_version", value: "16.4" }]);
+
+    await refreshDatabase(queryClient, connection, "alfa");
+
+    expect(queryClient.getQueryState(databaseSchemasQuery(connection, queryClient, "alfa").queryKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(databasePropertiesQuery(connection, queryClient, "alfa").queryKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(databaseSchemasQuery(connection, queryClient).queryKey)?.isInvalidated).toBe(false);
   });
 });
 

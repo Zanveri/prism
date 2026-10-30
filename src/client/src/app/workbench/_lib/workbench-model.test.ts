@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { databaseSessionKey, treeKey } from "./database-sessions.service";
 import { navKey, type NavPath } from "./navigator-model";
 import { structureKey } from "./table-structure.service";
-import { connectedConnectionIds, forgetMissingConnections, isConnected, nextActiveTab, ownedByMissingConnection, pruneWorkbench, type QueryTab } from "./workbench-model";
+import { connectedConnectionIds, forgetMissingConnections, isConnected, isDatabaseTab, isSchemaTab, isTableTab, nextActiveTab, ownedByMissingConnection, pruneWorkbench, type QueryTab } from "./workbench-model";
 
 function tab(id: string, connectionId: string): QueryTab {
   return { id, title: `consulta-${id}.sql`, connectionId, sessionId: `sessao-${id}`, sql: `select '${id}'` };
@@ -182,5 +182,19 @@ describe("connectedConnectionIds: as conexões conectadas, para a lista da troca
     expect(connectedConnectionIds(["c1", "c3", "c4"], tabs, (connectionId) => connectionId === "c1" || connectionId === "c4", new Set(["c1", "c3"]))).toEqual(["c4"]);
     // A que não está conectada continua de fora, com ou sem a resposta.
     expect(connectedConnectionIds(["c2"], tabs, () => false, new Set(["c2"]))).toEqual([]);
+  });
+});
+
+describe("isTableTab, isSchemaTab e isDatabaseTab", () => {
+  const queryTab = tab("q1", "c1");
+  const tableTab: QueryTab = { ...tab("t1", "c1"), table: { schema: "public", name: "pedido", view: "data" } };
+  const schemaTab: QueryTab = { ...tab("s1", "c1"), schemaTarget: { schema: "public", view: "diagram" } };
+  const databaseTab: QueryTab = { ...tab("d1", "c1"), databaseTarget: { name: "mes", view: "diagram" } };
+
+  it("distingue aba de consulta, tabela, esquema e banco sem sobreposição", () => {
+    expect([isTableTab(queryTab), isSchemaTab(queryTab), isDatabaseTab(queryTab)]).toEqual([false, false, false]);
+    expect([isTableTab(tableTab), isSchemaTab(tableTab), isDatabaseTab(tableTab)]).toEqual([true, false, false]);
+    expect([isTableTab(schemaTab), isSchemaTab(schemaTab), isDatabaseTab(schemaTab)]).toEqual([false, true, false]);
+    expect([isTableTab(databaseTab), isSchemaTab(databaseTab), isDatabaseTab(databaseTab)]).toEqual([false, false, true]);
   });
 });

@@ -11,7 +11,7 @@ import type { QueryTab } from "../_lib/workbench-model";
 const rt = await vi.hoisted(async () => {
   const { createHookRuntime } = await import("@/lib/testing/react-hooks");
 
-  const runner = { values: { snapshot: () => ({ values: new Map(), counter: 0 }) }, getState: () => ({ status: "idle" }), autoRunSettled: () => Promise.resolve(), autoRefresh: { pause: vi.fn() }, sessionOf: () => null };
+  const runner = { values: { snapshot: () => ({ values: new Map(), counter: 0 }) }, getState: () => ({ status: "idle" }), autoRunSettled: () => Promise.resolve(), autoRefresh: { pause: vi.fn() }, sessionOf: () => null, transaction: { getState: () => ({ open: false }) } };
   const workbench = {
     tabs: [] as unknown[],
     activeTabId: null as string | null,
@@ -23,7 +23,7 @@ const rt = await vi.hoisted(async () => {
     detachTab: vi.fn(),
   };
   const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
-  const focus = { request: vi.fn(), forgetExcept: vi.fn() };
+  const focus = { request: vi.fn(), forgetExcept: vi.fn(), pending: vi.fn(() => false) };
   const host = { releaseFocusIn: vi.fn(), focusResultIn: vi.fn(), resultHostOf: vi.fn(() => ({ id: "raiz" })) };
   const sendTabAway = vi.fn(() => Promise.resolve({ ok: true }));
   const endTabDrag = vi.fn<(request: unknown) => Promise<{ action: "none" } | { action: "newWindow"; at: { x: number; y: number } | null }>>(async () => ({ action: "none" }));
@@ -52,11 +52,10 @@ vi.mock("@/components/ui", () => ({ ConfirmDialog: () => null, useToast: () => r
 vi.mock("@/lib/api/bridge", () => ({ currentWindowId: () => 1, endTabDrag: rt.endTabDrag, onTabWanted: () => () => {}, onWindowCloseRequested: () => () => {}, sendTabAway: rt.sendTabAway, tellWindows: () => {}, resultWindowsAvailable: () => true, onResultWindowClosed: () => () => {}, onResultWindowState: () => () => {} }));
 vi.mock("../_lib/data-export/data-exports", () => ({ exportTracker: { count: () => 0, cancelAll: async () => {} } }));
 vi.mock("../_lib/data-import/data-imports", () => ({ loadTracker: { cancelAll: async () => {} }, windowTransfers: () => ({ exports: 0, imports: 0, copies: 0 }) }));
-vi.mock("../_lib/connection-intent", () => ({ createDisconnectLog: () => ({ subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }) }));
 vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => true }));
 vi.mock("../_lib/result-slots", async (importOriginal) => ({ ...(await importOriginal<typeof import("../_lib/result-slots")>()), resultFocus: rt.focus }));
 vi.mock("../_lib/result-windows", () => ({ resultWindows: rt.windows }));
-vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ ...noop, restoredTableConnections: new Set(), ...rt.workbench }) }));
+vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ ...noop, disconnectLog: { subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }, ...rt.workbench }) }));
 vi.mock("./result-host", () => rt.host);
 vi.mock("./use-script-saving", () => ({ useScriptSaving: () => ({ save: async () => true, dialog: null }) }));
 vi.mock("./query-tab", () => ({ QueryTabPanel: () => null }));
@@ -65,6 +64,7 @@ vi.mock("./script-dialogs", () => ({ UnsavedScriptsDialog: () => null }));
 vi.mock("./unsaved-edits-dialog", () => ({ UnsavedEditsDialog: () => null }));
 vi.mock("./tab-strip", () => ({ TabStrip: () => null, panelElementId: (id: string) => `painel-${id}`, tabElementId: (id: string) => `aba-${id}` }));
 
+import { createFakePage } from "@/lib/testing/fake-page";
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
 import { QueryTabPanel } from "./query-tab";
@@ -94,11 +94,16 @@ beforeEach(() => {
   rt.windows.open.mockResolvedValue(true);
   rt.windows.close.mockResolvedValue(true);
   vaultLock.reset();
+  // RN-ABAS-019: a área das abas ouve o foco da página e as teclas da janela; o vitest não tem página, e a de mentira basta.
+  const page = createFakePage();
+  vi.stubGlobal("document", page.document);
+  vi.stubGlobal("window", page.window);
 });
 
 afterEach(() => {
   rt.unmount();
   vaultLock.reset();
+  vi.unstubAllGlobals();
 });
 
 describe("trocar para 'Numa janela' (RN-ABAS-013, 014 e 017)", () => {

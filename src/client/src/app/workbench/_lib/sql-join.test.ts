@@ -104,6 +104,26 @@ describe("joinSuggestions: depois de JOIN (RN-SQL-025)", () => {
     expect(labels(joinSuggestions({ ...base, tables: [itens], used: new Set(["i"]) }))).toEqual(["produtos p ON p.empresa = i.empresa AND p.id = i.produto_id"]);
   });
 
+  it("respeita uppercaseKeywords desabilitado: escreve `on` e `and` em minúsculas", () => {
+    const itens = stated("itens", "i", [out("fk_produto", ["empresa", "produto_id"], "produtos", ["empresa", "id"])]);
+
+    expect(labels(joinSuggestions({ ...base, tables: [itens], used: new Set(["i"]), uppercaseKeywords: false }))).toEqual(["produtos p on p.empresa = i.empresa and p.id = i.produto_id"]);
+  });
+
+  it("segue o padrão sem esquema quando a tabela de origem foi escrita sem esquema (qualified: false)", () => {
+    const orders: StatementTable = {
+      schema: "usr_migration_stock_manager",
+      name: "orders",
+      qualifier: "orders",
+      qualified: false,
+      links: linksOf([], [into("fk_orders_packings", "usr_migration_stock_manager", "orders_packings", ["order_id"], ["id"])]),
+    };
+
+    expect(labels(joinSuggestions({ ...base, tables: [orders], usesAliases: false, used: new Set(["orders"]), uppercaseKeywords: false }))).toEqual([
+      "orders_packings on orders_packings.order_id = orders.id",
+    ]);
+  });
+
   it("sem apelidos no comando, a tabela nova entra pelo nome inteiro", () => {
     const pedidos = stated("pedidos", "pedidos", [out("fk_cliente", ["cliente_id"], "clientes", ["id"])], [into("fk_item", "public", "itens", ["pedido_id"], ["id"])]);
 
@@ -214,10 +234,11 @@ describe("onSuggestions: depois de JOIN tabela ON (RN-SQL-025)", () => {
     expect(labels(onSuggestions(itens, [stated("pedidos", "p"), stated("produtos", "pr")], postgres))).toEqual(["i.pedido_id = p.id"]);
   });
 
-  it("a chave composta, com AND", () => {
+  it("a chave composta, com AND, respeitando uppercaseKeywords", () => {
     const itens = stated("itens", "i", [out("fk_produto", ["empresa", "produto_id"], "produtos", ["empresa", "id"])]);
 
     expect(labels(onSuggestions(itens, [stated("produtos", "p")], postgres))).toEqual(["i.empresa = p.empresa AND i.produto_id = p.id"]);
+    expect(labels(onSuggestions(itens, [stated("produtos", "p")], postgres, false))).toEqual(["i.empresa = p.empresa and i.produto_id = p.id"]);
   });
 
   it("a tabela ligada a si mesma, com outra instância dela no comando: a condição filha e a pai", () => {

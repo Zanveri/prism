@@ -10,7 +10,7 @@ import { apiExitMessage, closeVaultAndStop, startApi, type ApiProcess } from "./
 import { versionArgument, windowArgument } from "./app-version";
 import { userDataDir } from "./data-dir";
 import { permissionAllowed } from "./permissions";
-import { applicationMenuTemplate, isWaylandSession, menuShortcutIgnored, windowIconFile } from "./platform";
+import { applicationMenuTemplate, hasWindowBar, isSymbolColor, isWaylandSession, menuShortcutIgnored, windowBarOptions, windowBarOverlayHeight, windowIconFile } from "./platform";
 import type { ApiConfigReply } from "./preload";
 import { createResultWindowSaver, readResultWindow, resultWindowFileName, writeResultWindow, type SavedResultWindow } from "./result-window-file";
 import {
@@ -26,6 +26,7 @@ import { createResultWindows, type ResultWindowEntry } from "./result-windows";
 import { createSplash, splashGeometry } from "./splash";
 import { startUp } from "./startup";
 import { createDbeaverSource } from "./dbeaver-source";
+import { cleanExternalEditorTempDir, openCellInExternalEditor } from "./external-editor";
 import { createTransferDesk } from "./transfer-desk";
 import { createTransferSource } from "./transfer-source";
 import { installedForAllUsers } from "./update/install-scope";
@@ -92,6 +93,8 @@ function changeZoom(next: AppZoom): AppZoom {
   for (const window of liveWindows()) {
     window.webContents.setZoomFactor(zoomFactor(next));
     window.webContents.send("prism:zoom-changed", next);
+    // RN-JANELA-001: os botões do sistema acompanham a barra, que cresce e encolhe com o zoom.
+    if (hasWindowBar(process.platform)) window.setTitleBarOverlay({ height: windowBarOverlayHeight(zoomFactor(next)) });
   }
   // RN-ABAS-013 e RN-ZOOM-001: as janelas do resultado também (elas não têm ponte, então não recebem o aviso: a tela da aba, que as desenha, o recebe).
   for (const entry of resultWindows.all()) if (!entry.handle.window.isDestroyed()) entry.handle.window.webContents.setZoomFactor(zoomFactor(next));
@@ -700,8 +703,9 @@ app.on("web-contents-created", (_event, contents) => {
  * RN-ZOOM-001: Ctrl +, Ctrl − e Ctrl 0 (Cmd no macOS) em qualquer tela e com o foco em qualquer lugar (`zoomShortcut`, com teste). A tecla é tratada aqui,
  * antes da página e do menu: o editor e a grade não a veem, o menu padrão de desenvolvimento não muda o zoom por fora, e o app empacotado do Windows e
  * do Linux, que não tem menu, tem o atalho do mesmo jeito. Vale nas janelas do app e nas do resultado (RN-ABAS-017).
- * RN-GRADE-012 e RN-ABAS-014: F5, F6, F11 e Ctrl+R nunca chegam ao menu (`menuShortcutIgnored`, com teste): o F5 e o F6 chegam à tela (atualizar e alternar entre o
- * editor e o resultado), e o F11 ao "Filtrar" da grade, e Ctrl+R nunca recarrega a janela (o texto das abas de SQL se perderia).
+ * RN-GRADE-012, RN-ABAS-014 e RN-ABAS-019: F5, F6, F11, Ctrl+R e Ctrl+W nunca chegam ao menu (`menuShortcutIgnored`, com teste): o F5 e o F6 chegam à tela (atualizar e alternar entre o
+ * editor e o resultado), e o F11 ao "Filtrar" da grade, e Ctrl+R nunca recarrega a janela (o texto das abas de SQL se perderia). O Ctrl+W chega à tela, que fecha a aba;
+ * onde ela não o trata (um diálogo aberto, a tela de entrada) ele não faz nada, e o Janela › Fechar do menu padrão de desenvolvimento não fecha a janela.
  */
 function installShortcuts(contents: WebContents): void {
   contents.on("before-input-event", (event, input) => {
@@ -740,6 +744,8 @@ function createAppWindow(bounds?: Rect) {
     icon: iconPath,
     show: false,
     backgroundColor: "#0E1114",
+    // RN-JANELA-001: no Windows a barra superior do app é a barra da janela, com os botões do sistema sobre ela (`windowBarOptions`).
+    ...windowBarOptions(process.platform, zoomFactor(appZoom)),
     // RN-SHELL-001.
     // A versão (RN-VERSAO-004) e o número da janela (RN-ABAS-003) vão como argumentos: o preload os lê em `process.argv` (`app-version.ts`).
     // RN-ZOOM-001: a janela já nasce no zoom do programa, sem um quadro em 100% antes.
@@ -891,6 +897,12 @@ ipcMain.handle("prism:windows-describe", (event, summary: unknown) => {
   assertFromApp(event);
   hub.describe(windowIdOf(event.sender), summary);
 });
+// RN-JANELA-001: a cor dos símbolos dos botões do sistema, a do tema em uso na janela que pediu. Fora do Windows a janela tem a barra nativa, e não há o que pintar.
+ipcMain.handle("prism:window-bar", (event, symbolColor: unknown) => {
+  assertFromApp(event);
+  if (!isSymbolColor(symbolColor)) throw new Error("A cor dos botões da janela não é #rrggbb.");
+  if (hasWindowBar(process.platform)) appWindows.get(windowIdOf(event.sender))?.setTitleBarOverlay({ symbolColor });
+});
 ipcMain.handle("prism:windows-close", (event) => {
   assertFromApp(event);
   const id = windowIdOf(event.sender);
@@ -1012,6 +1024,15 @@ ipcMain.handle("prism:dbeaver-source-release", (event, request: unknown) => {
   return dbeaverSource.release(windowIdOf(event.sender), request);
 });
 
+// Abre o conteúdo textual de uma célula num arquivo temporário seguro (`0o600`) usando o editor de texto padrão do sistema (RN-SHELL-002).
+ipcMain.handle("prism:open-external-editor", (event, request: unknown) => {
+  assertFromApp(event);
+  return openCellInExternalEditor(request, {
+    tempRoot: app.getPath("temp"),
+    openPath: (target) => shell.openPath(target),
+  });
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -1051,6 +1072,7 @@ if (!app.requestSingleInstanceLock()) {
     void Promise.all([transferDesk.releaseAll(), transferSource.releaseAll(), dbeaverSource.releaseAll(), workspaceHub.flush()])
       .then(() => stopApi((running) => closeVaultAndStop(running, (message) => console.log(`[prism] ${message}`))))
       .finally(() => {
+        cleanExternalEditorTempDir(app.getPath("temp"));
         quitting = "ready";
         app.quit();
       });

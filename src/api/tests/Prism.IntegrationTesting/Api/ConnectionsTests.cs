@@ -229,7 +229,7 @@ public sealed class ConnectionsTests
             ("UserName", Body(userName: "")),
             ("Password", Body(password: "")),
             ("Engine", Body(engine: 0)),
-            ("Engine", Body(engine: 4)),
+            ("Engine", Body(engine: 14)),
             ("EnvironmentName", Body(environmentName: new string('a', 31))),
             ("EnvironmentColor", Body(environmentColor: "red")),
             ("EnvironmentColor", Body(environmentColor: "#12345")),
@@ -274,7 +274,7 @@ public sealed class ConnectionsTests
         Assert.That(listRaw, Does.Not.Contain(DatabasePassword));
         Assert.That(detailRaw, Does.Not.Contain(DatabasePassword));
         Assert.That(list.Select(IdOf), Is.EqualTo(new[] { IdOf(alfa), IdOf(beta) }));
-        Assert.That(list[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "folderID", "name", "engine", "host", "port", "database", "userName", "hasPassword", "environmentName", "environmentColor", "confirmCommands", "readOnly", "verificationEnabled", "verificationInterval", "verificationQuery", "protections", "createdAt", "updatedAt" }));
+        Assert.That(list[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "folderID", "name", "engine", "host", "port", "database", "userName", "hasPassword", "environmentName", "environmentColor", "confirmCommands", "readOnly", "verificationEnabled", "verificationInterval", "verificationQuery", "useInternalDescriptions", "protections", "createdAt", "updatedAt" }));
         Assert.That(list.All(item => item.GetProperty("hasPassword").GetBoolean()), Is.True);
         Assert.That(JsonDocument.Parse(detailRaw).RootElement.GetRawText(), Is.EqualTo(list[1].GetRawText()));
     }
@@ -581,7 +581,7 @@ public sealed class ConnectionsTests
         {
             ("Name", Body(name: new string('a', 81), password: null)),
             ("Port", Body(port: 65536, password: null)),
-            ("Engine", Body(engine: 4, password: null)),
+            ("Engine", Body(engine: 14, password: null)),
             ("Password", Body(password: "")),
             ("EnvironmentColor", Body(environmentColor: "#12345", password: null))
         };

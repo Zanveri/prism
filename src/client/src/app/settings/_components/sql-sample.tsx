@@ -2,6 +2,8 @@ import type { CSSProperties } from "react";
 
 import { cn } from "@/lib/utils/cn";
 
+import type { SqlFormatStyle } from "../_lib/preferences";
+
 /** O papel de cada trecho do exemplo: palavra-chave, texto entre aspas, número, comentário ou o resto. */
 export type SampleKind = "kw" | "str" | "num" | "com" | "fg";
 export type SampleLine = readonly (readonly [SampleKind, string])[];
@@ -42,6 +44,59 @@ export const editorSample: readonly SampleLine[] = [
   [["kw", "FROM"], ["fg", " producao.apontamento a"]],
   [["kw", "WHERE"], ["fg", " a.registrado_em >= now() - "], ["kw", "interval "], ["str", "'24 hours'"]],
 ];
+
+/** A prévia de Editor SQL: ilustra o estilo de formatação (`formatStyle`) e a caixa das palavras-chave (`uppercaseKeywords`). */
+export function editorSampleOf(style: SqlFormatStyle, uppercaseKeywords: boolean): readonly SampleLine[] {
+  const kw = (word: string): readonly [SampleKind, string] => ["kw", uppercaseKeywords ? word.toUpperCase() : word.toLowerCase()];
+
+  switch (style) {
+    case "river":
+      return [
+        [kw("SELECT"), ["fg", " c.nome,"]],
+        [["fg", "       "], kw("COUNT"), ["fg", "(p.id) "], kw("AS"), ["fg", " total_pedidos"]],
+        [["fg", "  "], kw("FROM"), ["fg", " clientes "], kw("AS"), ["fg", " c"]],
+        [["fg", " "], kw("WHERE"), ["fg", " c.ativo = "], ["num", "1"]],
+        [["fg", "   "], kw("AND"), ["fg", " p.data >= "], ["str", "'2026-01-01'"], ["fg", ";"]],
+      ];
+    case "expanded":
+      return [
+        [kw("SELECT")],
+        [["fg", "\tc.nome,"]],
+        [["fg", "\t"], kw("COUNT"), ["fg", "(p.id) "], kw("AS"), ["fg", " total_pedidos"]],
+        [kw("FROM")],
+        [["fg", "\tclientes "], kw("AS"), ["fg", " c"]],
+        [kw("WHERE")],
+        [["fg", "\tc.ativo = "], ["num", "1"], ["fg", ";"]],
+      ];
+    case "tabular":
+      return [
+        [kw("SELECT"), ["fg", "   c.nome,"]],
+        [["fg", "         "], kw("COUNT"), ["fg", "(p.id) "], kw("AS"), ["fg", " total_pedidos"]],
+        [kw("FROM"), ["fg", "     clientes "], kw("AS"), ["fg", " c"]],
+        [kw("WHERE"), ["fg", "    c.ativo = "], ["num", "1"]],
+        [kw("ORDER BY"), ["fg", " total_pedidos "], kw("DESC"), ["fg", ";"]],
+      ];
+    case "leadingComma":
+      return [
+        [kw("SELECT"), ["fg", " c.nome"]],
+        [["fg", "     , c.email"]],
+        [["fg", "     , "], kw("COUNT"), ["fg", "(p.id) "], kw("AS"), ["fg", " total_pedidos"]],
+        [kw("FROM"), ["fg", " clientes "], kw("AS"), ["fg", " c;"]],
+      ];
+    case "compact":
+      return [[kw("SELECT"), ["fg", " c.nome, c.email "], kw("FROM"), ["fg", " clientes "], kw("AS"), ["fg", " c "], kw("WHERE"), ["fg", " c.ativo = "], ["num", "1"], ["fg", ";"]]];
+    case "modern":
+      return [
+        [kw("WITH"), ["fg", " pedidos_2026 "], kw("AS"), ["fg", " ("]],
+        [["fg", "\t"], kw("SELECT"), ["fg", " * "], kw("FROM"), ["fg", " pedidos "], kw("WHERE"), ["fg", " data >= "], ["str", "'2026-01-01'"]],
+        [["fg", ")"]],
+        [kw("SELECT")],
+        [["fg", "\tc.nome,"]],
+        [["fg", "\t"], kw("COUNT"), ["fg", "(p.id) "], kw("AS"), ["fg", " total_pedidos"]],
+        [kw("FROM"), ["fg", " clientes "], kw("AS"), ["fg", " c;"]],
+      ];
+  }
+}
 
 type SqlSampleProps = {
   lines: readonly SampleLine[];

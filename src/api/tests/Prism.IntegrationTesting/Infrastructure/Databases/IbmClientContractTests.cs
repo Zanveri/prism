@@ -16,6 +16,8 @@ namespace Prism.IntegrationTesting.Infrastructure.Databases;
 /// </summary>
 public abstract class IbmClientContractTests : DatabaseClientContractTests
 {
+    protected override bool RefusesRollbackWorkToSavepoint => true;
+
     protected override string WrongPasswordMessage => "SQL30082N";
 
     // Limitada de propósito (cerca de um minuto no banco): se o cancelamento falhasse, o teste terminaria reprovado, e não pendurado.

@@ -88,6 +88,7 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
   // RN-PROT-001 e 002: as proteções PRÓPRIAS; as herdadas da pasta escolhida aparecem na seção, e não são gravadas aqui.
   const [confirm, setConfirm] = useState<ConfirmationChoice>(confirmationChoiceOf(connection?.confirmCommands ?? null));
   const [readOnly, setReadOnly] = useState(connection?.readOnly ?? false);
+  const [useInternalDescriptions, setUseInternalDescriptions] = useState<boolean | null>(connection?.useInternalDescriptions ?? null);
   // RN-VERIF-001: "Verificar a cada", ligada na conexão nova; o intervalo e a consulta são campos do formulário.
   const [verifying, setVerifying] = useState(connection?.verificationEnabled ?? true);
   // RN-PROT-003: a gravação que espera a senha do usuário (o somente leitura que muda, ou a API que a pediu), com a frase do que muda.
@@ -332,6 +333,8 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
               engine={engine}
               verifying={verifying}
               onVerifyingChange={setVerifying}
+              useInternalDescriptions={useInternalDescriptions}
+              onUseInternalDescriptionsChange={setUseInternalDescriptions}
               checkIndicator={checkIndicator}
             />
             {refusal === null ? null : <FormMessage tone="error">{refusal}</FormMessage>}

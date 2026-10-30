@@ -3,10 +3,10 @@ import { transferCopy } from "@/app/connections/_lib/transfer.copy";
 
 import { dataExportCopy } from "./data-export/data-export.copy";
 import { dataImportCopy } from "./data-import/data-import.copy";
-import { tableTargetOf, type NavNode } from "./navigator-model";
+import { databaseTargetOf, schemaTargetOf, tableTargetOf, type NavNode } from "./navigator-model";
 import { quoteIdentifier } from "./table-sql";
 import { navigatorCopy } from "./navigator.copy";
-import type { TableView } from "./workbench-model";
+import type { DatabaseView, SchemaView, TableView } from "./workbench-model";
 import { workbenchCopy } from "./workbench.copy";
 
 const copy = workbenchCopy.navigator.menu;
@@ -32,6 +32,8 @@ export type MenuAction =
   | { type: "deleteConnection" }
   | { type: "newConnection" }
   | { type: "openTable"; view: TableView }
+  | { type: "openSchema"; view: SchemaView }
+  | { type: "openDatabase"; view: DatabaseView }
   | { type: "generateSelect" }
   /** RN-EXPORT-001: o assistente "Exportar dados", com a tabela (ou a visão) inteira como origem. */
   | { type: "exportData" }
@@ -166,11 +168,31 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
     }
 
     // A consulta nova de um banco roda na sessão dele (RN-ARVORE-006), como a de um esquema.
-    case "database":
-      return [[newQuery, refresh()], [copyName]];
+    case "database": {
+      const disabled = databaseTargetOf(node) === null;
+      return [
+        [
+          item("openDatabase", copy.openDatabase, { type: "openDatabase", view: "schemas" }, { disabled }),
+          item("openDatabaseDiagram", copy.openDatabaseDiagram, { type: "openDatabase", view: "diagram" }, { disabled }),
+        ],
+        [newQuery, refresh()],
+        [copyName],
+      ];
+    }
 
-    case "schema":
-      return [[newQuery, refresh()], [copyName]];
+
+    case "schema": {
+      const disabled = schemaTargetOf(node) === null;
+      return [
+        [
+          item("openSchema", copy.openSchema, { type: "openSchema", view: "tables" }, { disabled }),
+          item("openSchemaDiagram", copy.openSchemaDiagram, { type: "openSchema", view: "diagram" }, { disabled }),
+        ],
+        [newQuery, refresh()],
+        [copyName],
+      ];
+    }
+
 
     case "group":
       return [[refresh()]];
@@ -224,6 +246,7 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
       ];
 
     case "routine":
+    case "sequence":
     case "column":
     case "index":
     case "foreignKey":

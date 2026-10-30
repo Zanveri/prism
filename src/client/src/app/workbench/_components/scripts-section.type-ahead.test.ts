@@ -21,12 +21,13 @@ const script = (id: string, name: string, folderID: string | null = null): Scrip
 // Fechamento (relatório), Rascunhos (vazia), e na raiz Abril, álamo e Zeta.
 const tree = buildScriptTree([folder("f1", "Fechamento"), folder("f2", "Rascunhos")], [script("s1", "relatório", "f1"), script("s2", "Zeta"), script("s3", "álamo"), script("s4", "Abril")]);
 
-let closed = new Set<string>();
+/** As pastas abertas (RN-NAV-014): sem elas, só o primeiro nível está à vista. */
+let open = new Set<string>();
 let handlers = { onSelect: vi.fn(), onToggle: vi.fn(), onRequest: vi.fn(), onMenu: vi.fn() };
 /** Os elementos de linha da lista falsa: o que recebeu o foco, por índice. */
 let focused: number[] = [];
 
-const rows = () => visibleScriptRows(tree, closed);
+const rows = () => visibleScriptRows(tree, open);
 const names = () => scriptTreeLabels(rows());
 const at = (name: string) => names().indexOf(name);
 
@@ -46,7 +47,7 @@ function press(index: number, key: string, modifiers: { ctrlKey?: boolean; altKe
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(10_000);
-  closed = new Set();
+  open = new Set([folderKey("f1")]);
   handlers = { onSelect: vi.fn(), onToggle: vi.fn(), onRequest: vi.fn(), onMenu: vi.fn() };
   focused = [];
 });
@@ -87,7 +88,7 @@ describe("a árvore da seção Scripts: ir à linha pelas primeiras letras (RN-A
     expect(focused).toEqual([at("relatório")]);
 
     vi.advanceTimersByTime(1100);
-    closed = new Set([folderKey("f1")]);
+    open = new Set();
     press(0, "r");
 
     expect(focused.at(-1)).toBe(at("Rascunhos"));

@@ -33,6 +33,8 @@ public sealed record ConnectionDto
     /// <summary>RN-VERIF-001: a consulta de verificação própria; nula é a do banco (RN-CONN-013).</summary>
     public string? VerificationQuery { get; init; }
 
+    public bool? UseInternalDescriptions { get; init; }
+
     /// <summary>RN-PROT-004: as proteções que valem, a própria e as das pastas acima, e de onde cada uma vem.</summary>
     public ProtectionsDto Protections { get; init; } = new();
     public DateTime CreatedAt { get; init; }

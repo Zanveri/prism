@@ -4,6 +4,7 @@ import { AlertIcon, CheckIcon, CloseIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { selectEditorText } from "../_lib/cell-editing";
+import { environmentAccent } from "../_lib/environment-accent";
 import { recordsCopy } from "../_lib/records.copy";
 
 const copy = recordsCopy.edit;
@@ -85,7 +86,7 @@ export function CellEditor({ label, draft, hint = null, number, typed = false, o
         onChange={(event) => onDraft(event.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={() => onCommit()}
-        className={cn("h-[calc(26px*var(--grid-zoom))] min-w-0 flex-1 resize-none overflow-hidden rounded-sm border border-accent bg-background px-1.5 leading-[calc(24px*var(--grid-zoom))] whitespace-pre text-ink outline-none", number && "text-right")}
+        className={cn("h-[calc(26px*var(--grid-zoom))] min-w-0 flex-1 resize-none overflow-hidden rounded-sm border bg-background px-1.5 leading-[calc(24px*var(--grid-zoom))] whitespace-pre text-ink outline-none", environmentAccent.border, number && "text-right")}
       />
       <button type="button" aria-label={copy.confirmEdit} title={copy.confirmEdit} onMouseDown={(event) => event.preventDefault()} onClick={() => onCommit()} className={cn(button, "bg-accent text-panel hover:brightness-110")}>
         <CheckIcon className="size-4" />

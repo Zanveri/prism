@@ -244,6 +244,15 @@ export function RoutineIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** A sequência: o sustenido (#) de numeração sequencial. */
+export function SequenceIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 6h9M3.5 10h9M6.5 3l-1 10M10.5 3l-1 10" />
+    </Icon>
+  );
+}
+
 export function RefreshIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>
@@ -457,6 +466,59 @@ export function FlagIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>
       <path d="M3.5 14V2.5M3.5 3h8.75l-2 3 2 3H3.5" />
+    </Icon>
+  );
+}
+
+/*
+ * Os ícones das seções de Configurações que nenhum outro ícone da tela cobria (os outros reaproveitam os que já existem: `settings-nav.tsx`).
+ * Mesmo traço: 16×16, linha de 1,5, pontas redondas, sem preenchimento.
+ */
+
+/** Conta: a cabeça e os ombros de uma pessoa. */
+export function UserIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="5.5" r="2.75" />
+      <path d="M2.75 13.5a5.25 5.25 0 0 1 10.5 0" />
+    </Icon>
+  );
+}
+
+/** Aparência: a paleta de pintor, com o furo do polegar e quatro tintas. */
+export function PaletteIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M8 2a6 6 0 0 0 0 12c.9 0 1.4-.55 1.4-1.3 0-.75-.55-1.05-.55-1.8 0-.75.6-1.2 1.35-1.2H12a2 2 0 0 0 2-2C14 4.45 11.3 2 8 2z" />
+      <path d="M5 8.25h.01M5.75 5.25h.01M8.75 4.5h.01M11 6.25h.01" />
+    </Icon>
+  );
+}
+
+/** Sobre: o "i" de informação, num círculo. */
+export function InfoIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M8 7.5v3.25M8 5.25h.01" />
+    </Icon>
+  );
+}
+
+/** Plugins: a peça de quebra-cabeça, com um pino em cima e outro à direita (o plugue, `PlugIcon`, é o das conexões). */
+export function PuzzleIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M2.25 5h3a1.75 1.75 0 1 1 2.5 0h3v3a1.75 1.75 0 1 1 0 2.5v3h-8.5z" />
+    </Icon>
+  );
+}
+
+/** Transações: as duas setas opostas, da ida e da volta. */
+export function TransactionIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M2.75 5.5h10.5M10.5 2.75l2.75 2.75-2.75 2.75M13.25 10.5H2.75M5.5 7.75L2.75 10.5l2.75 2.75" />
     </Icon>
   );
 }

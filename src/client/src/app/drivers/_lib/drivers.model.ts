@@ -66,11 +66,11 @@ export function actionOf(driver: Driver): DriverAction | null {
   }
 }
 
-const isEngine = (value: number): value is Engine => value === 1 || value === 2 || value === 3;
+const isEngine = (value: number): value is Engine => Number.isInteger(value) && value >= 1 && value <= 13;
 
 /** Os bancos do driver que a tela sabe desenhar (as etiquetas PG, DB2 e IFX), em ordem e sem repetir. */
 export function knownEngines(driver: Driver): Engine[] {
-  return [...new Set(driver.engines)].filter(isEngine).sort();
+  return [...new Set(driver.engines)].filter(isEngine).sort((a, b) => a - b);
 }
 
 export const hasInstalling = (drivers: readonly Driver[] | undefined): boolean => drivers?.some((driver) => driver.state === "installing") ?? false;

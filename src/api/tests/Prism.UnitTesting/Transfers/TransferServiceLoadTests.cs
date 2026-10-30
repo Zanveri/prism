@@ -645,6 +645,19 @@ public sealed partial class TransferServiceTests
 
         public bool HasOpenCursor => false;
 
+        public bool ManualCommit { get; set; }
+
+        public ETransactionState Transaction => ETransactionState.None;
+
+        public Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken)
+            => Task.FromResult(Result.Success<bool, DatabaseFailure>(true));
+
+        public Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken)
+            => Task.FromResult(UnitResult.Success<DatabaseFailure>());
+
+        public Task<UnitResult<DatabaseFailure>> RollbackAsync(CancellationToken cancellationToken)
+            => Task.FromResult(UnitResult.Success<DatabaseFailure>());
+
         /// <summary>A conexão cai: a recusa da confirmação que o teste devolve.</summary>
         public DatabaseFailure Lose()
         {
@@ -765,6 +778,7 @@ public sealed partial class TransferServiceTests
         public Task CloseCursorAsync() => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(string schema, string kind, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<ObjectNamesInfo, DatabaseFailure>> GetObjectNamesAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<IndexInfo>, DatabaseFailure>> GetIndexesAsync(string schema, string table, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<ForeignKeyInfo>, DatabaseFailure>> GetForeignKeysAsync(string schema, string table, CancellationToken cancellationToken) => throw new NotSupportedException();

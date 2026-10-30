@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { appFonts, appFontStacks, applyFonts, clearFonts, fontNameMaxLength, fontStack, fontVariables, isSafeFontName } from "./fonts";
+import { appFontFamilies, appFonts, appFontStacks, applyFonts, clearFonts, fontNameMaxLength, fontStack, fontVariables, isSafeFontName, resolvedFontFamily } from "./fonts";
 
 const css = readFileSync(new URL("../../../styles/globals.css", import.meta.url), "utf8");
 
@@ -85,6 +85,34 @@ describe("a pilha de fontes", () => {
     expect(css).toMatch(/--font-mono:\s*"IBM Plex Mono",/);
     expect(css).toMatch(/--font-editor:\s*var\(--font-mono\);/);
     expect(appFonts).toEqual({ ui: "IBM Plex Sans", editor: "IBM Plex Mono" });
+  });
+});
+
+describe("a pilha sem var(), para o canvas que mede a grade (RN-CONFIG-008)", () => {
+  it("a escolhida vem entre aspas, com a pilha do app atrás, escrita por extenso", () => {
+    expect(resolvedFontFamily("ui", "Inter")).toBe('"Inter", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif');
+    expect(resolvedFontFamily("editor", "JetBrains Mono")).toBe('"JetBrains Mono", "IBM Plex Mono", "Cascadia Mono", Consolas, monospace');
+  });
+
+  it("a fonte do app, ou um nome que não serve, é só a pilha do app", () => {
+    expect(resolvedFontFamily("ui", appFonts.ui)).toBe(appFontFamilies.ui);
+    expect(resolvedFontFamily("editor", appFonts.editor)).toBe(appFontFamilies.editor);
+    for (const name of ['Arial", x; color: red', "Arial}", "Arial\\", "", " Inter"]) {
+      expect(resolvedFontFamily("ui", name)).toBe(appFontFamilies.ui);
+      expect(resolvedFontFamily("editor", name)).toBe(appFontFamilies.editor);
+    }
+  });
+
+  it("nenhuma das duas tem var(): o canvas não resolve variável de CSS", () => {
+    for (const family of Object.values(appFontFamilies)) expect(family).not.toContain("var(");
+    expect(resolvedFontFamily("ui", "Inter")).not.toContain("var(");
+  });
+
+  it("as pilhas escritas aqui são, letra por letra, as de --font-app-sans e --font-mono no globals.css: se uma muda, o canvas mediria outra fonte", () => {
+    const declared = (variable: string) => new RegExp(`${variable}:\\s*([^;]+);`).exec(css)?.[1];
+
+    expect(declared("--font-app-sans")).toBe(appFontFamilies.ui);
+    expect(declared("--font-mono")).toBe(appFontFamilies.editor);
   });
 });
 

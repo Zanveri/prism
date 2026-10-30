@@ -77,7 +77,7 @@ export function choiceKeyTarget(key: string, active: number, count: number): num
  * é a tabela daquela conexão) e a mesma conexão. A aba sem conexão recebe a escolhida pelo mesmo caminho.
  */
 export function withConnection(tab: QueryTab, connectionId: string, sql: string = tab.sql): QueryTab | null {
-  if (tab.table !== undefined || tab.connectionId === connectionId) return null;
+  if (tab.table !== undefined || tab.schemaTarget !== undefined || tab.databaseTarget !== undefined || tab.connectionId === connectionId) return null;
 
   const rest = { ...tab };
   delete rest.database;

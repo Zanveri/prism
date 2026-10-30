@@ -201,10 +201,11 @@ describe("resolver os nomes pelo catálogo", () => {
     expect(resolveName("erp", "pedidos", catalog, standard)).toBeNull();
   });
 
-  it("sem esquema, vale o padrão da sessão; null é qualquer esquema (Informix)", () => {
+  it("sem esquema, vale o padrão da sessão e depois os demais esquemas do banco", () => {
     expect(resolveName(null, "clientes", catalog, standard)).toEqual({ schema: "public", name: "clientes" });
-    expect(resolveName(null, "produtos", catalog, standard)).toBeNull();
+    expect(resolveName(null, "produtos", catalog, standard)).toEqual({ schema: "erp", name: "produtos" });
     expect(resolveName(null, "produtos", catalog, null)).toEqual({ schema: "erp", name: "produtos" });
+    expect(resolveName(null, "inexistente", catalog, standard)).toBeNull();
   });
 
   it("o qualificador: apelido, nome da tabela escrita no comando, ou nome do catálogo", () => {

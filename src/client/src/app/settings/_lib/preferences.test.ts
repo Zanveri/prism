@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createPreferencesStore, defaultPreferences, gridZoomSteps, navigatorDensities, parseNullText, parsePreferences, preferenceLimits, preferencesKey, themeModes, type PreferencesStorage } from "./preferences";
+import { createPreferencesStore, defaultPreferences, gridZoomSteps, navigatorDensities, parseNullText, parsePreferences, preferenceLimits, preferencesKey, sqlFormatStyles, themeModes, type PreferencesStorage } from "./preferences";
 
 /** O `localStorage` de mentira: um mapa em memória, que também mostra o que foi gravado. */
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -15,7 +15,7 @@ function fakeStorage(initial: Record<string, string> = {}) {
 const saved = {
   theme: "light",
   ui: { fontFamily: "Noto Sans", navigatorDensity: "compact" },
-  editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false, showVariableValues: false },
+  editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false, showVariableValues: false, formatStyle: "river" },
   results: { nullText: "∅", autoLoadMore: true, showColumnTypes: false, gridZoom: 125, resultPlace: "tab" },
   security: { lockEnabled: false, lockAfterMinutes: 45 },
 };
@@ -25,7 +25,7 @@ describe("o padrão das preferências", () => {
     expect(defaultPreferences).toEqual({
       theme: "dark",
       ui: { fontFamily: "IBM Plex Sans", navigatorDensity: "comfortable" },
-      editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true, showVariableValues: true },
+      editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true, showVariableValues: true, formatStyle: "expanded" },
       results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100, resultPlace: "panel" },
       security: { lockEnabled: true, lockAfterMinutes: 10 },
     });
@@ -55,7 +55,7 @@ describe("a leitura tolerante", () => {
   });
 
   it("os modos de tema são os seis do canvas e o do sistema, e o padrão é o Prism Escuro", () => {
-    expect([...themeModes].sort()).toEqual(["dark", "dracula", "github-light", "kanagawa", "light", "monokai", "nord", "system"]);
+    expect([...themeModes].sort()).toEqual(["anuppuccin", "anuppuccin-frappe", "anuppuccin-latte", "anuppuccin-macchiato", "anuppuccin-rosepine-light", "atom", "atom-light", "blue-topaz", "blue-topaz-light", "catppuccin", "catppuccin-frappe", "catppuccin-latte", "catppuccin-macchiato", "dark", "dracula", "github-light", "kanagawa", "light", "monokai", "nord", "obsidian-gruvbox", "obsidian-gruvbox-light", "obsidianite", "obsidianite-light", "primary", "primary-light", "prism", "prism-cherry", "prism-indigo", "prism-latte", "prism-mocha", "prism-peach", "prism-periwinkle", "prism-pine", "prism-pistachio", "prism-swan", "system", "typewriter", "typewriter-light", "willemstad", "willemstad-light"]);
     expect(defaultPreferences.theme).toBe("dark");
   });
 
@@ -95,6 +95,8 @@ describe("a leitura tolerante", () => {
     ["linha em branco nula", { editor: { blankLineSeparates: null } }, ["editor", "blankLineSeparates"]],
     ["valor das variáveis que não é booleano", { editor: { showVariableValues: "sim" } }, ["editor", "showVariableValues"]],
     ["valor das variáveis nulo", { editor: { showVariableValues: null } }, ["editor", "showVariableValues"]],
+    ["estilo de formatação desconhecido", { editor: { formatStyle: "oracle" } }, ["editor", "formatStyle"]],
+    ["estilo de formatação que não é texto", { editor: { formatStyle: 2 } }, ["editor", "formatStyle"]],
     ["texto do nulo vazio", { results: { nullText: "" } }, ["results", "nullText"]],
     ["texto do nulo só de espaços", { results: { nullText: "   " } }, ["results", "nullText"]],
     ["texto do nulo com 13 caracteres", { results: { nullText: "1234567890123" } }, ["results", "nullText"]],
@@ -440,7 +442,7 @@ describe("a linha em branco separa os comandos (RN-SQL-018)", () => {
     const before = JSON.stringify({ ...saved, editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true } });
 
     expect(defaultPreferences.editor.blankLineSeparates).toBe(true);
-    expect(parsePreferences(before).editor).toEqual({ ...saved.editor, blankLineSeparates: true, showVariableValues: true });
+    expect(parsePreferences(before).editor).toEqual({ ...saved.editor, blankLineSeparates: true, showVariableValues: true, formatStyle: "expanded" });
   });
 
   it("desligada, fica desligada ao abrir de novo, sem mexer no resto do grupo", () => {
@@ -459,7 +461,7 @@ describe("o valor das variáveis no fim da linha (RN-CONFIG-004 e RN-VAR-025)", 
     const before = JSON.stringify({ ...saved, editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false } });
 
     expect(defaultPreferences.editor.showVariableValues).toBe(true);
-    expect(parsePreferences(before).editor).toEqual({ ...saved.editor, showVariableValues: true });
+    expect(parsePreferences(before).editor).toEqual({ ...saved.editor, showVariableValues: true, formatStyle: "expanded" });
   });
 
   it("desligada, fica desligada ao abrir de novo, sem mexer no resto do grupo", () => {
@@ -470,6 +472,16 @@ describe("o valor das variáveis no fim da linha (RN-CONFIG-004 e RN-VAR-025)", 
     store.set("ana", { editor: { showVariableValues: false } });
 
     expect(createPreferencesStore(() => storage).get("ana").editor).toEqual({ ...defaultPreferences.editor, fontSize: 15, showVariableValues: false });
+  });
+});
+
+describe("o estilo de formatação SQL (Ctrl+Shift+F)", () => {
+  it("os seis estilos existem e o padrão é o expandido; quem gravou antes dele existir recebe 'expanded'", () => {
+    expect(sqlFormatStyles).toEqual(["river", "expanded", "tabular", "leadingComma", "compact", "modern"]);
+    expect(defaultPreferences.editor.formatStyle).toBe("expanded");
+    for (const formatStyle of sqlFormatStyles) {
+      expect(parsePreferences(JSON.stringify({ editor: { formatStyle } })).editor.formatStyle).toBe(formatStyle);
+    }
   });
 });
 

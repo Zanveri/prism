@@ -25,9 +25,10 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal sealed class PostgresConnection(ConnectionSettings settings, ILogger logger) : AdoDatabaseConnection(logger)
 {
-    /// <summary>As letras de `relkind` do que a árvore mostra como tabela (a comum, a particionada e a estrangeira) e como visão (a comum e a materializada).</summary>
+    /// <summary>As letras de `relkind` do que a árvore mostra como tabela (a comum, a particionada e a estrangeira), como visão (a comum e a materializada) e como sequência.</summary>
     private const string TableKinds = "'r', 'p', 'f'";
     private const string ViewKinds = "'v', 'm'";
+    private const string SequenceKinds = "'S'";
 
     /// <summary>Os tipos que a tela alinha de outro jeito, pelo nome que o servidor dá. O resto, inclusive vetores e intervalos, é texto.</summary>
     private static readonly Dictionary<string, string> Kinds = new()
@@ -211,6 +212,9 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
     protected override string BeginReadOnlySql => "BEGIN TRANSACTION READ ONLY";
 
+    /// <summary>RN-TX-009: qualquer erro de um comando dentro da transação, também o cancelamento, a deixa inteira com erro até o Rollback.</summary>
+    protected override bool ErrorsSpoilTheTransaction => true;
+
     /// <summary>
     /// RN-PROT-006: o modo de toda transação seguinte da sessão (`default_transaction_read_only`). Com ele, o que rodasse fora da transação só de leitura
     /// da tentativa também seria recusado pelo banco; a leitura de uma conexão somente leitura roda sempre nela, e o modo é a segunda trava.
@@ -267,7 +271,10 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     }
 
     protected override void ConfigureUserCommand(DbCommand command)
-        => ((NpgsqlCommand)command).AllResultTypesAreUnknown = true;
+    {
+        base.ConfigureUserCommand(command);
+        ((NpgsqlCommand)command).AllResultTypesAreUnknown = true;
+    }
 
     /// <summary>
     /// RN-EDIT-003: o banco diz, na descrição das linhas, de que tabela (`TableOID`) e de que coluna dela (o número, `attnum`) vem cada
@@ -283,7 +290,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// </summary>
     protected override void BindEditParameter(DbParameter parameter, EditParameter value)
     {
-        ((NpgsqlParameter)parameter).NpgsqlDbType = NpgsqlDbType.Unknown;
+        ((NpgsqlParameter)parameter).NpgsqlDbType = value.Value is byte[] ? NpgsqlDbType.Bytea : NpgsqlDbType.Unknown;
         parameter.Value = value.Value ?? DBNull.Value;
     }
 
@@ -507,6 +514,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
                                                                  ELSE pg_class.reltuples::bigint
                                                              END"),
             "views" => RelationsSql(ViewKinds, "view", "NULL::bigint"),
+            "sequences" => RelationsSql(SequenceKinds, "sequence", "NULL::bigint"),
             "routines" => @"SELECT pg_proc.proname AS name,
                                    CASE pg_proc.prokind WHEN 'p' THEN 'procedure' ELSE 'function' END AS kind,
                                    NULL::bigint AS estimated_rows,
@@ -519,6 +527,23 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
         };
 
     /// <summary>
+    /// RN-BUSCA-002. As mesmas letras de `relkind` que a lista de objetos (<see cref="TableKinds"/> e <see cref="ViewKinds"/>) e o mesmo
+    /// critério de sistema do <see cref="SchemasSql"/> (o prefixo `pg_` e o `information_schema`); a ordem é a dele, e a dos nomes é a da
+    /// lista de objetos (`relname`, byte a byte, pela colação `C` do tipo). Só o banco da sessão: o PostgreSQL não lê outro banco na mesma
+    /// conexão. O `pg_class` não tem a tabela de `TOAST` nem o índice (outras letras de `relkind`), então o esquema `pg_toast` não aparece.
+    /// </summary>
+    protected override string ObjectNamesSql(int rows)
+        => $@"SELECT pg_namespace.nspname AS schema_name,
+                     (LEFT(pg_namespace.nspname, 3) = 'pg_' OR pg_namespace.nspname = 'information_schema') AS is_system,
+                     pg_class.relname AS object_name,
+                     CASE WHEN pg_class.relkind IN ({ViewKinds}) THEN 'view' ELSE 'table' END AS object_kind
+                FROM pg_catalog.pg_class
+                JOIN pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+               WHERE pg_class.relkind IN ({TableKinds}, {ViewKinds})
+               ORDER BY is_system, pg_namespace.nspname, pg_class.relname
+               LIMIT {rows}";
+
+    /// <summary>
     /// RN-SQL-006. O `;` do fim sai porque dentro do parêntese ele é erro de sintaxe; as quebras de linha fazem um comentário `--` no fim
     /// do comando acabar antes do fecho da subconsulta.
     /// </summary>
@@ -529,12 +554,12 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// RN-SQL-009: a mensagem do servidor, e o detalhe e a dica quando ele os manda, cada um na sua linha e com o rótulo que o
     /// PostgreSQL usa, e o nome da coluna do erro, quando ele o diz. A `Message` da exceção não serve: leva o SQLSTATE na frente e junta tudo num formato do driver. O cancelamento
     /// chega embrulhado, com a `PostgresException` por dentro. O que não veio do servidor (host que não responde, conexão que caiu) tem a
-    /// causa na exceção interna.
+    /// causa na exceção interna, e a mensagem diz as duas só quando uma não repete a outra (<see cref="CauseText"/>).
     /// </summary>
     protected override DatabaseFailure ToFailure(EDatabaseFailure kind, Exception exception)
     {
         if ((exception as PostgresException ?? exception.InnerException as PostgresException) is not { } postgres)
-            return new DatabaseFailure(kind, exception.InnerException is null ? exception.Message : $"{exception.Message}: {exception.InnerException.Message}");
+            return new DatabaseFailure(kind, CauseText(exception));
 
         var message = postgres.MessageText;
         if (postgres.Detail is { Length: > 0 } detail)
@@ -545,6 +570,23 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
         // RN-IMPORT-016: a coluna que o banco diz no erro (na recusa do nulo), que a importação leva à coluna do arquivo.
         return new DatabaseFailure(kind, message, postgres.SqlState, postgres.Position > 0 ? postgres.Position : null, ColumnName: postgres.ColumnName is { Length: > 0 } column ? column : null);
+    }
+
+    /// <summary>
+    /// RN-SQL-009: a mensagem de uma falha que não veio do servidor, com a causa quando ela diz mais: "Failed to connect to db.exemplo.invalid:5432: Connection refused". O Npgsql
+    /// repete a causa na própria mensagem quando o nome do host não resolve (a `NpgsqlException` e a `SocketException` por dentro dizem "Name or service not known"), e a tela
+    /// mostrava a frase duas vezes. Se uma das duas já contém a outra, fica a que diz mais; senão, as duas, a da exceção primeiro.
+    /// </summary>
+    internal static string CauseText(Exception exception)
+    {
+        var message = exception.Message;
+        if (exception.InnerException?.Message is not { Length: > 0 } cause)
+            return message;
+
+        if (message.Contains(cause, StringComparison.Ordinal))
+            return message;
+
+        return cause.Contains(message, StringComparison.Ordinal) ? cause : $"{message}: {cause}";
     }
 
     /// <summary>

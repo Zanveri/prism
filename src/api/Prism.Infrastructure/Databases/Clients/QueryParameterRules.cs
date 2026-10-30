@@ -147,7 +147,7 @@ public static partial class QueryParameterRules
     /// </summary>
     public static (string Field, string Message)? EngineRefusal(EDatabaseEngine engine, IReadOnlyList<QueryParameter> parameters, string field)
     {
-        if (engine == EDatabaseEngine.PostgreSql)
+        if (engine is not (EDatabaseEngine.Db2 or EDatabaseEngine.Informix))
             return null;
 
         var name = engine == EDatabaseEngine.Db2 ? "o Db2" : "o Informix";

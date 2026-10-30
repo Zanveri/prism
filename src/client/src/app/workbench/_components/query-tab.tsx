@@ -30,6 +30,7 @@ import { saveShortcut } from "../_lib/saved-scripts";
 import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScriptTab, statisticsSummary, type ScriptTab } from "../_lib/script-run";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
+import { tabEntries } from "../_lib/tab-focus";
 import { recall, remember } from "../_lib/tab-memory";
 import { isPersonBusy, useQueryRunner, useScriptRun, type DocRange, type QueryRunner, type RunHooks, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
 import { conditionOf, sortOf, withOrder } from "../_lib/table-sql";
@@ -59,6 +60,7 @@ import { ScriptErrorDialog } from "./script-error-dialog";
 import { ScriptStatistics } from "./script-statistics";
 import { ResultTabs, ScriptTabs, ScriptWaitingMark, scriptTabId } from "./script-tabs";
 import { SentSqlDialog } from "./sent-sql-dialog";
+import { TransactionControl } from "./transaction-control";
 import { VariablesPanel } from "./variables-panel";
 import { variablesPanelCopy } from "../_lib/variables-panel.copy";
 import { RecordsFilter } from "./table-tab/records-filter";
@@ -69,6 +71,12 @@ type QueryTabPanelProps = {
   /** O que a aba executa e mostra. Vive no `WorkbenchProvider`, acima das rotas, e não aqui. */
   runner: QueryRunner;
   engine: Engine | undefined;
+  /**
+   * RN-AMB-002: a cor (`#RRGGBB`) do ambiente da conexão da aba, o próprio ou o herdado da pasta; nula sem ambiente, com ambiente sem cor e na aba sem conexão. É um
+   * texto, para o painel memorizado só se refazer quando a cor muda, e vai à área de resultado, que a põe na própria `<section>`: ela vai por portal para o
+   * painel, a aba do resultado ou a janela do resultado, e só dentro dela a variável de CSS chega aos destaques.
+   */
+  environmentColor: string | null;
   /** A aba é a ativa da janela (a da consulta ou a aba do resultado dela à frente): a pergunta de erro do script aparece (RN-SQL-021). */
   active: boolean;
   /**
@@ -164,7 +172,7 @@ function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onA
  * resultado, no "Salvar" da grade (em "Todos os comandos") e ao ligar a atualização automática (em "Todos os comandos", uma vez). Cancelado, nada sai, e a
  * aba fica como estava, com o resultado de antes.
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, place = "panel", editorShown = active, resultShown = active, moving = false, onPlace, onToggleEntry, onBackToPanel, onFocusWindow, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase, onOpenQuery }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, environmentColor, active, place = "panel", editorShown = active, resultShown = active, moving = false, onPlace, onToggleEntry, onBackToPanel, onFocusWindow, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase, onOpenQuery }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const queryClient = useQueryClient();
   const script = useScriptRun(runner);
@@ -410,6 +418,26 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   useLayoutEffect(() => {
     if (editorShown && resultFocus.take(tab.id, ["editor"]) !== null) editor.current?.focus();
   });
+
+  // RN-ABAS-019: a entrada da aba, onde o foco cai quando ela é aberta por um gesto, ou quando a aba em que ele estava fecha: o editor, com o cursor onde estava;
+  // com o editor escondido (o resultado maximizado) ou a aba do resultado ativa, o resultado (a grade, ou o botão "Onde mostrar o resultado"). O editor não toma o
+  // foco sozinho ao nascer: quem o leva é a área das abas, com a guarda de não roubá-lo de quem já foi para outro lugar. O estado de agora é lido na hora, por ref.
+  const entryNow = useRef({ editorShown, maximized, slot });
+  useEffect(() => {
+    entryNow.current = { editorShown, maximized, slot };
+  });
+  useEffect(
+    () =>
+      tabEntries.register(tab.id, () => {
+        const now = entryNow.current;
+        if (now.editorShown && !now.maximized && editor.current !== null) {
+          editor.current.focus();
+          return true;
+        }
+        return now.slot !== null && focusResultIn(now.slot);
+      }),
+    [tab.id],
+  );
 
   // O botão e o Ctrl+Enter passam pelo editor: um lugar só para a área recolhida voltar ao executar. Só volta quando o executor vai
   // enviar o comando: sem nada a executar, com mais de um comando ou com a aba ocupada ele só avisa, e não há resultado a caminho.
@@ -693,6 +721,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           onCancel={handleCancel}
           connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
           database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
+          transaction={connectionId === null ? null : <TransactionControl transaction={runner.transaction} busy={busy} />}
         />
   
         <div ref={area} className="flex min-h-0 flex-1 flex-col">
@@ -706,7 +735,6 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
               engine={engine}
               connectionId={tab.connectionId}
               database={tab.database}
-              autoFocus={editorShown}
               errorAt={shown?.status === "error" ? shown.errorAt : null}
               onRun={handleRun}
               onRunScript={handleRunScript}
@@ -727,6 +755,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         <ResultHost tabId={tab.id} slot={slot} onBack={onBackToPanel === undefined ? undefined : () => onBackToPanel(tab.id)} onLink={onFocusWindow === undefined ? undefined : () => onFocusWindow(tab.id, "link")}>
           <ResultPanel
             id={resultId}
+            environmentColor={environmentColor}
             state={kept === null ? state : kept.rows}
             connected={kept === null && tab.sessionId !== null}
             collapsed={inPanel && layout.mode === "collapsed"}

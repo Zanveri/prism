@@ -74,7 +74,7 @@ internal static class DriverPackageExtractor
             }
         }
 
-        return targets.ContainsKey(layout.ManagedAssembly) && targets.ContainsKey(layout.NativeLibrary) ? null : Refusal("O pacote não tem os arquivos que o driver precisa. Nada foi instalado.");
+        return targets.ContainsKey(layout.ManagedAssembly) && (layout.NativeLibrary is null || targets.ContainsKey(layout.NativeLibrary)) ? null : Refusal("O pacote não tem os arquivos que o driver precisa. Nada foi instalado.");
     }
 
     /// <summary>Para onde vai a entrada, na pasta do driver; nulo quando o catálogo não a espera (assinatura, `tools/`, o `.nuspec`).</summary>

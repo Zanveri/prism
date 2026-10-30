@@ -35,6 +35,20 @@ const splashAtStart = parseSvg(read("brand-assets.reference/splash-dda5d19.svg",
  */
 const loginAtStart = parseSvg(read("brand-assets.reference/login-dda5d19.svg", new URL("./", import.meta.url)));
 
+/**
+ * As cores das faixas, dos raios de dentro e dos cilindros, de antes para agora: o rosa, o verde e o azul (as cores do Informix, do Db2 e
+ * do PostgreSQL) viraram três tons de violeta, porque o Prism abre mais bancos do que esses três (pedido do dono em 2026-10-29, RN-MARCA-001).
+ * O desenho é o mesmo, traço por traço: as referências de dda5d19 são lidas com esta troca, e só com ela.
+ */
+const repainted: Record<string, string> = { "#F591B6": "#DCCBFF", "#5ED3A3": "#A98BF5", "#7DB2FF": "#7558D9" };
+const repaint = (text: string) =>
+  text.replace(/#(F591B6|5ED3A3|7DB2FF)/gi, (color) => (color === color.toLowerCase() ? repainted[color.toUpperCase()].toLowerCase() : repainted[color.toUpperCase()]));
+const repaintTree = (node: SvgNode): SvgNode => ({
+  ...node,
+  attributes: Object.fromEntries(Object.entries(node.attributes).map(([name, value]) => [name, repaint(value)])),
+  children: node.children.map(repaintTree),
+});
+
 /** O que o arquivo avulso tem e o desenho dentro de uma página não tem: o título e a descrição. */
 const drawing = (svg: SvgNode) => svg.children.filter((child) => child.name !== "title" && child.name !== "desc");
 
@@ -54,7 +68,7 @@ function shapeOf(nodes: SvgNode[]): unknown[] {
   return nodes.map((node) => [node.name, Object.keys(node.attributes), shapeOf(node.children)]);
 }
 
-describe("assets/prism-logo.svg é o desenho do splash e do login, sem mudar nada (RN-MARCA-007)", () => {
+describe("assets/prism-logo.svg é o desenho do splash e do login, só com as faixas em violeta (RN-MARCA-001 e 007)", () => {
   it("o viewBox, o preenchimento, as pontas e as junções da raiz são os do splash", () => {
     for (const attribute of ["viewBox", "fill", "stroke-linecap", "stroke-linejoin"]) expect(logo.attributes[attribute], attribute).toBe(splashAtStart.attributes[attribute]);
   });
@@ -67,8 +81,8 @@ describe("assets/prism-logo.svg é o desenho do splash e do login, sem mudar nad
     ]);
   });
 
-  it("elemento por elemento, é o desenho do splash: os mesmos elementos, na mesma ordem, com os mesmos atributos e valores (d, grossuras, cores, opacidades, gradientes e filtro)", () => {
-    expect(drawing(logo)).toEqual(splashAtStart.children);
+  it("elemento por elemento, é o desenho do splash: os mesmos elementos, na mesma ordem, com os mesmos atributos e valores (d, grossuras, cores, opacidades, gradientes e filtro), com o violeta no lugar das três cores de antes", () => {
+    expect(drawing(logo)).toEqual(splashAtStart.children.map(repaintTree));
     // E o desenho não está vazio dos dois lados: 24 caminhos, 3 círculos e 3 elipses (mais os 4 degradês e o filtro).
     const shapes = attributesOf(drawing(logo)).filter((entry) => entry.attribute === "d" || entry.attribute === "r" || entry.attribute === "rx").length;
     expect(shapes).toBe(30);
@@ -120,9 +134,9 @@ describe("assets/prism-logo-light.svg, a variante para fundo claro, só difere n
       "path stroke=#46505D stroke-width=1",
       // A luz dentro dele e os três raios coloridos que o atravessam.
       "path fill=#F3F5F8 fill-opacity=0.14",
-      "path stroke=#F591B6 stroke-width=1.25 stroke-opacity=0.9",
-      "path stroke=#5ED3A3 stroke-width=1.25 stroke-opacity=0.9",
-      "path stroke=#7DB2FF stroke-width=1.25 stroke-opacity=0.9",
+      "path stroke=#DCCBFF stroke-width=1.25 stroke-opacity=0.9",
+      "path stroke=#A98BF5 stroke-width=1.25 stroke-opacity=0.9",
+      "path stroke=#7558D9 stroke-width=1.25 stroke-opacity=0.9",
       // O brilho.
       "path stroke=#FFFFFF stroke-width=1.5 stroke-opacity=0.28",
       // O ponto da entrada.
@@ -240,8 +254,8 @@ function loginIllustration(markup: string): SvgNode {
   throw new Error("a ilustração do login não está no painel");
 }
 
-describe("o login desenha a marca de assets/, e o que se vê é o que se via (RN-MARCA-007)", () => {
-  const before = seen(loginAtStart);
+describe("o login desenha a marca de assets/, e o que se vê é o que se via, com o violeta no lugar das três cores (RN-MARCA-007)", () => {
+  const before = seen(loginAtStart).map(repaint);
 
   it("assets/prism-logo.svg é a ilustração do login de antes, sem a régua: forma por forma, com a mesma pintura", () => {
     expect(before.filter(isRuler)).toHaveLength(2);

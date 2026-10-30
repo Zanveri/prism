@@ -47,7 +47,7 @@ export const navigatorCopy = {
     connectionHint: (engine: string, host: string, port: number, database: string) => `${engine} · ${host}:${port} / ${database}`,
   },
 
-  // RN-NAV-010: o seletor de ambiente ao lado do campo de busca.
+  // RN-NAV-010: o seletor de ambiente, na linha abaixo do campo de busca, ao lado de "Só as conectadas".
   environmentFilter: {
     label: "Filtrar por ambiente",
     all: "Todos os ambientes",
@@ -57,7 +57,7 @@ export const navigatorCopy = {
     nothingWithout: "Nenhuma conexão sem ambiente.",
   },
 
-  // RN-NAV-013: "Só as conectadas", o botão de alternar ao lado do seletor de ambiente, que diz quantas conexões estão conectadas, ligado ou não. O nome
+  // RN-NAV-013: "Só as conectadas", o botão de alternar na linha abaixo do campo de busca, antes do seletor de ambiente, que diz quantas conexões estão conectadas, ligado ou não. O nome
   // acessível é o rótulo com a conta ("Só as conectadas: 3 conectadas"); o estado é o `aria-pressed`, e a dica diz o que o clique faz agora.
   connectedFilter: {
     label: "Só as conectadas",

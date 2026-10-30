@@ -23,6 +23,25 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     private const int AlreadyInTransaction = -535;
     private const int TransactionNotAvailable = -256;
 
+    /// <summary>RN-TX-009: "Long transaction aborted": a transação passou do limite de transação longa do servidor (o `LTXHWM`), e o banco a desfez inteira.</summary>
+    private const int LongTransactionAborted = -458;
+
+    /// <summary>
+    /// Os números nativos do Informix quando a sonda da chamada de rotina (`SELECT rotina(...) FROM TABLE(SET{1})`) encontra um
+    /// procedimento sem retorno (-674), uma função com mais de um valor (-684), uma rotina SPL que grava ou controla transação (-675) ou
+    /// uma função com `WITH RESUME` que devolve mais de uma linha (-686): ela sai do `SELECT` e roda como `EXECUTE`.
+    /// </summary>
+    private const int RoutineCannotBeResolved = -674;
+    private const int IllegalSqlInSplRoutine = -675;
+    private const int FunctionReturnsTooManyValues = -684;
+    private const int FunctionReturnedMoreThanOneRow = -686;
+
+    /// <summary>
+    /// O tamanho que o Informix dá ao retorno `LVARCHAR` sem parâmetro de uma rotina (como `sysadmin:task`): pela porta DRDA, o
+    /// `EXECUTE FUNCTION` corta o valor nos 2.048 bytes declarados no catálogo, e o `CAST` para `CLOB` entrega o texto inteiro.
+    /// </summary>
+    private const int DefaultLvarcharBytes = 2_048;
+
     /// <summary>"Statement interrupted by user": o número nativo com que o Informix diz que interrompeu o comando a pedido (RN-SQL-010).</summary>
     private const int StatementInterrupted = -213;
 
@@ -48,12 +67,27 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     /// </summary>
     private int _lastNativeError;
 
-    /// <summary>As letras de `tabtype` do que a árvore mostra como tabela (a comum e a externa) e como visão, e os `mode` das rotinas do usuário.</summary>
+    /// <summary>As letras de `tabtype` do que a árvore mostra como tabela (a comum e a externa), como visão e como sequência, e os `mode` das rotinas do usuário.</summary>
     private const string TableTypes = "'T', 'E'";
     private const string ViewTypes = "'V'";
+    private const string SequenceTypes = "'Q'";
     private const string RoutineModes = "'D', 'O', 'P', 'R', 'T'";
 
     protected override ESqlDialect Dialect => ESqlDialect.Informix;
+
+    /// <summary>RN-TX-009: o banco desfaz só o comando que falhou, menos na transação longa, que ele aborta inteira.</summary>
+    protected override bool UndoesTheTransaction(DatabaseFailure failure)
+        => _lastNativeError == LongTransactionAborted;
+
+    /// <summary>RN-TX-013: o banco sem log de transação (`is_logging` zero) não tem transação, e o Commit manual não existe nele.</summary>
+    protected override string TransactionsAvailableSql => "SELECT is_logging FROM sysmaster:sysdatabases WHERE name = DBINFO('dbname')";
+
+    /// <summary>
+    /// RN-EDIT-005 e RN-TX-011: o driver da IBM não tem os pontos de salvamento do ADO.NET. A volta vai sem `WORK`: por este driver, `ROLLBACK WORK TO
+    /// SAVEPOINT` desfaz a transação inteira (<see cref="AdoDatabaseConnection.RollbackWorkEndsTheTransaction"/>).
+    /// </summary>
+    protected override (string Save, string RollbackTo, string? Release)? SavepointSql(string name)
+        => ($"SAVEPOINT {name}", $"ROLLBACK TO SAVEPOINT {name}", $"RELEASE SAVEPOINT {name}");
 
     /// <summary>RN-CONN-013.</summary>
     protected override string PingSql => "SELECT 1 FROM systables WHERE tabid = 1";
@@ -69,7 +103,7 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
                                                       NVL(objects.tables, 0) AS tables,
                                                       NVL(objects.views, 0) AS views,
                                                       NVL(routines.routines, 0) AS routines
-                                                 FROM (SELECT owner FROM systables WHERE tabtype IN ({TableTypes}, {ViewTypes})
+                                                 FROM (SELECT owner FROM systables WHERE tabtype IN ({TableTypes}, {ViewTypes}, {SequenceTypes})
                                                         UNION
                                                        SELECT owner FROM sysprocedures WHERE mode IN ({RoutineModes})) AS owners
                                                  LEFT JOIN (SELECT owner,
@@ -354,7 +388,30 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     /// RN-LOG-001: as duas respostas que a sonda procura, "já há uma transação" (-535) e "transação não existe" (-256), são rotina.
     /// Num banco sem log a segunda vem depois de cada comando, e cada uma somava ao log uma linha de informação.
     /// </summary>
-    protected override bool IsRoutineRefusal => _lastNativeError is AlreadyInTransaction or TransactionNotAvailable;
+    protected override bool IsRoutineRefusal
+        => _lastNativeError is AlreadyInTransaction or TransactionNotAvailable or RoutineCannotBeResolved or IllegalSqlInSplRoutine or FunctionReturnsTooManyValues or FunctionReturnedMoreThanOneRow;
+
+    /// <summary>
+    /// RN-SQL-004 e 011: pela porta DRDA, o Informix descreve como `LVARCHAR(2048)` o retorno de uma rotina declarada `RETURNS LVARCHAR`
+    /// sem tamanho (como `sysadmin:task`) num `EXECUTE FUNCTION` ou `EXECUTE PROCEDURE`, e corta o texto em 2.048 bytes antes de enviá-lo.
+    /// Quando a preparação como consulta (`CommandBehavior.SchemaOnly`, que não executa a rotina) mostra uma coluna `LVARCHAR` de 2.048
+    /// bytes, a chamada roda envolvida em `SELECT CAST(... AS CLOB) FROM TABLE(SET{1})`, já lida até a primeira linha: se a
+    /// rotina for SPL com gravação (-675) ou com mais de uma linha (-686), o banco recusa sem ter gravado nada e o comando segue como
+    /// `EXECUTE`.
+    /// </summary>
+    protected override async Task<DbDataReader> StartUserCommandAsync(string sql, IReadOnlyList<QueryParameter>? parameters, CancellationToken cancellationToken)
+    {
+        if (SqlText.InformixRoutineCall(SqlText.RewriteDoubleQuotedLiterals(SqlText.Statement(sql, Dialect), Dialect)) is { } call && await TryDescribeUserCommandAsync($"SELECT {call} FROM TABLE(SET{{1}})", parameters, cancellationToken) is (1, "LVARCHAR", DefaultLvarcharBytes))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await TryStartUserSelectAsync($"SELECT CAST({call} AS CLOB) FROM TABLE(SET{{1}})", parameters, cancellationToken) is { } reader)
+                return reader;
+
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        return await base.StartUserCommandAsync(sql, parameters, cancellationToken);
+    }
 
     /// <summary>
     /// RN-SESSAO-005. O driver não sabe da transação que um comando abriu no servidor, e o catálogo de monitoração (`sysmaster`) só a
@@ -432,6 +489,7 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
         {
             "tables" => TablesSql(TableTypes, "table", "CASE WHEN ustlowts IS NULL THEN NULL ELSE nrows::INT8 END"),
             "views" => TablesSql(ViewTypes, "view", "CAST(NULL AS INT8)"),
+            "sequences" => TablesSql(SequenceTypes, "sequence", "CAST(NULL AS INT8)"),
             "routines" => $@"SELECT procname AS object_name,
                                     TRIM(CASE WHEN isproc = 't' THEN 'procedure' ELSE 'function' END) AS object_kind,
                                     CAST(NULL AS INT8) AS estimated_rows,
@@ -442,6 +500,24 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
                               ORDER BY procname, procid",
             _ => null
         };
+
+    /// <summary>
+    /// RN-BUSCA-002. As mesmas letras de `tabtype` que a lista de objetos (<see cref="TableTypes"/> e <see cref="ViewTypes"/>), o dono como
+    /// esquema e o `informix` como o de sistema, como no <see cref="SchemasSql"/>; a ordem dos nomes é a da lista (as tabelas que alguém
+    /// criou, a partir de `tabid` 100, antes das do catálogo). O `TRIM` do dono tira o espaço com que o `CHAR` completa o nome, e o do
+    /// `CASE`, o do texto mais curto. A ordenação é por posição das colunas (a quinta é só a da ordem dos nomes), como no <see cref="SchemasSql"/>.
+    /// Outro banco do servidor é outra sessão (RN-ARVORE-006): a consulta lê só o banco da sessão.
+    /// </summary>
+    protected override string ObjectNamesSql(int rows)
+        => $@"SELECT FIRST {rows}
+                     TRIM(owner) AS schema_name,
+                     CASE WHEN owner = 'informix' THEN 1 ELSE 0 END AS is_system,
+                     tabname AS object_name,
+                     TRIM(CASE WHEN tabtype IN ({ViewTypes}) THEN 'view' ELSE 'table' END) AS object_kind,
+                     CASE WHEN tabid >= 100 THEN 0 ELSE 1 END AS catalog_order
+                FROM systables
+               WHERE tabtype IN ({TableTypes}, {ViewTypes})
+               ORDER BY 2, 1, 5, 3";
 
     /// <summary>As letras de `tabtype`, o tipo e a expressão da estimativa são constantes deste arquivo, e não dado de fora: o dono, que é, vai como parâmetro.</summary>
     private static string TablesSql(string tableTypes, string kind, string estimatedRows)

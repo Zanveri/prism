@@ -171,6 +171,52 @@ public sealed class EditPlannerTests
         Assert.Equal([["linha 1\nlinha 2"], []], preview.Value.Statements.Select(statement => statement.Values.ToArray()));
     }
 
+    [Trait("EditPlanner", "Plan")]
+    [Fact(DisplayName = "OK os tipos especiais (JSON, JSONB, BLOB, CLOB, TEXT) geram UPDATE e INSERT com os parâmetros convertidos")]
+    public void Plan_ShouldPlanUpdatesAndInsertsForSpecialTypes()
+    {
+        //Arrange
+        var target = new EditTarget(
+            [new EditTable("loja", "documento", [0], true, null, EditTableKind.Table, ["id"])],
+            [
+                new EditColumn(0, "id", true, null, false, null, "INTEGER"),
+                new EditColumn(0, "payload", true, null, true, null, "JSON"),
+                new EditColumn(0, "conteudo", true, null, true, null, "CLOB(1048576)"),
+                new EditColumn(0, "anexo", true, null, true, null, "BLOB(1048576)")
+            ],
+            RowOperations: true,
+            OneAtATime: false);
+        QueryColumn[] result =
+        [
+            new("id", "INTEGER", "number"),
+            new("payload", "JSON", "text"),
+            new("conteudo", "CLOB(1048576)", "text"),
+            new("anexo", "BLOB(1048576)", "binary")
+        ];
+        EditChange[] changes =
+        [
+            new(EEditKind.Update, 0, ["1"], [new EditValue(1, "{\"ativo\":true,\"itens\":[1,2]}"), new EditValue(2, "texto longo"), new EditValue(3, "0x4F69")]),
+            new(EEditKind.Insert, 0, [], [new EditValue(0, "2"), new EditValue(1, "{\"novo\":1}"), new EditValue(3, "0xCAFE")])
+        ];
+
+        //Act
+        var commands = Plan(ESqlDialect.Db2, changes, target, result);
+
+        //Assert
+        Assert.Equal(
+        [
+            "UPDATE \"loja\".\"documento\" SET \"payload\" = ?, \"conteudo\" = ?, \"anexo\" = ? WHERE \"id\" = ?",
+            "INSERT INTO \"loja\".\"documento\" (\"id\", \"payload\", \"anexo\") VALUES (?, ?, ?)"
+        ], commands.Select(command => command.Sql));
+        Assert.Equal("{\"ativo\":true,\"itens\":[1,2]}", commands[0].Parameters[0].Value);
+        Assert.Equal("texto longo", commands[0].Parameters[1].Value);
+        Assert.Equal(new byte[] { 0x4F, 0x69 }, (byte[])commands[0].Parameters[2].Value!);
+        Assert.Equal(1, commands[0].Parameters[3].Value);
+        Assert.Equal(2, commands[1].Parameters[0].Value);
+        Assert.Equal("{\"novo\":1}", commands[1].Parameters[1].Value);
+        Assert.Equal(new byte[] { 0xCA, 0xFE }, (byte[])commands[1].Parameters[2].Value!);
+    }
+
     private static IReadOnlyList<EditCommand> Plan(ESqlDialect dialect, IReadOnlyList<EditChange> changes, EditTarget? target = null, IReadOnlyList<QueryColumn>? result = null)
     {
         var planned = EditPlanner.Plan(dialect, target ?? Target, result ?? Result, changes);

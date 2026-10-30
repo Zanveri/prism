@@ -4,11 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 
 // O campo é um CodeMirror (`FilterField`), que só nasce no navegador: aqui ele vira um `input` que mostra o que recebeu, e é isso que se confere. O que o
 // CodeMirror faz com cada propriedade tem teste próprio (`filter-field.test.ts`).
+// `ref`: o que o campo recebe de quem o desenha, para a aba da tabela levar o foco a ele (RN-ABAS-019).
+const field = vi.hoisted(() => ({ ref: undefined as unknown }));
 vi.mock("../filter-field", async () => {
   const { createElement: element } = await import("react");
   return {
-    FilterField: (props: { value: string; label: string; describedBy: string; invalid: boolean; placeholder: string; autocomplete: boolean; engine?: number; columns: { name: string }[] }) =>
-      element("input", {
+    FilterField: (props: { ref?: unknown; value: string; label: string; describedBy: string; invalid: boolean; placeholder: string; autocomplete: boolean; engine?: number; columns: { name: string }[] }) => {
+      field.ref = props.ref;
+      return element("input", {
         "aria-label": props.label,
         value: props.value,
         "aria-describedby": props.describedBy,
@@ -18,7 +21,8 @@ vi.mock("../filter-field", async () => {
         "data-engine": String(props.engine),
         "data-columns": props.columns.map((column) => column.name).join(","),
         readOnly: true,
-      }),
+      });
+    },
   };
 });
 
@@ -30,6 +34,16 @@ type Props = Partial<Parameters<typeof RecordsFilter>[0]>;
 const render = (props: Props = {}) => renderToStaticMarkup(createElement(RecordsFilter, { draft: "", onDraft: noop, applied: "", problem: null, busy: false, command: null, onApply: noop, onClear: noop, engine: 1, columns: [], autocomplete: true, ...props }));
 
 describe("o filtro dos registros (RN-TABELA-005 e 010)", () => {
+  it("a ref que a aba entrega chega ao campo (RN-ABAS-019); sem ela, o campo nasce igual", () => {
+    const handle = { current: null };
+
+    render({ ref: handle });
+    expect(field.ref).toBe(handle);
+
+    render();
+    expect(field.ref).toBeUndefined();
+  });
+
   it("o campo recebe o que vem depois do nome da tabela, tem nome acessível e não corrige o que a pessoa escreve", () => {
     const markup = render({ draft: "refugo > 0" });
 

@@ -10,9 +10,11 @@ import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { editorFont, type EditorPreferences } from "@/app/settings/_lib/editor-style";
 import { resolveScheme, subscribeSystemScheme, systemPrefersLight } from "@/app/settings/_lib/theme";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import type { Engine } from "@/components/ui";
+import { ContextMenu, ForeignKeyIcon, type Engine } from "@/components/ui";
 import { isMacPlatform } from "@/lib/utils/platform";
 
+import type { ObjectNames } from "../_lib/database-sessions.schema";
+import { objectNamesKey } from "../_lib/database-sessions.service";
 import type { CachedLevel } from "../_lib/navigator-search";
 import { completionTheme, highlight } from "../_lib/completion-theme";
 import { catalogCompletion, type CatalogCompletion } from "../_lib/sql-catalog-completion";
@@ -22,12 +24,14 @@ import { defaultSchemasOf, linkCatalog, tableLinkAt, type LinkCatalog, type Tabl
 import { liveEditors } from "../_lib/live-editors";
 import { flashRun, runFlash } from "../_lib/run-flash";
 import { scriptMark, scriptMarkEffects } from "../_lib/script-mark";
+import { formatSql, type SqlFormatOptions } from "../_lib/sql-format";
 import { keywordCase } from "../_lib/sql-keyword-case";
 import { hasStatement, scriptStatements, statementAt } from "../_lib/sql-statements";
 import type { RunTarget } from "../_lib/use-query-runner";
 import { variablesCompletion, type VariablesCompletion } from "../_lib/variables-completion";
 import { connectVariables, reanalyzeVariables, setShowVariableValues, variablesEditor, type VariablesStore } from "../_lib/variables-extension";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { JoinSuggestionsDialog } from "./join-suggestions-dialog";
 
 /** Quanto o editor espera, depois da última tecla, para entregar o texto a quem o guarda. */
 const changeDelayMs = 400;
@@ -149,6 +153,14 @@ export function scriptTargets(state: EditorState, engine: Engine | undefined, bl
  * O trecho que pisca quando "Executar" envia `target` (RN-SQL-018): sem seleção, o comando do cursor, exatamente o que foi enviado; com a linha em
  * branco separando, é assim que a pessoa vê qual comando o cursor pegou. A seleção já está à vista e não pisca; sem comando, nada pisca.
  */
+export function formatTarget(state: EditorState, options: SqlFormatOptions): { from: number; to: number; insert: string } | null {
+  const { from, to } = state.selection.main;
+  const [rangeFrom, rangeTo, raw] = from !== to ? [from, to, state.sliceDoc(from, to)] : [0, state.doc.length, state.doc.toString()];
+  if (raw.trim().length === 0) return null;
+  const insert = formatSql(raw, options);
+  return insert === raw ? null : { from: rangeFrom, to: rangeTo, insert };
+}
+
 export function flashRangeOf(state: EditorState, target: RunTarget): { from: number; to: number } | null {
   if (!state.selection.main.empty || target.sql === "") return null;
   return { from: target.offset, to: target.offset + target.sql.length };
@@ -231,7 +243,6 @@ type SqlEditorProps = {
   connectionId: string | null;
   /** RN-ARVORE-006: o outro banco do servidor da aba; o completar usa os nomes dele. */
   database?: string;
-  autoFocus: boolean;
   /** A posição, no texto, do erro que o banco apontou. */
   errorAt: number | null;
   /**
@@ -275,29 +286,42 @@ const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.l
  * guarda com atraso, para uma tecla não redesenhar a área de trabalho. Ctrl+Enter executa
  * (RN-SQL-001). Tab recua; Esc e depois Tab saem do editor pelo teclado.
  */
-export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onRunScript, runningAt = null, onChange, onRunnableChange, onEdited, onOpenTable, variables }: SqlEditorProps) {
+export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, errorAt, onRun, onRunScript, runningAt = null, onChange, onRunnableChange, onEdited, onOpenTable, variables }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const { preferences } = usePreferences();
   // Com "seguir o sistema", o esquema vem do sistema, e muda com o app aberto.
   const systemIsLight = useSyncExternalStore(subscribeSystemScheme, systemPrefersLight, () => false);
   const dark = resolveScheme(preferences.theme, systemIsLight) === "dark";
-  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords, blankLineSeparates, showVariableValues } = preferences.editor;
+  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords, formatStyle, blankLineSeparates, showVariableValues } = preferences.editor;
   // Os nomes sugeridos são os da árvore da conexão DESTA aba, que ela passa por propriedade: as abas ficam todas montadas, e ler a aba ativa
   // daria ao editor de uma aba os nomes da conexão de outra.
   const queryClient = useQueryClient();
   // O que só vale ao criar o editor: a mesma referência em todas as renderizações. As preferências do editor entram aqui para a
   // criação; depois, os efeitos de baixo as reconfiguram ao vivo quando mudam (Configurações abre por cima, com o editor montado).
-  const [initial] = useState(() => ({ sql: initialSql, tabId, selection: initialSelection, engine, autoFocus, editor: { fontFamily, fontSize, tabSize }, dark, autocomplete, uppercaseKeywords }));
+  const [initial] = useState(() => ({ sql: initialSql, tabId, selection: initialSelection, engine, editor: { fontFamily, fontSize, tabSize }, dark, autocomplete, uppercaseKeywords }));
   const applied = useRef(`${fontFamily}|${fontSize}|${tabSize}|${dark}`);
   // O banco de agora, lido pelas funções do editor na hora em que rodam (executar, separar o comando, sugerir).
   const engineNow = useRef(engine);
   // RN-SQL-018: a linha em branco separa os comandos? Lida na hora de executar: não muda nada no editor, e não precisa de compartimento.
   const blankLinesNow = useRef(blankLineSeparates);
+  const uppercaseKeywordsNow = useRef(uppercaseKeywords);
+  const formatStyleNow = useRef(formatStyle);
+  const tabSizeNow = useRef(tabSize);
   // RN-VAR-025: o armazém dos valores de agora, lido pelo autocompletar na hora do pedido (o tipo de cada variável).
   const variablesNow = useRef(variables);
   const variableCompletion = useRef<VariablesCompletion | null>(null);
   const appliedToggles = useRef(`${autocomplete}|${uppercaseKeywords}`);
+
+  const [contextMenuState, setContextMenuState] = useState<{
+    point: { x: number; y: number };
+    initialFocus: "first" | "menu";
+    cursorOffset: number;
+  } | null>(null);
+  const [joinModalState, setJoinModalState] = useState<{
+    sql: string;
+    cursorOffset: number;
+  } | null>(null);
 
   const emitRun = useEffectEvent((target: RunTarget, flash: FlashRun) => onRun(target, flash));
   const emitChange = useEffectEvent((text: string) => onChange(text));
@@ -305,12 +329,16 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const emitEdited = useEffectEvent(() => onEdited());
   // Os níveis da árvore são lidos na hora do pedido, da conexão desta aba (só o cache: as colunas de `tabela.` e as chaves da junção quem busca é o `catalogCompletion`, RN-CONFIG-004).
   const readLevels = useEffectEvent(() => (connectionId === null ? [] : cachedLevels(queryClient, connectionId, database)));
+  const readObjectNames = useEffectEvent(() => (connectionId === null ? undefined : queryClient.getQueryData<ObjectNames>(objectNamesKey(connectionId, database))));
   // RN-LINK-001: o catálogo é o do autocompletar (o cache da árvore do banco da aba, sem consulta nova), e o esquema padrão sai do usuário da conexão.
-  const catalogCache = useRef<{ levels: CachedLevel[]; catalog: LinkCatalog } | null>(null);
+  const catalogCache = useRef<{ levels: CachedLevel[]; names: ObjectNames | undefined; catalog: LinkCatalog } | null>(null);
   const findLink = useEffectEvent((sql: string, offset: number, tokens: Parameters<typeof tableLinkAt>[5]): TableLink | null => {
     if (connectionId === null || onOpenTable === undefined) return null;
     const levels = readLevels();
-    if (catalogCache.current === null || !sameLevels(catalogCache.current.levels, levels)) catalogCache.current = { levels, catalog: linkCatalog(levels) };
+    const names = readObjectNames();
+    if (catalogCache.current === null || catalogCache.current.names !== names || !sameLevels(catalogCache.current.levels, levels)) {
+      catalogCache.current = { levels, names, catalog: linkCatalog(levels, names) };
+    }
     const userName = queryClient.getQueryData<{ id: string; userName: string }[]>(connectionsQuery.queryKey)?.find((connection) => connection.id === connectionId)?.userName;
     return tableLinkAt(sql, offset, engineNow.current, catalogCache.current.catalog, defaultSchemasOf(engineNow.current, userName), tokens);
   });
@@ -320,10 +348,42 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const connectionNow = useEffectEvent(() => connectionId);
   const databaseNow = useEffectEvent(() => database);
   const userNameNow = useEffectEvent(() => (connectionId === null ? undefined : queryClient.getQueryData<{ id: string; userName: string }[]>(connectionsQuery.queryKey)?.find((connection) => connection.id === connectionId)?.userName));
+  const openContextMenuFromShortcut = useEffectEvent((editor: EditorView) => {
+    const cursorOffset = editor.state.selection.main.head;
+    const coords = editor.coordsAtPos(cursorOffset);
+    const rect = editor.dom.getBoundingClientRect();
+    const point = coords !== null ? { x: coords.left, y: coords.bottom + 4 } : { x: rect.left + 32, y: rect.top + 32 };
+    setContextMenuState({ point, initialFocus: "first", cursorOffset });
+  });
+  const openContextMenuFromPointer = useEffectEvent((event: MouseEvent, editor: EditorView) => {
+    event.preventDefault();
+    const clickedPos = editor.posAtCoords({ x: event.clientX, y: event.clientY });
+    const selection = editor.state.selection.main;
+    let cursorOffset = selection.head;
+    if (clickedPos !== null && (selection.empty || clickedPos < selection.from || clickedPos > selection.to)) {
+      cursorOffset = clickedPos;
+      editor.dispatch({ selection: EditorSelection.cursor(clickedPos) });
+    }
+    setContextMenuState({
+      point: { x: event.clientX, y: event.clientY },
+      initialFocus: "menu",
+      cursorOffset,
+    });
+  });
+
   const completionFor = useEffectEvent(() => {
     // O autocompletar das variáveis guarda o script lido da versão do texto: um só por editor, criado na primeira vez que a lista é montada.
     variableCompletion.current ??= variablesCompletion({ engine: () => engineNow.current, blankLines: () => blankLinesNow.current, values: () => variablesNow.current?.snapshot() ?? null });
-    catalogCompletionRef.current ??= catalogCompletion({ queryClient, engine: () => engineNow.current, connectionId: () => connectionNow(), database: () => databaseNow(), userName: () => userNameNow(), blankLines: () => blankLinesNow.current });
+    catalogCompletionRef.current ??= catalogCompletion({
+      queryClient,
+      engine: () => engineNow.current,
+      connectionId: () => connectionNow(),
+      database: () => databaseNow(),
+      userName: () => userNameNow(),
+      blankLines: () => blankLinesNow.current,
+      uppercaseKeywords: () => uppercaseKeywordsNow.current,
+      autoConnect: () => true,
+    });
     return sqlCompletion({ dialect: dialectOf(engineNow.current), engine: engineNow.current, levels: () => readLevels(), catalog: catalogCompletionRef.current, variables: variableCompletion.current });
   });
 
@@ -343,6 +403,31 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     function run(view: EditorView) {
       const { target, flash } = sendFrom(view, engineNow.current, blankLinesNow.current);
       emitRun(target, flash);
+      return true;
+    }
+
+    function formatEditorSql(view: EditorView) {
+      const change = formatTarget(view.state, {
+        style: formatStyleNow.current,
+        uppercaseKeywords: uppercaseKeywordsNow.current,
+        tabSize: tabSizeNow.current,
+        engine: engineNow.current,
+        blankLines: blankLinesNow.current,
+      });
+      if (change !== null) {
+        const hadSelection = !view.state.selection.main.empty;
+        view.dispatch({
+          changes: change,
+          selection: hadSelection
+            ? EditorSelection.single(change.from, change.from + change.insert.length)
+            : EditorSelection.cursor(Math.min(view.state.selection.main.head, change.insert.length)),
+        });
+      }
+      return true;
+    }
+
+    function openContextMenuShortcut(view: EditorView) {
+      openContextMenuFromShortcut(view);
       return true;
     }
 
@@ -370,12 +455,24 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           runFlash,
           scriptMark,
           tableLinks({ engine: () => engineNow.current, find: (sql, offset, tokens) => findLink(sql, offset, tokens), open: (link) => openLink(link), mac: isMac }),
-          // À frente do mapa padrão, que usa Ctrl+Enter para abrir uma linha em branco.
-          Prec.highest(keymap.of([{ key: "Mod-Enter", run }])),
+          // À frente do mapa padrão, que usa Ctrl+Enter para abrir uma linha em branco, e Ctrl+. para abrir o menu de contexto do editor.
+          Prec.highest(
+            keymap.of([
+              { key: "Mod-Enter", run },
+              { key: "Mod-.", run: openContextMenuShortcut },
+              { key: "Mod-Shift-f", run: formatEditorSql },
+            ]),
+          ),
           completionSlot.of(initial.autocomplete ? completionFor() : []),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           EditorView.contentAttributes.of({ "aria-label": workbenchCopy.editor.label, "data-sql-editor": "" }),
-          EditorView.domEventHandlers({ blur: flush }),
+          EditorView.domEventHandlers({
+            blur: flush,
+            contextmenu: (event, view) => {
+              openContextMenuFromPointer(event, view);
+              return true;
+            },
+          }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               if (pending !== null) clearTimeout(pending);
@@ -394,7 +491,6 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     view.current = editor;
     emitRunnable((runnable = isRunnable(editor.state, engineNow.current)));
     if (initial.selection !== null) editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: "center" }) });
-    if (initial.autoFocus) editor.focus();
     const unregister = initial.tabId === undefined ? () => {} : liveEditors.register(initial.tabId, () => ({ sql: editor.state.doc.toString(), anchor: editor.state.selection.main.anchor, head: editor.state.selection.main.head }));
 
     return () => {
@@ -438,13 +534,16 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
 
   // Autocompletar e maiúsculas ligam e desligam no editor que já existe. Efeito à parte: ligar uma caixa não refaz o tema.
   useEffect(() => {
+    uppercaseKeywordsNow.current = uppercaseKeywords;
+    formatStyleNow.current = formatStyle;
+    tabSizeNow.current = tabSize;
     const editor = view.current;
     const key = `${autocomplete}|${uppercaseKeywords}`;
     if (editor === null || key === appliedToggles.current) return;
 
     appliedToggles.current = key;
     editor.dispatch({ effects: [completionSlot.reconfigure(autocomplete ? completionFor() : []), caseSlot.reconfigure(uppercaseKeywords ? keywordCase(engineNow.current, () => blankLinesNow.current) : [])] });
-  }, [autocomplete, uppercaseKeywords]);
+  }, [autocomplete, uppercaseKeywords, formatStyle, tabSize]);
 
   // O banco mudou com o editor montado: a gramática, as maiúsculas e o completar passam a ser os dele, e "há o que executar?" é refeito pelas regras dele.
   useEffect(() => {
@@ -505,5 +604,107 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     [onRun, onRunScript],
   );
 
-  return <div ref={host} className="h-full" />;
+  const currentUserName =
+    connectionId === null
+      ? undefined
+      : queryClient.getQueryData<{ id: string; userName: string }[]>(connectionsQuery.queryKey)?.find((connection) => connection.id === connectionId)?.userName;
+
+  function handleApplyJoins(replacement: { from: number; to: number; text: string }) {
+    const editor = view.current;
+    if (editor === null) return;
+    const clampedFrom = Math.min(Math.max(0, replacement.from), editor.state.doc.length);
+    const clampedTo = Math.min(Math.max(clampedFrom, replacement.to), editor.state.doc.length);
+    editor.dispatch({
+      changes: { from: clampedFrom, to: clampedTo, insert: replacement.text },
+      selection: EditorSelection.cursor(clampedFrom + replacement.text.length),
+      scrollIntoView: true,
+    });
+    editor.focus();
+  }
+
+  return (
+    <>
+      <div ref={host} className="h-full" />
+
+      {contextMenuState !== null && (
+        <ContextMenu
+          label={workbenchCopy.editor.contextMenu.label}
+          point={contextMenuState.point}
+          initialFocus={contextMenuState.initialFocus}
+          onClose={() => {
+            setContextMenuState(null);
+            view.current?.focus();
+          }}
+          groups={[
+            [
+              {
+                id: "format-sql",
+                label: workbenchCopy.editor.contextMenu.formatSql,
+                shortcut: isMac
+                  ? workbenchCopy.editor.contextMenu.formatSqlShortcutMac
+                  : workbenchCopy.editor.contextMenu.formatSqlShortcut,
+                onSelect: () => {
+                  const editor = view.current;
+                  setContextMenuState(null);
+                  if (editor === null) return;
+                  const change = formatTarget(editor.state, {
+                    style: formatStyleNow.current,
+                    uppercaseKeywords: uppercaseKeywordsNow.current,
+                    tabSize: tabSizeNow.current,
+                    engine: engineNow.current,
+                    blankLines: blankLinesNow.current,
+                  });
+                  if (change !== null) {
+                    const hadSelection = !editor.state.selection.main.empty;
+                    editor.dispatch({
+                      changes: change,
+                      selection: hadSelection
+                        ? EditorSelection.single(change.from, change.from + change.insert.length)
+                        : EditorSelection.cursor(Math.min(editor.state.selection.main.head, change.insert.length)),
+                    });
+                  }
+                  editor.focus();
+                },
+              },
+              {
+                id: "autocomplete-joins",
+                label: workbenchCopy.editor.contextMenu.autocompleteJoins,
+                icon: <ForeignKeyIcon className="h-3.5 w-3.5" />,
+                shortcut: isMac
+                  ? workbenchCopy.editor.contextMenu.autocompleteJoinsShortcutMac
+                  : workbenchCopy.editor.contextMenu.autocompleteJoinsShortcut,
+                onSelect: () => {
+                  const editor = view.current;
+                  const cursorOffset = contextMenuState.cursorOffset;
+                  setContextMenuState(null);
+                  if (editor === null) return;
+                  setJoinModalState({
+                    sql: editor.state.doc.toString(),
+                    cursorOffset,
+                  });
+                },
+              },
+            ],
+          ]}
+        />
+      )}
+
+      <JoinSuggestionsDialog
+        open={joinModalState !== null}
+        sql={joinModalState?.sql ?? ""}
+        cursorOffset={joinModalState?.cursorOffset ?? 0}
+        engine={engine}
+        connectionId={connectionId}
+        database={database}
+        userName={currentUserName}
+        blankLines={blankLineSeparates}
+        uppercaseKeywords={uppercaseKeywords}
+        onClose={() => {
+          setJoinModalState(null);
+          view.current?.focus();
+        }}
+        onApply={handleApplyJoins}
+      />
+    </>
+  );
 }

@@ -17,9 +17,10 @@ Logos dos bancos de dados
 -------------------------
 
 As logos em src/client/src/assets/databases/ são marcas dos seus donos: PostgreSQL Community
-Association of Canada (PostgreSQL), Hipp, Wyrick & Company, Inc. (SQLite), Oracle Corporation
-(MySQL), MariaDB Corporation Ab (MariaDB), DuckDB Foundation (DuckDB) e ClickHouse, Inc.
-(ClickHouse). Elas aparecem no Prism só para identificar o banco com que se conecta.
+Association of Canada (PostgreSQL), IBM (Db2 e Informix), Hipp, Wyrick & Company, Inc. (SQLite),
+Oracle Corporation (MySQL e Oracle), MariaDB Corporation Ab (MariaDB), Microsoft Corporation
+(Microsoft SQL Server), Firebird Foundation (Firebird), DuckDB Foundation (DuckDB), ClickHouse, Inc.
+(ClickHouse), Google LLC (BigQuery) e Databricks, Inc. (Databricks). Elas aparecem no Prism só para identificar o banco com que se conecta.
 As logos não estão sob a GPLv3 que cobre o Prism e não indicam apoio, patrocínio nem parceria
 dos donos com o Prism ou com a Zanveri. A origem de cada arquivo, o dono da marca e a regra de uso
 estão em src/client/src/assets/databases/README.md. Um pedido de retirada de um dono é atendido

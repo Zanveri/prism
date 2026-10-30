@@ -73,7 +73,7 @@ function databaseOf(node: NavNode): string | undefined {
  * (ela é a tabela daquele banco), a aba sem conexão e o mesmo banco.
  */
 export function withDatabase(tab: QueryTab, database: string | undefined, sql: string = tab.sql): QueryTab | null {
-  if (tab.table !== undefined || tab.connectionId === null || tab.database === database) return null;
+  if (tab.table !== undefined || tab.schemaTarget !== undefined || tab.databaseTarget !== undefined || tab.connectionId === null || tab.database === database) return null;
 
   const rest = { ...tab };
   delete rest.database;

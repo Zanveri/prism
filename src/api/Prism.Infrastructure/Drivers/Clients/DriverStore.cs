@@ -69,7 +69,7 @@ internal static class DriverStore
         if (record is null || record.DriverID != driver.ID || record.Version != driver.Version || record.PackageID != package.ID || record.PackageSha512 != package.Sha512)
             return new DriverProbe(false, false, "o registro da instalação não é do pacote do catálogo");
 
-        return Matches(installDirectory, package.ManagedAssembly, record.ManagedAssemblySha512) && Matches(installDirectory, package.NativeLibrary, record.NativeLibrarySha512)
+        return Matches(installDirectory, package.ManagedAssembly, record.ManagedAssemblySha512) && (package.NativeLibrary is null ? record.NativeLibrarySha512 is null : record.NativeLibrarySha512 is not null && Matches(installDirectory, package.NativeLibrary, record.NativeLibrarySha512))
             ? new DriverProbe(true, false, null)
             : new DriverProbe(false, false, "um arquivo do driver foi alterado ou apagado depois da instalação");
     }
@@ -88,7 +88,8 @@ internal static class DriverStore
     /// </summary>
     public static void Commit(string directory, DriverDefinition driver, DriverPackage package, string temporaryDirectory, DateTimeOffset acceptedAt)
     {
-        var record = new DriverInstallRecord(driver.ID, driver.Version!, package.ID, package.Sha512, package.License, acceptedAt, HashFile(Path.Combine(temporaryDirectory, Local(package.ManagedAssembly))), HashFile(Path.Combine(temporaryDirectory, Local(package.NativeLibrary))));
+        var nativeHash = package.NativeLibrary is null ? null : HashFile(Path.Combine(temporaryDirectory, Local(package.NativeLibrary)));
+        var record = new DriverInstallRecord(driver.ID, driver.Version!, package.ID, package.Sha512, package.License, acceptedAt, HashFile(Path.Combine(temporaryDirectory, Local(package.ManagedAssembly))), nativeHash);
 
         using (var stream = new FileStream(Path.Combine(temporaryDirectory, RecordFileName), FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 4096, FileOptions.WriteThrough))
         {
