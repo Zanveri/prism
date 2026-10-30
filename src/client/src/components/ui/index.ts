@@ -11,6 +11,8 @@ export { iconColorStyle, readableIconColor } from "./icon-color";
 export {
   AlertIcon,
   ArrowDownIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
   ArrowsUpDownIcon,
   ArrowUpIcon,
   AutoLayoutIcon,
@@ -18,7 +20,9 @@ export {
   BuildIcon,
   ChartIcon,
   CheckIcon,
+  type ChevronDirection,
   ChevronIcon,
+  type ChevronIconProps,
   ClockIcon,
   CloseIcon,
   CodeIcon,

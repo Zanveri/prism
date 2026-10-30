@@ -78,7 +78,7 @@ export function ProblemsList({
   return (
     <aside
       aria-labelledby="problemas-titulo"
-      className="flex min-h-0 min-w-0 flex-1 basis-[340px] flex-col gap-2.5 overflow-y-auto border-l border-border bg-panel p-4"
+      className="flex min-h-0 min-w-0 flex-1 basis-[340px] flex-col gap-2.5 overflow-x-hidden overflow-y-auto border-l border-border bg-panel p-4"
     >
       <div className="flex items-center gap-2">
         <h2 id="problemas-titulo" className="m-0 text-sm font-semibold text-ink">
@@ -102,7 +102,7 @@ export function ProblemsList({
             key={problem.key}
             aria-label={problemTitle(problem)}
             className={cn(
-              "flex flex-col gap-2 rounded-md border p-3",
+              "flex min-w-0 flex-col gap-2 rounded-md border p-3",
               isError
                 ? "border-danger bg-raised"
                 : isWarning
@@ -110,7 +110,7 @@ export function ProblemsList({
                   : "border-border bg-transparent",
             )}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <span
                 className={cn(
                   "flex-none",
@@ -129,17 +129,19 @@ export function ProblemsList({
                   <InfoIcon />
                 )}
               </span>
-              <span className="font-semibold text-ink">
+              <span className="min-w-0 break-words font-semibold text-ink">
                 {problemTitle(problem)}
               </span>
               {line !== undefined && line !== null && (
-                <span className="ml-auto text-xs text-muted">
+                <span className="ml-auto flex-none text-xs text-muted">
                   linha {line}
                 </span>
               )}
             </div>
 
-            <p className="m-0 text-xs text-ink">{problem.message}</p>
+            <p className="m-0 min-w-0 break-words [overflow-wrap:anywhere] text-xs leading-relaxed text-ink">
+              {problem.message}
+            </p>
 
             {(problem.fix || isWarning || problem.column) && (
               <div className="flex flex-wrap gap-1.5">

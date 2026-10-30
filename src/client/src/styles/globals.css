@@ -1690,18 +1690,38 @@
   }
 
   /* Deslocamento vertical para cima (bounce-y-up) */
-  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="arrow-up"] > *,
-  svg[data-icon="arrow-up"]:hover > * {
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
+    svg[data-icon="chevron-up"],
+    svg[data-icon="arrow-up"]
+  ) > *,
+  :is(
+    svg[data-icon="chevron-up"],
+    svg[data-icon="arrow-up"]
+  ):hover > * {
     animation: prism-icon-bounce-y-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Deslocamento horizontal para a esquerda (bounce-x-left) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
+    svg[data-icon="chevron-left"],
+    svg[data-icon="arrow-left"]
+  ) > *,
+  :is(
+    svg[data-icon="chevron-left"],
+    svg[data-icon="arrow-left"]
+  ):hover > * {
+    animation: prism-icon-bounce-x-left 380ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   /* Deslocamento horizontal para a direita (bounce-x-right) */
   :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
     svg[data-icon="chevron-right"],
+    svg[data-icon="arrow-right"],
     svg[data-icon="play"]
   ) > *,
   :is(
     svg[data-icon="chevron-right"],
+    svg[data-icon="arrow-right"],
     svg[data-icon="play"]
   ):hover > * {
     animation: prism-icon-bounce-x-right 380ms cubic-bezier(0.22, 1, 0.36, 1);

@@ -1,6 +1,6 @@
 import {
+  ArrowLeftIcon,
   Button,
-  ChevronIcon,
   DownloadIcon,
   DuplicateIcon,
   EngineTag,
@@ -147,7 +147,7 @@ export function DdlView({
           onClick={onBackToDiagram}
           className="gap-1.5 px-2 text-ink"
         >
-          <ChevronIcon direction="left" />
+          <ArrowLeftIcon />
           <span>{buildCopy.ddlBackToDiagram}</span>
         </Button>
 

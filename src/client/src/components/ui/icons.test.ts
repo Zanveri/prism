@@ -50,6 +50,11 @@ describe("ícones animados em hover (icons.tsx + globals.css)", () => {
     expect(renderToStaticMarkup(createElement(Icons.TrashIcon))).toContain('class="icon-part-lid"');
     expect(renderToStaticMarkup(createElement(Icons.LockIcon))).toContain('class="icon-part-shackle"');
     expect(renderToStaticMarkup(createElement(Icons.ClockIcon))).toContain('class="icon-part-hand"');
+    expect(renderToStaticMarkup(createElement(Icons.ChevronIcon, { direction: "up" }))).toContain('data-icon="chevron-up"');
+    expect(renderToStaticMarkup(createElement(Icons.ChevronIcon, { direction: "left" }))).toContain('data-icon="chevron-left"');
+    expect(renderToStaticMarkup(createElement(Icons.ChevronIcon, { direction: "right" }))).toContain('data-icon="chevron-right"');
+    expect(renderToStaticMarkup(createElement(Icons.ArrowLeftIcon))).toContain('data-icon="arrow-left"');
+    expect(renderToStaticMarkup(createElement(Icons.ArrowRightIcon))).toContain('data-icon="arrow-right"');
   });
 
   it("SettingsIcon renderiza com data-icon='settings' e separa knobs deslizantes", () => {
