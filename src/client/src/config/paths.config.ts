@@ -11,6 +11,7 @@ export const pathsConfig = {
   connections: "/connections",
   drivers: "/drivers",
   workbench: "/workbench",
+  build: "/build",
   settings: "/settings",
   settingsSection: "/settings/:section",
 } as const;

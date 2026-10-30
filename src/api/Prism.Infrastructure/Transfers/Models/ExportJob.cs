@@ -34,7 +34,8 @@ public sealed record ExportJob(
     bool Bom,
     string? ZipEntryName,
     bool Clipboard,
-    IReadOnlyList<QueryParameter>? Parameters = null)
+    IReadOnlyList<QueryParameter>? Parameters = null,
+    long JournalEntryID = -1)
 {
     public override string ToString()
         => nameof(ExportJob);

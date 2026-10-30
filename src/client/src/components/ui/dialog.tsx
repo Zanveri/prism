@@ -96,7 +96,7 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
   // RN-ABAS-017: a página (a janela da aba ou a do resultado) é a de quando o diálogo abre, e fica a mesma até ele fechar; o foco entra, fica preso e volta nela.
   const current = useHost();
   const [opener, setOpener] = useState<{ open: boolean; element: HTMLElement | null; host: Host }>({ open: false, element: null, host: current });
-  if (opener.open !== open) setOpener({ open, element: open && isHtmlElement(current.document.activeElement) ? current.document.activeElement : null, host: open ? current : opener.host });
+  if (opener.open !== open) setOpener({ open, element: open && isHtmlElement(current.document?.activeElement) ? current.document.activeElement : null, host: open ? current : opener.host });
   const returnFocus = opener.element;
   const host = open ? opener.host : current;
 
@@ -150,7 +150,7 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
 
   const descriptionBlock = description === undefined ? null : <div id={descriptionID} className={cn("text-muted", icon === undefined ? "mt-1.5" : "mt-3")}>{description}</div>;
 
-  return createPortal(
+  const content = (
     <HostProvider host={host}>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
@@ -183,7 +183,7 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
             </div>
             {dismissible === true ? (
               <button type="button" aria-label="Fechar" title="Fechar" onClick={onClose} disabled={pending} className={cn("-mr-2 inline-flex size-9 flex-none cursor-pointer items-center justify-center rounded-md text-muted transition-colors enabled:hover:bg-selected enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-50", icon === undefined && "-mt-2")}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true" data-icon="close">
                   <path d="M4 4l8 8M12 4l-8 8" />
                 </svg>
               </button>
@@ -195,7 +195,8 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
         {footer === undefined ? null : <div className="flex flex-wrap justify-end gap-3 px-6 pb-6">{footer}</div>}
       </div>
     </div>
-    </HostProvider>,
-    host.document.body,
+    </HostProvider>
   );
+
+  return host.document === undefined ? content : createPortal(content, host.document.body);
 }

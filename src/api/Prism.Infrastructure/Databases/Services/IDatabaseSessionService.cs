@@ -212,6 +212,12 @@ public interface IDatabaseSessionService
     Task<Result<TransactionInfo, DatabaseFailure>> SetTransactionModeAsync(Guid sessionID, ETransactionMode mode, CancellationToken cancellationToken);
 
     /// <summary>
+    /// RN-ISOL-002 e 003: troca o nível de isolamento da sessão, sem esperar a vez (`SessionBusy`). Com transação aberta: `TransactionOpen`;
+    /// nível que o banco não tem: `IsolationLevelInvalid`; nível que pede transação no Informix `Unbuffered` ou `Buffered`: `TransactionsNotAvailable`.
+    /// </summary>
+    Task<Result<TransactionInfo, DatabaseFailure>> SetIsolationLevelAsync(Guid sessionID, string isolationLevel, CancellationToken cancellationToken);
+
+    /// <summary>
     /// RN-TX-002 e 014: confirma a transação manual da sessão, sem esperar a vez, e devolve quantos comandos ela tinha. Sem transação: `NoOpenTransaction`;
     /// com erro (PostgreSQL): `TransactionFailed`. A recusa do banco leva `TransactionUndone`: a transação acabou, e nada foi confirmado.
     /// </summary>

@@ -190,8 +190,8 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   dados em andamento e apaga os arquivos delas (RN-EXPORT-016), e cancela as importações e as cópias
   para outro banco, que desfazem a transação em andamento e deixam nas tabelas o que já confirmaram
   (RN-IMPORT-014); o "Sair" e o fechamento do app perguntam antes, quando há alguma (RN-EXPORT-023 e
-  RN-IMPORT-021). *Alterada a pedido do dono em 2026-10-16 (seção 35): entraram as exportações de
-  dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as importações e as cópias.*
+  RN-IMPORT-021). Fechar o cofre também fecha o diário e zera a chave dele (RN-DIARIO-003). *Alterada a pedido do dono em 2026-10-16 (seção 35): entraram as exportações de
+  dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as importações e as cópias. Alterada a pedido do dono em 2026-10-30 (seção 43): entrou o diário.*
 - **RN-COFRE-009.** Senha esquecida não tem recuperação: o cofre daquele usuário fica ilegível.
   A tela de login avisa isso, como no canvas.
 - **RN-COFRE-010.** Nome de usuário: 3 a 32 caracteres, `a-z`, `0-9`, `.`, `_`, `-`, gravado em
@@ -212,9 +212,9 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   401 `VAULT_LOCKED` no lugar do 422. Acertar zera a contagem. Com transação aberta, o diálogo
   de senha da RN-CONN-002 avisa que cinco erros seguidos fecham o cofre e desfazem as transações
   abertas (RN-TX-008). A contagem é uma só para revelar a senha, trocar a senha (RN-COFRE-013), o
-  somente leitura (RN-PROT-003) e a exportação com senhas de banco (RN-TRANSF-005): os erros das
-  quatro somam. A senha de exportação errada, na importação, não conta (RN-TRANSF-010). *Alterada a
-  pedido do dono em 2026-10-16 (seção 34): entrou a exportação.*
+  somente leitura (RN-PROT-003), a exportação com senhas de banco (RN-TRANSF-005) e o "Apagar registros…" do diário (RN-AUDIT-016): os erros das
+  cinco somam. A senha de exportação errada, na importação, não conta (RN-TRANSF-010). *Alterada a
+  pedido do dono em 2026-10-16 (seção 34): entrou a exportação. Alterada a pedido do dono em 2026-10-30 (seção 43): entrou o apagar registros do diário.*
 - **RN-CONN-004.** Ao editar uma conexão, senha omitida mantém a senha gravada, desde que o
   host e a porta continuem os mesmos. Mudar o host ou a porta sem informar a senha da conexão
   responde 422 `CONNECTION_INVALID`: a senha gravada só é enviada ao servidor para o qual foi
@@ -254,12 +254,12 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   DBeaver, o conteúdo decifrado nem um caminho, também no log do processo principal (RN-DBEAVER-006, 008 e 016).
   Das variáveis dos scripts, só as contagens (quantos parâmetros uma execução levou, quantos valores a rota dos
   valores devolveu): nunca o valor de uma variável, de um parâmetro, da busca dos valores de uma coluna nem os
-  valores lembrados de um script, também no log do processo principal (RN-VAR-036).
+  valores lembrados de um script, também no log do processo principal (RN-VAR-036). Do diário, só as contagens (registros gravados, apagados pela guarda), a duração e a classe do erro: nunca o comando, um nome, um caminho, um filtro da Auditoria nem o texto da busca (RN-DIARIO-009).
   *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram a exportação e
   a importação. Alterada a pedido do dono em 2026-10-16 (seção 35): entrou a exportação de dados.
   Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação de dados e a cópia. Alterada a pedido do
   dono em 2026-10-20 (seção 40): entrou a importação do DBeaver. Alterada a pedido do dono em 2026-10-20 (seção
-  41): entraram as variáveis dos scripts.*
+  41): entraram as variáveis dos scripts. Alterada a pedido do dono em 2026-10-30 (seção 43): entrou o diário.*
 
 ## 5. Regras de negócio
 
@@ -435,7 +435,7 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   sem parar no erro.
   Uma declaração de variável (`let`, `const` e a reatribuição, seção 41) é um item como um comando: com o cursor
   nela, o Ctrl+Enter a avalia; e o comando que usa um `@nome` avalia antes as declarações de que depende, e vai
-  com os valores como parâmetros (RN-VAR-017 e 020). *Alterada a pedido do dono em 2026-10-20 (seção 41): entraram as declarações de variável.*
+  com os valores como parâmetros (RN-VAR-017 e 020). O pedido de execução leva também `origin`, `historyText` e `confirmed` para o diário (RN-AUDIT-002 e RN-HIST-002). *Alterada a pedido do dono em 2026-10-20 (seção 41): entraram as declarações de variável. Alterada a pedido do dono em 2026-10-30 (seção 43): entraram a origem, o texto do histórico e a confirmação.*
 - **RN-SQL-002.** Comandos são separados por `;` fora de texto entre aspas simples, de
   identificador entre aspas duplas, de comentário (`--` e `/* */`) e de `$tag$ ... $tag$` do
   PostgreSQL. Bloco que tem `;` no corpo (procedimento em Db2 ou Informix) é executado
@@ -449,16 +449,19 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   nem reescrito. Se o banco não aceita mais de um comando por envio, a recusa é a dele. A
   exceção são os comandos de controle de transação (`BEGIN`, `START TRANSACTION`, `COMMIT`,
   `END`, `ROLLBACK`, `ABORT`, `SAVEPOINT`, `RELEASE`, `PREPARE TRANSACTION`), que seguem a
-  RN-TX-004: em Auto-commit são recusados com 422 `TRANSACTION_CONTROL_NOT_SUPPORTED`, porque a
-  sessão é auto-commit (RN-SESSAO-005); no Commit manual são tratados na forma de cada banco, e
-  no PostgreSQL o comando que o banco não aceita dentro de transação é recusado sem ir ao banco
-  (422 `COMMAND_NOT_ALLOWED_IN_TRANSACTION`). No Commit manual do PostgreSQL a leitura é
-  paginada por um cursor do servidor: o comando vai dentro de uma declaração de cursor, e o que
+  RN-TX-004: quando escritos explicitamente pelo usuário, abrem, encerram ou marcam pontos na
+  transação da sessão independentemente do modo de commit da aba (em Auto-commit ou no Commit
+  manual), na forma de cada banco; só as formas que nunca valem (como `PREPARE TRANSACTION`,
+  `AND CHAIN` e `ROLLBACK WORK TO SAVEPOINT` no driver IBM) são recusadas com 422
+  `TRANSACTION_CONTROL_NOT_SUPPORTED`. Com transação aberta no PostgreSQL, o comando que o banco
+  não aceita dentro de transação é recusado sem ir ao banco (422 `COMMAND_NOT_ALLOWED_IN_TRANSACTION`),
+  e a leitura é paginada por um cursor do servidor: o comando vai dentro de uma declaração de cursor, e o que
   o banco recusa ali é executado de novo como está, de modo que a mensagem e a posição do erro
   são as do comando digitado.
   Com variáveis (seção 41), a tela troca os `@nome` pelos marcadores do banco antes de enviar e manda os valores em
   `params` (RN-VAR-017); a API não reescreve nada, e o texto que ela recebe é o que vai ao banco. *Alterada a pedido
-  do dono em 2026-10-20 (seção 41).*
+  do dono em 2026-10-20 (seção 41). Alterada a pedido do dono em 2026-10-29: o controle de transação explícito vale
+  em qualquer modo de commit.*
 - **RN-SQL-004.** Comando de leitura que devolve linhas: a API lê as **200 primeiras** e mantém
   o cursor aberto. A tela mostra "Primeiras 200 linhas" e o tempo.
 - **RN-SQL-013.** Comando que grava e devolve linhas (`UPDATE ... RETURNING`, por exemplo) é
@@ -1448,13 +1451,13 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
 - **RN-CONFIG-001.** Há uma tela de Configurações, alcançada pela barra superior. Ela traz as
   seções do canvas que têm efeito hoje: aparência e editor de SQL (preferências desta instalação,
   guardadas fora do cofre, por usuário), atualizações (verificar ao abrir, versão pulada), drivers
-  (atalho), conta (troca de senha, RN-COFRE-013), importar (o DBeaver e o arquivo do Prism, RN-CONFIG-011) e sobre
+  (atalho), conta (troca de senha, RN-COFRE-013), auditoria (RN-AUDIT-010 a 016), importar (o DBeaver e o arquivo do Prism, RN-CONFIG-011) e sobre
   (versão, pasta de dados). O que o canvas
   mostra e ainda depende da API (proteções) aparece como "em breve", sem controle que finja
   funcionar. Transações deixa
   de ser "em breve" (RN-CONFIG-007). *Alterada a pedido do dono em 2026-10-20 (seção 40): entrou a seção Importar.*
   *Alterada a pedido do dono em 2026-10-29: cada seção é uma página própria (`/settings/<seção>`), escolhida na navegação
-  à esquerda e na largura e na altura toda da janela; antes, as seções vinham uma embaixo da outra numa página só, que rolava.*
+  à esquerda e na largura e na altura toda da janela; antes, as seções vinham uma embaixo da outra numa página só, que rolava. Alterada a pedido do dono em 2026-10-30 (seção 43): entrou a seção Auditoria.*
 - **RN-CONFIG-007.** Configurações › Transações tem "Modo padrão das novas abas" (Auto-commit ou
   Commit manual; vem Auto-commit) e "Nível de isolamento padrão" (RN-ISOL-006), guardados por
   usuário; valem para as abas abertas depois.
@@ -1650,7 +1653,7 @@ Com a API (tarefas próprias):
   e as sessões com os bancos não caem. Uma falha na primeira gravação deixa o cofre abrindo com
   a senha antiga e a memória igual ao disco; uma falha só na segunda mantém a troca (204) e vai
   ao log como aviso. A resposta de senha errada custa a mesma derivação que a de uma entrada
-  errada. Nada das senhas vai a log.
+  errada. Nada das senhas vai a log. A troca de senha troca também a chave do diário (RN-DIARIO-004). *Alterada a pedido do dono em 2026-10-30 (seção 43): a troca de senha troca também a chave do diário.*
 - **RN-SQL-016.** Linhas por busca: `POST …/queries` aceita `pageSize`, inteiro de 50 a 1000
   (sem ele, 200; fora da faixa, 422 `QUERY_INVALID` no campo). O tamanho vale para a primeira
   página e para as de "carregar mais" daquele cursor (`queries/next` não recebe tamanho), e é
@@ -2355,25 +2358,30 @@ até lá, o que depende delas está a provar.
   Rollback", no tom de erro, com "Commit" desabilitado (a dica diz por quê) e "Rollback" habilitado. Cada execução e cada
   alteração salva contam um comando. Passados 10 minutos com a transação aberta, o texto passa ao tom de atenção, porque as
   travas dela seguram outras sessões. Abrir, fechar e estragar a transação é anunciado a leitor de tela.
-- **RN-TX-004.** Comandos de controle de transação digitados. **Em Auto-commit** continuam recusados (422
-  `TRANSACTION_CONTROL_NOT_SUPPORTED`), e a mensagem passa a dizer que eles valem no Commit manual. **No Commit manual**, na
-  forma de cada banco:
+- **RN-TX-004.** Comandos de controle de transação digitados. Quando o usuário escreve explicitamente comandos de
+  controle de transação, o Prism os aceita independentemente do modo de commit da aba (em Auto-commit ou no Commit
+  manual), na forma de cada banco (em banco sem suporte a transações, como o Informix sem log, respondem 422
+  `TRANSACTIONS_NOT_AVAILABLE`):
+  - `BEGIN`, `START TRANSACTION` e `BEGIN WORK` (`BEGIN TRANSACTION` também) abrem a transação na sessão (se já estava
+    aberta, mantêm-na aberta sem contar comando novo), respondendo como um comando sem linhas (`rowsAffected: 0`) com o
+    estado da transação aberta (`transaction.open: true`). Em Auto-commit, enquanto essa transação explícita estiver
+    aberta, os comandos seguintes rodam dentro dela, os botões "Commit" e "Rollback" ficam habilitados e a barra de
+    status mostra os comandos pendentes até que a transação seja encerrada;
   - `COMMIT` e `ROLLBACK` (com `WORK` opcional; no PostgreSQL também `TRANSACTION`, `END` e `ABORT`) fazem exatamente o que os
-    botões fazem; a resposta é a de um comando sem linhas, com o estado da transação. Numa transação com erro, o `COMMIT`
+    botões fazem (se não houver transação aberta, respondem com `rowsAffected: 0` sem erro); a resposta é a de um comando sem linhas, com o estado da transação. Numa transação com erro, o `COMMIT`
     digitado é recusado como o botão (RN-TX-009);
-  - os pontos de salvamento digitados vão ao banco e valem dentro da transação: no PostgreSQL `SAVEPOINT`, `ROLLBACK TO` e
+  - os pontos de salvamento digitados vão ao banco e valem dentro da transação (abrindo-a se ainda não estava aberta): no PostgreSQL `SAVEPOINT`, `ROLLBACK TO` e
     `RELEASE`; no Db2 `SAVEPOINT ... ON ROLLBACK RETAIN CURSORS`, `ROLLBACK TO SAVEPOINT` e `RELEASE SAVEPOINT`; no Informix
-    `SAVEPOINT`, `ROLLBACK WORK TO SAVEPOINT` e `RELEASE SAVEPOINT`. No PostgreSQL, o `ROLLBACK TO` digitado tira a transação do
+    `SAVEPOINT`, `ROLLBACK TO SAVEPOINT` e `RELEASE SAVEPOINT` (`ROLLBACK WORK TO SAVEPOINT` continua recusado porque o driver da IBM o intercepta e desfaz a transação inteira). No PostgreSQL, o `ROLLBACK TO` digitado tira a transação do
     estado de erro, como o banco faz, e a barra volta ao normal;
-  - `BEGIN`, `START TRANSACTION` e `BEGIN WORK` são recusados com a explicação de que o Prism já abre a transação no primeiro
-    comando;
   - `COMMIT AND CHAIN`, `ROLLBACK AND CHAIN`, `PREPARE TRANSACTION`, `COMMIT PREPARED` e `ROLLBACK PREPARED` continuam recusados
-    nos dois modos;
-  - o comando que o banco não aceita dentro de transação: no PostgreSQL (`VACUUM`, `CREATE DATABASE`, `DROP DATABASE`, `CREATE`
+    nos dois modos (422 `TRANSACTION_CONTROL_NOT_SUPPORTED`);
+  - o comando que o banco não aceita dentro de transação (no Commit manual ou com transação explícita aberta): no PostgreSQL (`VACUUM`, `CREATE DATABASE`, `DROP DATABASE`, `CREATE`
     e `DROP TABLESPACE`, `ALTER SYSTEM`, `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, `REINDEX ... CONCURRENTLY`), o
-    Prism recusa sem enviar (422 `COMMAND_NOT_ALLOWED_IN_TRANSACTION`), com a dica de executá-lo numa aba em Auto-commit, porque
+    Prism recusa sem enviar (422 `COMMAND_NOT_ALLOWED_IN_TRANSACTION`), com a dica de executá-lo numa aba em Auto-commit sem transação aberta, porque
     a recusa do banco estragaria a transação (RN-TX-009); o que a lista não conhecer chega ao banco e segue a RN-TX-009. No
-    Informix (`DATABASE`, `CREATE DATABASE`) a recusa é do banco, e a transação continua.
+    Informix (`DATABASE`, `CREATE DATABASE`) a recusa é do banco, e a transação continua. *Alterada a pedido do dono em 2026-10-29:
+    `BEGIN`, `COMMIT`, `ROLLBACK` e pontos de salvamento explícitos são aceitos independentemente do modo de commit da aplicação.*
 - **RN-TX-005.** Trocar de Auto-commit para Commit manual vale a qualquer momento sem comando em andamento. Trocar de Commit
   manual para Auto-commit, com transação aberta, pergunta antes: Commit, Rollback ou Cancelar (com transação com erro, só
   Rollback ou Cancelar); sem transação, troca direto.
@@ -2762,8 +2770,7 @@ Notas:
 - `transactionMode`: `autoCommit` ou `manual`. `isolationLevel`: `default` ou o código do nível do banco da sessão
   (PostgreSQL `readCommitted`, `repeatableRead`, `serializable`; Db2 `uncommittedRead`, `cursorStability`, `readStability`,
   `repeatableRead`; Informix, os da S-IFX-2).
-- `TRANSACTION_CONTROL_NOT_SUPPORTED` passa a valer para: controle de transação em Auto-commit; `BEGIN` no Commit manual; e as
-  formas que nunca valem (RN-TX-004).
+- `TRANSACTION_CONTROL_NOT_SUPPORTED` passa a valer só para as formas que nunca valem (`PREPARE TRANSACTION`, `COMMIT PREPARED`, `ROLLBACK PREPARED`, `AND CHAIN`, `COMMIT COMMENT`, `ROLLBACK WORK TO SAVEPOINT` no driver IBM) e para a rede de segurança quando uma rotina deixa transação aberta em Auto-commit (RN-TX-004).
 
 ### O que muda nas regras existentes
 
@@ -12970,3 +12977,117 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   RN-ABAS-018).
 - A cor do ambiente na faixa de abas (o sublinhado da aba ativa e o da aba do resultado) e no editor SQL (o cursor e as
   barras de rolagem).
+
+
+## 43. Complemento de 2026-10-30: histórico de comandos SQL e logs de auditoria
+
+**Pedido do dono em 2026-10-30:** "um botão que nem no DBeaver que fosse exibido o histórico de comandos SQL executados de forma rápida e de fácil acesso, criptografados também"; "os logs de auditoria devem ficar nas configurações do Prism e podem ser filtrados por conexões, ambientes, data e hora, nível de perigo"; "tudo muito bem criptografado para que quem tenha acesso ao PC do usuário não consiga ver sem precisar entrar com a conta no Prism".
+
+**Canvas:** `docs/design/canvas/Historico.dc.html`, `docs/design/canvas/Auditoria.dc.html` e `docs/design/canvas/Cifra.dc.html`. Onde esta especificação e o canvas divergirem, vale a especificação (seção 9).
+
+### 43.1. O diário
+
+- **RN-DIARIO-001.** Arquivo e cifra. Cada usuário tem `<PRISM_DATA_DIR>/journal/<usuario>.journal.db`, um banco SQLCipher 4 (AES-256 em cada página, HMAC-SHA512 por página). A chave entra crua (`PRAGMA key = "x'…'"`), sem a derivação do SQLCipher, porque já é aleatória. O WAL é cifrado como o banco; `temp_store = MEMORY` (nada temporário em claro no disco) e `secure_delete = ON` (o que se apaga é zerado). Sem a chave, o arquivo não se distingue de bytes aleatórios: nem os nomes das tabelas aparecem.
+- **RN-DIARIO-002.** A chave. São 256 bits aleatórios, gerados na primeira vez que o cofre abre sem chave do diário (conta nova, ou conta de antes desta versão) e gravados no cofre, em `VaultDocument.Journal` (`VaultJournalRecord(byte[] Key, DateTimeOffset CreatedAt)`). Ninguém os vê: nem a tela, nem o usuário, nem o log. Sem a senha do Prism não há cofre aberto, e sem cofre aberto não há chave.
+- **RN-DIARIO-003.** Abrir e fechar. O diário abre logo depois do cofre e fecha com ele, por qualquer caminho (RN-COFRE-008: Sair, troca de usuário, quinto erro de senha, bloqueio por inatividade, app fechando). Ao fechar: espera a fila de gravação esvaziar (até 2 s), fecha a conexão, limpa o pool (`SqliteConnection.ClearPool`) e zera a chave na memória (`CryptographicOperations.ZeroMemory`). Com o cofre fechado, toda rota do diário responde 401 `VAULT_LOCKED`.
+- **RN-DIARIO-004.** Troca de senha. Como o cofre (RN-COFRE-013), o diário troca de chave a cada troca de senha, para que quem guardou uma cópia antiga do cofre e a senha antiga não leia o que for gravado depois. A ordem: gera a chave nova, `PRAGMA rekey` no diário, grava o cofre com ela. Se a gravação do cofre falhar, o diário volta à chave antiga (`rekey` de novo) e a troca de senha falha como hoje (`Unavailable`). Se o `rekey` falhar, a troca de senha não acontece.
+- **RN-DIARIO-005.** Diário que não abre. Se a chave do cofre não abre o arquivo (adulterado, ou de outro cofre), a API o renomeia para `<usuario>.journal.damaged-<aaaammddhhmmss>.db`, cria outro vazio e grava nele o primeiro registro: "Diário ilegível substituído", nível Crítico. A entrada no cofre nunca é impedida pelo diário. Se o arquivo não pode ser criado (disco cheio, permissão), o cofre abre do mesmo jeito, as execuções seguem, e a tela mostra, uma vez por entrada, o aviso "O histórico e a auditoria estão desligados: o diário não pôde ser aberto." As rotas do diário respondem 503 `JOURNAL_UNAVAILABLE`.
+- **RN-DIARIO-006.** Gravar sem atrasar. Os registros vão para uma fila em memória, com um único gravador, que agrupa até 200 por transação. Uma execução grava um registro ao sair para o banco (resultado "Em andamento") e o completa ao terminar. Na próxima abertura, os que ficaram "Em andamento" (o app caiu) viram "Interrompido". Falha de gravação vai ao log com a classe do erro e mostra, uma vez por entrada, o aviso da RN-DIARIO-005.
+- **RN-DIARIO-007.** Tamanho. O texto do comando é guardado até 256 KiB (UTF-8); acima disso, os primeiros 256 KiB e a marca "… (cortado: 1,2 MB no total)". A mensagem de erro do banco vai inteira até 16 KiB (decisão 4 do `AGENTS.md`: ela é o produto).
+- **RN-DIARIO-008.** Por quanto tempo. Configurações › Auditoria tem "Guardar os registros por": 30 dias, 90 dias (o padrão), 180 dias, 1 ano ou Sempre. A escolha fica **dentro do diário** (tabela `settings`), e não nas preferências da instalação, para ninguém sem a conta encurtar a guarda. A limpeza roda ao abrir o diário e a cada 24 h com ele aberto. Mudar a escolha grava um registro, nível Alto quando encurta, Informativo quando alonga.
+- **RN-DIARIO-009.** O log em texto não muda (RN-LOG-001). Do diário ele registra só contagens (registros gravados, apagados pela guarda), a duração e a classe do erro. Nunca o comando, um nome, um caminho, um filtro da Auditoria nem o texto da busca.
+
+### 43.2. O que vira registro
+
+- **RN-AUDIT-001.** Cada registro tem: número (crescente), data e hora de início e de fim (UTC, mostradas na hora local), duração, tipo, ação, nível, motivo do nível, resultado, origem, o retrato da conexão (ID, nome, mecanismo, caminho das pastas, nome e cor do ambiente próprio ou herdado, banco), a sessão, o comando enviado, o texto do editor (RN-HIST-002), linhas lidas ou afetadas, a classe do erro com o SQLSTATE, a mensagem do banco, se passou pela confirmação (RN-PROT-001) e as proteções valendo naquele momento (confirmar e somente leitura). O retrato fica como estava: renomear, mover ou excluir a conexão depois não muda o registro.
+- **RN-AUDIT-002.** Execuções (tipo **SQL**), pela API, no caminho que vai ao banco:
+  - `ExecuteQuery`, com a origem que a tela manda: `editor` (Executar e Ctrl+Enter), `script` (Alt+X, um registro por comando, com o mesmo identificador de execução), `values` (Executar com valores…), `statement` (Executar este comando, RN-SQL-020), `rerun` (F5 e Executar de novo), `filter` (filtro e ordem da grade), `auto-refresh` (só a primeira execução e quando o comando muda, nunca a cada intervalo). Sem origem, `other`.
+  - `ApplyEdits` (tipo **Edição**): um registro por "Salvar", com os comandos gerados e quantas linhas cada um afetou.
+  - `EndTransaction` (tipo **Transação**): Commit e Rollback, e o Rollback automático de quando o cofre fecha (RN-TX-006).
+  - Exportação de dados, importação de dados e cópia para outro banco (tipo **Dados**, seções 35 e 36): um registro por trabalho, com o comando de origem, o destino e as contagens. O nome do arquivo não entra (RN-EXPORT-016).
+  - Comando recusado pelo somente leitura (RN-PROT-002): resultado "Recusado", sem ir ao banco.
+- **RN-AUDIT-003.** Não viram registro o que o Prism monta sozinho para mostrar o que a pessoa abriu e não muda nada: árvore e catálogo, Registros e Estrutura de uma tabela, diagramas, autocompletar, "Carregar mais", "Contar total", a verificação periódica (RN-VERIF-002). É a mesma lista que não pergunta na RN-PROT-001, menos a exportação de dados, que entra (os dados saem do Prism).
+- **RN-AUDIT-004.** Ações da conta e das conexões (tipos **Segurança** e **Conexões**):
+  - entrada no cofre, saída, bloqueio por inatividade, conta criada, troca de senha;
+  - entradas com senha errada: o cofre está fechado e não há chave, então a API conta à parte, em `<PRISM_DATA_DIR>/journal/<usuario>.attempts` (só a quantidade e as horas, sem mais nada), e na próxima entrada certa grava um registro "3 entradas com senha errada desde a última (30/10 14:02, 14:03, 14:05)" e zera o arquivo;
+  - senha da conexão revelada (RN-CONN-002), com acerto ou erro; senha errada nas outras conferências da RN-CONN-003; o quinto erro, gravado antes de o cofre fechar;
+  - conexão e pasta criadas, editadas, movidas e excluídas; proteções mudadas (RN-PROT-001 a 004);
+  - exportar conexões, com ou sem as senhas (RN-TRANSF-005), importar conexões e importar do DBeaver (seção 40);
+  - a guarda mudada (RN-DIARIO-008) e registros apagados (RN-AUDIT-016).
+
+### 43.3. Nível de perigo
+
+- **RN-AUDIT-005.** Quatro níveis, sempre com ícone e nome (nunca só a cor):
+
+| Nível | Execuções | Outras ações |
+| --- | --- | --- |
+| **Informativo** | Leitura (RN-PROT-005) | Entrada, saída, bloqueio, conta criada, conexão criada ou editada, proteção ligada, guarda alongada |
+| **Atenção** | `INSERT`; `UPDATE`, `DELETE` e `MERGE` com `WHERE`; `CALL`/`EXECUTE`; Salvar edições; Commit; Rollback; importação; exportação de dados | Conexão ou pasta excluída, importar conexões, senha errada numa conferência, comando recusado pelo somente leitura |
+| **Alto** | DDL que não destrói: `CREATE`, `ALTER` sem `DROP`, `RENAME`, `GRANT`, `REVOKE`, `COMMENT`; Salvar da coluna inteira (RN-EDIT-019) | Senha da conexão revelada, somente leitura desligado, confirmação afrouxada, troca de senha, exportar conexões com as senhas, entradas com senha errada, guarda encurtada |
+| **Crítico** | Irreversível (RN-PROT-001): `DROP` (também dentro de `ALTER`), `TRUNCATE`, `DELETE` e `UPDATE` sem `WHERE` no nível de fora (também depois de `WITH`); importação que esvazia a tabela antes | Quinto erro de senha, registros apagados, diário ilegível substituído |
+
+- **RN-AUDIT-006.** Quem decide é a API, pelo texto que foi ao banco, com o leitor da RN-PROT-005 (`EditableSql.Lex`: texto, nomes entre aspas, comentários e `$tag$` não contam). O que o leitor não entende sobe para Atenção, no mínimo; o que pode ser irreversível e o leitor não tem certeza é Crítico, como a confirmação, que "na dúvida, pergunta". Um comando com vários `;` fica com o nível do mais perigoso.
+- **RN-AUDIT-007.** O motivo do nível vai junto e aparece no detalhe, no mesmo texto da confirmação quando há: "DELETE sem WHERE: apaga todas as linhas de producao.apontamento.", "DROP COLUMN dentro de ALTER TABLE.", "Leitura."
+- **RN-AUDIT-008.** Os níveis estão numa fixture de ouro escrita à mão, `src/test-fixtures/audit/levels.json` (comando, banco, nível, motivo), lida pelos testes da API e da tela. A tela confere a parte do Crítico contra o seu leitor de irreversível (`protections.ts`), para a confirmação e a auditoria nunca discordarem. Mudar uma regra é mudar a fixture; nunca se regera a partir do código.
+
+### 43.4. Histórico (área de trabalho)
+
+- **RN-HIST-001.** O botão. A barra do editor (`EditorToolbar`) ganha "Histórico" (ícone de relógio com a seta de voltar, e o texto), depois de "Executar script" e antes da conexão. O atalho é **Ctrl+Shift+H** (Cmd+Shift+H no macOS), que não está em uso no Prism; o Ctrl+H fica livre para o substituir do editor. O botão mostra o atalho na dica e em `aria-keyshortcuts`. O mesmo atalho fecha o painel.
+- **RN-HIST-002.** O que aparece. Só as execuções que a pessoa pediu no editor: as origens `editor`, `script`, `values` e `statement` (RN-AUDIT-002). O texto mostrado é o do editor, com as variáveis `@nome` como estavam (seção 41), e não o comando já com os marcadores; a tela o manda à API em `historyText`, ao lado do `sql`. O mesmo comando executado em seguida na mesma conexão e no mesmo banco aparece uma vez, com "×3" e a hora da última.
+- **RN-HIST-003.** O painel. Abre à direita do editor, na altura da área de trabalho, com 420 px, sem cobrir o resultado: o editor encolhe. No topo, a busca (foco começa nela) e o escopo, "Esta conexão" (o padrão: a conexão da aba) ou "Todas as conexões". A lista vem da mais recente para a mais antiga, agrupada por dia ("Hoje", "Ontem", "28 de out."), 100 por vez, e carrega mais ao rolar.
+- **RN-HIST-004.** Cada item mostra a hora, o resultado (ícone e nome acessível: concluído, erro, cancelado, interrompido), a duração, as linhas, as três primeiras linhas do comando em código colorido (`highlighted-sql.tsx`) e, em "Todas as conexões", a conexão e o banco com a etiqueta do ambiente. Embaixo da lista, o item escolhido inteiro, com a mensagem do erro quando houve.
+- **RN-HIST-005.** Reaproveitar. Enter ou duplo clique **insere** o comando no editor, no cursor, separado por uma linha em branco do que já está lá (seção 26: a linha em branco separa os comandos), e fecha o painel com o foco no editor. Shift+Enter abre o comando numa aba nova de consulta da conexão e do banco do registro (se a conexão ainda existe; se não, na aba sem conexão, RN-ARVORE-008). Ctrl+C copia o texto. Nada executa a partir do Histórico.
+- **RN-HIST-006.** A busca filtra pelo texto do comando, sem diferenciar maiúsculas nem acentos, enquanto se digita (150 ms depois da última tecla). Setas sobem e descem na lista; Esc limpa a busca e, vazia, fecha o painel e devolve o foco ao editor.
+- **RN-HIST-007.** Tirar do Histórico. Delete no item, ou "Remover do histórico" no menu dele, tira o item do Histórico; "Limpar o histórico desta conexão" (no menu do painel, com confirmação) tira todos os da conexão. Os dois só escondem: o registro continua na Auditoria, que é a única que apaga (RN-AUDIT-016).
+- **RN-HIST-008.** Rápido. A primeira página aparece em até 100 ms com 200 mil registros no diário (índice por conexão e data), conferido por sonda.
+
+### 43.5. Auditoria (Configurações)
+
+- **RN-AUDIT-010.** A página. Configurações ganha "Auditoria" (ícone de escudo com a marca de conferido), depois de Segurança, em `/settings/audit` (RN-CONFIG-001). O topo diz "Tudo o que foi executado e as ações da conta, cifrado no diário de `<usuário>`. Só quem entra com esta conta vê.", com a quantidade de registros, a data do mais antigo e a guarda.
+- **RN-AUDIT-011.** Os filtros, numa barra que quebra linha em janela estreita:
+  - **Período**: Última hora, Hoje, 7 dias (o padrão), 30 dias, Tudo, Personalizado (de e até, data e hora, `input type="datetime-local"`).
+  - **Conexões**: escolha múltipla com busca, com as conexões que aparecem no diário, inclusive as já excluídas (marcadas "excluída").
+  - **Ambientes**: escolha múltipla, com a cor de cada um; os nomes vêm do diário, e "Sem ambiente" é uma opção.
+  - **Nível**: os quatro, cada um ligável; "Alto e Crítico" é um atalho.
+  - **Tipo**: SQL, Edição, Transação, Dados, Segurança, Conexões.
+  - **Resultado**: Concluído, Erro, Recusado, Cancelado, Interrompido.
+  - **Busca**: no comando, na mensagem do banco, no nome da conexão e no motivo.
+  - "Limpar filtros" volta ao padrão. Os filtros ficam enquanto a janela está aberta e voltam ao padrão na próxima entrada.
+- **RN-AUDIT-012.** A tabela: Data e hora (`30/10/2026 14:05:12`), Nível, Evento (a ação e um resumo: "DELETE · 1.204 linhas", "Senha da conexão revelada"), Conexão, Ambiente (etiqueta com a cor), Banco, Resultado, Duração. Da mais recente para a mais antiga, 200 por vez, carregando ao rolar; o cabeçalho fica fixo e diz quantos registros o filtro achou.
+- **RN-AUDIT-013.** O detalhe. Clicar numa linha (ou Enter nela) abre um painel à direita com tudo da RN-AUDIT-001: o comando inteiro em código colorido com "Copiar" e "Abrir no editor" (como o Shift+Enter da RN-HIST-005), o motivo do nível, as proteções daquele momento, se passou pela confirmação, a mensagem do banco e o identificador da execução do script, que filtra a tabela pelos comandos do mesmo script. Esc fecha.
+- **RN-AUDIT-014.** Tudo o que vem do diário é desenhado como texto, nunca como HTML (RN-SHELL-002).
+- **RN-AUDIT-015.** O cartão "Guarda" tem a escolha da RN-DIARIO-008 e o tamanho do arquivo.
+- **RN-AUDIT-016.** Apagar. "Apagar registros…" pede uma data ("Apagar tudo antes de") e a senha do Prism, que entra na contagem da RN-CONN-003 (senha errada responde 422 `INVALID_PASSWORD`; o quinto erro fecha o cofre). Confirmado, apaga os registros antes da data e grava um registro Crítico "N registros apagados, anteriores a 01/09/2026", que só sai na próxima limpeza que o alcançar.
+
+### 43.6. Rotas (`UserJournalController`, `api/user/journal`)
+
+| Método e rota | O que faz | Erros |
+| --- | --- | --- |
+| `GET history?connectionId&q&before&limit` | Histórico (RN-HIST-002 a 006). `connectionId` ausente = todas. `before` é o cursor (número do registro). `limit` 1 a 200, padrão 100. | 422 `JOURNAL_FILTER_INVALID` |
+| `DELETE history/{id}` | Esconde do Histórico (RN-HIST-007). | 404 `JOURNAL_ENTRY_NOT_FOUND` |
+| `DELETE history?connectionId` | Esconde todos os da conexão. | 422 `JOURNAL_FILTER_INVALID` |
+| `GET audit?from&to&connectionId&environment&level&kind&outcome&q&before&limit` | Auditoria (RN-AUDIT-011 e 012). Os de escolha múltipla se repetem na consulta. `limit` 1 a 500, padrão 200. Devolve também `total` do filtro. | 422 `JOURNAL_FILTER_INVALID` |
+| `GET audit/{id}` | O registro inteiro (RN-AUDIT-013). | 404 `JOURNAL_ENTRY_NOT_FOUND` |
+| `GET audit/facets` | Conexões e ambientes que aparecem no diário, para os filtros; quantidade, data do mais antigo e tamanho. | — |
+| `GET settings` · `PUT settings` | A guarda (RN-DIARIO-008). | 422 `JOURNAL_SETTINGS_INVALID` |
+| `POST audit/purge` `{ before, password }` | Apaga (RN-AUDIT-016). | 422 `INVALID_PASSWORD`, 401 `VAULT_LOCKED` no quinto erro |
+
+Qualquer rota com o diário desligado responde 503 `JOURNAL_UNAVAILABLE` (RN-DIARIO-005).
+
+### 43.7. O que muda nas regras existentes
+
+- **RN-COFRE-008**: fechar o cofre também fecha o diário e zera a chave dele (RN-DIARIO-003).
+- **RN-COFRE-013**: a troca de senha troca também a chave do diário (RN-DIARIO-004).
+- **RN-CONN-003**: a contagem de erros seguidos ganha o "Apagar registros…" (RN-AUDIT-016).
+- **RN-CONFIG-001**: entra a seção Auditoria, depois de Segurança.
+- **RN-LOG-001**: não muda; ganha a frase da RN-DIARIO-009.
+- **RN-SQL-001**: o pedido de execução leva `origin`, `historyText` e `confirmed`.
+- `VaultDocument`: ganha `Journal` no fim, nulo por padrão, sem subir o formato.
+- Decisão 2 do `AGENTS.md`: "Sem banco do produto nesta fatia" passa a "O único banco do produto é o diário (SQLite cifrado com SQLCipher), seção 1 da especificação da fatia 1."
+
+### 43.8. Fica para depois
+
+- Exportar a auditoria filtrada (CSV e JSON, pelo assistente da seção 35 ou um próprio).
+- Saber que o diário inteiro sumiu ou foi trocado por um antigo: o cofre guardaria o último número e um elo de verificação, conferidos na entrada.
+- Favoritar comandos do Histórico e dar nome a eles (os scripts salvos, seção 23, já cobrem o comando que se quer guardar).
+- Pedir a senha de novo para abrir a Auditoria; hoje vale o bloqueio por inatividade (RN-SEG-001).

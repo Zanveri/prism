@@ -2,9 +2,13 @@ using CSharpFunctionalExtensions;
 using Prism.Application.Connections.Domain;
 using Prism.Application.Connections.Models.Dtos;
 using Prism.Application.Connections.Repositories;
+using Prism.Application.Journal;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
+using Prism.Infrastructure.Vault.Services;
 
 namespace Prism.Application.Connections.Features.CreateConnection;
 
@@ -42,19 +46,23 @@ public sealed record CreateConnectionCommand : IRequest<Result<ConnectionDto, Ap
     public override string ToString() => nameof(CreateConnectionCommand);
 }
 
-internal sealed class CreateConnectionHandler(IConnectionRepository connectionRepository, TimeProvider timeProvider) : IRequestHandler<CreateConnectionCommand, Result<ConnectionDto, ApiErrorDto>>
+internal sealed class CreateConnectionHandler(IConnectionRepository connectionRepository, TimeProvider timeProvider, IVaultService? vaultService = null, IJournalRecorder? journal = null) : IRequestHandler<CreateConnectionCommand, Result<ConnectionDto, ApiErrorDto>>
 {
     public async Task<Result<ConnectionDto, ApiErrorDto>> Handle(CreateConnectionCommand request, CancellationToken cancellationToken)
     {
+        var startedAt = timeProvider.GetUtcNow();
         var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery, request.UseInternalDescriptions);
-        var connection = Connection.Create(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, timeProvider.GetUtcNow().UtcDateTime);
+        var connection = Connection.Create(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, startedAt.UtcDateTime);
 
-        // Que a pasta exista (404) e que o nome esteja livre nela (409, RN-CONN-011) quem diz é a gravação, o único lugar em que um cofre
-        // fechado não vira 404: nenhuma consulta feita antes leu o cofre com a garantia de que ele continuaria aberto. As proteções que valem
-        // (RN-PROT-004) saem do documento que ela gravou.
         var inserted = await connectionRepository.Insert(connection, cancellationToken);
         if (inserted.IsFailure)
             return Result.Failure<ConnectionDto, ApiErrorDto>(inserted.Error);
+
+        var endedAt = timeProvider.GetUtcNow();
+        var (snapshot, _) = JournalSnapshots.FromRecord(vaultService, ConnectionRecords.ToRecord(connection));
+        journal?.Record(
+            new JournalEntryStart(startedAt, EJournalKind.Connections, "Conexão criada", EJournalLevel.Info, "Conexão criada.", Connection: snapshot, Protections: JournalSnapshots.ProtectionsText(inserted.Value)),
+            new JournalEntryEnd(endedAt, Math.Max(0L, (long)(endedAt - startedAt).TotalMilliseconds), EJournalOutcome.Ok));
 
         return Result.Success<ConnectionDto, ApiErrorDto>(connection.ToDto(inserted.Value));
     }

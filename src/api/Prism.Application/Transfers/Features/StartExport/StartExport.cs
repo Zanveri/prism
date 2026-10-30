@@ -3,6 +3,7 @@ using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Models;
+using Prism.Application.Journal;
 using Prism.Application.Transfers.Models;
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -10,6 +11,8 @@ using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Transfers.Services;
 using Prism.Infrastructure.Transfers.Writers;
@@ -43,7 +46,7 @@ public sealed record StartExportCommand : IRequest<Result<TransferStartedDto, Ap
 /// uma sessão; (3) o que depende do banco da conexão: mais de um comando, o filtro e a leitura, pelo dialeto dele (RN-PROT-005), e as linhas por comando
 /// no Informix; (4) o limite e o cofre, no registro, sob a trava com que o trabalho entra nele.
 /// </summary>
-internal sealed class StartExportHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, ITransferService transferService) : IRequestHandler<StartExportCommand, Result<TransferStartedDto, ApiErrorDto>>
+internal sealed class StartExportHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, ITransferService transferService, IJournalRecorder? journalRecorder = null) : IRequestHandler<StartExportCommand, Result<TransferStartedDto, ApiErrorDto>>
 {
     /// <summary>RN-ARVORE-006: o teto do nome de outro banco do servidor, o mesmo da abertura de uma sessão.</summary>
     private const int MaxDatabaseLength = 128;
@@ -91,12 +94,35 @@ internal sealed class StartExportHandler(IConnectionQueries connectionQueries, I
 
         var output = request.Output ?? new();
         var columns = request.Columns!.OrderBy(column => column.Position).Select(column => new ExportColumnChoice(column.Position, column.Name!)).ToList();
+        var canonicalFormat = ExportFormats.Canonical(request.Format!);
         var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, source.Database ?? record.Database, record.UserName, record.Password);
-        var job = new ExportJob(record.ID, settings, generation, request.WindowID, command.Value, columns, source.Kind == "query", request.Count, ExportFormats.Canonical(request.Format!), options!, source.Kind == "table" ? source.Table! : source.Name ?? ResultName, output.Bom, output.Zip ? output.EntryName : null, output.Clipboard, parameters);
+
+        var entryId = -1L;
+        if (journalRecorder is not null)
+        {
+            var (snapshot, protections) = JournalSnapshots.FromRecord(vaultService, record, settings.Database);
+            entryId = journalRecorder.Begin(new JournalEntryStart(
+                Kind: EJournalKind.Data,
+                Action: "Exportação de dados",
+                Level: EJournalLevel.Warning,
+                Reason: $"Exportação em {canonicalFormat.ToUpperInvariant()}.",
+                Origin: "other",
+                Sql: command.Value,
+                Connection: snapshot,
+                Protections: protections));
+        }
+
+        var job = new ExportJob(record.ID, settings, generation, request.WindowID, command.Value, columns, source.Kind == "query", request.Count, canonicalFormat, options!, source.Kind == "table" ? source.Table! : source.Name ?? ResultName, output.Bom, output.Zip ? output.EntryName : null, output.Clipboard, parameters, entryId);
 
         var started = transferService.StartExport(job);
         if (started.IsFailure)
-            return Result.Failure<TransferStartedDto, ApiErrorDto>(started.Error == ETransferStartFailure.LimitReached ? TransferJobErrors.LimitReached() : VaultErrors.From(EVaultError.Locked));
+        {
+            var error = started.Error == ETransferStartFailure.LimitReached ? TransferJobErrors.LimitReached() : VaultErrors.From(EVaultError.Locked);
+            if (entryId > 0)
+                journalRecorder!.Complete(entryId, new JournalEntryEnd(EJournalOutcome.Refused, null, error.Type, null, error.Detail));
+
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(error);
+        }
 
         // RN-CONN-014: a exclusão da conexão pode terminar enquanto o trabalho entra no registro, e o cancelamento dela não o acharia. A exclusão grava
         // antes de cancelar, então uma leitura feita agora já a enxerga: sem a conexão (ou com o cofre fechado), o trabalho não fica.

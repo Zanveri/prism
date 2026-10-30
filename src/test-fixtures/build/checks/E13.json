@@ -1,0 +1,128 @@
+{
+  "scope": "full",
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [
+      { "name": "manutencao", "create": true },
+      { "name": "producao", "create": false }
+    ],
+    "base": null,
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": "id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "maquina",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            {
+              "name": "id",
+              "exactName": false,
+              "originName": "id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": "always",
+              "comment": null
+            }
+          ],
+          "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": true
+      },
+      {
+        "schema": "manutencao",
+        "name": "plano_manutencao",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "maquina_id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [
+          {
+            "name": "ix_plano_maquina",
+            "columns": ["maquina_id"],
+            "unique": false
+          }
+        ],
+        "foreignKeys": [
+          {
+            "name": null,
+            "columns": ["maquina_id"],
+            "target": { "schema": "producao", "table": "maquina", "columns": ["id"] },
+            "onDelete": "noAction",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "E13",
+      "severity": "error",
+      "table": "producao.maquina",
+      "column": null
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import type { Preferences } from "@/app/settings/_lib/preferences";
 import { appliedTheme, systemPrefersLight, type ThemeId } from "@/app/settings/_lib/theme";
 
 import { saveBlob, saveText } from "./save-file";
-import { diagramMetrics, fitText, fitTitle, rowHeight, type DiagramBox, type DiagramLayout } from "./table-diagram";
+import { diagramMetrics, edgeBezierGeometry, fitText, fitTitle, rowHeight, stripToneForSchema, type DiagramBox, type DiagramLayout } from "./table-diagram";
 
 export type DiagramPalette = {
   background: string;
@@ -128,7 +128,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#a5aabf",
     accent: "#cba6f7",
     postgres: "#89b4fa",
-  },
+  },
   "anuppuccin-frappe": {
     background: "#282b3a",
     panel: "#292c3c",
@@ -141,7 +141,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#afb5cc",
     accent: "#cea6e8",
     postgres: "#99b4f0",
-  },
+  },
   "anuppuccin-macchiato": {
     background: "#24273a",
     panel: "#1e2030",
@@ -154,7 +154,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#afb4ca",
     accent: "#c6a0f6",
     postgres: "#8aadf4",
-  },
+  },
   "anuppuccin-latte": {
     background: "#fafbfc",
     panel: "#e6e9ef",
@@ -167,7 +167,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#505368",
     accent: "#7013ea",
     postgres: "#094cd2",
-  },
+  },
   "anuppuccin-rosepine-light": {
     background: "#fdfaf7",
     panel: "#f2e9de",
@@ -180,7 +180,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#595472",
     accent: "#6c5685",
     postgres: "#27667f",
-  },
+  },
   "blue-topaz": {
     background: "#181c24",
     panel: "#13171e",
@@ -193,7 +193,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#93a5bb",
     accent: "#42a5f5",
     postgres: "#42a5f5",
-  },
+  },
   "blue-topaz-light": {
     background: "#f9fbfd",
     panel: "#edf2f8",
@@ -206,7 +206,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#4f637f",
     accent: "#0256d4",
     postgres: "#1d5bbf",
-  },
+  },
   obsidianite: {
     background: "#100e17",
     panel: "#0d0b12",
@@ -219,7 +219,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#8093a5",
     accent: "#0fb6d6",
     postgres: "#45aaff",
-  },
+  },
   "obsidianite-light": {
     background: "#fbfbfb",
     panel: "#f2f4f5",
@@ -232,7 +232,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#576268",
     accent: "#096a7e",
     postgres: "#1d5bbf",
-  },
+  },
   atom: {
     background: "#272b34",
     panel: "#20242b",
@@ -245,7 +245,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#abb0ba",
     accent: "#61afef",
     postgres: "#61afef",
-  },
+  },
   "atom-light": {
     background: "#fafafa",
     panel: "#eaeaeb",
@@ -258,7 +258,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#5b5e69",
     accent: "#085cbf",
     postgres: "#085cbf",
-  },
+  },
   typewriter: {
     background: "#262626",
     panel: "#202020",
@@ -271,7 +271,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#a8a8a8",
     accent: "#6fbf7b",
     postgres: "#78a9ff",
-  },
+  },
   "typewriter-light": {
     background: "#fefaf2",
     panel: "#f7ecd2",
@@ -284,7 +284,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#5e584d",
     accent: "#316839",
     postgres: "#1f5aa6",
-  },
+  },
   willemstad: {
     background: "#1c1f21",
     panel: "#16191b",
@@ -297,7 +297,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#9aa8ac",
     accent: "#38b29a",
     postgres: "#5aa9e6",
-  },
+  },
   "willemstad-light": {
     background: "#fafafb",
     panel: "#eff2f5",
@@ -310,7 +310,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#526368",
     accent: "#166973",
     postgres: "#1b588c",
-  },
+  },
   "obsidian-gruvbox": {
     background: "#282828",
     panel: "#1d2021",
@@ -323,7 +323,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#bdae93",
     accent: "#fe841f",
     postgres: "#8aaa9e",
-  },
+  },
   "obsidian-gruvbox-light": {
     background: "#fefbee",
     panel: "#f9f2df",
@@ -336,7 +336,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#5b534b",
     accent: "#a03503",
     postgres: "#076273",
-  },
+  },
   primary: {
     background: "#211c18",
     panel: "#1b1714",
@@ -349,7 +349,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#b09e8b",
     accent: "#e5a454",
     postgres: "#6eb5e5",
-  },
+  },
   "primary-light": {
     background: "#fcfaf7",
     panel: "#f6f2eb",
@@ -362,7 +362,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#6f583f",
     accent: "#934e13",
     postgres: "#1d5d8f",
-  },
+  },
   catppuccin: {
     background: "#1e1e2e",
     panel: "#181825",
@@ -375,7 +375,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#a5aabf",
     accent: "#b4befe",
     postgres: "#89b4fa",
-  },
+  },
   "catppuccin-frappe": {
     background: "#282b3a",
     panel: "#292c3c",
@@ -388,7 +388,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#afb5cc",
     accent: "#babbf1",
     postgres: "#99b4f0",
-  },
+  },
   "catppuccin-macchiato": {
     background: "#24273a",
     panel: "#1e2030",
@@ -401,7 +401,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#afb4ca",
     accent: "#b7bdf8",
     postgres: "#8aadf4",
-  },
+  },
   "catppuccin-latte": {
     background: "#fafbfc",
     panel: "#e6e9ef",
@@ -414,7 +414,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#505368",
     accent: "#1236fc",
     postgres: "#094cd2",
-  },
+  },
   prism: {
     background: "#2e2e2e",
     panel: "#1f1f1f",
@@ -427,7 +427,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#b3b3b3",
     accent: "#b29bf9",
     postgres: "#8ea8f8",
-  },
+  },
   "prism-mocha": {
     background: "#30241c",
     panel: "#211913",
@@ -440,7 +440,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#b4a499",
     accent: "#b592f6",
     postgres: "#8ca6f5",
-  },
+  },
   "prism-indigo": {
     background: "#1f2647",
     panel: "#14192e",
@@ -453,7 +453,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#a5b0d0",
     accent: "#b695f8",
     postgres: "#8ea8f8",
-  },
+  },
   "prism-pine": {
     background: "#173619",
     panel: "#0e2110",
@@ -466,7 +466,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#9fb8a1",
     accent: "#73d68f",
     postgres: "#98aff9",
-  },
+  },
   "prism-cherry": {
     background: "#471a19",
     panel: "#2e1110",
@@ -479,7 +479,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#c3a4a1",
     accent: "#f58e9b",
     postgres: "#9bb2fa",
-  },
+  },
   "prism-swan": {
     background: "#ffffff",
     panel: "#f5f5f5",
@@ -492,7 +492,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#5c5c5c",
     accent: "#6538d4",
     postgres: "#2655c7",
-  },
+  },
   "prism-latte": {
     background: "#fcfaf8",
     panel: "#f5ede6",
@@ -505,7 +505,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#68513d",
     accent: "#6538d4",
     postgres: "#2553c3",
-  },
+  },
   "prism-periwinkle": {
     background: "#f9fbfd",
     panel: "#edf1f9",
@@ -518,7 +518,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#4b5c81",
     accent: "#5b2ec9",
     postgres: "#1e4ec2",
-  },
+  },
   "prism-pistachio": {
     background: "#fbfdf9",
     panel: "#eff6ec",
@@ -531,7 +531,7 @@ export const themePalettes: Record<ThemeId, DiagramPalette> = {
     subtle: "#4c6547",
     accent: "#296f22",
     postgres: "#1e4ec2",
-  },
+  },
   "prism-peach": {
     background: "#fdfaf9",
     panel: "#f9efed",
@@ -682,7 +682,8 @@ export function renderDiagramToCanvas(ctx: CanvasRenderingContext2D, layout: Dia
   ctx.fillStyle = palette.background;
   ctx.fillRect(0, 0, layout.width, layout.height);
 
-  // Arestas (chaves estrangeiras) e setas.
+  // Arestas (chaves estrangeiras) com curva de Bézier, pé-de-galinha (FK) e traço (PK).
+  const boxesByKey = new Map(layout.boxes.map((box) => [box.key, box]));
   ctx.strokeStyle = palette.borderStrong;
   ctx.fillStyle = palette.borderStrong;
   ctx.lineWidth = 1.25;
@@ -690,23 +691,32 @@ export function renderDiagramToCanvas(ctx: CanvasRenderingContext2D, layout: Dia
 
   for (const edge of layout.edges) {
     if (edge.points.length < 2) continue;
+    const geom = edgeBezierGeometry(edge, boxesByKey);
     ctx.beginPath();
-    ctx.moveTo(edge.points[0].x, edge.points[0].y);
-    for (let index = 1; index < edge.points.length; index++) {
-      ctx.lineTo(edge.points[index].x, edge.points[index].y);
+    ctx.moveTo(geom.x1, geom.y1);
+    if (typeof ctx.bezierCurveTo === "function") {
+      ctx.bezierCurveTo(geom.c1x, geom.c1y, geom.c2x, geom.c2y, geom.x2, geom.y2);
+    } else {
+      ctx.lineTo(geom.c1x, geom.c1y);
+      ctx.lineTo(geom.c2x, geom.c2y);
+      ctx.lineTo(geom.x2, geom.y2);
     }
     ctx.stroke();
 
-    // Seta na chegada (último segmento é horizontal).
-    const end = edge.points.at(-1)!;
-    const prev = edge.points.at(-2)!;
-    const dir = end.x >= prev.x ? 1 : -1;
+    // Pé-de-galinha na origem (FK) e traço 1 na chegada (PK).
+    const fkSign = geom.s1;
+    const fkTipX = geom.x1 + fkSign * 10;
+    const pkSign = geom.s2;
+    const pkTickX = geom.x2 + pkSign * 6;
+
     ctx.beginPath();
-    ctx.moveTo(end.x, end.y);
-    ctx.lineTo(end.x - dir * 6, end.y - 3);
-    ctx.lineTo(end.x - dir * 6, end.y + 3);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(fkTipX, geom.y1);
+    ctx.lineTo(geom.x1, geom.y1 - 5);
+    ctx.moveTo(fkTipX, geom.y1);
+    ctx.lineTo(geom.x1, geom.y1 + 5);
+    ctx.moveTo(pkTickX, geom.y2 - 5);
+    ctx.lineTo(pkTickX, geom.y2 + 5);
+    ctx.stroke();
   }
 
   // Caixas das tabelas.
@@ -719,12 +729,15 @@ export function renderDiagramToCanvas(ctx: CanvasRenderingContext2D, layout: Dia
     ctx.fillStyle = palette.panel;
     ctx.fill();
 
-    // Faixa do cabeçalho recortada no topo arredondado da caixa.
+    // Faixa do cabeçalho e barra de grupo de 3px recortadas no topo arredondado da caixa.
     ctx.save();
     drawRoundedBox(ctx, box.x + 0.5, box.y + 0.5, box.width - 1, box.height - 1, 8);
     ctx.clip();
     ctx.fillStyle = box.center ? palette.raised : palette.selected;
     ctx.fillRect(box.x + 1, box.y + 1, box.width - 2, headerHeight - 1);
+    const tone = box.stripTone ?? stripToneForSchema(box.ref.schema);
+    ctx.fillStyle = tone === "postgres" ? palette.postgres : palette.accent;
+    ctx.fillRect(box.x + 1, box.y + 1, box.width - 2, 3);
     ctx.restore();
 
     // Linha divisória abaixo do cabeçalho quando há colunas.

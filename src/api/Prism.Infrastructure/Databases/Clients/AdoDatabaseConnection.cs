@@ -62,7 +62,6 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     private const string UnknownObjectKindMessage = "O tipo de objeto pedido não existe: use tables, views, routines ou sequences.";
     private const string TransactionControlMessage = "Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos em Auto-commit, em que cada comando é confirmado quando termina. Para controlar a transação, escolha \"Commit manual\" na barra do editor: o primeiro comando abre a transação, e \"Commit\" e \"Rollback\" (ou COMMIT e ROLLBACK digitados) a encerram.";
-    private const string BeginInManualMessage = "No Commit manual o Prism já abre a transação no primeiro comando: não é preciso enviar BEGIN. Execute os comandos e encerre com \"Commit\" ou \"Rollback\" (ou COMMIT e ROLLBACK digitados).";
     private const string NeverTransactionControlMessage = "A confirmação em duas fases (PREPARE TRANSACTION, COMMIT PREPARED), o AND CHAIN e o COMMIT ou ROLLBACK com mais alguma coisa depois não são aceitos; nada foi enviado. Use COMMIT ou ROLLBACK sozinhos, ou os botões \"Commit\" e \"Rollback\".";
     private const string NotAllowedInTransactionMessage = "Este comando não roda dentro de transação, e a recusa do banco estragaria a transação manual da aba; nada foi enviado. Execute-o numa aba em Auto-commit.";
     private const string ReadOnlyWithTransactionMessage = "A conexão passou a somente leitura com uma transação manual aberta nesta aba; nada foi enviado. Encerre a transação com \"Commit\" ou \"Rollback\" antes.";
@@ -202,7 +201,16 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     public bool ManualCommit { get; set; }
 
+    public string IsolationLevel { get; private set; } = IsolationLevels.Default;
+
     public ETransactionState Transaction => _manualTransaction is null ? ETransactionState.None : _manualFailed ? ETransactionState.Failed : ETransactionState.Open;
+
+    private EDatabaseEngine Engine => QueryDialect switch
+    {
+        ESqlDialect.PostgreSql => EDatabaseEngine.PostgreSql,
+        ESqlDialect.Db2 => EDatabaseEngine.Db2,
+        _ => EDatabaseEngine.Informix,
+    };
 
     /// <summary>
     /// RN-TX-009: no banco em que um erro dentro da transação a deixa inteira com erro, até o Rollback (o PostgreSQL). Ali o cancelamento também
@@ -223,6 +231,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// sempre tem; o Informix sem log de transação não tem.
     /// </summary>
     protected virtual string? TransactionsAvailableSql => null;
+
+    /// <summary>RN-ISOL-002 e 004: no Informix, a consulta que devolve o modo de log do banco (`ansi`, `bufferedLogging`, `unbufferedLogging` ou `noLogging`).</summary>
+    protected virtual string? LoggingModeSql => null;
 
     /// <summary>RN-TX-013: o banco não tem transação nenhuma (os motores analíticos que o driver gerenciado atende): o Commit manual não existe nele.</summary>
     protected virtual bool HasTransactions => true;
@@ -709,7 +720,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
     {
-        // RN-SQL-003 e RN-TX-004: recusado aqui, sem ir ao banco. Um `BEGIN` deixaria a conexão dentro de uma transação que ninguém fecha.
+        // RN-SQL-003 e RN-TX-004: recusado aqui, sem ir ao banco, para as formas não suportadas (PREPARE TRANSACTION, AND CHAIN, etc.).
         if (TransactionControlRefusal(sql) is { } refusal)
             return refusal;
 
@@ -718,10 +729,48 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         if (HasSeveralStatements(sql))
             return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
 
-        if (ManualCommit)
+        if (ManualCommit || _manualTransaction is not null || IsTransactionControl(sql))
             return await ExecuteInTransactionAsync(sql, pageSize, cancellationToken, parameters);
 
         return await ExecuteWithoutRefusalAsync(sql, pageSize, cancellationToken, parameters);
+    }
+
+    public async Task<UnitResult<DatabaseFailure>> SetIsolationLevelAsync(string isolationLevel, CancellationToken cancellationToken)
+    {
+        if (!IsolationLevels.IsKnown(isolationLevel) || !IsolationLevels.IsSupportedBy(Engine, isolationLevel))
+            return new DatabaseFailure(EDatabaseFailure.IsolationLevelInvalid, $"O nível de isolamento \"{isolationLevel}\" não existe para este banco.");
+
+        if (_manualTransaction is not null)
+            return new DatabaseFailure(EDatabaseFailure.TransactionOpen, "A aba tem uma transação aberta: encerre-a com Commit ou Rollback antes de trocar o nível de isolamento.");
+
+        var applied = await RunAsync(nameof(SetIsolationLevelAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            string? loggingMode = null;
+            if (Engine == EDatabaseEngine.Informix && LoggingModeSql is { } loggingSql)
+            {
+                var modes = await ReadAllAsync(loggingSql, [], reader => Text(reader, 0), token);
+                loggingMode = modes.Count > 0 ? modes[0].Trim() : null;
+            }
+
+            if (Engine == EDatabaseEngine.Informix && !IsolationLevels.IsSupportedByInformixLogging(loggingMode, isolationLevel))
+                return UnitResult.Failure(new DatabaseFailure(EDatabaseFailure.TransactionsNotAvailable, "Este banco não tem log de transação: o único nível de isolamento disponível é Dirty Read."));
+
+            var sql = Engine switch
+            {
+                EDatabaseEngine.PostgreSql => IsolationLevels.PostgresSessionSql(isolationLevel),
+                EDatabaseEngine.Db2 => IsolationLevels.Db2SessionSql(isolationLevel),
+                EDatabaseEngine.Informix => IsolationLevels.InformixSessionSql(isolationLevel, loggingMode),
+                _ => null,
+            };
+
+            if (sql is not null)
+                await NonQueryAsync(sql, token);
+
+            IsolationLevel = isolationLevel;
+            return UnitResult.Success<DatabaseFailure>();
+        }, cancellationToken);
+
+        return applied.IsFailure ? applied.Error : applied.Value;
     }
 
     /// <summary>
@@ -774,40 +823,56 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     }
 
     /// <summary>
-    /// RN-SQL-003 e RN-TX-004: o controle de transação digitado. Em Auto-commit, todo ele é recusado, e a mensagem diz que ele vale no Commit manual.
-    /// No Commit manual os pontos de salvamento vão ao banco; o `BEGIN` e as formas que nunca valem são recusados; `COMMIT` e `ROLLBACK` são os
-    /// botões, e quem os atende é o registro de sessões (aqui só chegam por engano, e são recusados). No PostgreSQL, também o comando que o banco não
-    /// aceita dentro de transação: a recusa dele estragaria a transação inteira (RN-TX-009).
+    /// RN-SQL-003 e RN-TX-004: o controle de transação digitado (`BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `ROLLBACK TO SAVEPOINT`, `RELEASE SAVEPOINT`)
+    /// é aceito em qualquer modo da aba; só as formas não suportadas (`PREPARE TRANSACTION`, `COMMIT PREPARED`, `AND CHAIN`, `ROLLBACK WORK TO SAVEPOINT`
+    /// nos bancos da IBM) são recusadas. No PostgreSQL, também o comando que o banco não aceita dentro de transação: a recusa dele estragaria a transação
+    /// inteira (RN-TX-009).
     /// </summary>
     private DatabaseFailure? TransactionControlRefusal(string sql)
     {
         if (!IsTransactionControl(sql))
-            return ManualCommit && ErrorsSpoilTheTransaction && SqlText.RunsOnlyOutsideTransaction(sql) ? new DatabaseFailure(EDatabaseFailure.CommandNotAllowedInTransaction, NotAllowedInTransactionMessage) : null;
-
-        if (!ManualCommit)
-            return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, TransactionControlMessage);
+            return (ManualCommit || _manualTransaction is not null) && ErrorsSpoilTheTransaction && SqlText.RunsOnlyOutsideTransaction(sql) ? new DatabaseFailure(EDatabaseFailure.CommandNotAllowedInTransaction, NotAllowedInTransactionMessage) : null;
 
         return SqlText.TransactionControlOf(sql, QueryDialect) switch
         {
             ETransactionControl.RollbackToSavepoint when RollbackWorkEndsTheTransaction && SqlText.IsRollbackWork(sql, QueryDialect) => new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, RollbackWorkToSavepointMessage),
-            ETransactionControl.Savepoint or ETransactionControl.RollbackToSavepoint => null,
-            ETransactionControl.Begin => new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, BeginInManualMessage),
+            ETransactionControl.Begin or ETransactionControl.Commit or ETransactionControl.Rollback or ETransactionControl.Savepoint or ETransactionControl.RollbackToSavepoint => null,
             _ => new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, NeverTransactionControlMessage)
         };
     }
 
     /// <summary>
-    /// RN-TX-002, 009, 011 e 015: o comando do Commit manual, dentro da transação da aba, que ele abre quando não há uma. Não passa pela tentativa
-    /// só de leitura nem pela rede de segurança, que são do Auto-commit: a sonda de transação do Informix desfaria a transação da pessoa. A leitura
-    /// fica com o cursor aberto dentro da transação (no PostgreSQL, num ponto de salvamento só dela, para o cursor fechar antes do fim sem estragar
-    /// a transação), e o resto é lido até o fim e fica pendente. O `ROLLBACK TO` digitado tira a transação do PostgreSQL do estado de erro.
+    /// RN-TX-002, 004, 009, 011 e 015: o comando do Commit manual ou de transação explícita, dentro da transação da aba, que ele abre quando não há uma.
+    /// Não passa pela tentativa só de leitura nem pela rede de segurança, que são do Auto-commit: a sonda de transação do Informix desfaria a transação
+    /// da pessoa. A leitura fica com o cursor aberto dentro da transação (no PostgreSQL, num ponto de salvamento só dela, para o cursor fechar antes do fim
+    /// sem estragar a transação), e o resto é lido até o fim e fica pendente. O `ROLLBACK TO` digitado tira a transação do PostgreSQL do estado de erro.
     /// </summary>
     private async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteInTransactionAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters)
     {
-        var paged = TriesAsRead(sql);
+        var control = SqlText.TransactionControlOf(sql, QueryDialect);
+        if (control is ETransactionControl.Commit or ETransactionControl.Rollback)
+        {
+            var started = Stopwatch.GetTimestamp();
+            var ended = _manualTransaction is null
+                ? UnitResult.Success<DatabaseFailure>()
+                : await EndTransactionAsync(nameof(ExecuteAsync), commit: control == ETransactionControl.Commit);
+
+            return ended.IsSuccess
+                ? new QueryOutcome(null, 0, ElapsedMs(started))
+                : ended.Error;
+        }
+
+        var paged = control == ETransactionControl.None && TriesAsRead(sql);
         var executed = await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, async token =>
         {
+            var started = Stopwatch.GetTimestamp();
             await BeginTransactionAsync(token);
+
+            if (control == ETransactionControl.Begin)
+            {
+                _executed = true;
+                return new QueryOutcome(null, 0, ElapsedMs(started));
+            }
 
             // ponytail: voltar ao ponto de salvamento desfaz também o que uma função chamada pela leitura gravou antes de o cursor fechar no meio
             // (a RN-TX-011 o deixa pendente). Um cursor do servidor (`DECLARE`/`FETCH`) fecha sem cancelar, se isso pesar.
@@ -817,7 +882,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             return await ExecuteCommandAsync(sql, pageSize, paged, token, parameters: parameters);
         }, cancellationToken);
 
-        if (executed.IsSuccess && SqlText.TransactionControlOf(sql, QueryDialect) == ETransactionControl.RollbackToSavepoint)
+        if (executed.IsSuccess && control == ETransactionControl.RollbackToSavepoint)
             _manualFailed = false;
 
         return executed;
@@ -911,8 +976,12 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         var total = await RunAsync(nameof(CountAsync), EDatabaseFailure.ExecutionFailed, async token =>
         {
-            // RN-SQL-006: contar é executar o comando de novo, como subconsulta. Dentro da transação só de leitura ele não grava outra vez.
+            // RN-SQL-006 e RN-TX-012: contar é executar o comando de novo, como subconsulta. Dentro da transação só de leitura ele não grava outra vez;
+            // com transação manual aberta no PostgreSQL, usa o ponto de salvamento da leitura para não estragar a transação se for cancelado ou falhar.
             await BeginReadOnlyAsync(token);
+            if (_manualTransaction is not null && ErrorsSpoilTheTransaction)
+                await SaveAsync(ReadSavepoint, token);
+
             var reader = await StartAsync(CountSql(sql), [], userCommand: true, token, query: parameters);
             await reader.ReadAsync(token);
 
@@ -1205,7 +1274,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             // RN-PROT-006: o "Salvar" só chega aqui numa conexão que não é somente leitura; a sessão que já foi sai do modo só de leitura do banco.
             await ApplySessionModeAsync(readOnly: false, token);
 
-            if (!oneAtATime && ManualCommit)
+            if (!oneAtATime && (ManualCommit || _manualTransaction is not null))
             {
                 await BeginTransactionAsync(token);
                 await SaveAsync(EditSavepoint, token);
@@ -2235,9 +2304,11 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// <summary>A transação em que os comandos da sessão entram: a do "Salvar" em Auto-commit e da carga, ou a do Commit manual.</summary>
     private DbTransaction? CommandTransaction => _editTransaction ?? _manualTransaction;
 
-    /// <summary>RN-TX-002: a transação manual abre no primeiro comando (ou "Salvar") da aba, já com o cursor anterior fechado.</summary>
+    /// <summary>RN-TX-002 e RN-ISOL-004: a transação manual abre no primeiro comando (ou "Salvar") da aba, já com o cursor anterior fechado, no nível da aba.</summary>
     private async Task BeginTransactionAsync(CancellationToken cancellationToken)
-        => _manualTransaction ??= await _connection!.BeginTransactionAsync(cancellationToken);
+        => _manualTransaction ??= IsolationLevels.ToAdoIsolationLevel(Engine, IsolationLevel) is { } level
+            ? await _connection!.BeginTransactionAsync(level, cancellationToken)
+            : await _connection!.BeginTransactionAsync(cancellationToken);
 
     /// <summary>
     /// RN-EDIT-005 e RN-TX-011: abre o ponto de salvamento dentro da transação manual. A marca sobe antes do envio, como a da transação da

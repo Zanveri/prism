@@ -83,7 +83,10 @@ public enum EDatabaseFailure
     TransactionOpen,
 
     /// <summary>RN-TX-013: o banco não tem transação (Informix sem log de transação), e o Commit manual não existe nele.</summary>
-    TransactionsNotAvailable
+    TransactionsNotAvailable,
+
+    /// <summary>RN-ISOL-003: o nível de isolamento pedido não existe para o motor da sessão.</summary>
+    IsolationLevelInvalid
 }
 
 /// <summary>

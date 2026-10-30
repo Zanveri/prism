@@ -29,11 +29,17 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// </summary>
     bool ManualCommit { get; set; }
 
+    /// <summary>RN-ISOL-001: o nível de isolamento da aba (`default` ou o código do nível escolhido).</summary>
+    string IsolationLevel { get; }
+
     /// <summary>RN-TX-002 e 009: a transação manual, depois da última operação. Some sem Commit nem Rollback quando o banco a desfez (RN-TX-009).</summary>
     ETransactionState Transaction { get; }
 
     /// <summary>RN-TX-013: o banco da sessão tem transação? O Informix sem log de transação não tem.</summary>
     Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken);
+
+    /// <summary>RN-ISOL-002 a 004: aplica o nível de isolamento na sessão.</summary>
+    Task<UnitResult<DatabaseFailure>> SetIsolationLevelAsync(string isolationLevel, CancellationToken cancellationToken);
 
     /// <summary>RN-TX-002: confirma a transação manual. Sem ela, não faz nada. A falha é a do banco, e a transação já não existe (RN-TX-014).</summary>
     Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken);

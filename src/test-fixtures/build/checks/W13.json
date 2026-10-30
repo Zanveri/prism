@@ -1,0 +1,34 @@
+{
+  "scope": "changes",
+  "notes": [
+    {
+      "code": "W13",
+      "message": "producao.maquina ganhou a coluna numero_serie no banco."
+    }
+  ],
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "producao",
+    "schemas": [{ "name": "producao", "create": false }],
+    "base": null,
+    "tables": [],
+    "layout": {},
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "W13",
+      "severity": "warning",
+      "table": null,
+      "column": null
+    }
+  ]
+}

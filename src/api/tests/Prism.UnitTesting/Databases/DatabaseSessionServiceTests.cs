@@ -330,7 +330,7 @@ public sealed partial class DatabaseSessionServiceTests
         clock.Advance(TimeSpan.FromMinutes(1));
 
         //Act
-        var refused = await service.ExecuteAsync(session.ID, "COMMIT", CancellationToken.None);
+        var refused = await service.ExecuteAsync(session.ID, "COMMIT PREPARED 'x'", CancellationToken.None);
         clock.Advance(TimeSpan.FromMinutes(4) - TimeSpan.FromMilliseconds(1));
         var closedBeforeFiveMinutes = _connection.CloseCursorCalls;
         clock.Advance(TimeSpan.FromMilliseconds(1));
@@ -359,7 +359,7 @@ public sealed partial class DatabaseSessionServiceTests
         _clock.Advance(TimeSpan.FromMinutes(5));
 
         //Act
-        var refused = await service.ExecuteAsync(session.ID, "COMMIT", CancellationToken.None);
+        var refused = await service.ExecuteAsync(session.ID, "COMMIT PREPARED 'x'", CancellationToken.None);
 
         //Assert
         Assert.Equal(EDatabaseFailure.TransactionControlNotSupported, refused.Error.Kind);
@@ -746,6 +746,8 @@ public sealed partial class DatabaseSessionServiceTests
         /// <summary>RN-TX-002: o Commit manual de mentira: o comando que chega à conexão com ele ligado abre a transação, e o Commit e o Rollback a encerram.</summary>
         public bool ManualCommit { get; set; }
 
+        public string IsolationLevel { get; set; } = IsolationLevels.Default;
+
         public ETransactionState Transaction { get; set; }
 
         /// <summary>RN-TX-013: o que a conexão responde sobre o banco ter transação.</summary>
@@ -756,6 +758,12 @@ public sealed partial class DatabaseSessionServiceTests
 
         public Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken)
             => Task.FromResult(Result.Success<bool, DatabaseFailure>(TransactionsAvailable));
+
+        public Task<UnitResult<DatabaseFailure>> SetIsolationLevelAsync(string isolationLevel, CancellationToken cancellationToken)
+        {
+            IsolationLevel = isolationLevel;
+            return Task.FromResult(UnitResult.Success<DatabaseFailure>());
+        }
 
         public Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken)
             => End("commit");

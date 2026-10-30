@@ -29,6 +29,7 @@ import { withConnection } from "./tab-connection";
 import { withDatabase } from "./tab-database";
 import { newTabPlace, placeOf, withResultPlace } from "./result-place";
 import { readTransfer } from "./tab-transfer";
+import { normalizeIsolationLevel } from "./transaction";
 import { unsavedEdits } from "./unsaved-edits";
 import { createQueryRunner, isPersonBusy, type QueryRunner } from "./use-query-runner";
 import { connectExports, exportTracker } from "./data-export/data-exports";
@@ -46,7 +47,7 @@ type WorkbenchState = {
   tabs: QueryTab[];
   activeTabId: string | null;
   /** Abre uma aba de consulta; com `sql`, o editor já nasce com esse texto (nada é executado); com `database`, na sessão desse outro banco do servidor (RN-ARVORE-006). */
-  openQueryTab: (connectionId: string, sql?: string, database?: string) => void;
+  openQueryTab: (connectionId: string | null, sql?: string, database?: string) => void;
   /** Abre a aba de uma tabela, ou volta para a que já está aberta; com `view`, já na vista pedida (RN-TABELA-001); com `database`, a tabela é desse outro banco do servidor. */
   openTableTab: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
   setTableView: (tabId: string, view: TableView) => void;
@@ -376,8 +377,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         queryClient,
         toast,
         onSession: (sessionId) => updateTab(tab.id, { sessionId }),
-        initial,
+        initial: {
+          ...initial,
+          transaction: initial?.transaction ?? defaultTabTransaction(queryClient, tab.connectionId),
+        },
         title: () => titles.get(tab.id) ?? null,
+        journal: true,
       }),
     [queryClient, toast, updateTab, titles],
   );
@@ -413,7 +418,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   // RN-ABAS-016 e RN-CONFIG-010: a aba de consulta nova nasce no lugar da preferência, lida na hora (mudar a preferência não muda as abas abertas).
   const openQueryTab = useCallback(
-    (connectionId: string, sql = "", database?: string) =>
+    (connectionId: string | null, sql = "", database?: string) =>
       addTab({ id: crypto.randomUUID(), title: `consulta-${nextNumber.current++}.sql`, connectionId, ...inDatabase(database), sessionId: null, sql, resultPlace: newTabPlace(resultPlacePreference(queryClient)) }),
     [addTab, queryClient],
   );
@@ -768,7 +773,19 @@ export function useWorkbench(): WorkbenchState {
   return context;
 }
 
+export function useOptionalWorkbench(): WorkbenchState | null {
+  return useContext(WorkbenchContext);
+}
+
 /** RN-CONFIG-010: o lugar do resultado das abas novas, nas preferências do usuário do cofre aberto (a sessão que o guard já buscou), lido na hora. */
+function defaultTabTransaction(queryClient: QueryClient, connectionId: string | null) {
+  const userName = queryClient.getQueryData(sessionQuery.queryKey)?.userName;
+  const prefs = (userName === undefined || userName === null ? defaultPreferences : preferencesStore.get(userName)).transactions;
+  const connections = connectionId === null ? undefined : queryClient.getQueryData(connectionsQuery.queryKey);
+  const engine = Array.isArray(connections) ? connections.find((c) => c.id === connectionId)?.engine : undefined;
+  return { mode: prefs.mode, isolationLevel: normalizeIsolationLevel(prefs.isolationLevel, engine) };
+}
+
 function resultPlacePreference(queryClient: QueryClient): ResultPlace {
   const userName = queryClient.getQueryData(sessionQuery.queryKey)?.userName;
   return (userName === undefined || userName === null ? defaultPreferences : preferencesStore.get(userName)).results.resultPlace;

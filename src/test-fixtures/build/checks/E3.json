@@ -1,0 +1,43 @@
+{
+  "scope": "full",
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "vazia",
+        "exactName": false,
+        "comment": null,
+        "columns": [],
+        "primaryKey": null,
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "E3",
+      "severity": "error",
+      "table": "public.vazia",
+      "column": null
+    }
+  ]
+}

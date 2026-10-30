@@ -283,7 +283,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         // `h-auto`: um rótulo comprido quebra a linha em vez de ser cortado.
         className={cn(controlClassName, "flex h-auto min-h-10 cursor-pointer items-center justify-between gap-2 py-2 text-left aria-disabled:cursor-not-allowed aria-disabled:opacity-50", open && "border-accent", className)}
       >
-        <span className={cn("min-w-0 flex-1 break-words", selected === undefined || selected.value === "" ? "text-subtle" : "text-ink")}>{selected === undefined ? (placeholder ?? "") : (selected.content ?? selected.label)}</span>
+        <span className={cn("min-w-0 flex-1 truncate", selected === undefined || selected.value === "" ? "text-subtle" : "text-ink")}>{selected === undefined ? (placeholder ?? "") : (selected.content ?? selected.label)}</span>
         <span aria-hidden className="flex-none text-xs text-subtle">▾</span>
       </button>
 

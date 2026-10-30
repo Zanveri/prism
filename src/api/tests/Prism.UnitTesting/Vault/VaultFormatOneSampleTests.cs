@@ -128,7 +128,7 @@ public sealed class VaultFormatOneSampleTests : IDisposable
         using var after = ReadJson(path);
         Assert.True(result.IsSuccess);
         Assert.Equal(SampleUserName, opened.UserName);
-        Assert.True(opened.JsonEquals(SampleDocument));
+        Assert.True((opened with { Journal = null }).JsonEquals(SampleDocument));
         Assert.Empty(opened.Scripts);
         Assert.Empty(opened.ScriptFolders);
         Assert.Empty(opened.Workspace.Tabs);
@@ -137,7 +137,7 @@ public sealed class VaultFormatOneSampleTests : IDisposable
         Assert.Equal(before.RootElement.GetProperty("kdf").GetRawText(), after.RootElement.GetProperty("kdf").GetRawText());
         Assert.Equal(sample, File.ReadAllBytes(path + ".bak"));
         Assert.True(reopened.IsSuccess);
-        Assert.True(service.Read().Value.JsonEquals(SampleDocument));
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(SampleDocument));
         Assert.Equal(EVaultError.InvalidCredentials, withAnother.Error);
     }
 
@@ -231,7 +231,7 @@ public sealed class VaultFormatOneSampleTests : IDisposable
         Assert.True(withTheOld.IsFailure);
         Assert.Equal(EVaultError.InvalidCredentials, withTheOld.Error);
         Assert.True(withTheNew.IsSuccess);
-        Assert.True(service.Read().Value.JsonEquals(SampleDocument));
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(SampleDocument));
         Assert.Equal(VaultCrypto.Version, json.RootElement.GetProperty("version").GetInt32());
         Assert.Equal("argon2id", json.RootElement.GetProperty("kdf").GetProperty("algorithm").GetString());
         Assert.Equal(File.ReadAllBytes(path), File.ReadAllBytes(path + ".bak"));

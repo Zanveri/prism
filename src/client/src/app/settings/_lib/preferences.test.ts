@@ -17,23 +17,25 @@ const saved = {
   ui: { fontFamily: "Noto Sans", navigatorDensity: "compact" },
   editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false, showVariableValues: false, formatStyle: "river" },
   results: { nullText: "∅", autoLoadMore: true, showColumnTypes: false, gridZoom: 125, resultPlace: "tab" },
+  transactions: { mode: "manual", isolationLevel: "serializable" },
   security: { lockEnabled: false, lockAfterMinutes: 45 },
 };
 
 describe("o padrão das preferências", () => {
-  it("é o do canvas e o combinado com as outras frentes (segunda leva): resultados, segurança e as duas chaves novas do editor", () => {
+  it("é o do canvas e o combinado com as outras frentes: resultados, transações, segurança e as chaves novas do editor", () => {
     expect(defaultPreferences).toEqual({
       theme: "dark",
       ui: { fontFamily: "IBM Plex Sans", navigatorDensity: "comfortable" },
       editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true, showVariableValues: true, formatStyle: "expanded" },
       results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100, resultPlace: "panel" },
+      transactions: { mode: "autoCommit", isolationLevel: "default" },
       security: { lockEnabled: true, lockAfterMinutes: 10 },
     });
   });
 
   it("não se altera por engano: o padrão é compartilhado por todo mundo que ainda não escolheu nada", () => {
     expect(Object.isFrozen(defaultPreferences)).toBe(true);
-    for (const group of [defaultPreferences.ui, defaultPreferences.editor, defaultPreferences.results, defaultPreferences.security]) expect(Object.isFrozen(group)).toBe(true);
+    for (const group of [defaultPreferences.ui, defaultPreferences.editor, defaultPreferences.results, defaultPreferences.transactions, defaultPreferences.security]) expect(Object.isFrozen(group)).toBe(true);
   });
 });
 
@@ -116,6 +118,8 @@ describe("a leitura tolerante", () => {
     ["zoom da grade como fator", { results: { gridZoom: 1.5 } }, ["results", "gridZoom"]],
     ["lugar do resultado desconhecido", { results: { resultPlace: "flutuante" } }, ["results", "resultPlace"]],
     ["lugar do resultado em maiúsculas", { results: { resultPlace: "TAB" } }, ["results", "resultPlace"]],
+    ["modo de transação desconhecido", { transactions: { mode: "outro" } }, ["transactions", "mode"]],
+    ["nível de isolamento desconhecido", { transactions: { isolationLevel: "snapshot" } }, ["transactions", "isolationLevel"]],
     ["bloqueio ligado que não é booleano", { security: { lockEnabled: 0 } }, ["security", "lockEnabled"]],
     ["minutos do bloqueio zero", { security: { lockAfterMinutes: 0 } }, ["security", "lockAfterMinutes"]],
     ["minutos do bloqueio acima de 240", { security: { lockAfterMinutes: 241 } }, ["security", "lockAfterMinutes"]],
@@ -141,7 +145,7 @@ describe("a leitura tolerante", () => {
     const parsed = parsePreferences(JSON.stringify({ theme: "system", senha: "segredo", extra: { a: 1 }, results: { nullText: "—", token: "x" } }));
 
     expect(parsed).toEqual({ ...defaultPreferences, theme: "system", results: { ...defaultPreferences.results, nullText: "—" } });
-    expect(Object.keys(parsed).sort()).toEqual(["editor", "results", "security", "theme", "ui"]);
+    expect(Object.keys(parsed).sort()).toEqual(["editor", "results", "security", "theme", "transactions", "ui"]);
     expect(Object.keys(parsed.results).sort()).toEqual(["autoLoadMore", "gridZoom", "nullText", "resultPlace", "showColumnTypes"]);
   });
 

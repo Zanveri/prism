@@ -1,6 +1,8 @@
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Vault.Services;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -42,13 +44,15 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     private readonly IVaultService _vault;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger _logger;
+    private readonly IJournalRecorder? _journal;
 
-    public DatabaseSessionService(IEnumerable<IDatabaseClient> clients, IVaultService vault, TimeProvider timeProvider, ILogger logger)
+    public DatabaseSessionService(IEnumerable<IDatabaseClient> clients, IVaultService vault, TimeProvider timeProvider, ILogger logger, IJournalRecorder? journal = null)
     {
         _clients = clients.ToDictionary(client => client.Engine);
         _vault = vault;
         _timeProvider = timeProvider;
         _logger = logger.ForContext<DatabaseSessionService>();
+        _journal = journal;
 
         // RN-COFRE-008: fechar o cofre encerra as sessões abertas com as credenciais dele.
         _vault.Locked += OnVaultLocked;
@@ -235,9 +239,13 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
-            // RN-TX-004: no Commit manual, `COMMIT` e `ROLLBACK` digitados fazem o que os botões fazem, e respondem como um comando sem linhas. Sem
-            // transação aberta não há o que encerrar. Na transação com erro (RN-TX-009), só o que a desfaz vai ao banco.
-            var control = session.Connection.ManualCommit ? SqlText.TransactionControlOf(sql, DialectOf(session)) : ETransactionControl.None;
+            // RN-SQL-003 e RN-TX-004: `BEGIN`, `COMMIT`, `ROLLBACK` e pontos de salvamento digitados são aceitos em qualquer modo da aba; `COMMIT` e
+            // `ROLLBACK` fazem o que os botões fazem e respondem como um comando sem linhas. Sem transação aberta não há o que encerrar. Na transação
+            // com erro (RN-TX-009), só o que a desfaz vai ao banco.
+            var control = !readOnly ? SqlText.TransactionControlOf(sql, DialectOf(session)) : ETransactionControl.None;
+            if (!session.Info.TransactionsAvailable && control is ETransactionControl.Begin or ETransactionControl.Commit or ETransactionControl.Rollback or ETransactionControl.Savepoint or ETransactionControl.RollbackToSavepoint)
+                return new DatabaseFailure(EDatabaseFailure.TransactionsNotAvailable, "Este banco não tem log de transação: cada comando é gravado quando termina, e não há Commit manual.");
+
             if (control is ETransactionControl.Commit or ETransactionControl.Rollback)
             {
                 var started = _timeProvider.GetTimestamp();
@@ -249,7 +257,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             if (session.Connection.Transaction == ETransactionState.Failed && control != ETransactionControl.RollbackToSavepoint)
                 return TransactionFailed(session);
 
-            var outcome = await InTheTransactionAsync(session, ran => ran.IsSuccess || ran.Error.Kind == EDatabaseFailure.ExecutionFailed, () => ExecuteInSessionAsync(session, sql, filter, pageSize, readOnly, keep, parameters, cancellationToken));
+            var outcome = await InTheTransactionAsync(session, ran => control != ETransactionControl.Begin && (ran.IsSuccess || ran.Error.Kind == EDatabaseFailure.ExecutionFailed), () => ExecuteInSessionAsync(session, sql, filter, pageSize, readOnly, keep, parameters, cancellationToken));
 
             return outcome.Map(executed => executed with { Transaction = TransactionOf(session) });
         }, cancellationToken);
@@ -405,12 +413,29 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         // RN-SQL-010: a contagem para com a requisição, com "cancelar", com o fechamento da sessão e com o do cofre.
         using var counting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, session.CountCancellation.Token);
 
+        // RN-TX-012: com transação aberta, a contagem roda na própria sessão para enxergar o que a transação gravou (no PostgreSQL, num ponto de salvamento).
+        if (session.Connection.Transaction != ETransactionState.None)
+        {
+            return await RunAsync(sessionID, nameof(CountAsync), waitsForTurn: false, s =>
+                s.Connection.Transaction == ETransactionState.Failed
+                    ? Task.FromResult<Result<long, DatabaseFailure>>(TransactionFailed(s))
+                    : InTheTransactionAsync(s, _ => false, () => s.Connection.CountAsync(query.Sql, counting.Token, query.Parameters)),
+                counting.Token);
+        }
+
         // RN-SQL-006: em conexão separada, para o cursor da sessão continuar como está e a sessão continuar livre para "carregar mais".
         var opened = await ConnectAsync(session.Settings, counting.Token);
         if (opened.IsFailure)
             return opened.Error;
 
         await using var connection = opened.Value;
+        if (session.Connection.IsolationLevel != IsolationLevels.Default)
+        {
+            var isolated = await connection.SetIsolationLevelAsync(session.Connection.IsolationLevel, counting.Token);
+            if (isolated.IsFailure)
+                return isolated.Error;
+        }
+
         var started = _timeProvider.GetTimestamp();
         var total = await connection.CountAsync(query.Sql, counting.Token, query.Parameters);
         Log(session, nameof(CountAsync), started, total);
@@ -592,6 +617,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task<Result<TransactionInfo, DatabaseFailure>> SetTransactionModeAsync(Guid sessionID, ETransactionMode mode, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(SetTransactionModeAsync), waitsForTurn: false, session => Task.FromResult(ChangeMode(session, mode)), cancellationToken);
 
+    public Task<Result<TransactionInfo, DatabaseFailure>> SetIsolationLevelAsync(Guid sessionID, string isolationLevel, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(SetIsolationLevelAsync), waitsForTurn: false, session => ChangeIsolationLevelAsync(session, isolationLevel, cancellationToken), cancellationToken);
+
     public Task<Result<int, DatabaseFailure>> CommitAsync(Guid sessionID, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(CommitAsync), waitsForTurn: false, session => EndTransactionAsync(session, commit: true), cancellationToken);
 
@@ -616,6 +644,23 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
         session.Connection.ManualCommit = manual;
         _logger.Information("Sessão {SessionID}: modo de transação {Mode}.", session.Info.ID, mode);
+
+        return TransactionOf(session);
+    }
+
+    private async Task<Result<TransactionInfo, DatabaseFailure>> ChangeIsolationLevelAsync(Session session, string isolationLevel, CancellationToken cancellationToken)
+    {
+        if (isolationLevel == session.Connection.IsolationLevel)
+            return TransactionOf(session);
+
+        if (session.Connection.Transaction != ETransactionState.None)
+            return new DatabaseFailure(EDatabaseFailure.TransactionOpen, "A aba tem uma transação aberta: encerre-a com Commit ou Rollback antes de trocar o nível de isolamento.", Transaction: TransactionOf(session));
+
+        var changed = await session.Connection.SetIsolationLevelAsync(isolationLevel, cancellationToken);
+        if (changed.IsFailure)
+            return changed.Error with { Transaction = TransactionOf(session) };
+
+        _logger.Information("Sessão {SessionID}: nível de isolamento {IsolationLevel}.", session.Info.ID, isolationLevel);
 
         return TransactionOf(session);
     }
@@ -688,13 +733,19 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         return result.IsSuccess ? result : result.Error with { Transaction = TransactionOf(session), TransactionUndone = undone };
     }
 
-    /// <summary>RN-TX-003: o modo, e a transação manual quando há uma: os comandos sem commit e quando ela abriu.</summary>
+    /// <summary>RN-TX-003 e RN-ISOL-001: o modo, o nível de isolamento e a transação manual quando há uma: os comandos sem commit e quando ela abriu.</summary>
     private static TransactionInfo TransactionOf(Session session)
     {
         var state = session.Connection.IsOpen ? session.Connection.Transaction : ETransactionState.None;
         var open = state != ETransactionState.None;
 
-        return new TransactionInfo(session.Connection.ManualCommit ? ETransactionMode.Manual : ETransactionMode.AutoCommit, open, state == ETransactionState.Failed, open ? session.Commands : 0, open ? session.OpenedAt : null);
+        return new TransactionInfo(
+            session.Connection.ManualCommit ? ETransactionMode.Manual : ETransactionMode.AutoCommit,
+            open,
+            state == ETransactionState.Failed,
+            open ? session.Commands : 0,
+            open ? session.OpenedAt : null,
+            session.Connection.IsolationLevel);
     }
 
     /// <summary>RN-TX-009: no PostgreSQL, a transação com erro só aceita o Rollback; nada vai ao banco.</summary>
@@ -995,7 +1046,25 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         }
 
         using (new TurnEnd(session.Turn))
+        {
+            if (session.Connection.Transaction != ETransactionState.None)
+            {
+                var snapshot = new JournalConnectionSnapshot(session.Info.ConnectionID, null, session.Info.Engine.ToString().ToLowerInvariant(), null, null, null, session.Info.Database);
+                _journal?.Record(
+                    new JournalEntryStart(
+                        Kind: EJournalKind.Transaction,
+                        Action: "ROLLBACK",
+                        Level: EJournalLevel.Warning,
+                        Reason: "Transação desfeita ao fechar a sessão ou o cofre.",
+                        Origin: "other",
+                        Sql: "ROLLBACK",
+                        SessionId: session.Info.ID,
+                        Connection: snapshot),
+                    new JournalEntryEnd(EJournalOutcome.Ok, session.Commands));
+            }
+
             await ReleaseAsync(session);
+        }
 
         _logger.Information("Sessão {SessionID} fechada.", session.Info.ID);
     }
@@ -1110,7 +1179,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
             // RN-VERIF-002: a verificação periódica não é comando da pessoa, e não a deixa com a sessão ocupada: o comando espera o fim dela, que tem o
             // prazo do driver. O "cancelar" pedido durante a espera vale para ele, que desiste na hora, sem ir ao banco: a fonte que o "cancelar" e o
-            // fechamento da sessão cancelam interrompe a espera. O contador pega o "cancelar" que chega junto com a vez, depois da espera.
+            // fechamento da sessão cancelam interrompe a espera. O contador pega o "cancelar" que chegou junto com a vez, depois da espera.
             var canceled = Volatile.Read(ref session.CancelRequests);
             using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, session.CountCancellation.Token);
             var afterTheVerification = session.Turn.WaitAsync(waiting.Token);

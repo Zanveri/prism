@@ -49,12 +49,13 @@ internal static class DatabaseSessionErrors
             EDatabaseFailure.TransactionControlNotSupported => ApiErrorDto.CreateUnprocessableEntity("Controle de transação não é aceito.", "TRANSACTION_CONTROL_NOT_SUPPORTED", failure.Message, ExecutedDetails(failure)),
             EDatabaseFailure.MultipleStatementsNotSupported => ApiErrorDto.CreateUnprocessableEntity("Só um comando por execução.", "MULTIPLE_STATEMENTS_NOT_SUPPORTED", failure.Message),
 
-            // Seção 22 (RN-TX-004, 005, 009 e 013): nada foi ao banco.
+            // Seção 22 (RN-TX-004, 005, 009 e 013; RN-ISOL-003): nada foi ao banco.
             EDatabaseFailure.TransactionFailed => ApiErrorDto.CreateConflict("A transação tem um erro.", "TRANSACTION_FAILED", failure.Message),
             EDatabaseFailure.CommandNotAllowedInTransaction => ApiErrorDto.CreateUnprocessableEntity("O comando não roda dentro de transação.", "COMMAND_NOT_ALLOWED_IN_TRANSACTION", failure.Message),
             EDatabaseFailure.NoOpenTransaction => ApiErrorDto.CreateConflict("Não há transação aberta.", "NO_OPEN_TRANSACTION", failure.Message),
             EDatabaseFailure.TransactionOpen => ApiErrorDto.CreateConflict("Há uma transação aberta.", "TRANSACTION_OPEN", failure.Message),
             EDatabaseFailure.TransactionsNotAvailable => ApiErrorDto.CreateUnprocessableEntity("O banco não tem transação.", "TRANSACTIONS_NOT_AVAILABLE", failure.Message),
+            EDatabaseFailure.IsolationLevelInvalid => ApiErrorDto.CreateUnprocessableEntity("Nível de isolamento inválido.", "ISOLATION_LEVEL_INVALID", failure.Message),
 
             // RN-DRIVER-006: o detalhe diz o nome do driver que falta, e a extensão `driverID` leva a tela até a linha dele ("Instalar driver").
             EDatabaseFailure.DriverNotInstalled => ApiErrorDto.CreateUnprocessableEntity("Driver não instalado.", "DRIVER_NOT_INSTALLED", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["driverID"] = failure.DriverID }),

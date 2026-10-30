@@ -1,6 +1,8 @@
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Transfers.Clients;
 using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Transfers.Writers;
@@ -40,6 +42,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     private readonly TransferSettings _settings;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger _logger;
+    private readonly IJournalRecorder? _journal;
     private readonly ITimer _watch;
 
     /// <summary>Toda leitura e toda mudança de estado de um trabalho passam por esta trava; a leitura do banco e a escrita do arquivo, não.</summary>
@@ -47,7 +50,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
 
     private readonly Dictionary<Guid, Transfer> _transfers = [];
 
-    public TransferService(IEnumerable<IDatabaseClient> clients, ITransferFileClient files, IImportFileClient importFiles, IVaultService vault, TransferSettings settings, TimeProvider timeProvider, ILogger logger)
+    public TransferService(IEnumerable<IDatabaseClient> clients, ITransferFileClient files, IImportFileClient importFiles, IVaultService vault, TransferSettings settings, TimeProvider timeProvider, ILogger logger, IJournalRecorder? journal = null)
     {
         _clients = clients.ToDictionary(client => client.Engine);
         _files = files;
@@ -56,6 +59,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         _settings = settings;
         _timeProvider = timeProvider;
         _logger = logger.ForContext<TransferService>();
+        _journal = journal;
 
         // RN-EXPORT-018: a partida apaga o que sobrou na pasta `transfers` de uma execução que caiu; nenhum trabalho atravessa uma partida.
         _files.Prepare();
@@ -79,7 +83,10 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             if (_transfers.Values.Count(running => running.State == ETransferState.Running) >= _settings.Limit)
                 return ETransferStartFailure.LimitReached;
 
-            transfer = new Transfer(Guid.CreateVersion7(), ETransferKind.Export, job.ConnectionID, job.WindowID, job.VaultGeneration, _timeProvider.GetUtcNow(), now);
+            transfer = new Transfer(Guid.CreateVersion7(), ETransferKind.Export, job.ConnectionID, job.WindowID, job.VaultGeneration, _timeProvider.GetUtcNow(), now)
+            {
+                JournalEntryID = job.JournalEntryID
+            };
             _transfers[transfer.ID] = transfer;
             transfer.Task = Task.Run(() => RunExportAsync(transfer, job));
         }
@@ -103,7 +110,8 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             {
                 TargetConnectionID = job.ConnectionID,
                 Target = (job.Settings, job.Schema, job.Table),
-                Committed = 0
+                Committed = 0,
+                JournalEntryID = job.JournalEntryID
             };
 
             // RN-IMPORT-014: a API toma o arquivo; dali em diante ele é do trabalho. O que sumiu antes da troca (o processo principal o soltou) é 404, e o
@@ -142,7 +150,8 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             {
                 TargetConnectionID = job.TargetConnectionID,
                 Target = (job.TargetSettings, job.Schema, job.Table),
-                Committed = 0
+                Committed = 0,
+                JournalEntryID = job.JournalEntryID
             };
 
             _transfers[transfer.ID] = transfer;
@@ -683,7 +692,46 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             if (transfer.Kind != ETransferKind.Export)
                 transfer.Committed = summary.Committed;
         }
+
+        if (transfer.JournalEntryID > 0 && _journal is not null)
+        {
+            var entryId = transfer.JournalEntryID;
+            transfer.JournalEntryID = -1;
+            var outcome = state switch
+            {
+                ETransferState.Done => EJournalOutcome.Ok,
+                ETransferState.Canceled => EJournalOutcome.Cancelled,
+                _ => EJournalOutcome.Error
+            };
+            var rowCount = state == ETransferState.Done
+                ? (transfer.Kind == ETransferKind.Export ? transfer.Rows : transfer.Committed)
+                : transfer.Committed;
+
+            _journal.Complete(entryId, new JournalEntryEnd(outcome, rowCount, failure is not null ? ToJournalErrorCode(failure.Code) : null, failure?.SqlState, failure?.Message));
+        }
     }
+
+    private static string ToJournalErrorCode(ETransferError error)
+        => error switch
+        {
+            ETransferError.DatabaseConnectionFailed => "DATABASE_CONNECTION_FAILED",
+            ETransferError.SqlExecutionFailed => "SQL_EXECUTION_FAILED",
+            ETransferError.ColumnsChanged => "EXPORT_COLUMNS_CHANGED",
+            ETransferError.ValueTooLarge => "EXPORT_VALUE_TOO_LARGE",
+            ETransferError.Stalled => "EXPORT_STALLED",
+            ETransferError.ClipboardTooLarge => "EXPORT_CLIPBOARD_TOO_LARGE",
+            ETransferError.WriteFailed => "EXPORT_WRITE_FAILED",
+            ETransferError.ImportValueInvalid => "IMPORT_VALUE_INVALID",
+            ETransferError.ImportValueTooLarge => "IMPORT_VALUE_TOO_LARGE",
+            ETransferError.ImportFileUnreadable => "IMPORT_FILE_UNREADABLE",
+            ETransferError.ImportTableNotFound => "IMPORT_TABLE_NOT_FOUND",
+            ETransferError.ImportTargetNotTable => "IMPORT_TARGET_NOT_TABLE",
+            ETransferError.ImportTableChanged => "IMPORT_TABLE_CHANGED",
+            ETransferError.ImportMappingInvalid => "IMPORT_MAPPING_INVALID",
+            ETransferError.ImportStalled => "IMPORT_STALLED",
+            ETransferError.ImportSourceGrowing => "IMPORT_SOURCE_GROWING",
+            _ => "INTERNAL_SERVER_ERROR"
+        };
 
     /// <summary>RN-EXPORT-016: uma fase nova ou um lote escrito é progresso, e adia o fim por falta dele.</summary>
     private void Advance(Transfer transfer, ETransferPhase phase, long? rows = null, long? bytes = null)

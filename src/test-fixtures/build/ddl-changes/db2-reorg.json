@@ -1,0 +1,130 @@
+{
+  "model": {
+    "version": 1,
+    "engine": "db2",
+    "defaultSchema": "producao",
+    "schemas": [{ "name": "producao", "create": false }],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 14:10",
+      "knownSchemas": ["producao"],
+      "knownTables": ["producao.operador"]
+    },
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "operador",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": "id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "matricula",
+            "exactName": false,
+            "originName": "matricula",
+            "type": "varchar(20)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          },
+          {
+            "name": "nome",
+            "exactName": false,
+            "originName": "nome",
+            "type": "varchar(80)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "operador_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "operador",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            {
+              "name": "id",
+              "exactName": false,
+              "originName": "id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": "always",
+              "comment": null
+            },
+            {
+              "name": "matricula",
+              "exactName": false,
+              "originName": "matricula",
+              "type": "varchar(12)",
+              "nullable": false,
+              "default": null,
+              "identity": null,
+              "comment": null
+            },
+            {
+              "name": "nome",
+              "exactName": false,
+              "originName": "nome",
+              "type": "varchar(80)",
+              "nullable": false,
+              "default": null,
+              "identity": null,
+              "comment": null
+            },
+            {
+              "name": "turno",
+              "exactName": false,
+              "originName": "turno",
+              "type": "char(1)",
+              "nullable": true,
+              "default": null,
+              "identity": null,
+              "comment": null
+            }
+          ],
+          "primaryKey": { "name": "operador_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "context": {
+    "modelName": "db2-reorg",
+    "prismVersion": "0.6.0",
+    "generatedAt": "29/10/2026 14:32",
+    "baseLabel": "MES Produção / mes"
+  },
+  "expected": "-- Modelo db2-reorg · Db2 · gerado pelo Prism 0.6.0 em 29/10/2026 14:32\n-- Só as diferenças em relação a MES Produção / mes, lida em 29/10/2026 14:10.\n\nALTER TABLE producao.operador ALTER COLUMN matricula SET DATA TYPE varchar(20);\nALTER TABLE producao.operador DROP COLUMN turno;\n\n-- Reorganizar producao.operador após troca de tipo e remoção de coluna\nCALL SYSPROC.ADMIN_CMD('REORG TABLE producao.operador');"
+}

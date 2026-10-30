@@ -210,7 +210,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
                                                    AND pg_catalog.has_database_privilege(pg_database.oid, 'CONNECT')
                                                  ORDER BY pg_database.datname";
 
-    protected override string BeginReadOnlySql => "BEGIN TRANSACTION READ ONLY";
+    protected override string BeginReadOnlySql => IsolationLevels.PostgresBeginReadOnlySql(IsolationLevel);
 
     /// <summary>RN-TX-009: qualquer erro de um comando dentro da transação, também o cancelamento, a deixa inteira com erro até o Rollback.</summary>
     protected override bool ErrorsSpoilTheTransaction => true;
@@ -400,7 +400,10 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// `UPDATE` veem o mesmo retrato, e a linha que outra sessão alterou depois dele é a recusa 40001 do banco, sem nada gravado. (O Serializable da aba,
     /// RN-ISOL-001, e o nível da aba no Commit manual entram com eles.)
     /// </summary>
-    protected override IsolationLevel? WholeColumnIsolation => IsolationLevel.RepeatableRead;
+    protected override IsolationLevel? WholeColumnIsolation =>
+        IsolationLevel == IsolationLevels.Serializable
+            ? System.Data.IsolationLevel.Serializable
+            : System.Data.IsolationLevel.RepeatableRead;
 
     /// <summary>
     /// RN-EXPORT-017 e RN-IMPORT-028: além do prazo de trava, a forma do texto que o servidor escreve, para ela ser a mesma em qualquer servidor e o

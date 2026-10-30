@@ -110,7 +110,7 @@ public sealed partial class DatabaseSessionServiceTests
     [Trait("DatabaseSessionService", "Keep")]
     [Theory(DisplayName = "OK a lista guarda o atual e os guardados que leva, esquece os outros e ignora o desconhecido, também no comando que falha e no desfeito com executed")]
     [InlineData(EDatabaseFailure.ExecutionFailed, "SELECT * FROM LOJA.NADA", false)]
-    [InlineData(EDatabaseFailure.TransactionControlNotSupported, "COMMIT", true)]
+    [InlineData(EDatabaseFailure.TransactionControlNotSupported, "COMMIT PREPARED 'x'", true)]
     public async Task Keep_AppliesToTheCurrentAndTheKept_WhenTheCommandRuns(EDatabaseFailure kind, string command, bool executed)
     {
         //Arrange
@@ -144,10 +144,10 @@ public sealed partial class DatabaseSessionServiceTests
         var (service, session) = await OpenAsync(EDatabaseEngine.Db2);
         var first = await ReadAsync(service, session, "SELECT ID, STATUS FROM LOJA.PEDIDO");
         var current = await ReadAsync(service, session, "SELECT ID, STATUS FROM LOJA.PEDIDO", false, first);
-        _connection.Refusal = new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, "O Prism não executa COMMIT.");
+        _connection.Refusal = new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, "O Prism não executa COMMIT PREPARED.");
 
         //Act
-        var refused = await service.ExecuteAsync(session, "COMMIT", null, QueryPaging.DefaultPageSize, false, [], CancellationToken.None);
+        var refused = await service.ExecuteAsync(session, "COMMIT PREPARED 'x'", null, QueryPaging.DefaultPageSize, false, [], CancellationToken.None);
         var readOnly = await service.ExecuteAsync(session, "DELETE FROM LOJA.PEDIDO", null, QueryPaging.DefaultPageSize, true, [], CancellationToken.None);
         var kept = await service.PreviewEditsAsync(session, first, [PaidOrder], CancellationToken.None);
         var stillCurrent = await service.PreviewEditsAsync(session, current, [PaidOrder], CancellationToken.None);

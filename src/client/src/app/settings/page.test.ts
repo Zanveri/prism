@@ -116,13 +116,13 @@ describe("as seções 'em breve' (RN-CONFIG-001: sem controle que finja funciona
   const soonIds = settingsSections.filter((section) => section.soon).map((section) => section.anchor);
 
   it("é só a que ainda depende da API: as transações (a troca de senha já tem rota)", () => {
-    expect(soonIds).toEqual(["cfg-transacoes"]);
+    expect(soonIds).toEqual([]);
   });
 
   it("diz o que virá, traz a etiqueta e não tem campo, lista, caixa de marcar nem botão, nem desabilitados", () => {
     const sections = sectionsOf(render("transactions").markup).filter((section) => soonIds.includes(section.id));
 
-    expect(sections).toHaveLength(1);
+    expect(sections).toHaveLength(0);
     for (const section of sections) {
       expect(section.html).toContain("Em breve");
       expect(section.html).toMatch(/<p /);
@@ -131,7 +131,16 @@ describe("as seções 'em breve' (RN-CONFIG-001: sem controle que finja funciona
   });
 
   it("repete o que o canvas diz, sem prometer o que a tela não tem", () => {
-    expect(render("transactions").markup).toContain("Aqui você vai escolher o modo padrão das novas abas");
+    const html = render("transactions").markup;
+    expect(html).not.toContain("Em breve");
+    expect(html).toMatch(/<label[^>]*for="cfg-modo-transacao"[^>]*>Modo padrão nas novas abas<\/label>/);
+    expect(html).toMatch(/<label[^>]*for="cfg-nivel-isolamento"[^>]*>Nível de isolamento padrão<\/label>/);
+    expect(html).toContain("Auto-commit");
+    expect(html).toContain("Padrão do banco");
+    expect(html).toContain("Vale para cada aba nova de consulta ou de registros.");
+    const custom = render("transactions", { transactions: { mode: "manual", isolationLevel: "serializable" } }).markup;
+    expect(custom).toContain("Commit manual");
+    expect(custom).toContain("Serializable");
   });
 });
 

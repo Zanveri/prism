@@ -14,7 +14,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 
 ```
 electron/        main.ts, preload.ts, api-process.ts, dbeaver-source.ts e dbeaver-messages.ts (a procura e a cópia do DBeaver), app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
-src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
+src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot/KeepAliveSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, build, drivers, settings)
 src/components/  ui/ (primitivos + index.ts; e tooltip.ts, a dica do app no lugar da do sistema, ligada pelo main.tsx), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
 src/lib/api/     prism-api.ts, prism-endpoints.ts, query-client.ts, bridge.ts, vault-lock.ts (o estado de bloqueio e a barreira dos pedidos), workspace-sync.ts ("grave as abas agora", antes de o cofre fechar)
@@ -4263,6 +4263,11 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que
   nenhuma escolha muda (a mensagem do banco, as etiquetas, a Estrutura e o Diagrama). Texto novo que é SQL usa `font-editor`; **o dado do banco
   na grade e na árvore usa a da interface (`font-sans`, herdada)**; a mensagem do banco, o código e as etiquetas, `font-mono`.
+
+## Construir (`/build`, RN-CONSTRUIR-001 a 074)
+
+- A rota `/build` vive num `KeepAliveSlot` (`mountOnFirstVisit`, fora do `RemountOnLock` em `routes.tsx`), ao lado do `WorkbenchSlot`: só monta na primeira visita ao modo Construir e, depois disso, alternar entre Área de trabalho e Construir pelo seletor `ModeMenu` da `TopBar` esconde o outro modo com `hidden` e `inert`, preservando cursor, seleção, zoom do diagrama e histórico de desfazer/refazer até o cofre fechar.
+- As regras puras moram em `src/app/build/_lib/` (bancos-alvo `postgresql`, `db2` e `informix`, operações do modelo, verificação `E1`–`E12` e `W1`–`W14`, geração de DDL completo e de alterações, DBML, SQL do modelo, importação/releitura do catálogo, layout do diagrama, salvamento automático com detecção de conflito 409 e destino na Área de trabalho), todas testadas sem DOM contra as fixtures de ouro escritas à mão em `src/test-fixtures/build/`.
 
 ## Dependências
 

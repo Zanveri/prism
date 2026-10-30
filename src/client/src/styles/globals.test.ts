@@ -16,11 +16,13 @@ const themes = (["light", "dark", ...extraThemes] as const).map((id) => ({ id, n
 
 const surfaces = ["background", "panel", "raised", "selected"] as const;
 const neutralText = ["ink", "body", "muted", "subtle"] as const;
-const toneText = ["accent", "postgres", "db2", "informix", "danger", "success"] as const;
+const toneText = ["accent", "postgres", "db2", "informix", "danger", "warning", "success"] as const;
 /** As cores de sintaxe do editor (RN-CONFIG-003): palavra-chave, texto entre aspas, número e comentário. O canvas as define em cada tema. */
 const syntaxText = ["syntax-keyword", "syntax-string", "syntax-number", "syntax-comment"] as const;
 /** RN-VAR-025: a cor da variável (o nome declarado e o `@nome` no SQL). O canvas não a desenha: cada tema traz a sua, e ela passa no mesmo contraste da sintaxe. */
 const variableText = ["syntax-variable"] as const;
+/** RN-AUDIT-005 e RN-CONFIG-003: os quatro níveis da auditoria, sempre acompanhados de ícone e texto. */
+const levelText = ["level-info", "level-warn", "level-high", "level-critical"] as const;
 /** O que o editor pinta por cima da seleção: o texto e o que o erro de SQL marca (a sintaxe é conferida à parte, em cada superfície). */
 const editorOnSelection = { texto: "ink", erro: "danger" } as const;
 /** `FormMessage` (e o aviso): o texto do tom sobre 10% do próprio tom por cima da superfície (`bg-<tom>/10`). */
@@ -77,13 +79,19 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
       db2: "#5ed3a3",
       informix: "#f591b6",
       danger: "#ff8a7a",
+      warning: "#ffb86b",
       success: "#5ed3a3",
+      "diagram-edge": "#566170",
       "syntax-keyword": "#7db2ff",
       "syntax-string": "#5ed3a3",
       "syntax-number": "#f2b644",
       "syntax-comment": "#8e99a8",
       "syntax-variable": "#c9a8ff",
       link: "#7db2ff",
+      "level-info": "#7db2ff",
+      "level-warn": "#f2b644",
+      "level-high": "#f5a65b",
+      "level-critical": "#ff8a7a",
     });
     expect(Object.keys(light).sort()).toEqual(Object.keys(dark).sort());
   });
@@ -235,6 +243,15 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
     for (const { name, palette } of themes) {
       expect(contrast(palette.selection, palette.background), `${name}: seleção`).toBeGreaterThanOrEqual(1.15);
       expect(contrast(palette.selected, palette.background), `${name}: linha selecionada`).toBeGreaterThanOrEqual(1.15);
+    }
+  });
+
+  it.each(["light", "dark", ...canvasThemes] as const)("os quatro níveis da auditoria passam em 4,5:1 sobre o fundo e o painel no tema %s (RN-AUDIT-005 e RN-CONFIG-003)", (id) => {
+    const theme = themes.find((candidate) => candidate.id === id)!;
+    for (const token of levelText) {
+      for (const surface of ["background", "panel"] as const) {
+        expect(contrast(theme.palette[token], theme.palette[surface]), `${id}: ${token} sobre ${surface}`).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 });

@@ -1,0 +1,116 @@
+{
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "producao",
+    "schemas": [{ "name": "producao", "create": false }],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 14:10",
+      "knownSchemas": ["producao"],
+      "knownTables": ["producao.maquina", "producao.linha"]
+    },
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": "id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "linha_id",
+            "exactName": false,
+            "originName": "linha_id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          {
+            "name": "maquina_linha_id_fkey",
+            "columns": ["linha_id"],
+            "target": { "schema": "producao", "table": "linha", "columns": ["id"] },
+            "onDelete": "noAction",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": {
+          "schema": "producao",
+          "name": "maquina",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            {
+              "name": "id",
+              "exactName": false,
+              "originName": "id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": "always",
+              "comment": null
+            },
+            {
+              "name": "linha_id",
+              "exactName": false,
+              "originName": "linha_id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": null,
+              "comment": null
+            }
+          ],
+          "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": [
+            {
+              "name": "maquina_linha_id_fkey",
+              "columns": ["linha_id"],
+              "target": { "schema": "producao", "table": "linha", "columns": ["id"] },
+              "onDelete": "noAction",
+              "onUpdate": "noAction"
+            }
+          ]
+        },
+        "dropInDatabase": true
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "context": {
+    "modelName": "existente-excluida",
+    "prismVersion": "0.6.0",
+    "generatedAt": "29/10/2026 14:32",
+    "baseLabel": "MES Produção / mes"
+  },
+  "expected": "-- Modelo existente-excluida · PostgreSQL · gerado pelo Prism 0.6.0 em 29/10/2026 14:32\n-- Só as diferenças em relação a MES Produção / mes, lida em 29/10/2026 14:10.\n\nALTER TABLE producao.maquina DROP CONSTRAINT maquina_linha_id_fkey;\n\nDROP TABLE producao.maquina;"
+}

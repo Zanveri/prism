@@ -3,14 +3,26 @@ import { formatCount } from "@/lib/utils/format";
 const commands = (count: number) => formatCount(count, "comando", "comandos");
 const notConfirmed = (count: number) => formatCount(count, "comando não foi confirmado", "comandos não foram confirmados");
 
-/** O modo de transação da aba e a transação manual (seção 22 da especificação, RN-TX-001 a 014). */
+/** O modo de transação da aba e a transação manual (seção 22 da especificação, RN-TX-001 a 014 e RN-ISOL-001 a 006). */
 export const transactionCopy = {
   editor: {
     // RN-TX-001: o seletor da barra do editor, como no canvas ("Transação").
     label: "Transação",
     modeLabel: "Modo de transação",
+    isolationLabel: "Isolamento",
     autoCommit: "Auto-commit",
     manual: "Commit manual",
+    // RN-ISOL-001: os níveis de isolamento por banco, e "Padrão do banco" em todos.
+    levels: {
+      default: "Padrão do banco",
+      readUncommitted: "Read Uncommitted",
+      readCommitted: "Read Committed",
+      committedReadLastCommitted: "Committed Read Last Committed",
+      cursorStability: "Cursor Stability",
+      repeatableRead: "Repeatable Read",
+      readStability: "Read Stability",
+      serializable: "Serializable",
+    },
     // RN-TX-013: o banco sem log de transação não tem Commit manual.
     notAvailable: "Este banco não tem log de transação",
     commit: "Commit",
@@ -21,12 +33,13 @@ export const transactionCopy = {
     busy: "Espere o comando terminar",
   },
 
-  // RN-TX-003: a barra de status. "Padrão do banco" é o nível de isolamento enquanto o seletor de nível não existe (RN-ISOL-001).
+  // RN-TX-003 e RN-ISOL-002: a barra de status mostra o modo, o nível de isolamento e, com transação aberta, os comandos sem commit e há quanto tempo abriu.
   status: {
-    autoCommit: "Auto-commit · Padrão do banco",
-    idle: "Commit manual · Padrão do banco · sem transação aberta",
-    failed: "Commit manual · Padrão do banco · transação com erro: só resta o Rollback",
-    open: (count: number, minutes: number) => `Commit manual · Padrão do banco · ${formatCount(count, "comando sem commit", "comandos sem commit")} · ${minutes < 1 ? "há menos de 1 min" : `há ${minutes} min`}`,
+    autoCommit: (level: string = "Padrão do banco") => `Auto-commit · ${level}`,
+    idle: (level: string = "Padrão do banco") => `Commit manual · ${level} · sem transação aberta`,
+    failed: (level: string = "Padrão do banco", mode: string = "Commit manual") => `${mode} · ${level} · transação com erro: só resta o Rollback`,
+    open: (count: number, minutes: number, level: string = "Padrão do banco", mode: string = "Commit manual") =>
+      `${mode} · ${level} · ${formatCount(count, "comando sem commit", "comandos sem commit")} · ${minutes < 1 ? "há menos de 1 min" : `há ${minutes} min`}`,
   },
 
   // RN-TX-005: sair do Commit manual com a transação aberta pergunta antes.
@@ -34,6 +47,16 @@ export const transactionCopy = {
     title: "Há uma transação aberta",
     description: (count: number) => `A aba tem ${commands(count)} sem commit. Confirme ou desfaça a transação antes de passar para Auto-commit.`,
     failedDescription: "A transação tem um erro e só pode ser desfeita. Desfaça-a antes de passar para Auto-commit.",
+    commit: "Commit",
+    rollback: "Rollback",
+    cancel: "Cancelar",
+  },
+
+  // RN-TX-006: trocar a conexão ou o banco da aba com a transação aberta pergunta antes.
+  switching: {
+    title: "Há uma transação aberta",
+    description: (count: number) => `A aba tem ${commands(count)} sem commit. Confirme ou desfaça a transação antes de trocar a sessão da aba.`,
+    failedDescription: "A transação tem um erro e só pode ser desfeita. Desfaça-a antes de trocar a sessão da aba.",
     commit: "Commit",
     rollback: "Rollback",
     cancel: "Cancelar",

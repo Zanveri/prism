@@ -12,7 +12,7 @@ const copy = recordsCopy.grid;
 /** O menos do zoom, no traço dos outros ícones (16×16, 1,5); o mais é o `PlusIcon` do conjunto. */
 function MinusIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-none">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon="minus" className="flex-none">
       <path d="M3 8h10" />
     </svg>
   );

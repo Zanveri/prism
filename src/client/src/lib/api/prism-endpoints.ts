@@ -38,6 +38,7 @@ export const prismEndpoints = {
   userDatabaseSessionSchemaDiagram: (id: string, schema: string) => `api/user/database-sessions/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/diagram`,
   userDatabaseSessionColumns: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/columns`,
   userDatabaseSessionIndexes: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/indexes`,
+  userDatabaseSessionChecks: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/checks`,
   userDatabaseSessionForeignKeys: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/foreign-keys`,
   userDatabaseSessionReferencedBy: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/referenced-by`,
   userDatabaseSessionQueries: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries`,
@@ -57,6 +58,9 @@ export const prismEndpoints = {
   // RN-SCRIPT-007: as pastas da seção Scripts, à parte das pastas de conexões.
   userScriptFolders: "api/user/script-folders",
   userScriptFolder: (id: string) => `api/user/script-folders/${encodeURIComponent(id)}`,
+  // RN-CONSTRUIR-080: modelos do Construir no cofre.
+  userBuildModels: "api/user/build-models",
+  userBuildModel: (id: string) => `api/user/build-models/${encodeURIComponent(id)}`,
   userWorkspace: "api/user/workspace",
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
@@ -77,6 +81,14 @@ export const prismEndpoints = {
   userTransferCopiesPreview: "api/user/transfers/copies/preview",
   userTransferCopies: "api/user/transfers/copies",
   userTransfer: (id: string) => `api/user/transfers/${encodeURIComponent(id)}`,
+  // RN-HIST-002 a 006 e RN-AUDIT-010 a 016: o diário de comandos e auditoria do usuário.
+  userJournalHistory: "api/user/journal/history",
+  userJournalHistoryEntry: (id: number) => `api/user/journal/history/${encodeURIComponent(String(id))}`,
+  userJournalAudit: "api/user/journal/audit",
+  userJournalAuditEntry: (id: number) => `api/user/journal/audit/${encodeURIComponent(String(id))}`,
+  userJournalAuditFacets: "api/user/journal/audit/facets",
+  userJournalAuditPurge: "api/user/journal/audit/purge",
+  userJournalSettings: "api/user/journal/settings",
 } as const;
 
 function tablePath(id: string, schema: string, table: string) {

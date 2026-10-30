@@ -1,0 +1,93 @@
+{
+  "engine": "db2",
+  "sql": "CREATE SCHEMA estoque;\n\nCREATE TABLE estoque.item (\n  id       bigint NOT NULL,\n  grupo_id bigint NOT NULL,\n  codigo   varchar(30) NOT NULL\n);\n\nALTER TABLE estoque.item\n  ADD CONSTRAINT pk_item PRIMARY KEY (id);\n\nALTER TABLE estoque.item\n  ADD CONSTRAINT uq_item_codigo UNIQUE (codigo);\n\nALTER TABLE estoque.item\n  ADD CONSTRAINT fk_item_grupo FOREIGN KEY (grupo_id)\n    REFERENCES estoque.grupo (id) ON DELETE RESTRICT ON UPDATE CASCADE;\n\nALTER TABLE estoque.item\n  ADD CONSTRAINT ck_item_codigo CHECK (codigo <> '');\n\nCOMMENT ON TABLE estoque.item IS 'Itens de estoque';",
+  "before": {
+    "version": 1,
+    "engine": "db2",
+    "defaultSchema": "estoque",
+    "schemas": [{ "name": "estoque", "create": false }],
+    "base": null,
+    "tables": [],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "model": {
+    "version": 1,
+    "engine": "db2",
+    "defaultSchema": "estoque",
+    "schemas": [{ "name": "estoque", "create": true }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "estoque",
+        "name": "item",
+        "exactName": false,
+        "comment": "Itens de estoque",
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          },
+          {
+            "name": "grupo_id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          },
+          {
+            "name": "codigo",
+            "exactName": false,
+            "originName": null,
+            "type": "varchar(30)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "pk_item", "columns": ["id"] },
+        "uniques": [{ "name": "uq_item_codigo", "columns": ["codigo"] }],
+        "checks": [{ "name": "ck_item_codigo", "expression": "codigo <> ''" }],
+        "indexes": [],
+        "foreignKeys": [
+          {
+            "name": "fk_item_grupo",
+            "columns": ["grupo_id"],
+            "target": { "schema": "estoque", "table": "grupo", "columns": ["id"] },
+            "onDelete": "restrict",
+            "onUpdate": "cascade"
+          }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "warnings": []
+}

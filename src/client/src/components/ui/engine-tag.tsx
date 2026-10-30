@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 
+import { databaseLogoOf, engineBrands } from "@/assets/databases/database-logos";
 import { cn } from "@/lib/utils/cn";
 
 import { StatusBadge } from "./status-badge";
@@ -41,8 +42,21 @@ const engineColors: Record<Engine, string> = {
   13: "border-informix text-informix",
 };
 
-/** A etiqueta mono do banco, com a cor dele. Serve à lista, à árvore e à área de trabalho. */
+/** A marca do banco, com a logo em PNG sem fundo (ou a etiqueta mono de reserva se a logo for retirada). Serve à lista, à árvore e à área de trabalho. */
 export function EngineTag({ engine, className, ...props }: { engine: Engine } & ComponentProps<"span">) {
+  const logo = databaseLogoOf(engineBrands[engine]);
+  if (logo !== null) {
+    return (
+      <img
+        src={logo.src}
+        alt={engineTags[engine]}
+        draggable={false}
+        aria-hidden={props["aria-hidden"]}
+        className={cn("size-[18px] flex-none object-contain select-none", className)}
+      />
+    );
+  }
+
   return (
     <StatusBadge className={cn("min-w-8 justify-center font-semibold", engineColors[engine], className)} {...props}>
       {engineTags[engine]}

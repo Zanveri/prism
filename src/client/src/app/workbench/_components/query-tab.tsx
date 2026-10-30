@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { HostProvider, type Engine } from "@/components/ui";
+import { Button, Dialog, HostProvider, type Engine } from "@/components/ui";
 import { focusedHost, hostFocus, mainHost } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
@@ -31,6 +31,8 @@ import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScri
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { tabEntries } from "../_lib/tab-focus";
+import { useTabTransaction } from "../_lib/transaction";
+import { transactionCopy } from "../_lib/transaction.copy";
 import { recall, remember } from "../_lib/tab-memory";
 import { isPersonBusy, useQueryRunner, useScriptRun, type DocRange, type QueryRunner, type RunHooks, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
 import { conditionOf, sortOf, withOrder } from "../_lib/table-sql";
@@ -65,6 +67,9 @@ import { VariablesPanel } from "./variables-panel";
 import { variablesPanelCopy } from "../_lib/variables-panel.copy";
 import { RecordsFilter } from "./table-tab/records-filter";
 import { SqlEditor, type FlashRun, type SqlEditorHandle } from "./sql-editor";
+import { HistoryPanel } from "./history-panel";
+import { openFromHistory } from "../_lib/history";
+import type { HistoryItem } from "../_lib/history.service";
 
 type QueryTabPanelProps = {
   tab: QueryTab;
@@ -112,7 +117,7 @@ type QueryTabPanelProps = {
   /** RN-ARVORE-007: a aba passa a outro banco do servidor da conexão (`undefined`: o da conexão), depois da pergunta das alterações não salvas. Estável. */
   onSwitchDatabase: (tabId: string, database: string | undefined) => void;
   /** RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL": uma aba de consulta nova, com o texto no editor. Estável. */
-  onOpenQuery?: (connectionId: string, sql: string, database?: string) => void;
+  onOpenQuery?: (connectionId: string | null, sql: string, database?: string) => void;
 };
 
 /** A plataforma, para o atalho do script (RN-SQL-019): Alt+X, ou Cmd+Option+X no macOS. */
@@ -178,13 +183,28 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const script = useScriptRun(runner);
   // RN-PROT-001: o aviso antes de executar, pelas proteções da conexão da aba.
   const confirmation = useCommandConfirmation(tab.connectionId, tab.database);
-  const { confirm, confirmed } = confirmation;
+  const { confirm: rawConfirm, confirmed } = confirmation;
+  const confirm = useCallback(
+    (make: Parameters<typeof rawConfirm>[0], proceed: (asked: boolean) => void) => {
+      let asked = false;
+      rawConfirm(
+        (protections) => {
+          const question = make(protections);
+          asked = question !== null && protections.confirm !== null;
+          return question;
+        },
+        () => proceed(asked),
+      );
+    },
+    [rawConfirm],
+  );
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
   const area = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const resultId = useId();
   const [runnable, setRunnable] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [layout, dispatch] = useReducer(layoutReducer, tab.id, (tabId) => recall(tabId, "layout") ?? initialLayout);
   useEffect(() => remember(tab.id, "layout", layout), [tab.id, layout]);
 
@@ -288,10 +308,10 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         const filter = conditionOf(draft);
         confirm(
           (protections) => commandQuestion(protections, confirmedOf(filter === "" ? before : { ...before, filter })),
-          () => {
+          (asked) => {
             const { base: target, applied } = filterNow.current;
             // RN-SQL-020: o filtro do resultado do último comando de um script muda só ele; as outras abas do script ficam.
-            void applyResultFilter(target, draft, applied, runner.getState(), { setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned, run: (next) => runner.run(next, { keepScript: true }) });
+            void applyResultFilter(target, draft, applied, runner.getState(), { setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned, run: (next) => runner.run(next, asked ? { keepScript: true, confirmed: true } : { keepScript: true }) });
           },
         );
       }),
@@ -482,7 +502,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
       const range = variableRange(false);
       if (range !== null) return guard(() => void runner.runItem(range, runHooks(flash)));
 
-      const go = () => {
+      const go = (asked?: boolean) => {
         if (commandWillRun(target, isPersonBusy(runner.getState()))) {
           // RN-PAINEL-001: executar com a área recolhida a restaura, no painel; numa aba ou numa janela o que o painel tinha fica guardado como estava.
           if (inPanel) dispatch({ type: "run" });
@@ -490,7 +510,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
           if (hasConnection) flash();
         }
-        void runner.run(target);
+        if (asked) void runner.run(target, { confirmed: true });
+        else void runner.run(target);
       };
       // RN-PROT-001: o aviso vem depois da pergunta das alterações não salvas, logo antes de o comando sair; cancelado, nada sai.
       if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => commandQuestion(protections, confirmedOf(target)), go));
@@ -504,12 +525,13 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     (targets: RunTarget[]) => {
       const range = variableRange(true);
       if (range !== null) return guard(() => void runner.runScriptDoc(range, runHooks()));
-      const go = () => {
+      const go = (asked?: boolean) => {
         if (scriptWillRun(targets, isPersonBusy(runner.getState()))) {
           if (inPanel) dispatch({ type: "run" });
           clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
         }
-        void runner.runScript(targets);
+        if (asked) void runner.runScript(targets, { confirmed: true });
+        else void runner.runScript(targets);
       };
       // RN-PROT-001: uma vez, antes do primeiro comando, com a lista dos que pedem confirmação; confirmado, o script roda sem perguntar de novo.
       if (scriptWillRun(targets, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => scriptQuestion(protections, targets), go));
@@ -521,12 +543,13 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // limpa o filtro nem mexe na área.
   const handleRunAlone = useCallback(
     (target: RunTarget) => {
-      const go = () => {
+      const go = (asked?: boolean) => {
         if (commandWillRun(target, isPersonBusy(runner.getState()))) {
           if (inPanel) dispatch({ type: "run" });
           clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
         }
-        void runner.runCommand(target);
+        if (asked) void runner.runCommand(target, { confirmed: true });
+        else void runner.runCommand(target);
       };
       if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => commandQuestion(protections, confirmedOf(target)), go));
       else go();
@@ -541,7 +564,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         if (target === null || isPersonBusy(runner.getState())) return void runner.rerun();
         confirm(
           (protections) => commandQuestion(protections, confirmedOf(target)),
-          () => void runner.rerun(),
+          (asked) => (asked ? void runner.rerun({ confirmed: true }) : void runner.rerun()),
         );
       }),
     [runner, guard, confirm],
@@ -619,11 +642,21 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
 
   // RN-ARVORE-007: trocar o banco, com alterações não salvas na grade, pergunta antes, como executar outro comando (RN-EDIT-007). O resultado na tela é do
   // banco de antes e sai com o executor dele; o texto fica. (A aba de consulta ainda não tem o Commit manual, RN-TX-001: não há transação aberta a perguntar.)
-  const handleChooseDatabase = useCallback((database: string | undefined) => guard(() => onSwitchDatabase(tab.id, database)), [guard, onSwitchDatabase, tab.id]);
+  const txState = useTabTransaction(runner.transaction);
+  const [pendingSwitch, setPendingSwitch] = useState<(() => void) | null>(null);
+  const guardSwitch = useCallback(
+    (proceed: () => void) =>
+      guard(() => {
+        if (runner.transaction.getState().open) setPendingSwitch(() => proceed);
+        else proceed();
+      }),
+    [guard, runner],
+  );
+  const handleChooseDatabase = useCallback((database: string | undefined) => guardSwitch(() => onSwitchDatabase(tab.id, database)), [guardSwitch, onSwitchDatabase, tab.id]);
 
   // RN-ARVORE-008: trocar a conexão pergunta o mesmo antes; o resultado sai com o executor de antes, e a aba vai ao banco padrão da conexão nova.
   const [pickingConnection, setPickingConnection] = useState(false);
-  const handleChooseConnection = useCallback((connectionId: string) => guard(() => onSwitchConnection(tab.id, connectionId)), [guard, onSwitchConnection, tab.id]);
+  const handleChooseConnection = useCallback((connectionId: string) => guardSwitch(() => onSwitchConnection(tab.id, connectionId)), [guardSwitch, onSwitchConnection, tab.id]);
 
   // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -668,6 +701,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     if (!event.defaultPrevented && connectionShortcut(event)) {
       event.preventDefault();
       setPickingConnection((open) => !open);
+      return;
+    }
+    // RN-HIST-001: Ctrl+Shift+H (Cmd+Shift+H no macOS) abre ou fecha o painel do histórico desta aba.
+    if (!event.defaultPrevented && (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "h") {
+      event.preventDefault();
+      if (!event.repeat) setHistoryOpen((open) => !open);
       return;
     }
     const mode = event.defaultPrevented ? null : saveShortcut(event);
@@ -721,10 +760,13 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           onCancel={handleCancel}
           connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
           database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
-          transaction={connectionId === null ? null : <TransactionControl transaction={runner.transaction} busy={busy} />}
+          transaction={connectionId === null ? null : <TransactionControl transaction={runner.transaction} engine={engine} busy={busy} />}
+          historyOpen={historyOpen}
+          onToggleHistory={() => setHistoryOpen((open) => !open)}
         />
   
-        <div ref={area} className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-row">
+        <div ref={area} className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Maximizada, o editor fica sem altura e fora da ordem do Tab, mas montado. */}
           <div inert={maximized} style={{ flex: flex.editor }} className={cn("min-h-0 overflow-hidden", maximized && "h-0")}>
             <SqlEditor
@@ -751,6 +793,21 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
 
           {/* O lugar da área de resultado no painel. Numa aba ou numa janela, ela está no lugar de lá, e aqui não há nada. */}
           {inPanel ? <div ref={setPanelSlot} style={{ flex: flex.result }} className="flex min-h-0 min-w-0 flex-col" /> : null}
+        </div>
+        {historyOpen ? (
+          <HistoryPanel
+            connectionId={connectionId}
+            onInsertAtCursor={(sql) => editor.current?.insertText(sql)}
+            onOpenInNewTab={(item: HistoryItem) => {
+              const target = openFromHistory(item, queryClient.getQueryData<{ id: string }[]>(connectionsQuery.queryKey) ?? []);
+              onOpenQuery?.(target.connectionId, target.sql);
+            }}
+            onClose={() => {
+              setHistoryOpen(false);
+              editor.current?.focus();
+            }}
+          />
+        ) : null}
         </div>
         <ResultHost tabId={tab.id} slot={slot} onBack={onBackToPanel === undefined ? undefined : () => onBackToPanel(tab.id)} onLink={onFocusWindow === undefined ? undefined : () => onFocusWindow(tab.id, "link")}>
           <ResultPanel
@@ -829,6 +886,52 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         {/* RN-VAR-018: o "SQL enviado" do comando que levou variáveis, no resultado, nas Estatísticas e na pergunta de erro. */}
         {sentView?.sent === undefined ? null : <SentSqlDialog command={sentView.sent} engine={sentView.engine} onClose={() => setSentView(null)} />}
         {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
+        {pendingSwitch === null ? null : (
+          <Dialog
+            open
+            role="alertdialog"
+            title={transactionCopy.switching.title}
+            description={txState.failed ? transactionCopy.switching.failedDescription : transactionCopy.switching.description(txState.commands)}
+            pending={txState.pending}
+            onClose={() => setPendingSwitch(null)}
+            footer={
+              <>
+                <Button autoFocus type="button" variant="secondary" onClick={() => setPendingSwitch(null)} disabled={txState.pending}>
+                  {transactionCopy.switching.cancel}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={txState.pending}
+                  onClick={() =>
+                    void runner.transaction.end(false).then((ok) => {
+                      const proceed = pendingSwitch;
+                      setPendingSwitch(null);
+                      if (ok) proceed();
+                    })
+                  }
+                >
+                  {transactionCopy.switching.rollback}
+                </Button>
+                {txState.failed ? null : (
+                  <Button
+                    type="button"
+                    disabled={txState.pending}
+                    onClick={() =>
+                      void runner.transaction.end(true).then((ok) => {
+                        const proceed = pendingSwitch;
+                        setPendingSwitch(null);
+                        if (ok) proceed();
+                      })
+                    }
+                  >
+                    {transactionCopy.switching.commit}
+                  </Button>
+                )}
+              </>
+            }
+          />
+        )}
         {/* RN-PROT-001: o aviso antes de executar; no Salvar, com o "Ver SQL", que abre os comandos por cima dele. */}
         {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" || confirmation.open.question.kind === "wholeColumn" ? edits.banner.onViewSql : undefined} />}
       </ActiveHostProvider>

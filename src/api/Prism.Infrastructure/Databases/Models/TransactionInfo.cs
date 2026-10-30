@@ -25,10 +25,6 @@ public enum ETransactionState
 /// <summary>
 /// RN-TX-003 e seção 22 da especificação ("Rotas e respostas"): o estado da transação da sessão depois de uma operação, que a tela mostra
 /// na barra do editor e na de status. `Commands` são os comandos sem commit (cada execução e cada "Salvar" contam um), e `OpenedAt`, quando
-/// a transação abriu; os dois só existem com ela aberta. `IsolationLevel` é sempre o padrão do banco: o seletor de nível (RN-ISOL-*) ainda
-/// não existe.
+/// a transação abriu; os dois só existem com ela aberta. `IsolationLevel` é o nível de isolamento escolhido na aba (RN-ISOL-001).
 /// </summary>
-public sealed record TransactionInfo(ETransactionMode Mode, bool Open, bool Failed, int Commands, DateTimeOffset? OpenedAt)
-{
-    public string IsolationLevel => "default";
-}
+public sealed record TransactionInfo(ETransactionMode Mode, bool Open, bool Failed, int Commands, DateTimeOffset? OpenedAt, string IsolationLevel = IsolationLevels.Default);

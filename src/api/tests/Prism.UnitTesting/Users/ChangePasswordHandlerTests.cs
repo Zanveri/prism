@@ -23,7 +23,7 @@ public sealed class ChangePasswordHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = UserFakers.ReturnChangePasswordCommandValid(currentPassword: " senha atual com espaços ", newPassword: " senha nova com espaços ");
-        _vault.Setup(v => v.ChangePasswordAsync(" senha atual com espaços ", " senha nova com espaços ", cancellationToken)).ReturnsAsync(UnitResult.Success<EVaultError>());
+        _vault.Setup(v => v.ChangePasswordAsync(" senha atual com espaços ", " senha nova com espaços ", cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>())).ReturnsAsync(UnitResult.Success<EVaultError>());
         var handler = new ChangePasswordHandler(_vault.Object);
 
         //Act
@@ -31,7 +31,7 @@ public sealed class ChangePasswordHandlerTests
 
         //Assert
         Assert.True(result.IsSuccess);
-        _vault.Verify(v => v.ChangePasswordAsync(" senha atual com espaços ", " senha nova com espaços ", cancellationToken), Times.Once);
+        _vault.Verify(v => v.ChangePasswordAsync(" senha atual com espaços ", " senha nova com espaços ", cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>()), Times.Once);
         _vault.VerifyNoOtherCalls();
     }
 
@@ -42,7 +42,7 @@ public sealed class ChangePasswordHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = UserFakers.ReturnChangePasswordCommandValid();
-        _vault.Setup(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken)).ReturnsAsync(UnitResult.Failure(EVaultError.CurrentPasswordInvalid));
+        _vault.Setup(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>())).ReturnsAsync(UnitResult.Failure(EVaultError.CurrentPasswordInvalid));
         var handler = new ChangePasswordHandler(_vault.Object);
 
         //Act
@@ -52,7 +52,7 @@ public sealed class ChangePasswordHandlerTests
         Assert.True(result.IsFailure);
         Assert.Equal("INVALID_PASSWORD", result.Error.Type);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, result.Error.StatusCode);
-        _vault.Verify(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken), Times.Once);
+        _vault.Verify(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>()), Times.Once);
         _vault.VerifyNoOtherCalls();
     }
 
@@ -63,7 +63,7 @@ public sealed class ChangePasswordHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = UserFakers.ReturnChangePasswordCommandValid();
-        _vault.Setup(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken)).ReturnsAsync(UnitResult.Failure(EVaultError.PasswordUnchanged));
+        _vault.Setup(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>())).ReturnsAsync(UnitResult.Failure(EVaultError.PasswordUnchanged));
         var handler = new ChangePasswordHandler(_vault.Object);
 
         //Act
@@ -73,7 +73,7 @@ public sealed class ChangePasswordHandlerTests
         Assert.True(result.IsFailure);
         Assert.Equal("PASSWORD_UNCHANGED", result.Error.Type);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, result.Error.StatusCode);
-        _vault.Verify(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken), Times.Once);
+        _vault.Verify(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>()), Times.Once);
         _vault.VerifyNoOtherCalls();
     }
 
@@ -85,7 +85,7 @@ public sealed class ChangePasswordHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = UserFakers.ReturnChangePasswordCommandValid();
-        _vault.Setup(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken)).ReturnsAsync(UnitResult.Failure(EVaultError.Locked));
+        _vault.Setup(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>())).ReturnsAsync(UnitResult.Failure(EVaultError.Locked));
         var handler = new ChangePasswordHandler(_vault.Object);
 
         //Act
@@ -95,7 +95,7 @@ public sealed class ChangePasswordHandlerTests
         Assert.True(result.IsFailure);
         Assert.Equal("VAULT_LOCKED", result.Error.Type);
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
-        _vault.Verify(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken), Times.Once);
+        _vault.Verify(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>()), Times.Once);
         _vault.VerifyNoOtherCalls();
     }
 
@@ -106,7 +106,7 @@ public sealed class ChangePasswordHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = UserFakers.ReturnChangePasswordCommandValid();
-        _vault.Setup(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken)).ReturnsAsync(UnitResult.Failure(EVaultError.Unavailable));
+        _vault.Setup(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>())).ReturnsAsync(UnitResult.Failure(EVaultError.Unavailable));
         var handler = new ChangePasswordHandler(_vault.Object);
 
         //Act
@@ -116,7 +116,7 @@ public sealed class ChangePasswordHandlerTests
         Assert.True(result.IsFailure);
         Assert.Equal("VAULT_UNAVAILABLE", result.Error.Type);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, result.Error.StatusCode);
-        _vault.Verify(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken), Times.Once);
+        _vault.Verify(v => v.ChangePasswordAsync(command.CurrentPassword, command.NewPassword, cancellationToken, It.IsAny<Func<byte[], CancellationToken, Task<bool>>?>(), It.IsAny<Func<CancellationToken, Task>?>()), Times.Once);
         _vault.VerifyNoOtherCalls();
     }
 }
