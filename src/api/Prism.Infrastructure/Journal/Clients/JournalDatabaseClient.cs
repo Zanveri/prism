@@ -363,7 +363,8 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
                 protections TEXT NULL,
                 hidden_in_history INTEGER NOT NULL DEFAULT 0,
                 history_search_text TEXT NOT NULL DEFAULT '',
-                search_text TEXT NOT NULL DEFAULT ''
+                search_text TEXT NOT NULL DEFAULT '',
+                sql_state TEXT NULL
             );
             CREATE INDEX IF NOT EXISTS ix_entries_started_at ON entries (started_at_ticks DESC, id DESC);
             CREATE INDEX IF NOT EXISTS ix_entries_connection_started_at ON entries (connection_id, started_at_ticks DESC, id DESC);
@@ -474,7 +475,7 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
         var errorMessage = TruncateErrorMessage(end?.ErrorMessage);
         var outcome = end?.Outcome ?? EJournalOutcome.InProgress;
         var historySearch = NormalizeSearchText(historyText ?? sqlText ?? start.Action);
-        var fullSearch = NormalizeSearchText(start.Action, start.Reason, snapshot.Name, snapshot.Database, sqlText, historyText, end?.ErrorCode, errorMessage);
+        var fullSearch = NormalizeSearchText(start.Action, start.Reason, snapshot.Name, snapshot.Database, sqlText, historyText, end?.ErrorCode, end?.SqlState, errorMessage);
 
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -483,12 +484,12 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
                 id, started_at, started_at_ticks, ended_at, duration_ms, kind, action, level, reason, outcome, origin,
                 connection_id, connection_name, engine, folder_path, environment_name, environment_color, database_name,
                 session_id, script_run_id, sql_text, history_text, row_count, error_code, error_message,
-                confirmed, protections, hidden_in_history, history_search_text, search_text
+                confirmed, protections, hidden_in_history, history_search_text, search_text, sql_state
             ) VALUES (
                 @id, @startedAt, @startedAtTicks, @endedAt, @durationMs, @kind, @action, @level, @reason, @outcome, @origin,
                 @connectionId, @connectionName, @engine, @folderPath, @environmentName, @environmentColor, @databaseName,
                 @sessionId, @scriptRunId, @sqlText, @historyText, @rowCount, @errorCode, @errorMessage,
-                @confirmed, @protections, 0, @historySearch, @search
+                @confirmed, @protections, 0, @historySearch, @search, @sqlState
             );
             """;
         command.Parameters.AddWithValue("@id", id);
@@ -520,13 +521,14 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
         command.Parameters.AddWithValue("@protections", (object?)start.Protections ?? DBNull.Value);
         command.Parameters.AddWithValue("@historySearch", historySearch);
         command.Parameters.AddWithValue("@search", fullSearch);
+        command.Parameters.AddWithValue("@sqlState", (object?)end?.SqlState ?? DBNull.Value);
         command.ExecuteNonQuery();
     }
 
     private static void ExecuteUpdate(SqliteConnection connection, SqliteTransaction transaction, long id, JournalEntryEnd end)
     {
         var errorMessage = TruncateErrorMessage(end.ErrorMessage);
-        var extraSearch = NormalizeSearchText(end.ErrorCode, errorMessage);
+        var extraSearch = NormalizeSearchText(end.ErrorCode, end.SqlState, errorMessage);
 
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -538,6 +540,7 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
                 row_count = @rowCount,
                 error_code = @errorCode,
                 error_message = @errorMessage,
+                sql_state = @sqlState,
                 search_text = CASE WHEN @extraSearch = '' THEN search_text ELSE search_text || ' ' || @extraSearch END
             WHERE id = @id;
             """;
@@ -548,6 +551,7 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
         command.Parameters.AddWithValue("@rowCount", (object?)end.RowCount ?? DBNull.Value);
         command.Parameters.AddWithValue("@errorCode", (object?)end.ErrorCode ?? DBNull.Value);
         command.Parameters.AddWithValue("@errorMessage", (object?)errorMessage ?? DBNull.Value);
+        command.Parameters.AddWithValue("@sqlState", (object?)end.SqlState ?? DBNull.Value);
         command.Parameters.AddWithValue("@extraSearch", extraSearch);
         command.ExecuteNonQuery();
     }
@@ -567,7 +571,7 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
             SELECT id, started_at, ended_at, duration_ms, kind, action, level, reason, outcome, origin,
                    connection_id, connection_name, engine, folder_path, environment_name, environment_color, database_name,
                    session_id, script_run_id, sql_text, history_text, row_count, error_code, error_message,
-                   confirmed, protections, hidden_in_history
+                   confirmed, protections, hidden_in_history, sql_state
             FROM entries
             {pageWhere}
             ORDER BY id DESC
@@ -695,7 +699,7 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
             SELECT id, started_at, ended_at, duration_ms, kind, action, level, reason, outcome, origin,
                    connection_id, connection_name, engine, folder_path, environment_name, environment_color, database_name,
                    session_id, script_run_id, sql_text, history_text, row_count, error_code, error_message,
-                   confirmed, protections, hidden_in_history
+                   confirmed, protections, hidden_in_history, sql_state
             FROM entries
             WHERE id = @id;
             """;
@@ -822,8 +826,9 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
         var confirmed = reader.GetInt32(24) != 0;
         var protections = GetNullableString(reader, 25);
         var hiddenInHistory = reader.GetInt32(26) != 0;
+        var sqlState = GetNullableString(reader, 27);
 
-        return new JournalEntry(id, startedAt, endedAt, durationMs, kind, action, level, reason, outcome, origin, snapshot, sessionId, scriptRunId, sqlText, historyText, rowCount, errorCode, errorMessage, confirmed, protections, hiddenInHistory);
+        return new JournalEntry(id, startedAt, endedAt, durationMs, kind, action, level, reason, outcome, origin, snapshot, sessionId, scriptRunId, sqlText, historyText, rowCount, errorCode, errorMessage, confirmed, protections, hiddenInHistory, sqlState);
     }
 
     private static string? GetNullableString(SqliteDataReader reader, int ordinal)

@@ -31,6 +31,9 @@ internal sealed class Transfer(Guid id, ETransferKind kind, Guid connectionID, l
     /// <summary>RN-IMPORT-014: a tabela de destino da importação e da cópia, pela regra da própria origem (a tabela ocupada); nula na exportação.</summary>
     public (ConnectionSettings Settings, string Schema, string Table)? Target { get; init; }
 
+    /// <summary>RN-AUDIT-002: o identificador do registro aberto no diário quando o trabalho começou, ou -1 se não há registro pendente.</summary>
+    public long JournalEntryID { get; set; } = -1;
+
     public ETransferState State { get; set; } = ETransferState.Running;
 
     public ETransferPhase Phase { get; set; } = ETransferPhase.Connecting;

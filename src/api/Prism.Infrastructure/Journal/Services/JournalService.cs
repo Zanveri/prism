@@ -54,10 +54,11 @@ internal sealed class JournalService : IJournalService, IDisposable
         if (session is null || !session.AcceptingWrites || !_vaultService.IsUnlocked || _vaultService.Generation != session.Generation)
             return -1;
 
+        var effectiveStart = start.StartedAt == default ? start with { StartedAt = _timeProvider.GetUtcNow() } : start;
         var id = Interlocked.Increment(ref _nextId);
-        session.InFlight[id] = session.Generation;
+        session.InFlight[id] = (session.Generation, effectiveStart.StartedAt);
 
-        if (!session.Channel.Writer.TryWrite(new JournalWork.Write(new JournalBatchItem.Insert(id, session.Generation, start))))
+        if (!session.Channel.Writer.TryWrite(new JournalWork.Write(new JournalBatchItem.Insert(id, session.Generation, effectiveStart))))
         {
             session.InFlight.TryRemove(id, out _);
 
@@ -76,10 +77,14 @@ internal sealed class JournalService : IJournalService, IDisposable
         if (session is null || !session.AcceptingWrites || !_vaultService.IsUnlocked || _vaultService.Generation != session.Generation)
             return;
 
-        if (!session.InFlight.TryRemove(id, out var entryGeneration) || entryGeneration != session.Generation)
+        if (!session.InFlight.TryRemove(id, out var inFlight) || inFlight.Generation != session.Generation)
             return;
 
-        session.Channel.Writer.TryWrite(new JournalWork.Write(new JournalBatchItem.Update(id, session.Generation, end)));
+        var endedAt = end.EndedAt == default ? _timeProvider.GetUtcNow() : end.EndedAt;
+        var durationMs = end.DurationMs ?? Math.Max(0L, (long)(endedAt - inFlight.StartedAt).TotalMilliseconds);
+        var effectiveEnd = end with { EndedAt = endedAt, DurationMs = durationMs };
+
+        session.Channel.Writer.TryWrite(new JournalWork.Write(new JournalBatchItem.Update(id, session.Generation, effectiveEnd)));
     }
 
     public void Record(JournalEntryStart start, JournalEntryEnd end)
@@ -88,8 +93,14 @@ internal sealed class JournalService : IJournalService, IDisposable
         if (session is null || !session.AcceptingWrites || !_vaultService.IsUnlocked || _vaultService.Generation != session.Generation)
             return;
 
+        var startedAt = start.StartedAt == default ? _timeProvider.GetUtcNow() : start.StartedAt;
+        var endedAt = end.EndedAt == default ? startedAt : end.EndedAt;
+        var durationMs = end.DurationMs ?? Math.Max(0L, (long)(endedAt - startedAt).TotalMilliseconds);
+        var effectiveStart = start with { StartedAt = startedAt };
+        var effectiveEnd = end with { EndedAt = endedAt, DurationMs = durationMs };
+
         var id = Interlocked.Increment(ref _nextId);
-        session.Channel.Writer.TryWrite(new JournalWork.Write(new JournalBatchItem.InsertCompleted(id, session.Generation, start, end)));
+        session.Channel.Writer.TryWrite(new JournalWork.Write(new JournalBatchItem.InsertCompleted(id, session.Generation, effectiveStart, effectiveEnd)));
     }
 
     public Task<Result<JournalPage, EJournalError>> QueryAsync(JournalQuery query, CancellationToken cancellationToken = default)
@@ -443,7 +454,7 @@ internal sealed class JournalService : IJournalService, IDisposable
 
         public Channel<JournalWork> Channel { get; } = System.Threading.Channels.Channel.CreateUnbounded<JournalWork>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
-        public ConcurrentDictionary<long, long> InFlight { get; } = new();
+        public ConcurrentDictionary<long, (long Generation, DateTimeOffset StartedAt)> InFlight { get; } = new();
 
         public SemaphoreSlim DbGate { get; } = new(1, 1);
 
