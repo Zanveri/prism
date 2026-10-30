@@ -1215,7 +1215,7 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
 
     view.show().area.kept!.onRunAlone();
     rt.asked[1].proceed();
-    expect(runner.runCommand).toHaveBeenCalledExactlyOnceWith(targets[0]);
+    expect(runner.runCommand).toHaveBeenCalledExactlyOnceWith(targets[0], { confirmed: true });
   });
 
   it("com um comando em andamento na aba, Executar este comando diz que está ocupado e não pergunta, não limpa o filtro nem abre a área recolhida", () => {

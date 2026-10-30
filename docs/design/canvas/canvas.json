@@ -24,7 +24,10 @@
     "Construir.dc.html": { "x": 4560, "y": 4200, "w": 1440, "h": 1240, "title": "Construir — tabelas, diagrama e editor Simplificado · SQL · DBML", "expand": "fill", "is_interactive": true },
     "ConstruirDDL.dc.html": { "x": 6080, "y": 4200, "w": 1440, "h": 1640, "title": "DDL gerado — só as diferenças ou tudo — e problemas", "expand": "fill", "is_interactive": true },
     "ConstruirEscopo.dc.html": { "x": 7600, "y": 4200, "w": 1440, "h": 900, "title": "Gerar DDL pela primeira vez — tudo ou só as diferenças", "expand": "fill", "is_interactive": true },
-    "ConstruirExistente.dc.html": { "x": 9120, "y": 4200, "w": 480, "h": 1240, "title": "Editar uma tabela existente — o que muda vira ALTER", "is_interactive": false }
+    "ConstruirExistente.dc.html": { "x": 9120, "y": 4200, "w": 480, "h": 1240, "title": "Editar uma tabela existente — o que muda vira ALTER", "is_interactive": false },
+    "Historico.dc.html": { "x": 0, "y": 6200, "w": 1520, "h": 920, "title": "Histórico de comandos SQL — área de trabalho", "expand": "fill", "is_interactive": true },
+    "Auditoria.dc.html": { "x": 1600, "y": 6200, "w": 1520, "h": 980, "title": "Configurações › Auditoria — filtros, tabela e detalhe", "expand": "fill", "is_interactive": true },
+    "Cifra.dc.html": { "x": 3200, "y": 6200, "w": 1520, "h": 880, "title": "Cifra do diário — cadeia de chaves e o que fica no disco", "is_interactive": false }
   },
   "order": [
     "Main.dc.html",
@@ -46,13 +49,17 @@
     "Construir.dc.html",
     "ConstruirDDL.dc.html",
     "ConstruirEscopo.dc.html",
-    "ConstruirExistente.dc.html"
+    "ConstruirExistente.dc.html",
+    "Historico.dc.html",
+    "Auditoria.dc.html",
+    "Cifra.dc.html"
   ],
   "notes": {
     "titulo-acesso": { "x": 0, "y": -300, "text": "1 · Acesso e cofre de conexões", "kind": "title1", "maxW": 6000 },
     "titulo-trabalho": { "x": 0, "y": 1020, "text": "2 · Área de trabalho", "kind": "title1", "maxW": 10560 },
     "titulo-marca": { "x": 0, "y": 2840, "text": "3 · Marca e inicialização", "kind": "title1", "maxW": 1840 },
-    "titulo-construir": { "x": 0, "y": 3900, "text": "4 · Construir — modelar tabelas e gerar o DDL", "kind": "title1", "maxW": 9600 }
+    "titulo-construir": { "x": 0, "y": 3900, "text": "4 · Construir — modelar tabelas e gerar o DDL", "kind": "title1", "maxW": 9600 },
+    "titulo-diario": { "x": 0, "y": 5900, "text": "5 · Histórico de comandos SQL e auditoria", "kind": "title1", "maxW": 4800 }
   },
   "designSystems": []
 }

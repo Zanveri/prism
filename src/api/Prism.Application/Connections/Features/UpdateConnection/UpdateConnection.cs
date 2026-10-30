@@ -1,13 +1,18 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Common.Protections;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Domain;
 using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Models.Dtos;
 using Prism.Application.Connections.Queries;
 using Prism.Application.Connections.Repositories;
+using Prism.Application.Journal;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
+using Prism.Infrastructure.Vault.Services;
 
 namespace Prism.Application.Connections.Features.UpdateConnection;
 
@@ -54,13 +59,11 @@ public sealed record UpdateConnectionCommand : IRequest<Result<ConnectionDto, Ap
     public override string ToString() => nameof(UpdateConnectionCommand);
 }
 
-internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueries, IConnectionRepository connectionRepository, TimeProvider timeProvider) : IRequestHandler<UpdateConnectionCommand, Result<ConnectionDto, ApiErrorDto>>
+internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueries, IConnectionRepository connectionRepository, TimeProvider timeProvider, IVaultService? vaultService = null, IJournalRecorder? journal = null) : IRequestHandler<UpdateConnectionCommand, Result<ConnectionDto, ApiErrorDto>>
 {
     public async Task<Result<ConnectionDto, ApiErrorDto>> Handle(UpdateConnectionCommand request, CancellationToken cancellationToken)
     {
-        // A leitura carrega a falha do cofre, então o cofre fechado é 401 e "a conexão não existe" (sucesso com `null`) é 404.
-        // Ela dá a conexão como estava gravada quando foi lida, fora do semáforo do cofre: só o que não muda (o ID e a criação) vale. Que a conexão
-        // continue lá, que a pasta exista, que o nome seja livre (RN-CONN-011) e a senha que RN-CONN-004 mantém quem resolve é a gravação, com o documento mais recente.
+        var startedAt = timeProvider.GetUtcNow();
         var read = await connectionQueries.GetRecordByID(request.ID, cancellationToken);
         if (read.IsFailure)
             return Result.Failure<ConnectionDto, ApiErrorDto>(VaultErrors.From(read.Error));
@@ -68,16 +71,66 @@ internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueri
         if (read.Value is not { } record)
             return Result.Failure<ConnectionDto, ApiErrorDto>(ConnectionErrors.NotFound(request.ID));
 
+        var previousReadOnly = record.ReadOnly == true;
+        var previousConfirm = ProtectionRules.NormalizeConfirmation(record.ConfirmCommands);
+        var previousFolderID = record.FolderID;
+
         var connection = ConnectionRecords.ToDomain(record);
         var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery, request.UseInternalDescriptions);
-        connection.Update(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, timeProvider.GetUtcNow().UtcDateTime);
+        connection.Update(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, startedAt.UtcDateTime);
 
-        // A senha vai à parte: omitida (nula) mantém a do documento na hora da gravação, e não a que esta leitura trouxe (RN-CONN-004). A do usuário
-        // também: a gravação a confere só se a mudança do somente leitura a pede (RN-PROT-003).
         var updated = await connectionRepository.Update(connection, request.Password, request.UserPassword, cancellationToken);
+        var endedAt = timeProvider.GetUtcNow();
+        var durationMs = Math.Max(0L, (long)(endedAt - startedAt).TotalMilliseconds);
         if (updated.IsFailure)
+        {
+            if (updated.Error.Type == "INVALID_PASSWORD")
+            {
+                var (errSnapshot, errProtections) = JournalSnapshots.FromRecord(vaultService, record);
+                journal?.Record(
+                    new JournalEntryStart(startedAt, EJournalKind.Security, "Senha errada numa conferência", EJournalLevel.Warning, "Senha errada ao mudar o somente leitura da conexão.", Connection: errSnapshot, Protections: errProtections),
+                    new JournalEntryEnd(endedAt, durationMs, EJournalOutcome.Error, ErrorCode: "INVALID_PASSWORD"));
+            }
+
             return Result.Failure<ConnectionDto, ApiErrorDto>(updated.Error);
+        }
+
+        var (snapshot, _) = JournalSnapshots.FromRecord(vaultService, ConnectionRecords.ToRecord(connection));
+        var (action, level, reason) = ClassifyChange(previousReadOnly, connection.ReadOnly, previousConfirm, ProtectionRules.NormalizeConfirmation(connection.ConfirmCommands), previousFolderID, connection.FolderID);
+        journal?.Record(
+            new JournalEntryStart(startedAt, EJournalKind.Connections, action, level, reason, Connection: snapshot, Protections: JournalSnapshots.ProtectionsText(updated.Value)),
+            new JournalEntryEnd(endedAt, durationMs, EJournalOutcome.Ok));
 
         return Result.Success<ConnectionDto, ApiErrorDto>(connection.ToDto(updated.Value));
     }
+
+    private static (string Action, EJournalLevel Level, string Reason) ClassifyChange(bool previousReadOnly, bool currentReadOnly, string? previousConfirm, string? currentConfirm, Guid? previousFolderID, Guid? currentFolderID)
+    {
+        if (previousReadOnly && !currentReadOnly)
+            return ("Somente leitura desligado", EJournalLevel.High, "Somente leitura desligado na conexão.");
+
+        if (!previousReadOnly && currentReadOnly)
+            return ("Somente leitura ligado", EJournalLevel.Info, "Somente leitura ligado na conexão.");
+
+        var previousRank = ConfirmationRank(previousConfirm);
+        var currentRank = ConfirmationRank(currentConfirm);
+        if (currentRank < previousRank)
+            return ("Confirmação afrouxada", EJournalLevel.High, "Confirmação de comandos afrouxada na conexão.");
+
+        if (currentRank > previousRank)
+            return ("Confirmação ligada", EJournalLevel.Info, "Confirmação de comandos reforçada na conexão.");
+
+        if (previousFolderID != currentFolderID)
+            return ("Conexão movida", EJournalLevel.Info, "Conexão movida.");
+
+        return ("Conexão editada", EJournalLevel.Info, "Conexão editada.");
+    }
+
+    private static int ConfirmationRank(string? confirm)
+        => confirm switch
+        {
+            ProtectionRules.ConfirmAll => 2,
+            ProtectionRules.ConfirmIrreversible => 1,
+            _ => 0
+        };
 }

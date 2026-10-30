@@ -3,6 +3,7 @@ using Prism.Api.Hosting;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Transfers.Services;
 
 namespace Prism.Api;
@@ -58,6 +59,9 @@ public static class DependencyInjection
 
         // RN-DBEAVER-006: o serviço da cópia do DBeaver assina o fechamento do cofre para apagá-la; precisa existir desde a subida.
         app.ApplicationServices.GetRequiredService<IDbeaverSourceService>();
+
+        // RN-DIARIO-001 a 003: o serviço do diário assina a abertura e o fechamento do cofre; precisa existir desde a subida.
+        app.ApplicationServices.GetRequiredService<IJournalService>();
 
         app.UseExceptionHandler(handler => handler.Run(WriteUnexpectedError));
 

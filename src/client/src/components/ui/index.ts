@@ -1,14 +1,29 @@
 export { Button, buttonVariants, type ButtonProps } from "./button";
 export { ConfirmDialog, type ConfirmDialogProps } from "./confirm-dialog";
 export { ContextMenu, ContextMenuItems, type ContextMenuGroup, type ContextMenuItem, type ContextMenuProps } from "./context-menu";
+export {
+  DatePicker,
+  DateTimePicker,
+  buildCalendarGrid,
+  daysInMonth,
+  formatDatePickerDisplay,
+  formatDatePickerValue,
+  parseDatePickerValue,
+  type CalendarCell,
+  type DatePickerMode,
+  type DatePickerParts,
+  type DatePickerProps,
+  type DateTimePickerProps,
+} from "./date-picker";
 export { Dialog, type DialogDismissal, type DialogProps, type DialogSize } from "./dialog";
 export { EngineTag, type Engine } from "./engine-tag";
 export { EnvironmentPill, environmentTextColor } from "./environment-pill";
-export { Field, FieldLabel, Input } from "./field";
+export { controlClassName, Field, FieldLabel, Input } from "./field";
 export { FieldError, FormMessage, type FormMessageProps } from "./form-message";
 export { HostProvider, useHost } from "./host-context";
 export { iconColorStyle, readableIconColor } from "./icon-color";
 export {
+  AlertCircleIcon,
   AlertIcon,
   ArrowDownIcon,
   ArrowLeftIcon,
@@ -18,6 +33,7 @@ export {
   AutoLayoutIcon,
   BugIcon,
   BuildIcon,
+  CalendarIcon,
   ChartIcon,
   CheckIcon,
   type ChevronDirection,
@@ -44,6 +60,7 @@ export {
   FolderPlusIcon,
   ForeignKeyIcon,
   GripIcon,
+  HistoryIcon,
   IndexIcon,
   InfoIcon,
   KeyIcon,
@@ -56,6 +73,7 @@ export {
   MoreIcon,
   MoveIcon,
   NoColorIcon,
+  OctagonAlertIcon,
   PackageIcon,
   PaletteIcon,
   PencilIcon,
@@ -70,6 +88,7 @@ export {
   RoutineIcon,
   SequenceIcon,
   SearchIcon,
+  ShieldCheckIcon,
   StarIcon,
   StopIcon,
   TableIcon,

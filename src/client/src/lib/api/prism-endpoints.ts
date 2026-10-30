@@ -81,6 +81,14 @@ export const prismEndpoints = {
   userTransferCopiesPreview: "api/user/transfers/copies/preview",
   userTransferCopies: "api/user/transfers/copies",
   userTransfer: (id: string) => `api/user/transfers/${encodeURIComponent(id)}`,
+  // RN-HIST-002 a 006 e RN-AUDIT-010 a 016: o diário de comandos e auditoria do usuário.
+  userJournalHistory: "api/user/journal/history",
+  userJournalHistoryEntry: (id: number) => `api/user/journal/history/${encodeURIComponent(String(id))}`,
+  userJournalAudit: "api/user/journal/audit",
+  userJournalAuditEntry: (id: number) => `api/user/journal/audit/${encodeURIComponent(String(id))}`,
+  userJournalAuditFacets: "api/user/journal/audit/facets",
+  userJournalAuditPurge: "api/user/journal/audit/purge",
+  userJournalSettings: "api/user/journal/settings",
 } as const;
 
 function tablePath(id: string, schema: string, table: string) {

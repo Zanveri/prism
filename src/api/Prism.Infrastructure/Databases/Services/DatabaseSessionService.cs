@@ -1,6 +1,8 @@
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Vault.Services;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -42,13 +44,15 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     private readonly IVaultService _vault;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger _logger;
+    private readonly IJournalRecorder? _journal;
 
-    public DatabaseSessionService(IEnumerable<IDatabaseClient> clients, IVaultService vault, TimeProvider timeProvider, ILogger logger)
+    public DatabaseSessionService(IEnumerable<IDatabaseClient> clients, IVaultService vault, TimeProvider timeProvider, ILogger logger, IJournalRecorder? journal = null)
     {
         _clients = clients.ToDictionary(client => client.Engine);
         _vault = vault;
         _timeProvider = timeProvider;
         _logger = logger.ForContext<DatabaseSessionService>();
+        _journal = journal;
 
         // RN-COFRE-008: fechar o cofre encerra as sessões abertas com as credenciais dele.
         _vault.Locked += OnVaultLocked;
@@ -1042,7 +1046,25 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         }
 
         using (new TurnEnd(session.Turn))
+        {
+            if (session.Connection.Transaction != ETransactionState.None)
+            {
+                var snapshot = new JournalConnectionSnapshot(session.Info.ConnectionID, null, session.Info.Engine.ToString().ToLowerInvariant(), null, null, null, session.Info.Database);
+                _journal?.Record(
+                    new JournalEntryStart(
+                        Kind: EJournalKind.Transaction,
+                        Action: "ROLLBACK",
+                        Level: EJournalLevel.Warning,
+                        Reason: "Transação desfeita ao fechar a sessão ou o cofre.",
+                        Origin: "other",
+                        Sql: "ROLLBACK",
+                        SessionId: session.Info.ID,
+                        Connection: snapshot),
+                    new JournalEntryEnd(EJournalOutcome.Ok, session.Commands));
+            }
+
             await ReleaseAsync(session);
+        }
 
         _logger.Information("Sessão {SessionID} fechada.", session.Info.ID);
     }
@@ -1157,7 +1179,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
             // RN-VERIF-002: a verificação periódica não é comando da pessoa, e não a deixa com a sessão ocupada: o comando espera o fim dela, que tem o
             // prazo do driver. O "cancelar" pedido durante a espera vale para ele, que desiste na hora, sem ir ao banco: a fonte que o "cancelar" e o
-            // fechamento da sessão cancelam interrompe a espera. O contador pega o "cancelar" que chega junto com a vez, depois da espera.
+            // fechamento da sessão cancelam interrompe a espera. O contador pega o "cancelar" que chegou junto com a vez, depois da espera.
             var canceled = Volatile.Read(ref session.CancelRequests);
             using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, session.CountCancellation.Token);
             var afterTheVerification = session.Turn.WaitAsync(waiting.Token);

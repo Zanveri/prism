@@ -24,6 +24,7 @@ export const settingsCopy = {
     import: "Importar",
     transactions: "Transações",
     security: "Segurança",
+    audit: "Auditoria",
   },
 
   appearance: {

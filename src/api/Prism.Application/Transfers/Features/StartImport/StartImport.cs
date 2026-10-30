@@ -3,11 +3,14 @@ using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Models;
+using Prism.Application.Journal;
 using Prism.Application.Transfers.Models;
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Transfers.Imports;
 using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Transfers.Services;
@@ -42,7 +45,7 @@ public sealed record StartImportCommand : IRequest<Result<TransferStartedDto, Ap
 /// proteções que valem no cofre agora; (4) o limite, a tabela ocupada e a troca de nome do arquivo, no registro, sob a trava com que o trabalho entra
 /// nele. Conectar, ler o catálogo, conferir o arquivo e gravar acontecem no trabalho.
 /// </summary>
-internal sealed class StartImportHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, IImportPreviewService importPreviewService, ITransferService transferService) : IRequestHandler<StartImportCommand, Result<TransferStartedDto, ApiErrorDto>>
+internal sealed class StartImportHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, IImportPreviewService importPreviewService, ITransferService transferService, IJournalRecorder? journalRecorder = null) : IRequestHandler<StartImportCommand, Result<TransferStartedDto, ApiErrorDto>>
 {
     public async Task<Result<TransferStartedDto, ApiErrorDto>> Handle(StartImportCommand request, CancellationToken cancellationToken)
     {
@@ -85,11 +88,39 @@ internal sealed class StartImportHandler(IConnectionQueries connectionQueries, I
 
         var (options, _) = ImportReaderOptionsReader.Read(request.Format!, request.Reader, keys: true);
         var (load, _) = ImportRequestRules.Load(request.Load, copy: false);
-        var job = new ImportJob(fileID, record.ID, TransferConnections.SettingsOf(record, target.Database), generation, request.WindowID, ImportFormats.Canonical(request.Format!), options!, ImportRequestRules.Formats(request.Values), target.Schema!, target.Table!, ImportRequestRules.MappingOf(request.Mapping!), load!, TransferConnections.StopNow(connectionQueries, record.ID));
+        var settings = TransferConnections.SettingsOf(record, target.Database);
+
+        var entryId = -1L;
+        if (journalRecorder is not null)
+        {
+            var isEmptyFirst = load!.Empty;
+            var level = isEmptyFirst ? EJournalLevel.Critical : EJournalLevel.Warning;
+            var reason = isEmptyFirst ? $"Importação esvaziando {target.Schema}.{target.Table} antes." : $"Importação em {target.Schema}.{target.Table}.";
+            var (snapshot, protections) = JournalSnapshots.FromRecord(vaultService, record, settings.Database);
+
+            entryId = journalRecorder.Begin(new JournalEntryStart(
+                Kind: EJournalKind.Data,
+                Action: "Importação de dados",
+                Level: level,
+                Reason: reason,
+                Origin: "other",
+                Sql: $"{target.Schema}.{target.Table}",
+                Confirmed: isEmptyFirst,
+                Connection: snapshot,
+                Protections: protections));
+        }
+
+        var job = new ImportJob(fileID, record.ID, settings, generation, request.WindowID, ImportFormats.Canonical(request.Format!), options!, ImportRequestRules.Formats(request.Values), target.Schema!, target.Table!, ImportRequestRules.MappingOf(request.Mapping!), load!, TransferConnections.StopNow(connectionQueries, record.ID), entryId);
 
         var started = transferService.StartImport(job);
         if (started.IsFailure)
-            return Result.Failure<TransferStartedDto, ApiErrorDto>(TransferConnections.StartRefusal(started.Error, target.Schema!, target.Table!));
+        {
+            var error = TransferConnections.StartRefusal(started.Error, target.Schema!, target.Table!);
+            if (entryId > 0)
+                journalRecorder!.Complete(entryId, new JournalEntryEnd(EJournalOutcome.Refused, null, error.Type, null, error.Detail));
+
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(error);
+        }
 
         // RN-CONN-014: a exclusão da conexão pode terminar enquanto o trabalho entra no registro, e o cancelamento dela não o acharia. A exclusão grava
         // antes de cancelar, então uma leitura feita agora já a enxerga: sem a conexão (ou com o cofre fechado), o trabalho não fica.

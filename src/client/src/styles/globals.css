@@ -80,6 +80,11 @@
   /* RN-AVISO-001: o sucesso tem o mesmo verde do Db2; o canvas não traz outro. */
   --color-success: light-dark(#097244, #5ed3a3);
 
+  /* Os quatro níveis de perigo da auditoria (RN-AUDIT-005 e RN-CONFIG-003). */
+  --color-level-info: light-dark(#1d5fd1, #7db2ff);
+  --color-level-warn: light-dark(#8a5200, #f2b644);
+  --color-level-high: light-dark(#9a4200, #f5a65b);
+  --color-level-critical: light-dark(#b32a1a, #ff8a7a);
   /* Traço das relações do diagrama em repouso. */
   --color-diagram-edge: light-dark(#9aa3af, #566170);
 
@@ -1247,6 +1252,10 @@
     --color-syntax-comment: #8e99a8;
     --color-syntax-variable: #c9a8ff;
     --color-link: #7db2ff;
+    --color-level-info: #7db2ff;
+    --color-level-warn: #f2b644;
+    --color-level-high: #f5a65b;
+    --color-level-critical: #ff8a7a;
     --color-scrim: rgb(6 8 10 / 0.72);
     background-color: var(--color-background);
     color: var(--color-ink);

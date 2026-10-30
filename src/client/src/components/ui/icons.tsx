@@ -587,6 +587,57 @@ export function TransactionIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** Histórico: o relógio com a seta de retorno anti-horária (RN-HIST-001). */
+export function HistoryIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon data-icon="clock" {...props}>
+      <path d="M2.5 8a5.5 5.5 0 1 0 1.4-3.65L2.5 5.75" />
+      <path d="M2.5 2.75v3h3" />
+      <path className="icon-part-hand" d="M8 5.25v3l2 1.25" />
+    </Icon>
+  );
+}
+
+/** Auditoria: o escudo com a marca de conferido (RN-AUDIT-010). */
+export function ShieldCheckIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon data-icon="check" {...props}>
+      <path d="M8 1.75 2.75 4v3.75c0 3.35 2.25 5.75 5.25 6.5 3-.75 5.25-3.15 5.25-6.5V4z" />
+      <path d="m5.75 8 1.5 1.5 3-3" />
+    </Icon>
+  );
+}
+
+/** RN-AUDIT-005: nível Atenção — a exclamação dentro de um círculo. */
+export function AlertCircleIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon data-icon="alert" {...props}>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M8 5v3.25M8 10.75h.01" />
+    </Icon>
+  );
+}
+
+/** RN-AUDIT-005: nível Crítico — a exclamação dentro de um octógono de parada. */
+export function OctagonAlertIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon data-icon="alert" {...props}>
+      <path d="M5.5 2h5l3.5 3.5v5L10.5 14h-5L2 10.5v-5z" />
+      <path d="M8 5.25v3.25M8 11h.01" />
+    </Icon>
+  );
+}
+
+/** Calendário: seletor de data e hora (`DatePicker` / `DateTimePicker`). */
+export function CalendarIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon data-icon="table" {...props}>
+      <rect x="2.25" y="3.25" width="11.5" height="10.5" rx="1.5" />
+      <path d="M5.25 1.75v2.5M10.75 1.75v2.5M2.25 6.5h11.5" />
+    </Icon>
+  );
+}
+
 /** Desfazer: seta curva para a esquerda. */
 export function UndoIcon(props: ComponentProps<"svg">) {
   return (

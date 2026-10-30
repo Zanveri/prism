@@ -119,7 +119,7 @@ public sealed class VaultFormatThreeSampleTests : IDisposable
         using var before = JsonDocument.Parse(sample);
         using var after = JsonDocument.Parse(File.ReadAllBytes(path));
         Assert.True(result.IsSuccess);
-        Assert.True(opened.JsonEquals(SampleDocument));
+        Assert.True((opened with { Journal = null }).JsonEquals(SampleDocument));
         Assert.Empty(opened.ScriptFolders);
         Assert.All(opened.Scripts, script => Assert.Null(script.FolderID));
         Assert.Equal(2, opened.Workspace.Tabs.Count);
@@ -129,7 +129,7 @@ public sealed class VaultFormatThreeSampleTests : IDisposable
         Assert.Equal(before.RootElement.GetProperty("kdf").GetRawText(), after.RootElement.GetProperty("kdf").GetRawText());
         Assert.Equal(sample, File.ReadAllBytes(path + ".bak"));
         Assert.True(reopened.IsSuccess);
-        Assert.True(service.Read().Value.JsonEquals(SampleDocument));
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(SampleDocument));
     }
 
     /// <summary>A migração acontece uma vez: a entrada seguinte acha o formato atual e não regrava nada, e o `.bak` continua sendo o arquivo do formato 3.</summary>

@@ -16,10 +16,13 @@
 	</ItemGroup>
 
 	<!-- Argon2id da RN-COFRE-002: o .NET não traz Argon2. O AES-256-GCM do cofre é o do próprio .NET.
-	     Npgsql é o driver do PostgreSQL (Databases/Clients); os tipos dele não saem dessa pasta. -->
+	     Npgsql é o driver do PostgreSQL (Databases/Clients); os tipos dele não saem dessa pasta.
+	     Microsoft.Data.Sqlite.Core + SQLitePCLRaw.bundle_e_sqlcipher abrem o diário cifrado por usuário (RN-DIARIO-001). -->
 	<ItemGroup>
 		<PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
+		<PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.0" />
 		<PackageReference Include="Npgsql" Version="10.0.3" />
+		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.10" />
 	</ItemGroup>
 
 	<!-- O driver da IBM (Db2 e Informix) é um pacote por plataforma, todos com o IBM.Data.Db2.dll e a pasta

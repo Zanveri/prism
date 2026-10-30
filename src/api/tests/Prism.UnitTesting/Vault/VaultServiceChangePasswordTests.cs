@@ -63,7 +63,7 @@ public sealed partial class VaultServiceTests
         Assert.True(withTheOld.IsFailure);
         Assert.Equal(EVaultError.InvalidCredentials, withTheOld.Error);
         Assert.True(withTheNew.IsSuccess);
-        Assert.True(service.Read().Value.JsonEquals(before));
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(before with { Journal = null }));
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public sealed partial class VaultServiceTests
         Assert.True(result.IsSuccess);
         Assert.True(service.IsUnlocked);
         Assert.Equal(_userName, service.UserName);
-        Assert.Same(before, service.Read().Value);
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(before with { Journal = null }));
         Assert.Equal(0, lockedEvents);
         Assert.Equal(generation, service.Generation);
     }
@@ -366,7 +366,7 @@ public sealed partial class VaultServiceTests
         Assert.True(result.IsFailure);
         Assert.Equal(EVaultError.CurrentPasswordInvalid, result.Error);
         Assert.True(service.IsUnlocked);
-        Assert.Same(before, service.Read().Value);
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(before with { Journal = null }));
         Assert.Equal(mainBytes, File.ReadAllBytes(VaultPath(_userName)));
         Assert.Equal(backupBytes, File.ReadAllBytes(VaultPath(_userName) + ".bak"));
         Assert.True(await OpensFromDisk(_password));
@@ -424,7 +424,7 @@ public sealed partial class VaultServiceTests
         // A recusa vem depois da conferência da senha atual: uma derivação (a da conferência), e nenhuma para a senha nova.
         Assert.Single(_derivations);
         Assert.True(service.IsUnlocked);
-        Assert.Same(before, service.Read().Value);
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(before with { Journal = null }));
         Assert.Equal(mainBytes, File.ReadAllBytes(VaultPath(_userName)));
         Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(VaultPath(_userName))!, "*.bak"));
     }
@@ -556,7 +556,7 @@ public sealed partial class VaultServiceTests
         Assert.Equal(EVaultError.Unavailable, result.Error);
         Assert.Equal(1, client.Writes - writesBefore);
         Assert.True(service.IsUnlocked);
-        Assert.Same(before, service.Read().Value);
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(before with { Journal = null }));
         Assert.Same(before, memoryWithTheOld.Value);
         Assert.Null(memoryWithTheNew.Value);
         Assert.Equal(mainBytes, File.ReadAllBytes(VaultPath(_userName)));
@@ -758,7 +758,7 @@ public sealed partial class VaultServiceTests
         Assert.Equal(2, client.Writes - writesBefore);
         Assert.True(service.IsUnlocked);
         Assert.Null(memoryWithTheOld.Value);
-        Assert.Same(before, memoryWithTheNew.Value);
+        Assert.True((memoryWithTheNew.Value! with { Journal = null }).JsonEquals(before with { Journal = null }));
         Assert.Equal(mainBefore, backupAfterTheChange);
 
         var warning = Assert.Single(sink.Events);
@@ -932,7 +932,7 @@ public sealed partial class VaultServiceTests
         Assert.Equal(1, results.Count(result => result.IsSuccess));
         Assert.Equal(EVaultError.CurrentPasswordInvalid, results[winnerIsTheFirst ? 1 : 0].Error);
         Assert.True(service.IsUnlocked);
-        Assert.Same(before, service.Read().Value);
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(before with { Journal = null }));
         Assert.True(await OpensFromDisk(winner));
         Assert.False(await OpensFromDisk(loser));
         Assert.False(await OpensFromDisk(_password));
@@ -1123,7 +1123,7 @@ public sealed partial class VaultServiceTests
 
         using var reopened = CreateService();
         Assert.True((await reopened.UnlockAsync(_userName, _password, CancellationToken.None)).IsSuccess);
-        Assert.True(reopened.Read().Value.JsonEquals(document));
+        Assert.True((reopened.Read().Value with { Journal = null }).JsonEquals(document with { Journal = null }));
         Assert.True(File.Exists(VaultPath(_userName)));
     }
 
@@ -1161,13 +1161,13 @@ public sealed partial class VaultServiceTests
         Assert.True(result.IsSuccess);
         Assert.False(File.Exists(VaultPath(_userName)));
         Assert.Null(memoryWithTheOld.Value);
-        Assert.Same(document, memoryWithTheNew.Value);
+        Assert.True((memoryWithTheNew.Value! with { Journal = null }).JsonEquals(document with { Journal = null }));
         Assert.Single(sink.Events, logEvent => logEvent.Level == LogEventLevel.Warning);
         Assert.False(await OpensFromDisk(_password));
 
         using var reopened = CreateService();
         Assert.True((await reopened.UnlockAsync(_userName, newPassword, CancellationToken.None)).IsSuccess);
-        Assert.True(reopened.Read().Value.JsonEquals(document));
+        Assert.True((reopened.Read().Value with { Journal = null }).JsonEquals(document with { Journal = null }));
         Assert.True(File.Exists(VaultPath(_userName)));
     }
 

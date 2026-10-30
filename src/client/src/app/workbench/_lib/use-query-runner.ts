@@ -20,7 +20,7 @@ import { scriptRunCopy } from "./script-run.copy";
 import { scriptsCopy } from "./scripts.copy";
 import { gridFilterCopy } from "./grid-filter.copy";
 import { sqlErrorDetails, type FilterApplied, type QueryColumn, type QueryPage, type QueryResult, type QueryRow } from "./query.schema";
-import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage, type QueryParam } from "./query.service";
+import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage, type ExecuteQueryJournal, type QueryOrigin, type QueryParam } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
 import { bindItem, planItem, planScript, scopeBefore, usesVariables, type Plan, type ScriptDoc } from "./variable-execution";
 import { closedTransaction, createTransactionStore, fromWire, transactionOf, withUncommitted, type IsolationLevel, type TabTransaction, type TransactionMode, type TransactionStore } from "./transaction";
@@ -330,17 +330,17 @@ export type QueryRunner = {
    * Devolve a recusa do filtro do resultado (`FILTER_INVALID`), quando é ela; o resto vai à área de resultado e aos avisos, como sempre. O comando aceito
    * troca os resultados de um script (RN-SQL-020), menos com `keepScript`: o filtro do resultado do último comando do script muda só ele.
    */
-  run: (target: RunTarget, options?: { keepScript?: boolean }) => Promise<FilterRefusal | void>;
+  run: (target: RunTarget, options?: { keepScript?: boolean; confirmed?: boolean }) => Promise<FilterRefusal | void>;
   /**
    * RN-SQL-019: executa os comandos, um por vez, na ordem, na sessão da aba. O estado do script (as abas, as Estatísticas, a pergunta de erro) está em
    * `script`; o do executor fica "executando" enquanto ele roda, e no fim é o do último comando executado.
    */
-  runScript: (commands: readonly RunTarget[]) => Promise<void>;
+  runScript: (commands: readonly RunTarget[], options?: { confirmed?: boolean }) => Promise<void>;
   /**
    * RN-SQL-020: "Executar este comando", de uma aba guardada do script: executa só ele, como o Ctrl+Enter nele, e troca os resultados do script pelo dele. O
    * lugar no texto é o de quando o script rodou: o texto editado depois disso não ganha a marca do erro.
    */
-  runCommand: (target: RunTarget) => Promise<void>;
+  runCommand: (target: RunTarget, options?: { confirmed?: boolean }) => Promise<void>;
   /** RN-SQL-019 a 022: o script da aba (nulo sem script), e a resposta da pergunta de erro. */
   script: { subscribe: (listener: () => void) => () => void; getState: () => ScriptRun | null; decide: (choice: ScriptChoice) => void };
   /**
@@ -351,7 +351,7 @@ export type QueryRunner = {
    */
   transaction: Pick<TransactionStore, "subscribe" | "getState"> & { setMode: (mode: TransactionMode) => Promise<boolean>; setIsolationLevel: (isolationLevel: IsolationLevel) => Promise<boolean>; end: (commit: boolean) => Promise<boolean>; note: (wire: unknown) => void };
   /** Executa de novo o comando das linhas que estão na tela, e nunca outro: é o que o aviso de cursor fechado oferece. */
-  rerun: () => Promise<void>;
+  rerun: (options?: { confirmed?: boolean }) => Promise<void>;
   cancel: () => Promise<void>;
   /**
    * RN-GRADE-014: resolve quando não há execução automática em andamento, nem a que a pessoa interrompeu e ainda ocupa a sessão. "Exportar CSV" espera por
@@ -417,6 +417,8 @@ type QueryRunnerOptions = {
   evaluator?: Evaluator;
   /** O nome da aba agora (ela pode ter sido renomeada ou salva como script): o aviso do fim do script o diz (RN-SQL-020). Sem ele, o aviso não diz a aba. */
   title?: () => string | null;
+  /** Grava a origem do comando no diário e invalida a lista do histórico (RN-HIST-002). */
+  journal?: boolean;
 };
 
 function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells: [number, number][], rowOffset: number): ReadonlyMap<number, ReadonlySet<number>> {
@@ -443,7 +445,7 @@ function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells:
  * de transação recusado antes de executar, API fora do ar, resposta inválida) deixa o resultado e o
  * cursor dele como estavam, e avisa.
  */
-export function createQueryRunner({ connectionId, database, queryClient, toast, onSession, initial, title, evaluator }: QueryRunnerOptions): QueryRunner {
+export function createQueryRunner({ connectionId, database, queryClient, toast, onSession, initial, title, evaluator, journal = false }: QueryRunnerOptions): QueryRunner {
   let state: RunnerState = initial?.state ?? { status: "idle" };
   const listeners = new Set<() => void>();
   const values = createTabValuesStore(initial?.values);
@@ -622,7 +624,25 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * do primeiro comando respondido (RN-SQL-021): a sessão que caiu fica caída, e a resposta é a da API. `handled`: as recusas que quem chama trata a mais
    * (as do comando, no script). `keep`: os resultados das abas do script que ficam na tela, e que a API continua guardando para a edição (RN-SQL-024).
    */
-  async function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean, handled: readonly string[] = [], keep: readonly string[] = [], params: readonly QueryParam[] = []): Promise<ApiResult<QueryResult> | null> {
+  function journalInfo(target: RunTarget, origin: QueryOrigin, wasConfirmed?: boolean, scriptRunID?: string): ExecuteQueryJournal | undefined {
+    const historyText = target.sent !== undefined && target.sql !== target.sent.sql ? target.sql : undefined;
+    if (!journal && wasConfirmed !== true) return undefined;
+    return {
+      ...(journal ? { origin } : {}),
+      ...(journal && historyText !== undefined ? { historyText } : {}),
+      ...(wasConfirmed === true ? { confirmed: true } : {}),
+      ...(journal && scriptRunID !== undefined ? { scriptRunID } : {}),
+    };
+  }
+
+  function refreshHistory(origin?: QueryOrigin) {
+    if (!journal || origin === "auto-refresh") return;
+    if (typeof (queryClient as { invalidateQueries?: unknown }).invalidateQueries === "function") {
+      void queryClient.invalidateQueries({ queryKey: ["journal", "history"] });
+    }
+  }
+
+  async function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean, handled: readonly string[] = [], keep: readonly string[] = [], params: readonly QueryParam[] = [], meta?: ExecuteQueryJournal): Promise<ApiResult<QueryResult> | null> {
     for (let reopened = false; ; reopened = true) {
       let id = sessionId;
 
@@ -658,10 +678,13 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       const session = id;
       // RN-PROT-002: a recusa do somente leitura é tratada no lugar, como a do controle de transação: a frase da API, e o resultado de antes fica.
       const result = await call(
-        () => executeQuery(session, sql, filter, keep, params),
+        () => {
+          return executeQuery(session, sql, filter, keep, params, meta);
+        },
         codes("SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", "CONNECTION_READ_ONLY", ...handled, ...(filter === undefined ? [] : ["FILTER_INVALID"]), ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])),
       );
-      if (started !== epoch) return null;
+      if (started !== epoch) { refreshHistory(meta?.origin); return null; }
+      refreshHistory(meta?.origin);
       if (result.ok || result.error.code !== "DATABASE_SESSION_NOT_FOUND") return result;
 
       // Reabrir é do comando da pessoa (`reopen`), uma vez; fora isso a sessão fica caída. RN-TX-008: no Commit manual com a transação aberta, a sessão
@@ -830,7 +853,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * comando aceito troca os resultados do script que estiver na tela (RN-SQL-020: o Ctrl+Enter, "Executar este comando"); o F5, o filtro e a execução
    * automática no resultado do último comando do script mudam só ele.
    */
-  const runWith = async (target: RunTarget, kind: "person" | "again" | "auto", clearsScript = false): Promise<FilterRefusal | void> => {
+  const runWith = async (target: RunTarget, kind: "person" | "again" | "auto", clearsScript = false, meta?: { origin?: QueryOrigin; confirmed?: boolean }): Promise<FilterRefusal | void> => {
     const auto = kind === "auto";
     let refusal: FilterRefusal | undefined;
     await guarded(async () => {
@@ -879,7 +902,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
 
       // RN-SQL-024: o comando que troca os resultados do script não guarda nenhum; o F5, o filtro e a execução automática do resultado do último comando
       // guardam os das outras abas, que continuam se editando.
-      const result = await execute(connectionId, sentTextOf(target), started, target.filter, !auto, [], clearsScript ? [] : keptResultIds(script), queryParamsOf(target));
+      const origin: QueryOrigin = meta?.origin ?? (auto ? "auto-refresh" : kind === "again" ? "rerun" : target.filter !== undefined || !clearsScript ? "filter" : "editor");
+      const result = await execute(connectionId, sentTextOf(target), started, target.filter, !auto, [], clearsScript ? [] : keptResultIds(script), queryParamsOf(target), journalInfo(target, origin, meta?.confirmed));
       if (result === null) return;
       // RN-GRADE-011: a API recusou o filtro antes de executar: o resultado e o cursor de antes ficam como estavam, e a frase vai ao campo de filtro.
       if (!result.ok && result.error.code === "FILTER_INVALID" && target.filter !== undefined) {
@@ -963,7 +987,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   /** O comando vai mesmo à API: um comando só, e a aba com conexão (o resto o executor recusa antes, só com o aviso). */
   const sends = (target: RunTarget) => connectionId !== null && statementCount(sentTextOf(target), target.engine) === 1;
 
-  const run = (target: RunTarget, options?: { keepScript?: boolean }) => afterPausedScript(sends(target), () => runWith(target, "person", options?.keepScript !== true));
+  const run = (target: RunTarget, options?: { keepScript?: boolean; confirmed?: boolean }) =>
+    afterPausedScript(sends(target), () => runWith(target, "person", options?.keepScript !== true, { origin: options?.keepScript || target.filter !== undefined ? "filter" : "editor", confirmed: options?.confirmed }));
 
   /**
    * O "Executar script" (seção 31, RN-SQL-019 a 022): os comandos, um por vez, na ordem, pela sessão da aba e pelo mesmo caminho de `run` (`execute`: a
@@ -975,7 +1000,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * antes do primeiro), deixa a tela como estava: o script de antes volta, e o executor faz o que faria com o Ctrl+Enter. Depois do primeiro, a sessão que
    * cai não é reaberta: o que os comandos de antes deixaram nela (uma tabela temporária, um SET) se perdeu.
    */
-  const runScript = (commands: readonly RunTarget[]): Promise<void> => afterPausedScript(connectionId !== null && commands.length > 0, () => runScriptNow(commands));
+  const runScript = (commands: readonly RunTarget[], options?: { confirmed?: boolean }): Promise<void> =>
+    afterPausedScript(connectionId !== null && commands.length > 0, () => runScriptNow(commands, new Map(), undefined, options?.confirmed));
 
   /**
    * O laço do script (RN-SQL-019 a 022). `declarations` (RN-VAR-019 e 022) diz quais itens são declarações ou reatribuições, por posição: elas não vão à API, tomam
@@ -1037,10 +1063,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   }
 
   /** RN-PROT-001: a pergunta da proteção com os valores já calculados. Verdadeiro quando nada pergunta ou a pessoa confirma. */
-  async function confirmed(hooks: RunHooks | undefined, make: MakeQuestion): Promise<boolean> {
-    if (hooks?.confirm === undefined) return true;
+  async function confirmed(hooks: RunHooks | undefined, make: MakeQuestion): Promise<{ ok: boolean; asked: boolean }> {
+    if (hooks?.confirm === undefined) return { ok: true, asked: false };
     const answer = hooks.confirm(make);
-    return answer === true ? true : await answer;
+    return answer === true ? { ok: true, asked: false } : { ok: await answer, asked: true };
   }
 
   /** Nada a executar, ou a seleção com mais de um item (RN-SQL-001 e RN-VAR-020): os avisos de sempre. */
@@ -1110,7 +1136,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       }
 
       // RN-PROT-001: uma pergunta só, com o comando e os valores que já se sabem.
-      if (!(await confirmed(hooks, (protections) => commandQuestion(protections, confirmedOf(target))))) return;
+      const confirmResult = await confirmed(hooks, (protections) => commandQuestion(protections, confirmedOf(target)));
+      if (!confirmResult.ok) return;
       if (started !== epoch || retired) return;
       // RN-SQL-021: só o comando que vai mesmo ao banco responde "Parar" à pergunta de erro do script que espera; o que foi recusado até aqui a deixou esperando.
       if (deciding !== null) {
@@ -1120,7 +1147,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       for (const stored of evaluated.results.values()) applyStored(stored);
       hooks?.flash?.({ offset: item.offset, text: item.text });
       hooks?.begin?.();
-      await runWith(target, "person", true);
+      await runWith(target, "person", true, { origin: "editor", confirmed: confirmResult.asked });
     });
   };
 
@@ -1193,7 +1220,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       if (bindErrors.length > 0) return refuseVariables(bindErrors, "script");
 
       // RN-PROT-001: uma vez, antes do primeiro item, com a lista dos comandos que pedem confirmação e os valores já calculados.
-      if (!(await confirmed(hooks, (protections) => numberedScriptQuestion(protections, asked, plan.items.length)))) return;
+      const confirmResult = await confirmed(hooks, (protections) => numberedScriptQuestion(protections, asked, plan.items.length));
+      if (!confirmResult.ok) return;
       if (started !== epoch || retired) return;
       // RN-SQL-021: só o script que vai mesmo ao banco responde "Parar" à pergunta de erro do script que espera.
       if (deciding !== null) {
@@ -1207,13 +1235,13 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         if (stored !== undefined) applyStored(stored);
       }
       hooks?.begin?.();
-      await runScriptNow(targets, steps, () => {
+      await ((closing: () => void) => runScriptNow(targets, steps, closing, confirmResult.asked))(() => {
         if (steps.size === targets.length) reveal.reveal(null);
       });
     });
   };
 
-  const runScriptNow = async (commands: readonly RunTarget[], declarations: ReadonlyMap<number, DeclarationStep> = new Map(), closing?: () => void): Promise<void> => {
+  const runScriptNow = async (commands: readonly RunTarget[], declarations: ReadonlyMap<number, DeclarationStep> = new Map(), closing?: () => void, wasConfirmed?: boolean): Promise<void> => {
     const loop = guarded(async () => {
       if (retired) return refuse("runScript");
       if (isPersonBusy(state)) return;
@@ -1234,6 +1262,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       const yielding = isAutoRun(state) ? abandonAuto() : autoBusy;
       const started = epoch;
       const before = script;
+      const scriptRunID = journal && typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : undefined;
       cancelRequested = false;
       editedSinceRun = false;
       truncationWarned = false;
@@ -1317,7 +1346,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
 
           // RN-SQL-024: cada comando (e o "Tentar de novo") manda os resultados das abas que o script já tem: a API continua guardando o que a edição deles
           // precisa. O primeiro comando de um script novo não manda nenhum, e a API esquece os do script de antes quando ele vai ao banco.
-          const result = await execute(connectionId, sentTextOf(target), started, undefined, !answered, scriptCommandRefusals, keptResultIds(script), queryParamsOf(target));
+          const result = await execute(connectionId, sentTextOf(target), started, undefined, !answered, scriptCommandRefusals, keptResultIds(script), queryParamsOf(target), journalInfo(target, "script", wasConfirmed, scriptRunID));
           // A aba foi solta (desconectar, fechar, trocar de banco, o bloqueio): `release` já parou o script.
           if (started !== epoch) return;
           // Cancelado antes de o comando sair (a sessão abria): nada dele rodou, e o executor já voltou ao que mostrava.
@@ -1681,7 +1710,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     getState: () => state,
     run,
     runScript,
-    runCommand: (target) => afterPausedScript(sends(target), () => runWith(target, "again", true).then(() => undefined)),
+    runCommand: (target, options) => afterPausedScript(sends(target), () => runWith(target, "again", true, { origin: "statement", confirmed: options?.confirmed }).then(() => undefined)),
     script: {
       subscribe: (listener) => {
         scriptListeners.add(listener);
@@ -1724,7 +1753,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       end,
       note: noteWire,
     },
-    rerun: () => {
+    rerun: (options) => {
       // Com a execução automática em andamento, o resultado na tela é o de antes dela, e o comando dele é o que se executa de novo.
       const shownTarget = () => {
         const shown = state.status === "running" ? state.previous : state;
@@ -1733,7 +1762,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       const before = shownTarget();
       return afterPausedScript(before !== null && sends(before), async () => {
         const target = shownTarget();
-        if (target !== null) await runWith(target, "again");
+        if (target !== null) await runWith(target, "again", false, { origin: "rerun", confirmed: options?.confirmed });
       });
     },
     cancel,

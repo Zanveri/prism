@@ -15,6 +15,7 @@ Prism é um cliente de banco de dados para desktop, no lugar do DBeaver, para qu
 | `src/test-fixtures/export/` | As fixtures de ouro da exportação de dados (RN-EXPORT-024): JSON escritos à mão com a entrada e a saída esperada de cada caso, lidos pelos testes da tela e da API. Mudar uma regra é mudar a fixture; nunca se regera a partir do código. |
 | `src/test-fixtures/variables/` | A fixture dos marcadores de parâmetro (`markers.json`, RN-VAR-017): o texto de um comando, o banco e quantos marcadores ele já tem (`$n` no PostgreSQL, `?` no Db2 e no Informix, fora de texto, comentário, nome entre aspas e `$tag$`). Escrita à mão, lida pelos testes da tela e da API, que têm de contar igual. Mudar uma regra é mudar a fixture; nunca se regera a partir do código. |
 | `src/test-fixtures/build/` | As fixtures de ouro do modo Construir (RN-CONSTRUIR-074): modelo de referência, verificações (`E1`–`E12`, `W1`–`W14`), geração de DDL completo e de alterações, leitura e escrita de DBML e SQL e releitura do banco (`reread/`). Escritas à mão e lidas pelos testes de `src/client`; mudar uma regra é mudar a fixture, e nunca se regera a partir do código. |
+| `src/test-fixtures/audit/` | A fixture dos níveis de perigo da auditoria (`levels.json`, RN-AUDIT-008): comandos SQL nos três bancos com nível (`info`, `warning`, `high`, `critical`), motivo e ação principal. Escrita à mão e lida pelos testes da API e da tela, que conferem que a confirmação de irreversível e o nível crítico nunca discordam. Mudar uma regra é mudar a fixture; nunca se regera a partir do código. |
 
 ## Projeto de referência
 
@@ -29,7 +30,7 @@ O código segue as skills zanveri (`back-end-coding-best-practices`, `back-end-s
 Estão aqui para que ninguém as "corrija" depois (seção 8 da especificação).
 
 1. **Sem Keycloak, JWT, papéis e políticas.** A senha do usuário precisa gerar a chave do cofre, e um provedor de identidade não entrega isso; quem autentica a chamada é o token de lançamento, e quem libera os dados é o cofre aberto. A família de rotas `api/admin` não existe.
-2. **Sem banco do produto nesta fatia.** Os dados do Prism são o cofre, então não há `IDatabaseFactory`, migrations nem transação de handler; os repositories gravam pelo serviço do cofre. Se um banco local entrar depois, é SQLite cifrado.
+2. **O único banco do produto é o diário (SQLite cifrado com SQLCipher), seção 1 da especificação da fatia 1.** Os demais dados do Prism continuam no cofre, então não há `IDatabaseFactory`, migrations nem transação de handler; os repositories gravam pelo serviço do cofre.
 3. **Sessões com os bancos são de vida longa.** Uma conexão aberta atravessa várias requisições, por isso o registro de sessões é `Singleton`; repositories, queries e services continuam `Transient`.
 4. **A mensagem de erro do banco chega à tela como veio.** Num cliente de banco ela é o produto, então a regra "corpo de erro de terceiro não atravessa a integração" não vale para os drivers; as demais regras de integração valem (um único `try` no `Send` do client, `Result` para fora).
 5. **Sem Next.js.** Não há Server Components, Server Actions, BFF, `proxy.ts` nem cookie de sessão, porque no Electron a fronteira de confiança é o preload, não um servidor web.

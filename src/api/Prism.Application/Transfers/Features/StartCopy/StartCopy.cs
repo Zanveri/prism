@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Queries;
+using Prism.Application.Journal;
 using Prism.Application.Transfers.Models;
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -9,6 +10,8 @@ using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Transfers.Services;
 using Prism.Infrastructure.Vault.Services;
@@ -41,7 +44,7 @@ public sealed record StartCopyCommand : IRequest<Result<TransferStartedDto, ApiE
 /// tabela ocupada, no registro, sob a trava com que o trabalho entra nele. RN-IMPORT-023: na cópia de Db2 ou de Informix com a origem e o destino no
 /// mesmo servidor, porta e banco de dados, a contagem é obrigatória, mesmo com `count: false`.
 /// </summary>
-internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, ITransferService transferService) : IRequestHandler<StartCopyCommand, Result<TransferStartedDto, ApiErrorDto>>
+internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, ITransferService transferService, IJournalRecorder? journalRecorder = null) : IRequestHandler<StartCopyCommand, Result<TransferStartedDto, ApiErrorDto>>
 {
     public async Task<Result<TransferStartedDto, ApiErrorDto>> Handle(StartCopyCommand request, CancellationToken cancellationToken)
     {
@@ -83,11 +86,38 @@ internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVa
         var targetSettings = TransferConnections.SettingsOf(targetRecord.Value, target.Database);
         var forcedCount = sourceSettings.Engine is EDatabaseEngine.Db2 or EDatabaseEngine.Informix && TablePlaces.SameServer(sourceSettings, targetSettings);
         var (load, _) = ImportRequestRules.Load(request.Load, copy: true);
-        var job = new CopyJob(sourceRecord.Value.ID, sourceSettings, sql.Value, [.. columns.Select(column => new ExportColumnChoice(column.Position, column.Name!))], source.Kind == "query", request.Count, forcedCount, targetRecord.Value.ID, targetSettings, target.Schema!, target.Table!, ImportRequestRules.MappingOf(request.Mapping!), load!, generation, request.WindowID, TransferConnections.StopNow(connectionQueries, targetRecord.Value.ID), parameters);
+
+        var entryId = -1L;
+        if (journalRecorder is not null)
+        {
+            var isEmptyFirst = load!.Empty;
+            var level = isEmptyFirst ? EJournalLevel.Critical : EJournalLevel.Warning;
+            var reason = isEmptyFirst ? $"Cópia esvaziando {target.Schema}.{target.Table} antes." : $"Cópia para {target.Schema}.{target.Table}.";
+            var (snapshot, protections) = JournalSnapshots.FromRecord(vaultService, targetRecord.Value, targetSettings.Database);
+
+            entryId = journalRecorder.Begin(new JournalEntryStart(
+                Kind: EJournalKind.Data,
+                Action: "Cópia entre bancos",
+                Level: level,
+                Reason: reason,
+                Origin: "other",
+                Sql: sql.Value,
+                Confirmed: isEmptyFirst,
+                Connection: snapshot,
+                Protections: protections));
+        }
+
+        var job = new CopyJob(sourceRecord.Value.ID, sourceSettings, sql.Value, [.. columns.Select(column => new ExportColumnChoice(column.Position, column.Name!))], source.Kind == "query", request.Count, forcedCount, targetRecord.Value.ID, targetSettings, target.Schema!, target.Table!, ImportRequestRules.MappingOf(request.Mapping!), load!, generation, request.WindowID, TransferConnections.StopNow(connectionQueries, targetRecord.Value.ID), parameters, entryId);
 
         var started = transferService.StartCopy(job);
         if (started.IsFailure)
-            return Result.Failure<TransferStartedDto, ApiErrorDto>(TransferConnections.StartRefusal(started.Error, target.Schema!, target.Table!));
+        {
+            var error = TransferConnections.StartRefusal(started.Error, target.Schema!, target.Table!);
+            if (entryId > 0)
+                journalRecorder!.Complete(entryId, new JournalEntryEnd(EJournalOutcome.Refused, null, error.Type, null, error.Detail));
+
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(error);
+        }
 
         // RN-CONN-014: como na exportação, a exclusão de qualquer das duas conexões enquanto o trabalho entra no registro: o trabalho não fica.
         var confirmedSource = await connectionQueries.GetRecordByID(source.ConnectionID, cancellationToken);
