@@ -390,6 +390,6 @@ describe("a fonte da linha é a da interface, em todo nó (RN-CONFIG-008, seçã
     expect(markup).toContain(node.label);
     expect(markup).not.toContain("font-mono");
     expect(markup).not.toContain("font-editor");
-    if (node.detail !== undefined) expect(markup).toMatch(new RegExp(`<span class="[^"]*text-subtle[^"]*">${node.detail.replace(/[()]/g, "\\$&")}</span>`));
+    if (node.detail !== undefined) expect(markup).toMatch(new RegExp(`<span class="[^"]*text-subtle[^"]*">${node.detail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</span>`));
   });
 });
