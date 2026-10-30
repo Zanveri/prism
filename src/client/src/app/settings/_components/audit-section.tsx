@@ -10,6 +10,7 @@ import {
   Button,
   ChevronIcon,
   CloseIcon,
+  DateTimePicker,
   EnvironmentPill,
   Input,
   SearchIcon,
@@ -118,7 +119,13 @@ export function AuditSection({ anchor }: { anchor: string }) {
       const activeContainer = filterBarRef.current?.querySelector(
         `[data-audit-dropdown="${openDropdown}"]`,
       );
-      if (isNode(target) && activeContainer?.contains(target)) return;
+      if (
+        isNode(target) &&
+        (activeContainer?.contains(target) ||
+          (target instanceof Element && target.closest('[data-datepicker-popover="true"]') !== null))
+      ) {
+        return;
+      }
       setOpenDropdown(null);
     }
 
@@ -310,7 +317,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
             onClick={() => setOpenDropdown((current) => (current === "period" ? null : "period"))}
             className={cn(
               "flex h-[34px] cursor-pointer items-center gap-1.5 rounded-md border bg-raised px-2.5 text-xs text-ink",
-              openDropdown === "period" || filters.period !== "all"
+              openDropdown === "period" || filters.period !== "7d"
                 ? "border-accent"
                 : "border-border-strong",
             )}
@@ -339,34 +346,34 @@ export function AuditSection({ anchor }: { anchor: string }) {
               ))}
               {filters.period === "custom" ? (
                 <div className="mt-1 flex flex-col gap-2 border-t border-border pt-2">
-                  <label className="flex flex-col gap-1 text-[11px] text-subtle">
-                    <span>{copy.filters.customFrom}</span>
-                    <Input
-                      type="datetime-local"
+                  <div className="flex flex-col gap-1 text-[11px] text-subtle">
+                    <label htmlFor="audit-period-from">{copy.filters.customFrom}</label>
+                    <DateTimePicker
+                      id="audit-period-from"
                       value={filters.customRange.from}
-                      onChange={(event) =>
+                      onChange={(from) =>
                         setFilters((current) => ({
                           ...current,
-                          customRange: { ...current.customRange, from: event.target.value },
+                          customRange: { ...current.customRange, from },
                         }))
                       }
                       className="h-8 bg-background px-2 text-xs"
                     />
-                  </label>
-                  <label className="flex flex-col gap-1 text-[11px] text-subtle">
-                    <span>{copy.filters.customTo}</span>
-                    <Input
-                      type="datetime-local"
+                  </div>
+                  <div className="flex flex-col gap-1 text-[11px] text-subtle">
+                    <label htmlFor="audit-period-to">{copy.filters.customTo}</label>
+                    <DateTimePicker
+                      id="audit-period-to"
                       value={filters.customRange.to}
-                      onChange={(event) =>
+                      onChange={(to) =>
                         setFilters((current) => ({
                           ...current,
-                          customRange: { ...current.customRange, to: event.target.value },
+                          customRange: { ...current.customRange, to },
                         }))
                       }
                       className="h-8 bg-background px-2 text-xs"
                     />
-                  </label>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -396,39 +403,44 @@ export function AuditSection({ anchor }: { anchor: string }) {
             <ChevronIcon className="size-3" />
           </button>
           {openDropdown === "connections" ? (
-            <div className="absolute top-full left-0 z-20 mt-1 flex max-h-72 w-72 flex-col gap-1.5 overflow-y-auto rounded-md border border-border-strong bg-raised p-2 shadow-2xl">
-              <Input
-                type="search"
-                value={connectionFilterSearch}
-                onChange={(event) => setConnectionFilterSearch(event.target.value)}
-                placeholder={copy.filters.connectionSearchPlaceholder}
-                className="h-8 bg-background px-2 text-xs"
-              />
-              {filteredConnections.map((conn) => {
-                const checked = filters.connectionIds.includes(conn.id);
-                return (
-                  <label
-                    key={conn.id}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-ink hover:bg-selected"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() =>
-                        setFilters((current) => ({
-                          ...current,
-                          connectionIds: toggleFilterItem(current.connectionIds, conn.id),
-                        }))
-                      }
-                      className="m-0 size-4 flex-none cursor-pointer accent-accent"
-                    />
-                    <span className="truncate">{conn.name}</span>
-                    {conn.deleted ? (
-                      <span className="text-[11px] text-subtle">{copy.filters.deletedConnectionSuffix}</span>
-                    ) : null}
-                  </label>
-                );
-              })}
+            <div className="absolute top-full left-0 z-20 mt-1 flex w-72 flex-col gap-1.5 rounded-md border border-border-strong bg-raised p-2 shadow-2xl">
+              <div className="relative flex shrink-0 items-center">
+                <SearchIcon className="pointer-events-none absolute left-2.5 size-3.5 text-subtle" />
+                <Input
+                  type="search"
+                  value={connectionFilterSearch}
+                  onChange={(event) => setConnectionFilterSearch(event.target.value)}
+                  placeholder={copy.filters.connectionSearchPlaceholder}
+                  className="h-8 bg-background pr-2.5 pl-8 text-xs"
+                />
+              </div>
+              <div className="flex max-h-60 flex-col gap-1 overflow-y-auto">
+                {filteredConnections.map((conn) => {
+                  const checked = filters.connectionIds.includes(conn.id);
+                  return (
+                    <label
+                      key={conn.id}
+                      className="flex shrink-0 cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-ink hover:bg-selected"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setFilters((current) => ({
+                            ...current,
+                            connectionIds: toggleFilterItem(current.connectionIds, conn.id),
+                          }))
+                        }
+                        className="m-0 size-4 flex-none cursor-pointer accent-accent"
+                      />
+                      <span className="truncate">{conn.name}</span>
+                      {conn.deleted ? (
+                        <span className="text-[11px] text-subtle">{copy.filters.deletedConnectionSuffix}</span>
+                      ) : null}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
         </div>

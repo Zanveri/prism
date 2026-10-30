@@ -575,3 +575,13 @@ export function OctagonAlertIcon(props: ComponentProps<"svg">) {
     </Icon>
   );
 }
+
+/** Calendário: seletor de data e hora (`DatePicker` / `DateTimePicker`). */
+export function CalendarIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <rect x="2.25" y="3.25" width="11.5" height="10.5" rx="1.5" />
+      <path d="M5.25 1.75v2.5M10.75 1.75v2.5M2.25 6.5h11.5" />
+    </Icon>
+  );
+}

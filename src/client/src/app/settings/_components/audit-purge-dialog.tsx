@@ -2,7 +2,8 @@ import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
-import { Button, Dialog, LockIcon, TextField, useToast } from "@/components/ui";
+import { Button, DatePicker, Dialog, Field, FieldError, FieldLabel, LockIcon, TextField, useToast } from "@/components/ui";
+import { fieldAria } from "@/lib/utils/form";
 
 import { auditCopy } from "../_lib/audit.copy";
 import { purgeAuditOrRefuse } from "../_lib/audit.service";
@@ -103,18 +104,21 @@ export function AuditPurgeDialog({ open, onClose }: { open: boolean; onClose: ()
       <form id="audit-purge-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <input type="text" name="userName" autoComplete="username" value={userName} readOnly hidden />
 
-        <TextField
-          id="audit-purge-before"
-          label={copy.beforeLabel}
-          type="date"
-          value={beforeDate}
-          error={beforeError}
-          onChange={(event) => {
-            setBeforeDate(event.target.value);
-            setBeforeError(undefined);
-          }}
-          disabled={mutation.isPending}
-        />
+        <Field>
+          <FieldLabel htmlFor="audit-purge-before">{copy.beforeLabel}</FieldLabel>
+          <DatePicker
+            id="audit-purge-before"
+            value={beforeDate}
+            clearable={false}
+            onChange={(value) => {
+              setBeforeDate(value);
+              setBeforeError(undefined);
+            }}
+            disabled={mutation.isPending}
+            {...fieldAria("audit-purge-before", beforeError)}
+          />
+          <FieldError id="audit-purge-before-error">{beforeError}</FieldError>
+        </Field>
 
         <TextField
           ref={passwordRef}

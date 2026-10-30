@@ -1,6 +1,20 @@
 export { Button, buttonVariants, type ButtonProps } from "./button";
 export { ConfirmDialog, type ConfirmDialogProps } from "./confirm-dialog";
 export { ContextMenu, ContextMenuItems, type ContextMenuGroup, type ContextMenuItem, type ContextMenuProps } from "./context-menu";
+export {
+  DatePicker,
+  DateTimePicker,
+  buildCalendarGrid,
+  daysInMonth,
+  formatDatePickerDisplay,
+  formatDatePickerValue,
+  parseDatePickerValue,
+  type CalendarCell,
+  type DatePickerMode,
+  type DatePickerParts,
+  type DatePickerProps,
+  type DateTimePickerProps,
+} from "./date-picker";
 export { Dialog, type DialogDismissal, type DialogProps, type DialogSize } from "./dialog";
 export { EngineTag, type Engine } from "./engine-tag";
 export { EnvironmentPill, environmentTextColor } from "./environment-pill";
@@ -16,6 +30,7 @@ export {
   ArrowUpIcon,
   BugIcon,
   BuildIcon,
+  CalendarIcon,
   ChartIcon,
   CheckIcon,
   ChevronIcon,
