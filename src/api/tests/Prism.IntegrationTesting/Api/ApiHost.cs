@@ -31,6 +31,7 @@ public sealed class ApiHost : IAsyncDisposable
 
     public string Token { get; }
     public string DataDirectory { get; }
+    public IServiceProvider Services => _app.Services;
 
     /// <summary>Já leva o token de lançamento em `Authorization`.</summary>
     public HttpClient Client { get; }

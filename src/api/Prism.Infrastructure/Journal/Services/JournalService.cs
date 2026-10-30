@@ -392,15 +392,21 @@ internal sealed class JournalService : IJournalService, IDisposable
 
     private async Task<Result<T, EJournalError>> ExecuteWithFlushAsync<T>(Func<JournalSession, Result<T, EJournalError>> operation, CancellationToken cancellationToken)
     {
+        if (!_vaultService.IsUnlocked)
+            return EJournalError.Locked;
+
         var session = Volatile.Read(ref _session);
-        if (session is null || !session.AcceptingWrites || !_vaultService.IsUnlocked || _vaultService.Generation != session.Generation)
+        if (session is null || !session.AcceptingWrites || _vaultService.Generation != session.Generation)
             return EJournalError.Unavailable;
 
         await FlushSessionAsync(session, cancellationToken);
         await session.DbGate.WaitAsync(cancellationToken);
         try
         {
-            if (session.Closed || !_vaultService.IsUnlocked || _vaultService.Generation != session.Generation)
+            if (!_vaultService.IsUnlocked)
+                return EJournalError.Locked;
+
+            if (session.Closed || _vaultService.Generation != session.Generation)
                 return EJournalError.Unavailable;
 
             return operation(session);
@@ -413,15 +419,21 @@ internal sealed class JournalService : IJournalService, IDisposable
 
     private async Task<UnitResult<EJournalError>> ExecuteUnitWithFlushAsync(Func<JournalSession, UnitResult<EJournalError>> operation, CancellationToken cancellationToken)
     {
+        if (!_vaultService.IsUnlocked)
+            return EJournalError.Locked;
+
         var session = Volatile.Read(ref _session);
-        if (session is null || !session.AcceptingWrites || !_vaultService.IsUnlocked || _vaultService.Generation != session.Generation)
+        if (session is null || !session.AcceptingWrites || _vaultService.Generation != session.Generation)
             return EJournalError.Unavailable;
 
         await FlushSessionAsync(session, cancellationToken);
         await session.DbGate.WaitAsync(cancellationToken);
         try
         {
-            if (session.Closed || !_vaultService.IsUnlocked || _vaultService.Generation != session.Generation)
+            if (!_vaultService.IsUnlocked)
+                return EJournalError.Locked;
+
+            if (session.Closed || _vaultService.Generation != session.Generation)
                 return EJournalError.Unavailable;
 
             return operation(session);
