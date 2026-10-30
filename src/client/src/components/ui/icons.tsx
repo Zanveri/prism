@@ -533,3 +533,25 @@ export function TransactionIcon(props: ComponentProps<"svg">) {
     </Icon>
   );
 }
+
+
+/** Histórico: o relógio com a seta de retorno anti-horária (RN-HIST-001). */
+export function HistoryIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 8a5.5 5.5 0 1 0 1.4-3.65L2.5 5.75" />
+      <path d="M2.5 2.75v3h3" />
+      <path d="M8 5.25v3l2 1.25" />
+    </Icon>
+  );
+}
+
+/** Auditoria: o escudo com a marca de conferido (RN-AUDIT-010). */
+export function ShieldCheckIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M8 1.75 2.75 4v3.75c0 3.35 2.25 5.75 5.25 6.5 3-.75 5.25-3.15 5.25-6.5V4z" />
+      <path d="m5.75 8 1.5 1.5 3-3" />
+    </Icon>
+  );
+}
