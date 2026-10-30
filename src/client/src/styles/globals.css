@@ -1523,6 +1523,11 @@
     transform-origin: 20% 80%;
   }
 
+  svg[data-icon] .icon-part-hand {
+    transform-box: view-box;
+    transform-origin: 8px 8px;
+  }
+
   /* Desativa animações em controles interativos desabilitados */
   :is(button:disabled, [aria-disabled="true"], :disabled) svg[data-icon] *,
   :is(button:disabled, [aria-disabled="true"], :disabled) * svg[data-icon] * {
