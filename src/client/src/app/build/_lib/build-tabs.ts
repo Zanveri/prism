@@ -5,6 +5,7 @@ export type BuildTabsState = {
 
 export type BuildLayoutState = {
   sidebarHidden: boolean;
+  editorHidden?: boolean;
 };
 
 const defaultTabs: BuildTabsState = { open: [], active: null };
@@ -101,8 +102,11 @@ export function readBuildLayout(
     if (typeof parsed !== "object" || parsed === null) {
       return { ...defaultLayout };
     }
-    const { sidebarHidden } = parsed as { sidebarHidden?: unknown };
-    return { sidebarHidden: sidebarHidden === true };
+    const { sidebarHidden, editorHidden } = parsed as { sidebarHidden?: unknown; editorHidden?: unknown };
+    return {
+      sidebarHidden: sidebarHidden === true,
+      ...(typeof editorHidden === "boolean" ? { editorHidden } : {}),
+    };
   } catch {
     return { ...defaultLayout };
   }
@@ -118,7 +122,12 @@ export function writeBuildLayout(
   try {
     store.setItem(
       buildLayoutKey(user),
-      JSON.stringify({ sidebarHidden: layout.sidebarHidden === true }),
+      JSON.stringify({
+        sidebarHidden: layout.sidebarHidden === true,
+        ...(typeof layout.editorHidden === "boolean"
+          ? { editorHidden: layout.editorHidden }
+          : {}),
+      }),
     );
   } catch {
     // Armazenamento indisponível ou cheio: segue em memória.

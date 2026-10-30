@@ -109,7 +109,33 @@ export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, c
         {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} connected={tab.sessionId !== null} environmentColor={environment?.color ?? null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} onOpenQuery={onOpenQuery} refreshSlot={refreshSlot} filterRef={filter} /> : null}
         {view !== "data" && disconnected ? <DisconnectedView connectionId={tab.connectionId} database={tab.database} /> : null}
         {view === "structure" && !disconnected ? <StructureView tabId={tab.id} connectionId={tab.connectionId} database={tab.database} engine={connection?.engine} schema={schema} name={name} visible={visible} onOpenDiagram={() => onView(tab.id, "diagram")} refreshSlot={refreshSlot} /> : null}
-        {view === "diagram" && !disconnected ? <DiagramView connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} visible={visible} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} memoryKey={tab.id} refreshSlot={refreshSlot} /> : null}
+        {view === "diagram" && !disconnected ? (
+          <DiagramView
+            connectionId={tab.connectionId}
+            database={tab.database}
+            schema={schema}
+            name={name}
+            visible={visible}
+            onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })}
+            onOpenData={(ref) =>
+              ref.schema === schema && ref.name === name
+                ? onView(tab.id, "data")
+                : onOpenTable(tab.connectionId, { ...ref, view: "data", ...inDatabase(tab.database) })
+            }
+            onOpenStructure={(ref) =>
+              ref.schema === schema && ref.name === name
+                ? onView(tab.id, "structure")
+                : onOpenTable(tab.connectionId, { ...ref, view: "structure", ...inDatabase(tab.database) })
+            }
+            onGenerateSelect={
+              onOpenQuery
+                ? (ref) => onOpenQuery(tab.connectionId, `SELECT *\nFROM ${ref.schema}.${ref.name}\nLIMIT 100;`, tab.database)
+                : undefined
+            }
+            memoryKey={tab.id}
+            refreshSlot={refreshSlot}
+          />
+        ) : null}
       </div>
     </div>
   );

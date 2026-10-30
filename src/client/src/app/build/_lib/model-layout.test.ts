@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { addTable } from "./build-model";
 import { readCanvasModel } from "./fixtures";
 import { checkModel } from "./model-check";
 import {
@@ -64,6 +65,27 @@ describe("model-layout", () => {
     expect(organized.layout["manutencao.plano_manutencao"]?.pinned).toBe(false);
   });
 
+  it("não sobrepõe tabelas ao adicionar novas tabelas ou quando há coordenadas conflitantes", () => {
+    let model = readCanvasModel();
+    model = addTable(model).model;
+    model = addTable(model).model;
+    model = addTable(model).model;
+
+    const layout = modelDiagram(model, []);
+    for (let i = 0; i < layout.boxes.length; i++) {
+      for (let j = i + 1; j < layout.boxes.length; j++) {
+        const a = layout.boxes[i]!;
+        const b = layout.boxes[j]!;
+        const overlaps =
+          a.x < b.x + b.width &&
+          a.x + a.width > b.x &&
+          a.y < b.y + b.height &&
+          a.y + a.height > b.y;
+        expect(overlaps).toBe(false);
+      }
+    }
+  });
+
   it("connectColumn cria FK direta para tabela com PK simples e devolve needsDialog para PK composta", () => {
     const model = readCanvasModel();
 
@@ -108,6 +130,24 @@ describe("model-layout", () => {
         "id",
         "matricula",
       ]);
+    }
+
+    const modelWithoutPk = {
+      ...model,
+      tables: model.tables.map((t) =>
+        t.name === "operador" ? { ...t, primaryKey: null } : t,
+      ),
+    };
+    const noPkResult = connectColumn(
+      modelWithoutPk,
+      "manutencao.peca_trocada",
+      "ordem_id",
+      "producao.operador",
+    );
+    expect("needsDialog" in noPkResult).toBe(true);
+    if ("needsDialog" in noPkResult) {
+      expect(noPkResult.needsDialog.target.table).toBe("operador");
+      expect(noPkResult.needsDialog.target.columns).toEqual([]);
     }
   });
 });

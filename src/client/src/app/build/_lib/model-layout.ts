@@ -16,10 +16,30 @@ import {
   type BuildModel,
   type ModelForeignKey,
 } from "./build-model";
-import type { Problem } from "./model-check";
+import { fixButtonLabel, type Problem } from "./model-check";
 
 const boxPadding = 12;
 const margin = 64;
+const boxCollisionGap = 24;
+
+let cachedAutoLayout: { sig: string; layout: DiagramLayout } | null = null;
+
+function buildAutoLayoutSignature(model: BuildModel): string {
+  const parts: string[] = [model.engine];
+  for (const t of model.tables) {
+    const pk = (t.primaryKey?.columns ?? []).join(",");
+    const cols = t.columns.map((c) => `${c.name}:${c.type}`).join(",");
+    const originCols = t.origin ? t.origin.columns.map((c) => `${c.name}:${c.type}`).join(",") : "";
+    const fks = t.foreignKeys
+      .map(
+        (fk) =>
+          `${fk.name ?? ""}:${fk.columns.join(",")}->${fk.target.schema}.${fk.target.table}(${fk.target.columns.join(",")})`,
+      )
+      .join(";");
+    parts.push(`${t.schema}.${t.name}|${pk}|${cols}|${originCols}|${fks}`);
+  }
+  return parts.join("\n");
+}
 
 function rowCenterY(box: DiagramBox, columnName: string | undefined): number {
   if (!box.columns || !columnName) {
@@ -31,6 +51,11 @@ function rowCenterY(box: DiagramBox, columnName: string | undefined): number {
 }
 
 function computeAutoLayout(model: BuildModel): DiagramLayout {
+  const sig = buildAutoLayoutSignature(model);
+  if (cachedAutoLayout !== null && cachedAutoLayout.sig === sig) {
+    return cachedAutoLayout.layout;
+  }
+
   const modelKeys = new Set(model.tables.map((t) => tableKey(t)));
   const bySchema = new Map<string, SchemaDiagram>();
 
@@ -79,33 +104,91 @@ function computeAutoLayout(model: BuildModel): DiagramLayout {
   }
 
   const entries = [...bySchema.entries()].map(([schema, diagram]) => ({ schema, diagram }));
-  return layoutDatabaseDiagram(entries, { qualifyNames: true });
+  const layout = layoutDatabaseDiagram(entries, { qualifyNames: true });
+  cachedAutoLayout = { sig, layout };
+  return layout;
+}
+
+function rectsOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+  gap: number,
+): boolean {
+  return (
+    a.x < b.x + b.width + gap &&
+    a.x + a.width + gap > b.x &&
+    a.y < b.y + b.height + gap &&
+    a.y + a.height + gap > b.y
+  );
 }
 
 export function modelDiagram(model: BuildModel, problems: readonly Problem[]): DiagramLayout {
   const auto = computeAutoLayout(model);
-  const autoBoxByKey = new Map<string, DiagramBox>();
+  const autoBoxQueueByKey = new Map<string, DiagramBox[]>();
   for (const box of auto.boxes) {
-    autoBoxByKey.set(`${box.ref.schema}.${box.ref.name}`, box);
+    const k = `${box.ref.schema}.${box.ref.name}`;
+    const list = autoBoxQueueByKey.get(k) ?? [];
+    list.push(box);
+    autoBoxQueueByKey.set(k, list);
   }
 
   const activeProblems = problems.filter((p) => !model.ignoredWarnings.includes(p.key));
+  const usedSavedPosKeys = new Set<string>();
+  const seenBoxKeys = new Set<string>();
 
-  const boxes: DiagramBox[] = model.tables.map((table) => {
-    const key = tableKey(table);
-    const autoBox = autoBoxByKey.get(key);
-    const savedPos = model.layout[key];
+  const draftBoxes = model.tables.map((table, tableIdx) => {
+    const baseKey = tableKey(table);
+    const boxKey = seenBoxKeys.has(baseKey) ? `${baseKey}#${tableIdx}` : baseKey;
+    seenBoxKeys.add(baseKey);
+
+    const autoBox = autoBoxQueueByKey.get(baseKey)?.shift();
+    const rawSavedPos = model.layout[baseKey];
+    const hasUniqueSavedPos = rawSavedPos !== undefined && !usedSavedPosKeys.has(baseKey);
+    if (hasUniqueSavedPos) {
+      usedSavedPosKeys.add(baseKey);
+    }
+    const savedPos = hasUniqueSavedPos ? rawSavedPos : undefined;
+
     const changes = tableChanges(model.engine, table);
     const pkSet = new Set(table.primaryKey?.columns ?? []);
     const fkSet = new Set(table.foreignKeys.flatMap((fk) => fk.columns));
+    const uniqueSet = new Set(
+      table.uniques.filter((u) => u.columns.length === 1).map((u) => u.columns[0]!),
+    );
+    const changedByColName = new Map(
+      changes.changedColumns.map((cc) => [cc.name, cc]),
+    );
 
-    const columns: DiagramColumn[] = table.columns.map((col) => ({
-      name: col.name,
-      type: col.type,
-      primaryKey: pkSet.has(col.name),
-      foreignKey: fkSet.has(col.name),
-      ...(table.origin !== null && col.originName === null ? { state: "added" as const } : {}),
-    }));
+    const columns: DiagramColumn[] = table.columns.map((col) => {
+      const changed = changedByColName.get(col.name);
+      const originCol =
+        table.origin && col.originName
+          ? table.origin.columns.find(
+              (oc) => (oc.originName ?? oc.name) === col.originName || oc.name === col.originName,
+            )
+          : undefined;
+      const state: DiagramColumn["state"] =
+        table.origin !== null && col.originName === null
+          ? "added"
+          : table.origin !== null && changed !== undefined
+            ? "changed"
+            : undefined;
+      const previousType =
+        changed?.type && originCol && originCol.type !== col.type
+          ? originCol.type
+          : undefined;
+
+      return {
+        name: col.name,
+        type: col.type,
+        primaryKey: pkSet.has(col.name),
+        foreignKey: fkSet.has(col.name),
+        nullable: col.nullable,
+        ...(uniqueSet.has(col.name) ? { unique: true } : {}),
+        ...(state ? { state } : {}),
+        ...(previousType ? { previousType } : {}),
+      };
+    });
 
     if (table.origin !== null && changes.removedColumns.length > 0) {
       for (const removedName of changes.removedColumns) {
@@ -124,9 +207,9 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
 
     const tableProbs = activeProblems.filter(
       (p) =>
-        p.table === key ||
+        p.table === baseKey ||
         (p.fix?.kind === "createIndexes" &&
-          p.fix.items.some((item) => item.table === key)),
+          p.fix.items.some((item) => item.table === baseKey)),
     );
     const warning: "error" | "warning" | undefined = tableProbs.some((p) => p.severity === "error")
       ? "error"
@@ -138,21 +221,83 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
     const height = rowHeight * (columns.length + 1) + 2 * boxPadding;
 
     return {
-      key,
-      ref: { schema: table.schema, name: table.name },
-      title: table.origin !== null ? `${table.schema}.${table.name}` : table.name,
-      variant: table.origin !== null ? "existing" : "new",
-      ...(table.origin !== null && changes.kind === "changed" ? { badge: "alterada" } : {}),
-      ...(table.dropInDatabase ? { dropped: true } : {}),
-      ...(warning ? { warning } : {}),
-      center: false,
-      x: savedPos ? savedPos.x : (autoBox?.x ?? margin),
-      y: savedPos ? savedPos.y : (autoBox?.y ?? margin),
-      width,
-      height,
-      columns,
+      baseKey,
+      autoBox,
+      hasSavedPos: savedPos !== undefined,
+      pinned: savedPos?.pinned ?? false,
+      box: {
+        key: boxKey,
+        ref: { schema: table.schema, name: table.name },
+        title: table.origin !== null ? `${table.schema}.${table.name}` : table.name,
+        variant: table.origin !== null ? "existing" : "new",
+        ...(table.origin !== null && changes.kind === "changed" ? { badge: "alterada" } : {}),
+        ...(table.dropInDatabase ? { dropped: true } : {}),
+        ...(warning ? { warning } : {}),
+        ...(tableProbs.length > 0
+          ? {
+              problems: tableProbs.map((p) => ({
+                code: p.code,
+                severity: p.severity,
+                message: p.message,
+                key: p.key,
+                ...(p.fix ? { fixLabel: fixButtonLabel(p.fix) } : {}),
+              })),
+            }
+          : {}),
+        center: false,
+        x: savedPos ? savedPos.x : (autoBox?.x ?? margin),
+        y: savedPos ? savedPos.y : (autoBox?.y ?? margin),
+        width,
+        height,
+        columns,
+      } satisfies DiagramBox,
     };
   });
+
+  // Garante que nenhuma tabela fique sobreposta a outra (priorizando tabelas fixadas pelo usuário).
+  const autoBoxByKey = new Map<string, DiagramBox>();
+  for (const item of draftBoxes) {
+    if (item.autoBox && !autoBoxByKey.has(item.baseKey)) {
+      autoBoxByKey.set(item.baseKey, item.autoBox);
+    }
+  }
+
+  const order = draftBoxes
+    .map((item, index) => ({
+      index,
+      priority: item.pinned ? 0 : item.hasSavedPos ? 1 : 2,
+    }))
+    .sort((a, b) => a.priority - b.priority || a.index - b.index);
+
+  const placedRects: { x: number; y: number; width: number; height: number }[] = [];
+  const resolvedBoxes = new Array<DiagramBox>(draftBoxes.length);
+
+  for (const { index } of order) {
+    const item = draftBoxes[index]!;
+    let x = item.box.x;
+    let y = item.box.y;
+    const { width, height } = item.box;
+
+    let guard = 0;
+    while (guard < 200) {
+      const hit = placedRects.find((r) =>
+        rectsOverlap({ x, y, width, height }, r, boxCollisionGap),
+      );
+      if (!hit) break;
+      if (x >= hit.x + hit.width / 2 && x < hit.x + hit.width + boxCollisionGap) {
+        x = hit.x + hit.width + boxCollisionGap;
+      } else {
+        y = hit.y + hit.height + boxCollisionGap;
+      }
+      guard += 1;
+    }
+
+    placedRects.push({ x, y, width, height });
+    resolvedBoxes[index] =
+      x === item.box.x && y === item.box.y ? item.box : { ...item.box, x, y };
+  }
+
+  const boxes: DiagramBox[] = resolvedBoxes;
 
   const boxByKey = new Map(boxes.map((b) => [b.key, b]));
   const autoEdgeQueue = new Map<string, DiagramEdge[]>();
@@ -231,6 +376,15 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
         }
       }
 
+      const srcCol = table.columns.find((c) => c.name === fromCol);
+      const isSinglePk =
+        table.primaryKey?.columns.length === 1 && table.primaryKey.columns[0] === fromCol;
+      const isSingleUnique = table.uniques.some(
+        (u) => u.columns.length === 1 && u.columns[0] === fromCol,
+      );
+      const tableDiff = tableChanges(model.engine, table);
+      const isNewFk = table.origin === null || tableDiff.addedForeignKeys.includes(fk);
+
       edges.push({
         key: `${edgeOrder++}:${fromKey}:${fkName}:${fromCol ?? ""}`,
         name: fkName,
@@ -242,6 +396,10 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
         toTable: toKey,
         fromColumn: fromCol,
         toColumn: toCol,
+        cardinality: isSinglePk || isSingleUnique ? "1:1" : "1:N",
+        optional: Boolean(srcCol?.nullable),
+        self: fromKey === toKey,
+        variant: isNewFk ? "new" : "existing",
       });
     }
   }
@@ -310,12 +468,7 @@ export function connectColumn(
 
   const defaultOnDelete = model.engine === "informix" ? "noAction" : "restrict";
   const pkCols = targetTable.primaryKey?.columns ?? [];
-  const fallbackTargetCol =
-    pkCols.length === 1
-      ? pkCols[0]!
-      : pkCols.length === 0 && targetTable.columns.length > 0
-        ? targetTable.columns[0]!.name
-        : null;
+  const fallbackTargetCol = pkCols.length === 1 ? pkCols[0]! : null;
   if (fallbackTargetCol !== null) {
     const fk: ModelForeignKey = {
       name: null,

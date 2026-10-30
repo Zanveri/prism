@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { driversCopy } from "@/app/drivers/_lib/drivers.copy";
-import { databaseLogoOf, logoChips, type DatabaseLogo } from "@/assets/databases/database-logos";
+import { databaseLogoOf, engineBrands, type DatabaseLogo } from "@/assets/databases/database-logos";
 import { DatabaseIcon, EngineTag, StatusBadge, type Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
@@ -23,54 +23,27 @@ const stateColors: Record<EngineChoiceState, string> = {
   unknown: "text-muted",
 };
 
-/** A chave da marca de um banco da grade: a do banco que o Prism conecta, ou o id do driver do "em breve". */
-const engineBrands: Record<Engine, string> = {
-  1: "postgresql",
-  2: "db2",
-  3: "informix",
-  4: "sqlite",
-  5: "mysql",
-  6: "mariadb",
-  7: "sql-server",
-  8: "oracle",
-  9: "firebird",
-  10: "duckdb",
-  11: "clickhouse",
-  12: "bigquery",
-  13: "databricks",
-};
-
 function brandOf(choice: Pick<EngineChoice, "engine" | "driver">): string | null {
   return choice.engine === null ? (choice.driver?.id ?? null) : engineBrands[choice.engine];
-}
-
-/** O fundo da marca: transparente, ou a ficha no esquema de cor em que a logo some (`light-dark` segue o esquema do tema aplicado). */
-function chipBackground(chip: DatabaseLogo["chip"]): string | undefined {
-  if (chip === "both") return `light-dark(${logoChips.light}, ${logoChips.dark})`;
-  if (chip === "dark") return `light-dark(transparent, ${logoChips.dark})`;
-  return chip === "light" ? `light-dark(${logoChips.light}, transparent)` : undefined;
 }
 
 /** A caixa da marca: a mesma medida da ficha, para a grade não mudar de altura de um banco para outro. */
 const markBox = "flex h-10 w-12 flex-none items-center justify-center rounded-md";
 
 /**
- * A logo do fabricante (Ruling 136), só no tamanho: a imagem como está, ou o glifo do Simple Icons recortado do próprio arquivo (a máscara)
- * e pintado na cor que o Simple Icons dá à marca. Onde ela some no tema, fica sobre a ficha.
+ * A logo do fabricante (Ruling 136), em PNG sem fundo.
  */
 function LogoMark({ logo }: { logo: DatabaseLogo }) {
-  const glyph: CSSProperties = { backgroundColor: logo.color ?? undefined, maskImage: `url("${logo.src}")`, maskSize: "contain", maskRepeat: "no-repeat", maskPosition: "center" };
-
   return (
-    <span aria-hidden className={cn(markBox, "border border-border-strong")} style={{ backgroundColor: chipBackground(logo.chip) }}>
-      {logo.kind === "image" ? <img src={logo.src} alt="" draggable={false} className="size-7 object-contain" /> : <span className="size-7" style={glyph} />}
+    <span aria-hidden className={markBox}>
+      <img src={logo.src} alt="" draggable={false} className="size-7 object-contain" />
     </span>
   );
 }
 
 /**
- * A marca de um banco na grade e no passo das configurações (RN-NAV-005): a logo do fabricante onde há uma nas fontes que a Ruling 136
- * aceita (`src/assets/databases/README.md`); senão, a ficha de hoje: a colorida (DB2, IFX) dos bancos que o Prism conecta, e o desenho
+ * A marca de um banco na grade e no passo das configurações (RN-NAV-005): a logo do fabricante em PNG sem fundo onde há uma nas fontes que a
+ * Ruling 136 aceita (`src/assets/databases/README.md`); senão, a ficha de hoje: a colorida dos bancos que o Prism conecta, e o desenho
  * genérico de banco de dados dos "em breve", que não têm cor no app.
  */
 export function EngineMark({ choice }: { choice: Pick<EngineChoice, "engine" | "driver"> }) {

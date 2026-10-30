@@ -31,6 +31,7 @@ export type ForeignKeysSectionProps = {
   onAddForeignKey: (fk: ModelForeignKey) => void;
   onUpdateForeignKey: (index: number, fk: ModelForeignKey) => void;
   onRemoveForeignKey: (index: number) => void;
+  onFocusTableInDiagram?: (tableKey: string) => void;
 };
 
 type FkDraft = {
@@ -47,6 +48,7 @@ export function ForeignKeysSection({
   onAddForeignKey,
   onUpdateForeignKey,
   onRemoveForeignKey,
+  onFocusTableInDiagram,
 }: ForeignKeysSectionProps) {
   const options = fkActionOptions(model.engine).onDelete;
   const [draft, setDraft] = useState<FkDraft | null>(null);
@@ -172,8 +174,15 @@ export function ForeignKeysSection({
           >
             <button
               type="button"
-              onClick={() => openEditDraft(idx, fk)}
-              title="Clique para editar a relação"
+              onClick={(e) => {
+                if ((e.ctrlKey || e.metaKey) && onFocusTableInDiagram) {
+                  e.preventDefault();
+                  onFocusTableInDiagram(`${fk.target.schema}.${fk.target.table}`);
+                  return;
+                }
+                openEditDraft(idx, fk);
+              }}
+              title="Clique para editar a relação · Ctrl+clique para ir até a tabela no diagrama"
               className="min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-left font-mono text-xs text-ink hover:underline"
             >
               {colsLabel} <span className="text-accent">→</span> {targetDisplay}

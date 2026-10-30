@@ -1,9 +1,11 @@
 import {
+  ArrowLeftIcon,
   Button,
-  ChevronIcon,
   DownloadIcon,
   DuplicateIcon,
   EngineTag,
+  Segmented,
+  segmentedItem,
   WorkbenchIcon,
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
@@ -145,7 +147,7 @@ export function DdlView({
           onClick={onBackToDiagram}
           className="gap-1.5 px-2 text-ink"
         >
-          <ChevronIcon direction="left" />
+          <ArrowLeftIcon />
           <span>{buildCopy.ddlBackToDiagram}</span>
         </Button>
 
@@ -157,10 +159,9 @@ export function DdlView({
         <EngineTag engine={connectionEngineNumber(model.engine)} />
 
         {model.base !== null && (
-          <div
-            role="radiogroup"
+          <Segmented
             aria-label={buildCopy.ddlScopeGroupLabel}
-            className="ml-2 flex gap-0.5 rounded-md border border-border bg-background p-0.5"
+            className="ml-2 gap-0.5 rounded-md border border-border bg-background p-0.5"
           >
             <button
               type="button"
@@ -168,10 +169,8 @@ export function DdlView({
               aria-checked={effectiveScope === "changes"}
               onClick={() => setScope("changes")}
               className={cn(
-                "h-6.5 cursor-pointer rounded-sm border-0 px-2.5 text-xs",
-                effectiveScope === "changes"
-                  ? "bg-selected font-semibold text-ink"
-                  : "bg-transparent font-normal text-muted hover:text-ink",
+                segmentedItem({ active: effectiveScope === "changes" }),
+                "h-7 border-0 px-2.5 py-1 text-xs",
               )}
             >
               {buildCopy.scopeChangesLabel}
@@ -182,15 +181,13 @@ export function DdlView({
               aria-checked={effectiveScope === "full"}
               onClick={() => setScope("full")}
               className={cn(
-                "h-6.5 cursor-pointer rounded-sm border-0 px-2.5 text-xs",
-                effectiveScope === "full"
-                  ? "bg-selected font-semibold text-ink"
-                  : "bg-transparent font-normal text-muted hover:text-ink",
+                segmentedItem({ active: effectiveScope === "full" }),
+                "h-7 border-0 px-2.5 py-1 text-xs",
               )}
             >
               {buildCopy.scopeFullLabel}
             </button>
-          </div>
+          </Segmented>
         )}
 
         <span className="text-xs text-muted">{summaryText}</span>

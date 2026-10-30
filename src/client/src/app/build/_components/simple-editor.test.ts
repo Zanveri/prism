@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 
 import { stripTags } from "@/lib/testing/text";
 import { addIndex, removeColumn, updateColumn } from "../_lib/build-model";
-import { tableChangesDdl } from "../_lib/ddl-changes";
+import { engineRules } from "../_lib/build-engines";
 import { fkActionOptions } from "../_lib/editor-rows";
 import { readCanvasModel } from "../_lib/fixtures";
+import { buildTypeOptions } from "./column-row";
 import { SimpleEditor } from "./simple-editor";
 
 const ddlContext = {
@@ -42,7 +43,7 @@ describe("SimpleEditor", () => {
     expect(html).toContain("Ao excluir: anular");
   });
 
-  it("renderiza tabela existente producao.maquina com coluna alterada, removida, nova e DDL da tabela", () => {
+  it("renderiza tabela existente producao.maquina com coluna alterada, removida e nova, sem a seção 'O que esta tabela vai gerar'", () => {
     let model = readCanvasModel();
     model = updateColumn(model, "producao.maquina", "tag", {
       name: "tag_patrimonio",
@@ -50,8 +51,6 @@ describe("SimpleEditor", () => {
     });
     model = removeColumn(model, "producao.maquina", "modelo").model;
     model = addIndex(model, "producao.maquina", ["ultima_revisao_em"]);
-
-    const expectedDdl = tableChangesDdl(model, "producao.maquina", ddlContext);
 
     const html = renderToStaticMarkup(
       createElement(SimpleEditor, {
@@ -68,11 +67,18 @@ describe("SimpleEditor", () => {
     expect(text).toContain("modelo");
     expect(text).toContain("Restaurar");
     expect(text).toContain("NOVA");
-    expect(text).toContain("O que esta tabela vai gerar");
-    for (const line of expectedDdl.split("\n")) {
-      if (line.trim()) {
-        expect(text).toContain(line.trim());
+    expect(text).not.toContain("O que esta tabela vai gerar");
+  });
+
+  it("padroniza todas as opções do select de tipos para UPPERCASE", () => {
+    for (const engine of ["postgresql", "db2", "informix"] as const) {
+      const opts = buildTypeOptions(engineRules[engine].types, "integer");
+      expect(opts.length).toBeGreaterThan(0);
+      for (const opt of opts) {
+        expect(opt.label).toBe(opt.label.toUpperCase());
       }
+      const matched = opts.find((opt) => opt.value === "integer");
+      expect(matched?.label).toBe("INTEGER");
     }
   });
 
@@ -91,5 +97,48 @@ describe("SimpleEditor", () => {
     expect(fkActionOptions("informix").onDelete).toEqual(["noAction", "cascade"]);
     expect(html).toContain("Ao excluir: impedir");
     expect(html).not.toContain("Ao excluir: anular");
+  });
+
+  it("exibe tooltips descritivos nos botões PK, NN, UQ, AI e de expandir detalhes da coluna", () => {
+    const model = readCanvasModel();
+    const html = renderToStaticMarkup(
+      createElement(SimpleEditor, {
+        model,
+        tableKey: "manutencao.ordem_manutencao",
+        baseLabel: "MES Produção / mes",
+        ddlContext,
+        onChange: () => {},
+      }),
+    );
+
+    expect(html).toContain('title="PK — Chave primária (Primary Key): ativa nesta coluna"');
+    expect(html).toContain('title="NN — Não nulo (Not Null): obrigatório, não aceita NULL"');
+    expect(html).toContain(
+      'title="UQ — Valor único (Unique): clique para impedir valores repetidos nesta coluna"',
+    );
+    expect(html).toContain('title="AI — Auto-incremento (Identity / Serial): ativo nesta coluna"');
+    expect(html).toContain(
+      'title="Mais opções de id (tipo/tamanho, valor padrão, check, comentário)"',
+    );
+  });
+
+  it("renderiza alça interativa de drag-and-drop para reordenar colunas", () => {
+    const model = readCanvasModel();
+    const html = renderToStaticMarkup(
+      createElement(SimpleEditor, {
+        model,
+        tableKey: "manutencao.ordem_manutencao",
+        baseLabel: "MES Produção / mes",
+        ddlContext,
+        onChange: () => {},
+      }),
+    );
+
+    expect(html).toContain('data-column-row-index="0"');
+    expect(html).toContain('aria-label="Reordenar coluna id"');
+    expect(html).toContain(
+      'title="Arrastar para reordenar coluna (ou Alt+↑ / Alt+↓)"',
+    );
+    expect(html).toContain('draggable="true"');
   });
 });

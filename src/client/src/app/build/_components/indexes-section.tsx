@@ -89,6 +89,11 @@ export function IndexesSection({
               type="button"
               aria-pressed={ix.unique}
               aria-label="Índice único"
+              title={
+                ix.unique
+                  ? "UQ — Índice único (Unique): ativo neste índice"
+                  : "UQ — Índice único (Unique): clique para impedir valores repetidos"
+              }
               onClick={() => onUpdateIndex(idx, { ...ix, unique: !ix.unique })}
               className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
                 ix.unique
@@ -104,6 +109,7 @@ export function IndexesSection({
               variant="ghost"
               size="compact"
               aria-label={`Remover o índice ${ix.name}`}
+              title={`Remover o índice ${ix.name}`}
               onClick={() => onRemoveIndex(idx)}
               className="h-7 w-7 p-0"
             >

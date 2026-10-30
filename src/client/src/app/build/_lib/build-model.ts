@@ -211,6 +211,120 @@ export function moveTableToSchema(
   };
 }
 
+export function removeTables(model: BuildModel, keys: readonly string[]): BuildModel {
+  if (keys.length === 0) return model;
+  const keySet = new Set(keys);
+  const layout = { ...model.layout };
+  for (const k of keySet) {
+    delete layout[k];
+  }
+  const tables = model.tables.filter((t) => !keySet.has(tableKey(t)));
+  const knownSchemas = model.base?.knownSchemas ?? [];
+  const remainingSchemas = model.schemas.filter((s) => {
+    const hasRemainingTables = tables.some((t) =>
+      sameIdentifier(model.engine, t.schema, s.name),
+    );
+    if (hasRemainingTables) return true;
+    const isKnown = knownSchemas.some((k) => sameIdentifier(model.engine, k, s.name));
+    if (isKnown) return true;
+    return sameIdentifier(model.engine, s.name, model.defaultSchema);
+  });
+  return {
+    ...model,
+    schemas:
+      remainingSchemas.length > 0
+        ? remainingSchemas
+        : [{ name: model.defaultSchema, create: false }],
+    tables,
+    layout,
+  };
+}
+
+export function removeSchema(model: BuildModel, schemaName: string): BuildModel {
+  const keysToRemove = model.tables
+    .filter((t) => sameIdentifier(model.engine, t.schema, schemaName))
+    .map((t) => tableKey(t));
+  const keySet = new Set(keysToRemove);
+  const layout = { ...model.layout };
+  for (const k of keySet) {
+    delete layout[k];
+  }
+  const tables = model.tables.filter((t) => !keySet.has(tableKey(t)));
+  const remainingSchemas = model.schemas.filter(
+    (s) => !sameIdentifier(model.engine, s.name, schemaName),
+  );
+  const fallbackSchema =
+    remainingSchemas[0]?.name ??
+    tables[0]?.schema ??
+    model.defaultSchema;
+  const nextDefaultSchema = sameIdentifier(model.engine, model.defaultSchema, schemaName)
+    ? fallbackSchema
+    : model.defaultSchema;
+  return {
+    ...model,
+    defaultSchema: nextDefaultSchema,
+    schemas:
+      remainingSchemas.length > 0
+        ? remainingSchemas
+        : [{ name: nextDefaultSchema, create: false }],
+    tables,
+    layout,
+  };
+}
+
+export function dropSchemaInDatabase(
+  model: BuildModel,
+  schemaName: string,
+  drop = true,
+): BuildModel {
+  const knownInBase =
+    model.base?.knownSchemas.some((s) => sameIdentifier(model.engine, s, schemaName)) ?? false;
+  const hasExistingTables = model.tables.some(
+    (t) => sameIdentifier(model.engine, t.schema, schemaName) && t.origin !== null,
+  );
+  if (drop && !knownInBase && !hasExistingTables) {
+    return removeSchema(model, schemaName);
+  }
+
+  const layout = { ...model.layout };
+  const tables: ModelTable[] = [];
+  for (const t of model.tables) {
+    if (!sameIdentifier(model.engine, t.schema, schemaName)) {
+      tables.push(t);
+      continue;
+    }
+    if (t.origin === null) {
+      if (drop) {
+        delete layout[tableKey(t)];
+        continue;
+      }
+      tables.push(t);
+      continue;
+    }
+    tables.push({ ...t, dropInDatabase: drop });
+  }
+
+  const hasEntry = model.schemas.some((s) => sameIdentifier(model.engine, s.name, schemaName));
+  const schemas = hasEntry
+    ? model.schemas.map((s) => {
+        if (!sameIdentifier(model.engine, s.name, schemaName)) return s;
+        if (drop) {
+          return { name: s.name, create: false, drop: true };
+        }
+        return { name: s.name, create: s.create };
+      })
+    : drop
+      ? [...model.schemas, { name: schemaName, create: false, drop: true }]
+      : model.schemas;
+
+  return {
+    ...model,
+    schemas,
+    tables,
+    layout,
+  };
+}
+
 export function removeTable(model: BuildModel, key: string): BuildModel {
   const layout = { ...model.layout };
   delete layout[key];
@@ -513,7 +627,7 @@ export function renameColumn(
 export function moveColumn(
   model: BuildModel,
   key: string,
-  name: string,
+  nameOrFromIndex: string | number,
   toIndex: number,
 ): BuildModel {
   return {
@@ -522,8 +636,11 @@ export function moveColumn(
       if (tableKey(t) !== key) {
         return t;
       }
-      const fromIndex = t.columns.findIndex((c) => c.name === name);
-      if (fromIndex < 0) {
+      const fromIndex =
+        typeof nameOrFromIndex === "number"
+          ? nameOrFromIndex
+          : t.columns.findIndex((c) => c.name === nameOrFromIndex);
+      if (fromIndex < 0 || fromIndex >= t.columns.length) {
         return t;
       }
       const bounded = Math.max(0, Math.min(t.columns.length - 1, toIndex));
@@ -533,7 +650,17 @@ export function moveColumn(
       const columns = [...t.columns];
       const [moved] = columns.splice(fromIndex, 1);
       columns.splice(bounded, 0, moved!);
-      return { ...t, columns };
+
+      let primaryKey = t.primaryKey;
+      if (t.origin === null && primaryKey && primaryKey.columns.length > 1) {
+        const pkSet = new Set(primaryKey.columns);
+        primaryKey = {
+          ...primaryKey,
+          columns: columns.filter((c) => pkSet.has(c.name)).map((c) => c.name),
+        };
+      }
+
+      return { ...t, columns, primaryKey };
     }),
   };
 }

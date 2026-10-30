@@ -1,5 +1,8 @@
 import {
+  useCallback,
+  useDeferredValue,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -31,12 +34,22 @@ import {
   modelFromFile,
   needsScopeQuestion,
 } from "@/app/build/_lib/build-files";
-import { addTable, emptyModel, tableKey } from "@/app/build/_lib/build-model";
+import {
+  addTable,
+  dropSchemaInDatabase,
+  emptyModel,
+  removeSchema,
+  removeTable,
+  removeTables,
+  tableKey,
+} from "@/app/build/_lib/build-model";
 import {
   parseModelBody,
   serializeModelBody,
+  type BuildEngine,
   type BuildModel,
 } from "@/app/build/_lib/build-model.schema";
+import { engineRules } from "@/app/build/_lib/build-engines";
 import {
   buildModelsQuery,
   createBuildModel,
@@ -57,17 +70,23 @@ import {
   rereadModel,
   type CatalogSelection,
 } from "@/app/build/_lib/catalog-import";
-import { supportedConnections } from "@/app/build/_lib/catalog-tree";
+import {
+  connectionEngineNumber,
+  installedBuildEngines,
+  supportedConnections,
+} from "@/app/build/_lib/catalog-tree";
 import { writeDbml } from "@/app/build/_lib/dbml";
+import { generateDdl } from "@/app/build/_lib/ddl-changes";
 import { checkModel, type Problem } from "@/app/build/_lib/model-check";
 import { modelDiagram } from "@/app/build/_lib/model-layout";
 import type { SaveState } from "@/app/build/_lib/model-save";
-import { writeModelSql } from "@/app/build/_lib/sql-model";
 import { useModelDocument } from "@/app/build/_lib/use-model-document";
 import { workbenchTarget } from "@/app/build/_lib/workbench-target";
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
+import { NavigatorToggle } from "@/app/workbench/_components/navigator-toggle";
 import {
   closeDatabaseSession,
   getDatabases,
@@ -81,15 +100,70 @@ import {
 import { saveText } from "@/app/workbench/_lib/save-file";
 import { useWorkbench } from "@/app/workbench/_lib/workbench-state";
 import { TopBar } from "@/components/layout/top-bar";
-import { WorkbenchIcon } from "@/components/ui";
+import {
+  AlertIcon,
+  Button,
+  ChevronIcon,
+  CloseIcon,
+  EngineTag,
+  Segmented,
+  segmentedItem,
+  useToast,
+} from "@/components/ui";
 import { pathsConfig } from "@/config/paths.config";
 import { cn } from "@/lib/utils/cn";
+
+export function formatBuildTimestamp(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
+export function exportModelSqlDdl(
+  model: BuildModel,
+  modelName: string,
+  options: {
+    baseLabel?: string | null;
+    baseEnvironment?: string | null;
+    prismVersion?: string;
+    generatedAt?: string;
+  } = {},
+): { ok: true; sql: string } | { ok: false; error: string } {
+  const effectiveScope: "changes" | "full" =
+    model.base !== null ? (model.ddl.scope ?? "changes") : "full";
+  const resolvedBaseLabel =
+    options.baseLabel ??
+    (model.base
+      ? `${model.base.connectionId} / ${model.base.database ?? ""}`
+      : null);
+  const ddlModel: BuildModel =
+    model.ddl.scope === effectiveScope
+      ? model
+      : { ...model, ddl: { ...model.ddl, scope: effectiveScope } };
+  const problems = checkModel(ddlModel, {
+    scope: effectiveScope,
+    baseLabel: resolvedBaseLabel,
+    baseEnvironment: options.baseEnvironment ?? null,
+    notes: [],
+  });
+  const firstError = problems.find((p) => p.severity === "error");
+  if (firstError) {
+    return { ok: false, error: firstError.message };
+  }
+  const ddl = generateDdl(ddlModel, {
+    modelName,
+    prismVersion: options.prismVersion ?? "0.6.0",
+    generatedAt: options.generatedAt ?? formatBuildTimestamp(),
+    baseLabel: resolvedBaseLabel,
+  });
+  return { ok: true, sql: ddl.text };
+}
 
 export type BuildEditorPane = "simple" | "sql" | "dbml";
 
 export type BuildPageViewProps = {
   userName: string;
   sidebarHidden: boolean;
+  editorHidden?: boolean;
   savedModels: readonly SavedModelEntry[];
   openTabs: readonly string[];
   activeModelId: string | null;
@@ -111,12 +185,18 @@ export type BuildPageViewProps = {
   connectionEnvironment?: (id: string) => string | null;
   connectionEnvironmentColor?: (id: string) => string | null;
   onToggleSidebar?: () => void;
+  onToggleEditor?: () => void;
   onSelectTab?: (id: string) => void;
   onCloseTab?: (id: string) => void;
   onNewModel?: () => void;
   onOpenFile?: () => void;
   onShowModelsList?: () => void;
-  onSelectTable?: (tableKey: string) => void;
+  onSelectTable?: (tableKey: string | null) => void;
+  onDeleteTable?: (tableKey: string) => void;
+  onDeleteTables?: (tableKeys: readonly string[]) => void;
+  onDeleteSchema?: (schemaName: string) => void;
+  onDropSchema?: (schemaName: string, drop: boolean) => void;
+  onFocusTableInDiagram?: (tableKey: string) => void;
   onAddTable?: () => void;
   onImportTables?: () => void;
   onChangePane?: (pane: BuildEditorPane) => void;
@@ -128,6 +208,7 @@ export type BuildPageViewProps = {
   onKeepMineConflict?: () => void;
   onExport?: (kind: "dbml" | "sql" | "png") => void;
   onGenerateDdl?: () => void;
+  onShowProblems?: () => void;
   onRenameModel?: (id: string, newName: string) => void;
   onDuplicateModel?: (id: string) => void;
   onExportModel?: (id: string, kind: "dbml" | "sql" | "png") => void;
@@ -204,6 +285,7 @@ function PaneResizeHandle({
 export function BuildPageView({
   userName,
   sidebarHidden,
+  editorHidden,
   savedModels,
   openTabs,
   activeModelId,
@@ -224,12 +306,19 @@ export function BuildPageView({
   connectionName,
   connectionEnvironment,
   connectionEnvironmentColor,
+  onToggleSidebar,
+  onToggleEditor,
   onSelectTab,
   onCloseTab,
   onNewModel,
   onOpenFile,
   onShowModelsList,
   onSelectTable,
+  onDeleteTable,
+  onDeleteTables,
+  onDeleteSchema,
+  onDropSchema,
+  onFocusTableInDiagram,
   onAddTable,
   onImportTables,
   onChangePane,
@@ -241,6 +330,7 @@ export function BuildPageView({
   onKeepMineConflict,
   onExport,
   onGenerateDdl,
+  onShowProblems,
   onRenameModel,
   onDuplicateModel,
   onExportModel,
@@ -248,6 +338,27 @@ export function BuildPageView({
 }: BuildPageViewProps) {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [editorWidth, setEditorWidth] = useState(EDITOR_DEFAULT_WIDTH);
+  const [localSidebarHidden, setLocalSidebarHidden] = useState(sidebarHidden);
+  const [localEditorHidden, setLocalEditorHidden] = useState(editorHidden ?? false);
+
+  const isSidebarHidden = onToggleSidebar ? sidebarHidden : localSidebarHidden;
+  const isEditorHidden = onToggleEditor ? (editorHidden ?? false) : localEditorHidden;
+
+  const handleToggleSidebar = () => {
+    if (onToggleSidebar) {
+      onToggleSidebar();
+    } else {
+      setLocalSidebarHidden((prev) => !prev);
+    }
+  };
+
+  const handleToggleEditor = () => {
+    if (onToggleEditor) {
+      onToggleEditor();
+    } else {
+      setLocalEditorHidden((prev) => !prev);
+    }
+  };
 
   const activeEntry =
     activeModelId !== null
@@ -296,17 +407,23 @@ export function BuildPageView({
       {topBar}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {!sidebarHidden && (
+        {!isSidebarHidden ? (
           <>
             <BuildSidebar
               model={activeModel}
               selectedTableKey={selectedTableKey}
               problems={problems}
               width={sidebarWidth}
-              onSelectTable={onSelectTable}
+              onSelectTable={(key) => onSelectTable?.(key)}
+              onDeleteTable={onDeleteTable}
+              onDeleteTables={onDeleteTables}
+              onDeleteSchema={onDeleteSchema}
+              onDropSchema={onDropSchema}
+              onFocusTableInDiagram={onFocusTableInDiagram}
               onAddTable={onAddTable}
               onImportTables={onImportTables}
-              onOpenDdlView={onGenerateDdl}
+              onOpenDdlView={onShowProblems ?? onGenerateDdl}
+              onCollapse={handleToggleSidebar}
             />
             <PaneResizeHandle
               label="Ajustar a largura das tabelas do modelo"
@@ -316,6 +433,31 @@ export function BuildPageView({
               onResize={setSidebarWidth}
             />
           </>
+        ) : (
+          <aside
+            id="build-sidebar"
+            aria-label={buildCopy.sidebarTitle}
+            className="flex w-9 flex-none flex-col items-center gap-2 border-r border-border bg-panel py-2"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={buildCopy.showSidebarLabel}
+              title={buildCopy.showSidebarTitle}
+              onClick={handleToggleSidebar}
+            >
+              <ChevronIcon direction="right" />
+            </Button>
+            <button
+              type="button"
+              title={buildCopy.showSidebarTitle}
+              onClick={handleToggleSidebar}
+              className="cursor-pointer border-0 bg-transparent py-2 text-2xs font-semibold tracking-wider text-muted uppercase hover:text-ink [writing-mode:vertical-rl]"
+            >
+              {buildCopy.sidebarTitle}
+            </button>
+          </aside>
         )}
 
         {activeModel === null ? (
@@ -378,53 +520,97 @@ export function BuildPageView({
 
             {ddlOverlay ?? (
               <div className="flex min-h-0 flex-1 overflow-hidden">
-                <section
-                  aria-label="Editor do modelo"
-                  style={{ width: editorWidth }}
-                  className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
-                >
-                  <div
-                    role="group"
-                    aria-label={buildCopy.editorGroupLabel}
-                    className="flex items-center gap-1 border-b border-border px-3"
+                {!isEditorHidden ? (
+                  <>
+                    <section
+                      aria-label="Editor do modelo"
+                      style={{ width: editorWidth }}
+                      className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
+                    >
+                      <div
+                        role="group"
+                        aria-label={buildCopy.editorGroupLabel}
+                        className="flex items-center gap-1 border-b border-border px-3"
+                      >
+                        {(
+                          [
+                            ["simple", buildCopy.paneSimple],
+                            ["sql", buildCopy.paneSql],
+                            ["dbml", buildCopy.paneDbml],
+                          ] as const
+                        ).map(([paneKey, label]) => {
+                          const active = editorPane === paneKey;
+                          return (
+                            <button
+                              key={paneKey}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => onChangePane?.(paneKey)}
+                              className={cn(
+                                "h-9 cursor-pointer border-0 border-b-2 bg-transparent px-2.5",
+                                active
+                                  ? "border-accent font-semibold text-ink"
+                                  : "border-transparent font-normal text-muted hover:text-ink",
+                              )}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                        <div className="ml-auto flex items-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={buildCopy.hideEditorLabel}
+                            title={buildCopy.hideEditorTitle}
+                            onClick={handleToggleEditor}
+                          >
+                            <ChevronIcon direction="left" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {editorContent}
+                    </section>
+
+                    <PaneResizeHandle
+                      label="Ajustar a largura do editor do modelo"
+                      width={editorWidth}
+                      minWidth={EDITOR_MIN_WIDTH}
+                      maxWidth={EDITOR_MAX_WIDTH}
+                      onResize={setEditorWidth}
+                    />
+                  </>
+                ) : (
+                  <aside
+                    aria-label="Editor do modelo recolhido"
+                    className="flex w-9 flex-none flex-col items-center gap-2 border-r border-border bg-panel py-2"
                   >
-                    {(
-                      [
-                        ["simple", buildCopy.paneSimple],
-                        ["sql", buildCopy.paneSql],
-                        ["dbml", buildCopy.paneDbml],
-                      ] as const
-                    ).map(([paneKey, label]) => {
-                      const active = editorPane === paneKey;
-                      return (
-                        <button
-                          key={paneKey}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => onChangePane?.(paneKey)}
-                          className={cn(
-                            "h-9 cursor-pointer border-0 border-b-2 bg-transparent px-2.5",
-                            active
-                              ? "border-accent font-semibold text-ink"
-                              : "border-transparent font-normal text-muted hover:text-ink",
-                          )}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {editorContent}
-                </section>
-
-                <PaneResizeHandle
-                  label="Ajustar a largura do editor do modelo"
-                  width={editorWidth}
-                  minWidth={EDITOR_MIN_WIDTH}
-                  maxWidth={EDITOR_MAX_WIDTH}
-                  onResize={setEditorWidth}
-                />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={buildCopy.showEditorLabel}
+                      title={buildCopy.showEditorTitle}
+                      onClick={handleToggleEditor}
+                    >
+                      <ChevronIcon direction="right" />
+                    </Button>
+                    <button
+                      type="button"
+                      title={buildCopy.showEditorTitle}
+                      onClick={handleToggleEditor}
+                      className="cursor-pointer border-0 bg-transparent py-2 text-2xs font-semibold tracking-wider text-muted uppercase hover:text-ink [writing-mode:vertical-rl]"
+                    >
+                      {editorPane === "sql"
+                        ? buildCopy.paneSql
+                        : editorPane === "dbml"
+                          ? buildCopy.paneDbml
+                          : buildCopy.paneSimple}
+                    </button>
+                  </aside>
+                )}
 
                 <section
                   aria-label="Diagrama do modelo"
@@ -445,7 +631,7 @@ export function BuildPageView({
         modelName={activeModelName}
         connectionName={connectionName}
         problems={problems}
-        onOpenDdlView={onGenerateDdl}
+        onOpenDdlView={onShowProblems ?? onGenerateDdl}
       />
 
       {dialogs}
@@ -459,11 +645,17 @@ export function BuildPage() {
   const queryClient = useQueryClient();
   const { openQueryTab } = useWorkbench();
   const { preferences } = usePreferences();
+  const toast = useToast();
   const session = useQuery({ ...sessionQuery, staleTime: Infinity });
   const userName = session.data?.userName ?? "";
 
   const modelsQuery = useQuery(buildModelsQuery);
   const connections = useQuery(connectionsQuery);
+  const drivers = useQuery(driversQuery);
+  const availableEngines = useMemo(
+    () => installedBuildEngines(drivers.data),
+    [drivers.data],
+  );
 
   const [loadedUser, setLoadedUser] = useState(userName);
   const [tabsState, setTabsState] = useState<{ open: string[]; active: string | null }>(() =>
@@ -472,20 +664,36 @@ export function BuildPage() {
   const [sidebarHidden, setSidebarHidden] = useState<boolean>(
     () => readBuildLayout(userName).sidebarHidden,
   );
+  const [editorHidden, setEditorHidden] = useState<boolean>(
+    () => readBuildLayout(userName).editorHidden ?? false,
+  );
   if (loadedUser !== userName) {
     setLoadedUser(userName);
     if (userName !== "") {
+      const layout = readBuildLayout(userName);
       setTabsState(readBuildTabs(userName));
-      setSidebarHidden(readBuildLayout(userName).sidebarHidden);
+      setSidebarHidden(layout.sidebarHidden);
+      setEditorHidden(layout.editorHidden ?? false);
     }
   }
   const [selectedTableKey, setSelectedTableKey] = useState<string | null>(null);
+  const [lastEditedTableKey, setLastEditedTableKey] = useState<string | null>(null);
+  const [diagramFocusRequest, setDiagramFocusRequest] = useState<{
+    key: string;
+    seq: number;
+  } | null>(null);
   const [editorPane, setEditorPane] = useState<BuildEditorPane>("simple");
   const [ddlViewOpen, setDdlViewOpen] = useState(false);
+  const [diagramProblemsOpen, setDiagramProblemsOpen] = useState(false);
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const [newModelOpen, setNewModelOpen] = useState(false);
   const [importTablesOpen, setImportTablesOpen] = useState(false);
   const [pendingWorkbenchSql, setPendingWorkbenchSql] = useState<string | null>(null);
+  const [pendingFileImport, setPendingFileImport] = useState<{
+    fileName: string;
+    text: string;
+  } | null>(null);
+  const [pendingFileEngine, setPendingFileEngine] = useState<BuildEngine>("postgresql");
   const [rereadNotes, setRereadNotes] = useState<{ code: "W8" | "W13"; message: string }[]>([]);
   const [catalogSchemas, setCatalogSchemas] = useState<
     { schema: string; tables: string[] }[]
@@ -499,17 +707,22 @@ export function BuildPage() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const readingAbortRef = useRef<AbortController | null>(null);
+  const previewRequestIdRef = useRef(0);
 
-  const savedModels: SavedModelEntry[] = (modelsQuery.data ?? []).map((dto) => {
-    const parsed = parseModelBody(dto.body) ?? emptyModel("postgresql", "public", false);
-    return {
-      id: dto.id,
-      name: dto.name,
-      engine: parsed.engine,
-      model: parsed,
-      updatedAt: dto.updatedAt,
-    };
-  });
+  const savedModels: SavedModelEntry[] = useMemo(
+    () =>
+      (modelsQuery.data ?? []).map((dto) => {
+        const parsed = parseModelBody(dto.body) ?? emptyModel("postgresql", "public", false);
+        return {
+          id: dto.id,
+          name: dto.name,
+          engine: parsed.engine,
+          model: parsed,
+          updatedAt: dto.updatedAt,
+        };
+      }),
+    [modelsQuery.data],
+  );
 
   const activeDto =
     tabsState.active !== null
@@ -518,10 +731,14 @@ export function BuildPage() {
 
   const doc = useModelDocument(activeDto);
   const activeModel = doc.history.present;
+  const deferredModel = useDeferredValue(activeModel);
   const activeModelName = activeDto?.name ?? "modelo";
 
   const connectionsList = connections.data ?? [];
-  const connMap = new Map(connectionsList.map((c) => [c.id, c]));
+  const connMap = useMemo(
+    () => new Map((connections.data ?? []).map((c) => [c.id, c])),
+    [connections.data],
+  );
 
   const baseConnId = activeModel?.base?.connectionId ?? null;
   const baseConn = baseConnId ? (connMap.get(baseConnId) ?? null) : null;
@@ -530,20 +747,154 @@ export function BuildPage() {
       ? `${baseConn?.name ?? activeModel.base.connectionId} / ${activeModel.base.database ?? ""}`
       : null;
 
-  const problems = activeModel
-    ? checkModel(activeModel, {
-        scope: activeModel.ddl.scope ?? "changes",
-        baseLabel,
-        baseEnvironment: baseConn?.environmentName ?? null,
-        notes: rereadNotes,
-      })
-    : [];
+  const problems = useMemo(
+    () =>
+      deferredModel
+        ? checkModel(deferredModel, {
+            scope: deferredModel.ddl.scope ?? "changes",
+            baseLabel,
+            baseEnvironment: baseConn?.environmentName ?? null,
+            notes: rereadNotes,
+          })
+        : [],
+    [baseConn?.environmentName, baseLabel, deferredModel, rereadNotes],
+  );
 
-  const effectiveSelectedTableKey =
-    selectedTableKey ??
-    (activeModel && activeModel.tables.length > 0 ? tableKey(activeModel.tables[0]) : null);
+  const effectiveEditorTableKey = useMemo(() => {
+    if (!activeModel || activeModel.tables.length === 0) return null;
+    if (selectedTableKey && activeModel.tables.some((t) => tableKey(t) === selectedTableKey)) {
+      return selectedTableKey;
+    }
+    if (
+      lastEditedTableKey &&
+      activeModel.tables.some((t) => tableKey(t) === lastEditedTableKey)
+    ) {
+      return lastEditedTableKey;
+    }
+    return tableKey(activeModel.tables[0]);
+  }, [activeModel, lastEditedTableKey, selectedTableKey]);
+
+  const handleSelectTable = useCallback((key: string | null) => {
+    setSelectedTableKey(key);
+    if (key !== null) {
+      setLastEditedTableKey(key);
+    }
+  }, []);
+
+  const handleFocusTableInDiagram = useCallback((key: string) => {
+    setSelectedTableKey(key);
+    setLastEditedTableKey(key);
+    setDiagramFocusRequest((prev) => ({ key, seq: (prev?.seq ?? 0) + 1 }));
+  }, []);
+
+  const handleDeleteTable = useCallback(
+    (key: string) => {
+      if (!activeModel) return;
+      const target = activeModel.tables.find((t) => tableKey(t) === key);
+      if (!target) return;
+      doc.change(removeTable(activeModel, key));
+      if (selectedTableKey === key) {
+        setSelectedTableKey(null);
+      }
+      if (lastEditedTableKey === key) {
+        setLastEditedTableKey(null);
+      }
+      toast.success(
+        buildCopy.diagramTableRemoved(target.name),
+        undefined,
+        { label: buildCopy.undoAction, run: () => doc.undo() },
+      );
+    },
+    [activeModel, doc, lastEditedTableKey, selectedTableKey, toast],
+  );
+
+  const handleDeleteTables = useCallback(
+    (keys: readonly string[]) => {
+      if (!activeModel || keys.length === 0) return;
+      if (keys.length === 1) {
+        handleDeleteTable(keys[0]!);
+        return;
+      }
+      const keySet = new Set(keys);
+      const removedCount = activeModel.tables.filter((t) => keySet.has(tableKey(t))).length;
+      if (removedCount === 0) return;
+      doc.change(removeTables(activeModel, keys));
+      if (selectedTableKey && keySet.has(selectedTableKey)) {
+        setSelectedTableKey(null);
+      }
+      if (lastEditedTableKey && keySet.has(lastEditedTableKey)) {
+        setLastEditedTableKey(null);
+      }
+      toast.success(
+        buildCopy.diagramTablesRemoved(removedCount),
+        undefined,
+        { label: buildCopy.undoAction, run: () => doc.undo() },
+      );
+    },
+    [activeModel, doc, handleDeleteTable, lastEditedTableKey, selectedTableKey, toast],
+  );
+
+  const handleDeleteSchema = useCallback(
+    (schemaName: string) => {
+      if (!activeModel) return;
+      const next = removeSchema(activeModel, schemaName);
+      doc.change(next);
+      if (
+        selectedTableKey &&
+        !next.tables.some((t) => tableKey(t) === selectedTableKey)
+      ) {
+        setSelectedTableKey(null);
+      }
+      if (
+        lastEditedTableKey &&
+        !next.tables.some((t) => tableKey(t) === lastEditedTableKey)
+      ) {
+        setLastEditedTableKey(null);
+      }
+      toast.success(
+        buildCopy.diagramSchemaRemoved(schemaName),
+        undefined,
+        { label: buildCopy.undoAction, run: () => doc.undo() },
+      );
+    },
+    [activeModel, doc, lastEditedTableKey, selectedTableKey, toast],
+  );
+
+  const handleDropSchema = useCallback(
+    (schemaName: string, drop: boolean) => {
+      if (!activeModel) return;
+      const next = dropSchemaInDatabase(activeModel, schemaName, drop);
+      doc.change(next);
+      if (
+        selectedTableKey &&
+        !next.tables.some((t) => tableKey(t) === selectedTableKey)
+      ) {
+        setSelectedTableKey(null);
+      }
+      if (
+        lastEditedTableKey &&
+        !next.tables.some((t) => tableKey(t) === lastEditedTableKey)
+      ) {
+        setLastEditedTableKey(null);
+      }
+      toast.success(
+        drop
+          ? buildCopy.diagramSchemaDropped(schemaName)
+          : buildCopy.diagramSchemaRemoved(schemaName),
+        undefined,
+        { label: buildCopy.undoAction, run: () => doc.undo() },
+      );
+    },
+    [activeModel, doc, lastEditedTableKey, selectedTableKey, toast],
+  );
 
   function updateTabs(next: { open: string[]; active: string | null }) {
+    if (next.active !== tabsState.active) {
+      setSelectedTableKey(null);
+      setLastEditedTableKey(null);
+      setRereadNotes([]);
+      setDiagramProblemsOpen(false);
+    }
     setTabsState(next);
     setDdlViewOpen(false);
     if (userName !== "") writeBuildTabs(userName, next);
@@ -552,7 +903,15 @@ export function BuildPage() {
   function toggleSidebar() {
     setSidebarHidden((prev) => {
       const next = !prev;
-      if (userName !== "") writeBuildLayout(userName, { sidebarHidden: next });
+      if (userName !== "") writeBuildLayout(userName, { sidebarHidden: next, editorHidden });
+      return next;
+    });
+  }
+
+  function toggleEditor() {
+    setEditorHidden((prev) => {
+      const next = !prev;
+      if (userName !== "") writeBuildLayout(userName, { sidebarHidden, editorHidden: next });
       return next;
     });
   }
@@ -574,6 +933,7 @@ export function BuildPage() {
     const { model: next, key } = addTable(activeModel);
     doc.change(next);
     setSelectedTableKey(key);
+    setLastEditedTableKey(key);
   }
 
   function handleGenerateDdl() {
@@ -583,6 +943,12 @@ export function BuildPage() {
     } else {
       setDdlViewOpen(true);
     }
+  }
+
+  function handleShowProblems() {
+    if (!activeModel) return;
+    setDdlViewOpen(false);
+    setDiagramProblemsOpen(true);
   }
 
   function handleExportModelContent(
@@ -595,7 +961,21 @@ export function BuildPage() {
       return;
     }
     if (kind === "sql") {
-      saveText(fileNameOf(modelName, "sql"), writeModelSql(model), "text/sql;charset=utf-8");
+      const modelConnId = model.base?.connectionId ?? null;
+      const modelConn = modelConnId ? (connMap.get(modelConnId) ?? null) : null;
+      const modelBaseLabel =
+        model.base !== null
+          ? `${modelConn?.name ?? model.base.connectionId} / ${model.base.database ?? ""}`
+          : null;
+      const ddlExport = exportModelSqlDdl(model, modelName, {
+        baseLabel: modelBaseLabel,
+        baseEnvironment: modelConn?.environmentName ?? null,
+      });
+      if (!ddlExport.ok) {
+        toast.error(ddlExport.error);
+        return;
+      }
+      saveText(fileNameOf(modelName, "sql"), ddlExport.sql, "text/sql;charset=utf-8");
       return;
     }
     const modelProblems = checkModel(model, {
@@ -620,17 +1000,26 @@ export function BuildPage() {
   }
 
   async function loadCatalogPreview(connectionId: string, database?: string) {
+    const requestId = ++previewRequestIdRef.current;
     setSelectedCatalogConnId(connectionId);
     setCatalogError(null);
     const sessionRes = await openDatabaseSession(connectionId, database);
+    if (requestId !== previewRequestIdRef.current) {
+      if (sessionRes.ok) await closeDatabaseSession(sessionRes.data.id);
+      return;
+    }
     if (!sessionRes.ok) {
+      setCatalogSchemas([]);
+      setCatalogDatabases([]);
       setCatalogError(sessionRes.error.detail ?? sessionRes.error.title);
       return;
     }
     const sessionId = sessionRes.data.id;
     try {
       const namesRes = await getObjectNames(sessionId);
+      if (requestId !== previewRequestIdRef.current) return;
       if (!namesRes.ok) {
+        setCatalogSchemas([]);
         setCatalogError(namesRes.error.detail ?? namesRes.error.title);
         return;
       }
@@ -641,6 +1030,7 @@ export function BuildPage() {
       );
       if (database === undefined) {
         const dbsRes = await getDatabases(sessionId);
+        if (requestId !== previewRequestIdRef.current) return;
         if (dbsRes.ok && dbsRes.data.length > 0) {
           setCatalogDatabases(dbsRes.data.map((d) => d.name));
         }
@@ -685,13 +1075,14 @@ export function BuildPage() {
         signal: abort.signal,
         onProgress: (done, total) => setReadingProgress({ done, total }),
       });
+      const readAt = formatBuildTimestamp();
       const built = modelFromCatalog({
         engine: payload.engine,
         defaultSchema: payload.defaultSchema,
         createSchema: payload.createSchema,
         base: { connectionId: payload.connectionId, database: payload.database },
         snapshot,
-        readAt: "agora",
+        readAt,
       });
       const res = await createBuildModel({
         name: payload.name,
@@ -704,6 +1095,10 @@ export function BuildPage() {
       await queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
       setNewModelOpen(false);
       handleOpenModel(res.data.id);
+    } catch (err) {
+      if ((err as { name?: string })?.name !== "AbortError") {
+        setCatalogError(err instanceof Error ? err.message : "Erro ao ler catálogo");
+      }
     } finally {
       readingAbortRef.current = null;
       setReadingProgress(null);
@@ -731,6 +1126,7 @@ export function BuildPage() {
         signal: abort.signal,
         onProgress: (done, total) => setReadingProgress({ done, total }),
       });
+      const readAt = formatBuildTimestamp();
       const baseAttached: BuildModel =
         activeModel.base !== null
           ? activeModel
@@ -739,14 +1135,18 @@ export function BuildPage() {
               base: {
                 connectionId: payload.connectionId,
                 database: payload.database,
-                readAt: "agora",
+                readAt,
                 knownSchemas: [...snapshot.schemas],
                 knownTables: [...snapshot.knownTables],
               },
             };
-      const updated = addCatalogTables(baseAttached, snapshot, "agora");
+      const updated = addCatalogTables(baseAttached, snapshot, readAt);
       doc.change(updated);
       setImportTablesOpen(false);
+    } catch (err) {
+      if ((err as { name?: string })?.name !== "AbortError") {
+        setCatalogError(err instanceof Error ? err.message : "Erro ao importar tabelas");
+      }
     } finally {
       readingAbortRef.current = null;
       setReadingProgress(null);
@@ -777,28 +1177,66 @@ export function BuildPage() {
       targetBase.connectionId,
       targetBase.database ?? undefined,
     );
-    if (!sessionRes.ok) return;
+    if (!sessionRes.ok) {
+      toast.error(sessionRes.error.detail ?? sessionRes.error.title);
+      return;
+    }
     const sessionId = sessionRes.data.id;
     try {
       const { snapshot } = await readCatalog(sessionId, selection);
+      const readAt = formatBuildTimestamp();
       const baseModel: BuildModel = overrideBase
         ? {
             ...activeModel,
             base: {
               connectionId: overrideBase.connectionId,
               database: overrideBase.database,
-              readAt: "agora",
+              readAt,
               knownSchemas: activeModel.base?.knownSchemas ?? [],
               knownTables: activeModel.base?.knownTables ?? [],
             },
           }
         : activeModel;
-      const { model: nextModel, notes } = rereadModel(baseModel, snapshot, "agora");
-      setRereadNotes(notes.map((message) => ({ code: "W8" as const, message })));
+      const { model: nextModel, notes } = rereadModel(baseModel, snapshot, readAt);
+      const noteCode: "W8" | "W13" = overrideBase ? "W13" : "W8";
+      setRereadNotes(notes.map((message) => ({ code: noteCode, message })));
       doc.change(nextModel);
+    } catch (err) {
+      if ((err as { name?: string })?.name !== "AbortError") {
+        toast.error(err instanceof Error ? err.message : "Erro ao reler do banco");
+      }
     } finally {
       await closeDatabaseSession(sessionId);
     }
+  }
+
+  async function importFileWithEngine(
+    fileName: string,
+    text: string,
+    engine: BuildEngine | null,
+  ) {
+    const parsed = modelFromFile(fileName, text, engine);
+    if (!parsed.ok) {
+      if ("needsEngine" in parsed && parsed.needsEngine) {
+        setPendingFileEngine("postgresql");
+        setPendingFileImport({ fileName, text });
+        return;
+      }
+      if ("error" in parsed) {
+        toast.error(buildCopy.textErrorLine(parsed.error.line, parsed.error.message));
+      }
+      return;
+    }
+    const res = await createBuildModel({
+      name: parsed.name,
+      body: serializeModelBody(parsed.model),
+    });
+    if (!res.ok) {
+      toast.error(res.error.detail ?? res.error.title);
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
+    handleOpenModel(res.data.id);
   }
 
   async function handleFileSelected(event: ChangeEvent<HTMLInputElement>) {
@@ -806,54 +1244,71 @@ export function BuildPage() {
     event.target.value = "";
     if (!file) return;
     const text = await file.text();
-    const parsed = modelFromFile(file.name, text, "postgresql");
-    if (!parsed.ok) return;
-    const res = await createBuildModel({
-      name: parsed.name,
-      body: serializeModelBody(parsed.model),
-    });
-    if (!res.ok) return;
-    await queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
-    handleOpenModel(res.data.id);
+    await importFileWithEngine(file.name, text, null);
   }
 
   const renameMutation = useMutation({
     mutationFn: async ({ id, newName }: { id: string; newName: string }) => {
       const entry = (modelsQuery.data ?? []).find((m) => m.id === id);
       if (!entry) return;
-      await updateBuildModel(id, {
+      const res = await updateBuildModel(id, {
         name: newName,
         expectedUpdatedAt: entry.updatedAt,
       });
+      if (!res.ok) {
+        throw new Error(res.error.detail ?? res.error.title);
+      }
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey }),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Erro ao renomear modelo"),
   });
 
   const duplicateMutation = useMutation({
     mutationFn: async (id: string) => {
       const entry = (modelsQuery.data ?? []).find((m) => m.id === id);
       if (!entry) return;
-      await createBuildModel({
+      const res = await createBuildModel({
         name: `${entry.name}-copia`,
         body: entry.body,
       });
+      if (!res.ok) {
+        throw new Error(res.error.detail ?? res.error.title);
+      }
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey }),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Erro ao duplicar modelo"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await deleteBuildModel(id);
+      const res = await deleteBuildModel(id);
+      if (!res.ok) {
+        throw new Error(res.error.detail ?? res.error.title);
+      }
       return id;
     },
     onSuccess: (deletedId) => {
       handleCloseTab(deletedId);
       void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
     },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Erro ao excluir modelo"),
   });
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (
+        e.defaultPrevented ||
+        newModelOpen ||
+        importTablesOpen ||
+        scopeDialogOpen ||
+        pendingWorkbenchSql !== null ||
+        pendingFileImport !== null
+      ) {
+        return;
+      }
       if (e.key === "F5" && activeModel) {
         e.preventDefault();
         handleGenerateDdl();
@@ -902,7 +1357,7 @@ export function BuildPage() {
   const ddlContext = {
     modelName: activeModelName,
     prismVersion: "0.6.0",
-    generatedAt: "hoje",
+    generatedAt: formatBuildTimestamp(),
     baseLabel,
   };
 
@@ -918,12 +1373,13 @@ export function BuildPage() {
       <BuildPageView
         userName={userName}
         sidebarHidden={sidebarHidden}
+        editorHidden={editorHidden}
         savedModels={savedModels}
         openTabs={tabsState.open}
         activeModelId={tabsState.active}
-        activeModel={activeModel}
+        activeModel={deferredModel ?? activeModel}
         activeModelName={activeDto?.name ?? null}
-        selectedTableKey={effectiveSelectedTableKey}
+        selectedTableKey={selectedTableKey}
         editorPane={editorPane}
         canUndo={doc.history.past.length > 0}
         canRedo={doc.history.future.length > 0}
@@ -933,6 +1389,7 @@ export function BuildPage() {
         connectionEnvironment={(id) => connMap.get(id)?.environmentName ?? null}
         connectionEnvironmentColor={(id) => connMap.get(id)?.environmentColor ?? null}
         onToggleSidebar={toggleSidebar}
+        onToggleEditor={toggleEditor}
         onSelectTab={handleOpenModel}
         onCloseTab={handleCloseTab}
         onNewModel={() => {
@@ -940,14 +1397,19 @@ export function BuildPage() {
           setCatalogSchemas([]);
           setCatalogDatabases([]);
           setNewModelOpen(true);
-          const firstConn = supportedConnections(connectionsList)[0];
+          const firstConn = supportedConnections(connectionsList, undefined, availableEngines)[0];
           if (firstConn) {
             void loadCatalogPreview(firstConn.id);
           }
         }}
         onOpenFile={() => fileInputRef.current?.click()}
         onShowModelsList={() => updateTabs({ ...tabsState, active: null })}
-        onSelectTable={setSelectedTableKey}
+        onSelectTable={handleSelectTable}
+        onDeleteTable={handleDeleteTable}
+        onDeleteTables={handleDeleteTables}
+        onDeleteSchema={handleDeleteSchema}
+        onDropSchema={handleDropSchema}
+        onFocusTableInDiagram={handleFocusTableInDiagram}
         onAddTable={handleAddTable}
         onImportTables={() => {
           setCatalogError(null);
@@ -956,7 +1418,7 @@ export function BuildPage() {
           setImportTablesOpen(true);
           const firstConnId =
             activeModel?.base?.connectionId ??
-            supportedConnections(connectionsList, activeModel?.engine)[0]?.id;
+            supportedConnections(connectionsList, activeModel?.engine, availableEngines)[0]?.id;
           const initialDb = activeModel?.base?.database ?? undefined;
           if (firstConnId) {
             void loadCatalogPreview(firstConnId, initialDb);
@@ -974,6 +1436,7 @@ export function BuildPage() {
           }
         }}
         onGenerateDdl={handleGenerateDdl}
+        onShowProblems={handleShowProblems}
         onRenameModel={(id, newName) => renameMutation.mutate({ id, newName })}
         onDuplicateModel={(id) => duplicateMutation.mutate(id)}
         onExportModel={(id, kind) => {
@@ -998,12 +1461,18 @@ export function BuildPage() {
             editorPane === "simple" ? (
               <SimpleEditor
                 model={activeModel}
-                tableKey={effectiveSelectedTableKey}
+                tableKey={effectiveEditorTableKey}
                 baseLabel={baseLabel}
                 ddlContext={ddlContext}
+                onFocusTableInDiagram={handleFocusTableInDiagram}
                 onChange={(next, nextKey) => {
                   doc.change(next);
-                  if (nextKey !== undefined) setSelectedTableKey(nextKey);
+                  if (nextKey !== undefined) {
+                    setLastEditedTableKey(nextKey);
+                    if (selectedTableKey !== null) {
+                      setSelectedTableKey(nextKey);
+                    }
+                  }
                 }}
               />
             ) : (
@@ -1012,6 +1481,7 @@ export function BuildPage() {
                 model={activeModel}
                 format={editorPane}
                 onChange={(next) => doc.change(next)}
+                onFocusTableInDiagram={handleFocusTableInDiagram}
               />
             )
           ) : null
@@ -1019,11 +1489,22 @@ export function BuildPage() {
         diagramContent={
           activeModel ? (
             <BuildDiagram
-              model={activeModel}
+              model={deferredModel ?? activeModel}
               problems={problems}
-              selectedTableKey={effectiveSelectedTableKey}
-              onSelectTable={setSelectedTableKey}
+              selectedTableKey={selectedTableKey}
+              focusRequest={diagramFocusRequest}
+              problemsOpen={diagramProblemsOpen}
+              onCloseProblems={() => setDiagramProblemsOpen(false)}
+              onSelectTable={handleSelectTable}
               onChange={doc.change}
+              onUndo={doc.undo}
+              onTableRemovedToast={(tableName) =>
+                toast.success(
+                  buildCopy.diagramTableRemoved(tableName),
+                  undefined,
+                  { label: buildCopy.undoAction, run: () => doc.undo() },
+                )
+              }
             />
           ) : null
         }
@@ -1062,6 +1543,7 @@ export function BuildPage() {
             {newModelOpen && (
               <NewModelDialog
                 connections={connectionsList}
+                availableEngines={availableEngines}
                 databases={catalogDatabases.length > 0 ? catalogDatabases : undefined}
                 schemas={catalogSchemas}
                 readingProgress={readingProgress}
@@ -1074,7 +1556,7 @@ export function BuildPage() {
                 onSelectDatabase={(db) => {
                   const connId =
                     selectedCatalogConnId ??
-                    supportedConnections(connectionsList)[0]?.id;
+                    supportedConnections(connectionsList, undefined, availableEngines)[0]?.id;
                   if (connId) {
                     setCatalogSchemas([]);
                     void loadCatalogPreview(connId, db);
@@ -1146,27 +1628,96 @@ export function BuildPage() {
                 }}
               />
             )}
+            {pendingFileImport !== null && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="file-engine-dialog-title"
+                  className="flex w-full max-w-md flex-col gap-4 rounded-lg border border-border-strong bg-overlay p-5 text-sm text-ink shadow-xl"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 id="file-engine-dialog-title" className="m-0 text-base font-semibold">
+                      {buildCopy.targetEngineLegend}
+                    </h2>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={buildCopy.closeEscLabel}
+                      onClick={() => setPendingFileImport(null)}
+                    >
+                      <CloseIcon />
+                    </Button>
+                  </div>
+                  <p className="m-0 text-xs text-muted">
+                    {buildCopy.targetEngineHint}
+                  </p>
+                  <div
+                    role="group"
+                    aria-label={buildCopy.targetEngineLegend}
+                    className="flex flex-wrap gap-2"
+                  >
+                    {availableEngines.map((eng) => {
+                      const active = pendingFileEngine === eng;
+                      return (
+                        <button
+                          key={eng}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setPendingFileEngine(eng)}
+                          className={segmentedItem({ active })}
+                        >
+                          <EngineTag engine={connectionEngineNumber(eng)} />
+                          <span>{engineRules[eng].label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setPendingFileImport(null)}
+                    >
+                      {buildCopy.cancelButton}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={() => {
+                        const current = pendingFileImport;
+                        setPendingFileImport(null);
+                        if (current) {
+                          void importFileWithEngine(
+                            current.fileName,
+                            current.text,
+                            pendingFileEngine,
+                          );
+                        }
+                      }}
+                    >
+                      {buildCopy.createModelButton}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         }
         topBar={
           <TopBar
             leading={
-              <button
-                type="button"
-                aria-label={
+              <NavigatorToggle
+                hidden={sidebarHidden}
+                onToggle={toggleSidebar}
+                controls="build-sidebar"
+                label={
                   sidebarHidden ? buildCopy.showSidebarLabel : buildCopy.hideSidebarLabel
                 }
-                aria-pressed={!sidebarHidden}
-                onClick={toggleSidebar}
-                className={cn(
-                  "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-0",
-                  !sidebarHidden
-                    ? "bg-selected text-ink"
-                    : "bg-transparent text-muted hover:bg-selected hover:text-ink",
-                )}
-              >
-                <WorkbenchIcon />
-              </button>
+                showHint={buildCopy.showSidebarLabel}
+                hideHint={buildCopy.hideSidebarLabel}
+              />
             }
           />
         }

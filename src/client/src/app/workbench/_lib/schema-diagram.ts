@@ -54,6 +54,7 @@ function buildColumns(columns: SchemaDiagramColumn[], fkCols: ReadonlySet<string
     type: column.type,
     primaryKey: column.isPrimaryKey,
     foreignKey: fkCols.has(column.name),
+    nullable: column.isNullable,
   }));
   if (mode === "keys") {
     return mapped.filter((column) => column.primaryKey || column.foreignKey || refCols.has(column.name));
@@ -587,6 +588,11 @@ export function layoutDatabaseDiagram(schemas: readonly { schema: string; diagra
           ? `${route.fk.referencedSchema}.${route.fk.referencedTable}`
           : route.fk.referencedTable;
 
+      const fromCol = route.fk.columns[0];
+      const sourceCol = route.source.columns?.find((col) => col.name === fromCol);
+      const pkCount = route.source.columns?.filter((col) => col.primaryKey).length ?? 0;
+      const isOneToOne = Boolean(sourceCol?.primaryKey && pkCount === 1);
+
       compEdges.push({
         key: `${route.order}:${route.fk.referencingSchema}.${route.fk.referencingTable}:${route.fk.name}`,
         name: route.fk.name,
@@ -596,8 +602,11 @@ export function layoutDatabaseDiagram(schemas: readonly { schema: string; diagra
         points,
         fromTable: route.source.key,
         toTable: route.target.key,
-        fromColumn: route.fk.columns[0],
+        fromColumn: fromCol,
         toColumn: route.fk.referencedColumns[0],
+        cardinality: isOneToOne ? "1:1" : "1:N",
+        optional: Boolean(sourceCol?.nullable),
+        self: route.source.key === route.target.key,
       });
     }
 

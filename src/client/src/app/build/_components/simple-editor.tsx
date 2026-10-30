@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import {
   Button,
@@ -8,6 +8,7 @@ import {
   Field,
   FieldLabel,
   Input,
+  MoreIcon,
   PlusIcon,
   Select,
 } from "@/components/ui";
@@ -17,6 +18,7 @@ import {
   addForeignKey,
   addIndex,
   copyAsNewTable,
+  moveColumn,
   moveTableToSchema,
   removeColumn,
   removeForeignKey,
@@ -36,27 +38,26 @@ import {
   updateIndex,
 } from "../_lib/build-model";
 import type { BuildModel, ModelColumn } from "../_lib/build-model.schema";
-import { tableChangesDdl } from "../_lib/ddl-changes";
 import type { DdlContext } from "../_lib/ddl-full";
 import { columnRowState, removedColumns } from "../_lib/editor-rows";
 import { ColumnRow, RemovedColumnRow } from "./column-row";
 import { ForeignKeysSection } from "./foreign-keys-section";
 import { IndexesSection } from "./indexes-section";
-import { TableCommands } from "./table-commands";
 
 export type SimpleEditorProps = {
   model: BuildModel;
   tableKey: string | null;
   baseLabel: string | null;
-  ddlContext: DdlContext;
+  ddlContext?: DdlContext;
   onChange: (next: BuildModel, nextSelectedTableKey?: string | null) => void;
+  onFocusTableInDiagram?: (tableKey: string) => void;
 };
 
 export function SimpleEditor({
   model,
   tableKey,
-  ddlContext,
   onChange,
+  onFocusTableInDiagram,
 }: SimpleEditorProps) {
   const uid = useId();
   const tableInputId = `${uid}-table-name`;
@@ -65,11 +66,113 @@ export function SimpleEditor({
     null,
   );
   const [confirmDropOpen, setConfirmDropOpen] = useState(false);
+  const columnsListRef = useRef<HTMLDivElement | null>(null);
+  const [dragState, setDragState] = useState<{
+    fromIndex: number;
+    overIndex: number;
+    mode: "pointer" | "html5";
+  } | null>(null);
+  const dragStateRef = useRef(dragState);
+  dragStateRef.current = dragState;
 
   const table =
     model.tables.find((t) => getTableKey(t) === tableKey) ??
     model.tables[0] ??
     null;
+
+  const latestContextRef = useRef({
+    model,
+    currentKey: table ? getTableKey(table) : null,
+    onChange,
+  });
+  latestContextRef.current = {
+    model,
+    currentKey: table ? getTableKey(table) : null,
+    onChange,
+  };
+
+  useEffect(() => {
+    if (!dragState || dragState.mode !== "pointer") return;
+
+    const prevUserSelect = document.body.style.userSelect;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+
+    const handlePointerMove = (ev: PointerEvent) => {
+      const current = dragStateRef.current;
+      const listEl = columnsListRef.current;
+      if (!current || current.mode !== "pointer" || !listEl) return;
+
+      const rowEls = Array.from(
+        listEl.querySelectorAll<HTMLElement>("[data-column-row-index]"),
+      );
+      if (rowEls.length === 0) return;
+
+      let nextOver = current.overIndex;
+      for (let i = 0; i < rowEls.length; i++) {
+        const rect = rowEls[i]!.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (i < current.overIndex && ev.clientY < midY) {
+          nextOver = i;
+          break;
+        }
+        if (i > current.overIndex && ev.clientY > midY) {
+          nextOver = i;
+        }
+      }
+
+      if (nextOver !== current.overIndex) {
+        const updated = { ...current, overIndex: nextOver };
+        dragStateRef.current = updated;
+        setDragState(updated);
+      }
+    };
+
+    const finishDrag = (commit: boolean) => {
+      const current = dragStateRef.current;
+      dragStateRef.current = null;
+      setDragState(null);
+      const {
+        model: curModel,
+        currentKey: curKey,
+        onChange: curOnChange,
+      } = latestContextRef.current;
+      if (
+        commit &&
+        current &&
+        curKey &&
+        current.fromIndex !== current.overIndex
+      ) {
+        curOnChange(
+          moveColumn(curModel, curKey, current.fromIndex, current.overIndex),
+        );
+      }
+    };
+
+    const handlePointerUp = () => finishDrag(true);
+    const handlePointerCancel = () => finishDrag(false);
+    const handleKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        finishDrag(false);
+      }
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.userSelect = prevUserSelect;
+      document.body.style.cursor = prevCursor;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [dragState?.mode]);
 
   if (!table) {
     return (
@@ -109,10 +212,6 @@ export function SimpleEditor({
       columnCountParts.push(`${removedCols.length} a remover`);
     }
   }
-
-  const tableDdl = isExisting
-    ? tableChangesDdl(model, currentKey, ddlContext)
-    : "";
 
   const handleDuplicateColumn = (col: ModelColumn) => {
     const next = addColumn(model, currentKey, {
@@ -176,13 +275,29 @@ export function SimpleEditor({
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pb-10">
       <div className="grid grid-cols-[minmax(0,1fr)_140px_32px] items-end gap-2">
         <Field className="gap-1">
-          <FieldLabel htmlFor={tableInputId} className="text-xs">
+          <FieldLabel
+            htmlFor={tableInputId}
+            onClick={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                onFocusTableInDiagram?.(currentKey);
+              }
+            }}
+            className="text-xs"
+          >
             Tabela
           </FieldLabel>
           <Input
             id={tableInputId}
             type="text"
             value={table.name}
+            title="Ctrl+clique para ir até a tabela no diagrama"
+            onClick={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                onFocusTableInDiagram?.(currentKey);
+              }
+            }}
             onChange={(e) => {
               const nextName = e.target.value;
               const nextModel = renameTable(model, currentKey, nextName);
@@ -227,7 +342,8 @@ export function SimpleEditor({
         <Button
           type="button"
           variant="secondary"
-          size="compact"
+          size="icon"
+          title="Mais ações da tabela"
           aria-label="Mais ações da tabela"
           aria-haspopup="menu"
           aria-expanded={menuPoint !== null}
@@ -239,19 +355,9 @@ export function SimpleEditor({
               setMenuPoint({ x: rect.left, y: rect.bottom + 4 });
             }
           }}
-          className={`h-8 w-8 p-0 ${menuPoint !== null ? "bg-selected" : ""}`}
+          className={menuPoint !== null ? "bg-selected" : ""}
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <circle cx="3.5" cy="8" r="1.25" />
-            <circle cx="8" cy="8" r="1.25" />
-            <circle cx="12.5" cy="8" r="1.25" />
-          </svg>
+          <MoreIcon />
         </Button>
       </div>
 
@@ -281,97 +387,261 @@ export function SimpleEditor({
           <span />
           <span>Nome</span>
           <span>Tipo</span>
-          <span title="Chave primária" className="text-center">
+          <span
+            title="PK — Chave primária (Primary Key): identifica cada registro da tabela"
+            className="cursor-help text-center"
+          >
             PK
           </span>
-          <span title="Não aceita nulo" className="text-center">
+          <span
+            title="NN — Não nulo (Not Null): coluna obrigatória, não aceita NULL"
+            className="cursor-help text-center"
+          >
             NN
           </span>
-          <span title="Valor único" className="text-center">
+          <span
+            title="UQ — Valor único (Unique): não permite valores repetidos nesta coluna"
+            className="cursor-help text-center"
+          >
             UQ
           </span>
           <span
-            title="Gerado pelo banco (identity, serial)"
-            className="text-center"
+            title="AI — Auto-incremento (Identity / Serial): valor sequencial gerado automaticamente pelo banco"
+            className="cursor-help text-center"
           >
             AI
           </span>
           <span />
         </div>
 
-        {table.columns.map((column, idx) => {
-          const isPk = table.primaryKey?.columns.includes(column.name) ?? false;
-          const isUnique = table.uniques.some(
-            (u) => u.columns.length === 1 && u.columns[0] === column.name,
-          );
-          const fk = table.foreignKeys.find(
-            (f) => f.columns.length === 1 && f.columns[0] === column.name,
-          );
-          const fkTargetDisplay = fk
-            ? sameName(
-                model.engine,
-                { name: fk.target.schema, exactName: false },
-                { name: table.schema, exactName: false },
-              )
-              ? fk.target.table
-              : `${fk.target.schema}.${fk.target.table}`
-            : null;
-          const state = columnRowState(model.engine, table, column);
-          const colCheck =
-            table.checks.find((ck) => ck.expression.includes(column.name))
-              ?.expression ?? "";
+        <div ref={columnsListRef} className="flex flex-col gap-1">
+          {(() => {
+            const baseEntries = table.columns.map((column, originalIndex) => ({
+              column,
+              originalIndex,
+            }));
+            const displayedEntries =
+              dragState &&
+              dragState.fromIndex >= 0 &&
+              dragState.fromIndex < baseEntries.length &&
+              dragState.overIndex >= 0 &&
+              dragState.overIndex < baseEntries.length &&
+              dragState.fromIndex !== dragState.overIndex
+                ? (() => {
+                    const reordered = [...baseEntries];
+                    const [moved] = reordered.splice(dragState.fromIndex, 1);
+                    reordered.splice(dragState.overIndex, 0, moved!);
+                    return reordered;
+                  })()
+                : baseEntries;
 
-          return (
-            <ColumnRow
-              key={idx}
-              index={idx}
-              column={column}
-              isExistingTable={isExisting}
-              isPk={isPk}
-              isUnique={isUnique}
-              fkTargetDisplay={fkTargetDisplay}
-              rowState={state}
-              catalogTypes={catalogTypes}
-              checkExpression={colCheck}
-              onUpdateColumn={(patch) =>
-                onChange(updateColumn(model, currentKey, column.name, patch, idx))
-              }
-              onTogglePk={() =>
-                onChange(togglePrimaryKey(model, currentKey, column.name))
-              }
-              onToggleUnique={() =>
-                onChange(toggleUnique(model, currentKey, column.name))
-              }
-              onUpdateCheck={(expression) => {
-                const nextTables = model.tables.map((t) => {
-                  if (getTableKey(t) !== currentKey) return t;
-                  const others = t.checks.filter(
-                    (ck) => !ck.expression.includes(column.name),
-                  );
-                  return {
-                    ...t,
-                    checks: expression.trim()
-                      ? [...others, { name: null, expression: expression.trim() }]
-                      : others,
-                  };
-                });
-                onChange({ ...model, tables: nextTables });
-              }}
-              onDuplicate={() => handleDuplicateColumn(column)}
-              onRemove={() =>
-                onChange(removeColumn(model, currentKey, column.name).model)
-              }
-              onRevert={() =>
-                onChange(revertColumn(model, currentKey, column.name))
-              }
-              onAddNextColumn={
-                idx === table.columns.length - 1
-                  ? () => onChange(addColumn(model, currentKey))
-                  : undefined
-              }
-            />
-          );
-        })}
+            return displayedEntries.map(({ column, originalIndex }, visualIdx) => {
+              const isPk = table.primaryKey?.columns.includes(column.name) ?? false;
+              const isUnique = table.uniques.some(
+                (u) => u.columns.length === 1 && u.columns[0] === column.name,
+              );
+              const fk = table.foreignKeys.find(
+                (f) => f.columns.length === 1 && f.columns[0] === column.name,
+              );
+              const fkTargetDisplay = fk
+                ? sameName(
+                    model.engine,
+                    { name: fk.target.schema, exactName: false },
+                    { name: table.schema, exactName: false },
+                  )
+                  ? fk.target.table
+                  : `${fk.target.schema}.${fk.target.table}`
+                : null;
+              const state = columnRowState(model.engine, table, column);
+              const escapedColName = column.name.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&",
+              );
+              const colCheckRegex = column.name
+                ? new RegExp(
+                    `(?:^|[^a-zA-Z0-9_$])${escapedColName}(?:$|[^a-zA-Z0-9_$])`,
+                  )
+                : null;
+              const matchesColCheck = (ck: {
+                name: string | null;
+                expression: string;
+              }) =>
+                ck.name === column.name ||
+                (colCheckRegex !== null && colCheckRegex.test(ck.expression));
+              const colCheck =
+                table.checks.find(matchesColCheck)?.expression ?? "";
+              const isDragging =
+                dragState !== null && dragState.fromIndex === originalIndex;
+
+              return (
+                <ColumnRow
+                  key={column.originName ?? `col-${originalIndex}`}
+                  index={visualIdx}
+                  column={column}
+                  isExistingTable={isExisting}
+                  isPk={isPk}
+                  isUnique={isUnique}
+                  fkTargetDisplay={fkTargetDisplay}
+                  rowState={state}
+                  catalogTypes={catalogTypes}
+                  checkExpression={colCheck}
+                  isDragging={isDragging}
+                  onUpdateColumn={(patch) =>
+                    onChange(
+                      updateColumn(
+                        model,
+                        currentKey,
+                        column.name,
+                        patch,
+                        originalIndex,
+                      ),
+                    )
+                  }
+                  onTogglePk={() =>
+                    onChange(togglePrimaryKey(model, currentKey, column.name))
+                  }
+                  onToggleUnique={() =>
+                    onChange(toggleUnique(model, currentKey, column.name))
+                  }
+                  onUpdateCheck={(expression) => {
+                    const nextTables = model.tables.map((t) => {
+                      if (getTableKey(t) !== currentKey) return t;
+                      const existingCheck = t.checks.find(matchesColCheck);
+                      const others = t.checks.filter(
+                        (ck) => !matchesColCheck(ck),
+                      );
+                      return {
+                        ...t,
+                        checks: expression.trim()
+                          ? [
+                              ...others,
+                              {
+                                name: existingCheck?.name ?? null,
+                                expression: expression.trim(),
+                              },
+                            ]
+                          : others,
+                      };
+                    });
+                    onChange({ ...model, tables: nextTables });
+                  }}
+                  onDuplicate={() => handleDuplicateColumn(column)}
+                  onRemove={() =>
+                    onChange(removeColumn(model, currentKey, column.name).model)
+                  }
+                  onRevert={() =>
+                    onChange(revertColumn(model, currentKey, column.name))
+                  }
+                  onAddNextColumn={
+                    originalIndex === table.columns.length - 1
+                      ? () => onChange(addColumn(model, currentKey))
+                      : undefined
+                  }
+                  onCtrlClickFk={
+                    fk && onFocusTableInDiagram
+                      ? () =>
+                          onFocusTableInDiagram(
+                            `${fk.target.schema}.${fk.target.table}`,
+                          )
+                      : undefined
+                  }
+                  onMoveUp={
+                    originalIndex > 0
+                      ? () =>
+                          onChange(
+                            moveColumn(
+                              model,
+                              currentKey,
+                              originalIndex,
+                              originalIndex - 1,
+                            ),
+                          )
+                      : undefined
+                  }
+                  onMoveDown={
+                    originalIndex < table.columns.length - 1
+                      ? () =>
+                          onChange(
+                            moveColumn(
+                              model,
+                              currentKey,
+                              originalIndex,
+                              originalIndex + 1,
+                            ),
+                          )
+                      : undefined
+                  }
+                  onGripPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    const nextState = {
+                      fromIndex: originalIndex,
+                      overIndex: originalIndex,
+                      mode: "pointer" as const,
+                    };
+                    dragStateRef.current = nextState;
+                    setDragState(nextState);
+                  }}
+                  onDragStartRow={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", String(originalIndex));
+                    const nextState = {
+                      fromIndex: originalIndex,
+                      overIndex: originalIndex,
+                      mode: "html5" as const,
+                    };
+                    dragStateRef.current = nextState;
+                    setDragState(nextState);
+                  }}
+                  onDragOverRow={(e) => {
+                    if (!dragStateRef.current) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragStateRef.current.overIndex !== visualIdx) {
+                      const updated = {
+                        ...dragStateRef.current,
+                        overIndex: visualIdx,
+                      };
+                      dragStateRef.current = updated;
+                      setDragState(updated);
+                    }
+                  }}
+                  onDropRow={(e) => {
+                    e.preventDefault();
+                    const current = dragStateRef.current;
+                    dragStateRef.current = null;
+                    setDragState(null);
+                    if (current && current.fromIndex !== current.overIndex) {
+                      onChange(
+                        moveColumn(
+                          model,
+                          currentKey,
+                          current.fromIndex,
+                          current.overIndex,
+                        ),
+                      );
+                    }
+                  }}
+                  onDragEndRow={() => {
+                    const current = dragStateRef.current;
+                    dragStateRef.current = null;
+                    setDragState(null);
+                    if (current && current.fromIndex !== current.overIndex) {
+                      onChange(
+                        moveColumn(
+                          model,
+                          currentKey,
+                          current.fromIndex,
+                          current.overIndex,
+                        ),
+                      );
+                    }
+                  }}
+                />
+              );
+            });
+          })()}
+        </div>
 
         {removedCols.map((removed) => (
           <RemovedColumnRow
@@ -416,6 +686,7 @@ export function SimpleEditor({
         onRemoveForeignKey={(index) =>
           onChange(removeForeignKey(model, currentKey, index))
         }
+        onFocusTableInDiagram={onFocusTableInDiagram}
       />
 
       <IndexesSection
@@ -430,12 +701,7 @@ export function SimpleEditor({
         }
       />
 
-      {isExisting ? (
-        <TableCommands
-          ddl={tableDdl}
-          removedColumnNames={removedCols.map((c) => c.name)}
-        />
-      ) : (
+      {!isExisting ? (
         <section
           aria-labelledby="h-comentario"
           className="flex flex-col gap-1.5 border-t border-border pt-3"
@@ -461,7 +727,7 @@ export function SimpleEditor({
             className="box-border resize-y rounded-md border border-border-strong bg-raised px-2.5 py-2 text-ink outline-none focus-visible:border-accent focus-visible:ring-1 focus-visible:ring-accent"
           />
         </section>
-      )}
+      ) : null}
 
       <ConfirmDialog
         open={confirmDropOpen}

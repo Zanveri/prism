@@ -1,31 +1,61 @@
 import type { CheckItem, CheckTree } from "@/app/connections/_lib/check-tree";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
+import type { Driver } from "@/app/drivers/_lib/drivers.schema";
+import type { Engine } from "@/components/ui/engine-tag";
 
-import { sameName } from "./build-engines";
-import type { BuildEngine, BuildModel } from "./build-model.schema";
+import { engineRules, sameName } from "./build-engines";
+import {
+  buildEngines,
+  defaultBuildEngines,
+  type BuildEngine,
+  type BuildModel,
+} from "./build-model.schema";
 import type { CatalogSelection } from "./catalog-import";
 
 export function buildEngineOfConnection(engine: number): BuildEngine | null {
-  if (engine === 1) return "postgresql";
-  if (engine === 2) return "db2";
-  if (engine === 3) return "informix";
-  return null;
+  if (!Number.isInteger(engine) || engine < 1 || engine > buildEngines.length) {
+    return null;
+  }
+  return buildEngines[engine - 1] ?? null;
 }
 
-export function connectionEngineNumber(engine: BuildEngine): 1 | 2 | 3 {
-  if (engine === "postgresql") return 1;
-  if (engine === "db2") return 2;
-  return 3;
+export function connectionEngineNumber(engine: BuildEngine): Engine {
+  const index = buildEngines.indexOf(engine);
+  return ((index >= 0 ? index + 1 : 1) as Engine);
+}
+
+export function installedBuildEngines(drivers: readonly Driver[] | undefined): BuildEngine[] {
+  if (!drivers || drivers.length === 0) {
+    return [...defaultBuildEngines];
+  }
+  const installedSet = new Set<BuildEngine>();
+  for (const driver of drivers) {
+    if (driver.state === "bundled" || driver.state === "installed") {
+      for (const engineNumber of driver.engines) {
+        const buildEngine = buildEngineOfConnection(engineNumber);
+        if (buildEngine) {
+          installedSet.add(buildEngine);
+        }
+      }
+    }
+  }
+  if (installedSet.size === 0) {
+    return [...defaultBuildEngines];
+  }
+  return buildEngines.filter((engine) => installedSet.has(engine));
 }
 
 export function supportedConnections(
   connections: readonly Connection[],
   targetEngine?: BuildEngine,
+  availableEngines: readonly BuildEngine[] = defaultBuildEngines,
 ): Connection[] {
+  const allowed = new Set<BuildEngine>(availableEngines);
   return connections.filter((conn) => {
     const engine = buildEngineOfConnection(conn.engine);
     if (!engine) return false;
-    return targetEngine ? engine === targetEngine : true;
+    if (targetEngine) return engine === targetEngine;
+    return allowed.has(engine);
   });
 }
 
@@ -34,7 +64,7 @@ export function shouldCreateSchemaByDefault(
   defaultSchema: string,
   baseSchemas: readonly string[],
 ): boolean {
-  if (engine === "informix") return false;
+  if (!engineRules[engine].hasSchemas) return false;
   const trimmed = defaultSchema.trim();
   if (!trimmed) return false;
   return !baseSchemas.some((s) =>
