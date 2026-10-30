@@ -1,4 +1,12 @@
+import { irreversibleOf } from "@/app/workbench/_lib/irreversible";
+import type { Engine } from "@/components/ui/engine-tag";
+
 import { connectionsCopy } from "./connections.copy";
+
+/** RN-PROT-001 e RN-AUDIT-008: se o comando SQL é irreversível no banco dado, concordando com o nível crítico da auditoria. */
+export function isIrreversible(sql: string, engine?: Engine): boolean {
+  return irreversibleOf(sql, engine) !== null;
+}
 import type { Confirmation, Folder, Protections } from "./connections.schema";
 
 /** RN-PROT-001: as três escolhas de "Confirmar antes de executar", como os campos do formulário as escrevem: `none` é "Não". */
