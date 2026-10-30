@@ -82,6 +82,35 @@ export type ProblemFix =
   | { kind: "useIdentity"; table: string; column: string }
   | { kind: "reread" };
 
+export function fixButtonLabel(fix: ProblemFix): string {
+  switch (fix.kind) {
+    case "removeForeignKey":
+      return "Remover a FK";
+    case "createUnique":
+      return `Criar único em (${fix.columns.join(", ")})`;
+    case "useFkAction":
+      return `Usar ${fix.onDelete}`;
+    case "useType":
+      return `Trocar para ${fix.type}`;
+    case "createIdColumn":
+      return "Criar coluna id";
+    case "createIndexes":
+      return `Criar os ${fix.items.length} índices`;
+    case "restore":
+      return "Restaurar";
+    case "revert":
+      return "Voltar como era";
+    case "removeReferencingForeignKeys":
+      return "Remover as FKs";
+    case "giveDefault":
+      return "Dar um padrão";
+    case "useIdentity":
+      return "Trocar por AI";
+    case "reread":
+      return buildCopy.toolbarReread;
+  }
+}
+
 export type Problem = {
   code: ProblemCode;
   severity: "error" | "warning" | "info";

@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { PostgreSQL, sql, StandardSQL } from "@codemirror/lang-sql";
 import { bracketMatching, indentOnInput, syntaxHighlighting } from "@codemirror/language";
-import { EditorSelection, EditorState } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -22,8 +22,7 @@ import type { BuildModel } from "../_lib/build-model.schema";
 import { buildCopy } from "../_lib/build.copy";
 import { dbmlLanguage } from "../_lib/dbml-language";
 import {
-  applyText,
-  printText,
+  createTextSyncController,
   textApplyDelayMs,
   type TextStatus,
 } from "../_lib/text-apply";
@@ -35,25 +34,90 @@ export interface TextPaneProps {
   onChange: (next: BuildModel, warnings: TextWarning[]) => void;
 }
 
+function buildLanguageExtension(format: "sql" | "dbml", engine: BuildModel["engine"]) {
+  return format === "dbml"
+    ? dbmlLanguage
+    : sql({
+        dialect: engine === "postgresql" ? PostgreSQL : StandardSQL,
+      });
+}
+
+function buildThemeExtension(
+  font: ReturnType<typeof editorFont>,
+  dark: boolean,
+) {
+  return EditorView.theme(
+    {
+      "&": {
+        height: "100%",
+        backgroundColor: "var(--color-background)",
+        color: "var(--color-ink)",
+        fontSize: font.fontSize,
+      },
+      "&.cm-focused": { outline: "none" },
+      ".cm-scroller": {
+        fontFamily: font.fontFamily,
+        lineHeight: font.lineHeight,
+      },
+      ".cm-content": {
+        padding: "12px 16px 12px 0",
+        caretColor: "var(--color-accent)",
+        outline: "none",
+      },
+      ".cm-gutters": {
+        backgroundColor: "var(--color-background)",
+        color: "var(--color-subtle)",
+        border: "none",
+      },
+      ".cm-lineNumbers .cm-gutterElement": {
+        minWidth: "48px",
+        padding: "0 12px 0 0",
+      },
+      ".cm-activeLine": {
+        backgroundColor: "color-mix(in srgb, var(--color-ink) 3%, transparent)",
+      },
+      ".cm-activeLineGutter": {
+        backgroundColor: "var(--color-panel)",
+        color: "var(--color-ink)",
+      },
+      ".cm-cursor": { borderLeftColor: "var(--color-accent)" },
+      ".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground":
+        { backgroundColor: "var(--color-selection)" },
+    },
+    { dark },
+  );
+}
+
 export function TextPane({ model, format, onChange }: TextPaneProps) {
   const { preferences } = usePreferences();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncingRef = useRef(false);
+  const syncControllerRef = useRef<ReturnType<typeof createTextSyncController> | null>(
+    null,
+  );
+  if (syncControllerRef.current === null) {
+    syncControllerRef.current = createTextSyncController(model, format);
+  }
+  const languageCompartmentRef = useRef(new Compartment());
+  const themeCompartmentRef = useRef(new Compartment());
 
-  const [initialText] = useState(() => printText(model, format));
   const [status, setStatus] = useState<TextStatus>({
     kind: "applied",
     warnings: [],
   });
 
   const handleTextChanged = useEffectEvent((nextText: string) => {
+    if (syncingRef.current) return;
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
     }
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      const res = applyText(model, format, nextText);
+      const sync = syncControllerRef.current;
+      if (!sync) return;
+      const res = sync.applyEditorText(nextText);
       setStatus(res.status);
       if (res.model !== null && res.status.kind === "applied") {
         onChange(res.model, res.status.warnings);
@@ -63,60 +127,14 @@ export function TextPane({ model, format, onChange }: TextPaneProps) {
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    const sync = syncControllerRef.current;
+    if (!host || !sync) return;
 
     const font = editorFont(preferences.editor);
     const dark = resolveScheme(preferences.theme, systemPrefersLight()) === "dark";
-    const languageExt =
-      format === "dbml"
-        ? dbmlLanguage
-        : sql({
-            dialect: model.engine === "postgresql" ? PostgreSQL : StandardSQL,
-          });
-
-    const themeExt = EditorView.theme(
-      {
-        "&": {
-          height: "100%",
-          backgroundColor: "var(--color-background)",
-          color: "var(--color-ink)",
-          fontSize: font.fontSize,
-        },
-        "&.cm-focused": { outline: "none" },
-        ".cm-scroller": {
-          fontFamily: font.fontFamily,
-          lineHeight: font.lineHeight,
-        },
-        ".cm-content": {
-          padding: "12px 16px 12px 0",
-          caretColor: "var(--color-accent)",
-          outline: "none",
-        },
-        ".cm-gutters": {
-          backgroundColor: "var(--color-background)",
-          color: "var(--color-subtle)",
-          border: "none",
-        },
-        ".cm-lineNumbers .cm-gutterElement": {
-          minWidth: "48px",
-          padding: "0 12px 0 0",
-        },
-        ".cm-activeLine": {
-          backgroundColor: "color-mix(in srgb, var(--color-ink) 3%, transparent)",
-        },
-        ".cm-activeLineGutter": {
-          backgroundColor: "var(--color-panel)",
-          color: "var(--color-ink)",
-        },
-        ".cm-cursor": { borderLeftColor: "var(--color-accent)" },
-        ".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground":
-          { backgroundColor: "var(--color-selection)" },
-      },
-      { dark },
-    );
 
     const state = EditorState.create({
-      doc: initialText,
+      doc: sync.initialDoc(),
       extensions: [
         lineNumbers(),
         highlightActiveLineGutter(),
@@ -127,10 +145,10 @@ export function TextPane({ model, format, onChange }: TextPaneProps) {
         bracketMatching(),
         syntaxHighlighting(highlight),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-        languageExt,
-        themeExt,
+        languageCompartmentRef.current.of(buildLanguageExtension(format, model.engine)),
+        themeCompartmentRef.current.of(buildThemeExtension(font, dark)),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
+          if (update.docChanged && !syncingRef.current) {
             handleTextChanged(update.state.doc.toString());
           }
         }),
@@ -147,7 +165,48 @@ export function TextPane({ model, format, onChange }: TextPaneProps) {
       view.destroy();
       viewRef.current = null;
     };
-  }, [format, initialText, model.engine, preferences.editor, preferences.theme]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- o EditorView é criado apenas na montagem; mudanças de formato, modelo e preferências atualizam o estado via transações e Compartments
+  }, []);
+
+  useEffect(() => {
+    const sync = syncControllerRef.current;
+    const view = viewRef.current;
+    if (!sync) return;
+    const { shouldReplaceDoc, nextDoc } = sync.receiveProps(model, format);
+    if (!shouldReplaceDoc) return;
+
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setStatus({ kind: "applied", warnings: [] });
+
+    if (view && view.state.doc.toString() !== nextDoc) {
+      syncingRef.current = true;
+      try {
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: nextDoc },
+        });
+      } finally {
+        syncingRef.current = false;
+      }
+    }
+  }, [model, format]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const font = editorFont(preferences.editor);
+    const dark = resolveScheme(preferences.theme, systemPrefersLight()) === "dark";
+    view.dispatch({
+      effects: [
+        languageCompartmentRef.current.reconfigure(
+          buildLanguageExtension(format, model.engine),
+        ),
+        themeCompartmentRef.current.reconfigure(buildThemeExtension(font, dark)),
+      ],
+    });
+  }, [format, model.engine, preferences.editor, preferences.theme]);
 
   function handleGoToLine(lineNumber: number) {
     const view = viewRef.current;

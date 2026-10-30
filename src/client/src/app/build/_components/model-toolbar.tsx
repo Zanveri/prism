@@ -12,7 +12,9 @@ import {
   ContextMenu,
   EngineTag,
   EnvironmentPill,
+  RedoIcon,
   RefreshIcon,
+  UndoIcon,
 } from "@/components/ui";
 
 const engineToNumber: Record<BuildEngine, 1 | 2 | 3> = {
@@ -29,6 +31,7 @@ type ModelToolbarProps = {
   baseMenuSlot?: ReactNode;
   canUndo?: boolean;
   canRedo?: boolean;
+  hasErrors?: boolean;
   saveState?: SaveState;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -48,6 +51,7 @@ export function ModelToolbar({
   baseMenuSlot,
   canUndo = false,
   canRedo = false,
+  hasErrors = false,
   saveState = { status: "saved", savedAt: null, message: null },
   onUndo,
   onRedo,
@@ -111,53 +115,27 @@ export function ModelToolbar({
       <Button
         type="button"
         variant="ghost"
-        size="compact"
+        size="icon"
         aria-label={buildCopy.toolbarUndo}
         title={buildCopy.toolbarUndo}
         disabled={!canUndo}
         onClick={onUndo}
-        className="h-8 w-8 p-0 text-ink"
+        className="text-ink"
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M5.5 4L2.5 7l3 3" />
-          <path d="M2.5 7H10a3.5 3.5 0 0 1 0 7H8" />
-        </svg>
+        <UndoIcon />
       </Button>
 
       <Button
         type="button"
         variant="ghost"
-        size="compact"
+        size="icon"
         aria-label={buildCopy.toolbarRedo}
         title={buildCopy.toolbarRedo}
         disabled={!canRedo}
         onClick={onRedo}
-        className="h-8 w-8 p-0 text-ink"
+        className="text-ink"
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M10.5 4l3 3-3 3" />
-          <path d="M13.5 7H6a3.5 3.5 0 0 0 0 7h2" />
-        </svg>
+        <RedoIcon />
       </Button>
 
       <div className="ml-auto flex items-center gap-2 text-xs text-muted">
@@ -245,6 +223,7 @@ export function ModelToolbar({
                   id: "export-ddl",
                   label: buildCopy.exportDdlAction,
                   hint: ".sql",
+                  disabled: hasErrors,
                   onSelect: () => {
                     setExportMenuPoint(null);
                     onExport?.("sql");

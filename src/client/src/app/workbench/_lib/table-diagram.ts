@@ -27,7 +27,36 @@ const loopRoom = 64;
 /** Mais do que isto e o desenho vira uma parede: as outras ficam de fora, e a tela diz quantas. */
 export const maxNeighbors = 12;
 
-export type DiagramColumn = { name: string; type: string; primaryKey: boolean; foreignKey: boolean; state?: "added" | "removed" };
+export type DiagramStripTone = "accent" | "postgres" | "success" | "informix" | "db2" | "warning" | "danger";
+
+export type DiagramProblem = {
+  code: string;
+  severity: "error" | "warning" | "info";
+  message: string;
+  key: string;
+  fixLabel?: string;
+};
+
+export type DiagramGroup = {
+  id: string;
+  label: string;
+  tone: DiagramStripTone;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type DiagramColumn = {
+  name: string;
+  type: string;
+  primaryKey: boolean;
+  foreignKey: boolean;
+  nullable?: boolean;
+  unique?: boolean;
+  state?: "added" | "removed" | "changed";
+  previousType?: string;
+};
 
 export type DiagramBox = {
   key: string;
@@ -40,6 +69,8 @@ export type DiagramBox = {
   badge?: string;
   dropped?: boolean;
   warning?: "error" | "warning";
+  stripTone?: DiagramStripTone;
+  problems?: readonly DiagramProblem[];
   center: boolean;
   x: number;
   y: number;
@@ -65,9 +96,19 @@ export type DiagramEdge = {
   toTable?: string;
   fromColumn?: string;
   toColumn?: string;
+  cardinality?: "1:N" | "1:1";
+  optional?: boolean;
+  self?: boolean;
+  variant?: "new" | "existing";
 };
 
-export type DiagramLayout = { boxes: DiagramBox[]; edges: DiagramEdge[]; width: number; height: number };
+export type DiagramLayout = {
+  boxes: DiagramBox[];
+  edges: DiagramEdge[];
+  width: number;
+  height: number;
+  groups?: readonly DiagramGroup[];
+};
 
 /**
  * Medidas tipográficas do diagrama derivadas do tamanho da fonte do usuário (`preferences.editor.fontSize`, padrão 13 px).
@@ -133,18 +174,39 @@ export type DiagramInput = {
   incomingNeighbors?: { ref: TableRef; columns: Column[] | null }[];
 };
 
+const schemaStripPalette: readonly DiagramStripTone[] = ["accent", "postgres", "success", "informix", "db2"];
+
+export function stripToneForSchema(schema: string, schemas?: readonly string[]): DiagramStripTone {
+  if (schemas && schemas.length > 0) {
+    const idx = schemas.indexOf(schema);
+    if (idx >= 0) return schemaStripPalette[idx % schemaStripPalette.length]!;
+  }
+  let hash = 0;
+  for (let i = 0; i < schema.length; i++) {
+    hash = (hash * 31 + schema.charCodeAt(i)) >>> 0;
+  }
+  return schemaStripPalette[hash % schemaStripPalette.length]!;
+}
+
 /** As colunas na ordem da posição e com as marcas de chave: as mesmas regras da Estrutura (`structureColumns`), uma só vez. */
 function diagramColumns(columns: Column[], foreignKeys: ForeignKey[] | undefined): DiagramColumn[] {
-  return structureColumns(columns, foreignKeys).map(({ name, type, keys }) => ({ name, type, primaryKey: keys.includes("PK"), foreignKey: keys.includes("FK") }));
+  const nullableByName = new Map(columns.map((col) => [col.name, col.isNullable]));
+  return structureColumns(columns, foreignKeys).map(({ name, type, keys }) => ({
+    name,
+    type,
+    primaryKey: keys.includes("PK"),
+    foreignKey: keys.includes("FK"),
+    nullable: nullableByName.get(name),
+  }));
 }
 
 const heightOf = (columns: DiagramColumn[] | null) => rowHeight * ((columns?.length ?? 0) + 1) + 2 * boxPadding;
 
 /** O índice da coluna na caixa, ou -1 (o título) quando a caixa não a tem. */
-const indexOfColumn = (columns: DiagramColumn[] | null, name: string | undefined) => (columns === null || name === undefined ? -1 : columns.findIndex((column) => column.name === name));
+export const indexOfColumn = (columns: DiagramColumn[] | null, name: string | undefined) => (columns === null || name === undefined ? -1 : columns.findIndex((column) => column.name === name));
 
 /** O meio da linha de uma coluna; `-1` é o título, a primeira linha da caixa. */
-const rowCenter = (box: DiagramBox, index: number) => box.y + boxPadding + rowHeight * (index + 1) + rowHeight / 2;
+export const rowCenter = (box: DiagramBox, index: number) => box.y + boxPadding + rowHeight * (index + 1) + rowHeight / 2;
 
 type Side = "left" | "right";
 
@@ -437,6 +499,11 @@ export function layoutDiagram({ center, foreignKeys, neighbors, referencedBy = [
       const to = route.direction === "outgoing" ? neighborPoint : centerPoint;
       const lane = lanes.indexOf(route);
 
+      const sourceBox = route.direction === "outgoing" ? centerBox : route.neighbor;
+      const sourceCol = sourceBox.columns?.find((col) => col.name === route.fromColumn);
+      const pkCount = sourceBox.columns?.filter((col) => col.primaryKey).length ?? 0;
+      const isOneToOne = Boolean(sourceCol?.primaryKey && pkCount === 1);
+
       edges.push({
         key: `${route.order}:${route.name}`,
         name: route.name,
@@ -448,6 +515,9 @@ export function layoutDiagram({ center, foreignKeys, neighbors, referencedBy = [
         toTable: route.toTable,
         fromColumn: route.fromColumn,
         toColumn: route.toColumn,
+        cardinality: isOneToOne ? "1:1" : "1:N",
+        optional: Boolean(sourceCol?.nullable),
+        self: route.self,
       });
     }
   }
@@ -549,3 +619,103 @@ export function fitZoom(content: { width: number; height: number }, viewport: { 
 }
 
 export const zoomLabel = (zoom: number) => `${Math.round(zoom * 100)}%`;
+
+export type EdgeBezierGeometry = {
+  d: string;
+  markerPath: string;
+  circle: { cx: number; cy: number; r: number } | null;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  c1x: number;
+  c1y: number;
+  c2x: number;
+  c2y: number;
+  s1: 1 | -1;
+  s2: 1 | -1;
+};
+
+/**
+ * Calcula a curva Bézier cúbica (`d`) e os marcadores de cardinalidade (pé-de-galinha no lado FK,
+ * barra dupla no lado PK e círculo opcional no lado FK anulável) de coluna para coluna.
+ */
+export function edgeBezierGeometry(edge: DiagramEdge, boxesByKey?: ReadonlyMap<string, DiagramBox>): EdgeBezierGeometry {
+  const sourceBox = edge.fromTable ? boxesByKey?.get(edge.fromTable) : undefined;
+  const targetBox = edge.toTable ? boxesByKey?.get(edge.toTable) : undefined;
+
+  let x1 = edge.from.x;
+  let y1 = edge.from.y;
+  let x2 = edge.to.x;
+  let y2 = edge.to.y;
+  let s1: 1 | -1 = x2 >= x1 ? 1 : -1;
+  let s2: 1 | -1 = x2 >= x1 ? -1 : 1;
+
+  if (sourceBox && targetBox) {
+    const srcIdx = indexOfColumn(sourceBox.columns, edge.fromColumn);
+    const dstIdx = indexOfColumn(targetBox.columns, edge.toColumn);
+    const defaultFromY = rowCenter(sourceBox, srcIdx);
+    const defaultToY = rowCenter(targetBox, dstIdx);
+    y1 = Math.abs(edge.from.y - defaultFromY) <= rowHeight / 2 ? edge.from.y : defaultFromY;
+    y2 = Math.abs(edge.to.y - defaultToY) <= rowHeight / 2 ? edge.to.y : defaultToY;
+
+    if (sourceBox.key === targetBox.key || edge.self) {
+      x1 = sourceBox.x + sourceBox.width;
+      x2 = targetBox.x + targetBox.width;
+      s1 = 1;
+      s2 = 1;
+    } else if (targetBox.x >= sourceBox.x + sourceBox.width) {
+      x1 = sourceBox.x + sourceBox.width;
+      s1 = 1;
+      x2 = targetBox.x;
+      s2 = -1;
+    } else if (targetBox.x + targetBox.width <= sourceBox.x) {
+      x1 = sourceBox.x;
+      s1 = -1;
+      x2 = targetBox.x + targetBox.width;
+      s2 = 1;
+    } else if (edge.from.x >= sourceBox.x + sourceBox.width && edge.to.x >= targetBox.x + targetBox.width) {
+      x1 = sourceBox.x + sourceBox.width;
+      x2 = targetBox.x + targetBox.width;
+      s1 = 1;
+      s2 = 1;
+    } else {
+      x1 = sourceBox.x;
+      x2 = targetBox.x;
+      s1 = -1;
+      s2 = -1;
+    }
+  } else if (edge.points.length >= 2) {
+    s1 = edge.points[1].x >= edge.from.x ? 1 : -1;
+    const prev = edge.points.at(-2) ?? edge.from;
+    s2 = prev.x >= edge.to.x ? 1 : -1;
+  }
+
+  const dx = Math.abs(x2 - x1);
+  const dy = Math.abs(y2 - y1);
+  const isSelf = Boolean(edge.self || (edge.fromTable && edge.fromTable === edge.toTable));
+  const c = isSelf
+    ? Math.max(48, 38 + dy * 0.28)
+    : s1 === s2
+      ? 42 + dy * 0.08
+      : Math.max(36, dx * 0.5);
+
+  const c1x = x1 + s1 * c;
+  const c1y = y1;
+  const c2x = x2 + s2 * c;
+  const c2y = y2;
+  const d = `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
+
+  const fkMarker =
+    edge.cardinality === "1:1"
+      ? edge.optional
+        ? `M ${x1 + s1 * 8} ${y1 - 5} L ${x1 + s1 * 8} ${y1 + 5}`
+        : `M ${x1 + s1 * 6} ${y1 - 5} L ${x1 + s1 * 6} ${y1 + 5} M ${x1 + s1 * 10} ${y1 - 5} L ${x1 + s1 * 10} ${y1 + 5}`
+      : `M ${x1 + s1 * 10} ${y1} L ${x1} ${y1 - 5} M ${x1 + s1 * 10} ${y1} L ${x1} ${y1 + 5} M ${x1 + s1 * 10} ${y1 - 5} L ${x1 + s1 * 10} ${y1 + 5}`;
+
+  const pkMarker = `M ${x2 + s2 * 6} ${y2 - 5} L ${x2 + s2 * 6} ${y2 + 5} M ${x2 + s2 * 10} ${y2 - 5} L ${x2 + s2 * 10} ${y2 + 5}`;
+  const markerPath = `${fkMarker} ${pkMarker}`;
+  const circle = edge.optional ? { cx: x1 + s1 * (edge.cardinality === "1:1" ? 14 : 16), cy: y1, r: 3.5 } : null;
+
+  return { d, markerPath, circle, x1, y1, x2, y2, c1x, c1y, c2x, c2y, s1, s2 };
+}

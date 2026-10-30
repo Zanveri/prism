@@ -8,6 +8,7 @@ import {
   Field,
   FieldLabel,
   Input,
+  MoreIcon,
   PlusIcon,
   Select,
 } from "@/components/ui";
@@ -227,7 +228,7 @@ export function SimpleEditor({
         <Button
           type="button"
           variant="secondary"
-          size="compact"
+          size="icon"
           aria-label="Mais ações da tabela"
           aria-haspopup="menu"
           aria-expanded={menuPoint !== null}
@@ -239,19 +240,9 @@ export function SimpleEditor({
               setMenuPoint({ x: rect.left, y: rect.bottom + 4 });
             }
           }}
-          className={`h-8 w-8 p-0 ${menuPoint !== null ? "bg-selected" : ""}`}
+          className={menuPoint !== null ? "bg-selected" : ""}
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <circle cx="3.5" cy="8" r="1.25" />
-            <circle cx="8" cy="8" r="1.25" />
-            <circle cx="12.5" cy="8" r="1.25" />
-          </svg>
+          <MoreIcon />
         </Button>
       </div>
 
@@ -317,13 +308,19 @@ export function SimpleEditor({
               : `${fk.target.schema}.${fk.target.table}`
             : null;
           const state = columnRowState(model.engine, table, column);
+          const escapedColName = column.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const colCheckRegex = column.name
+            ? new RegExp(`(?:^|[^a-zA-Z0-9_$])${escapedColName}(?:$|[^a-zA-Z0-9_$])`)
+            : null;
+          const matchesColCheck = (ck: { name: string | null; expression: string }) =>
+            ck.name === column.name || (colCheckRegex !== null && colCheckRegex.test(ck.expression));
           const colCheck =
-            table.checks.find((ck) => ck.expression.includes(column.name))
+            table.checks.find(matchesColCheck)
               ?.expression ?? "";
 
           return (
             <ColumnRow
-              key={idx}
+              key={column.originName ?? idx}
               index={idx}
               column={column}
               isExistingTable={isExisting}
@@ -345,13 +342,12 @@ export function SimpleEditor({
               onUpdateCheck={(expression) => {
                 const nextTables = model.tables.map((t) => {
                   if (getTableKey(t) !== currentKey) return t;
-                  const others = t.checks.filter(
-                    (ck) => !ck.expression.includes(column.name),
-                  );
+                  const existingCheck = t.checks.find(matchesColCheck);
+                  const others = t.checks.filter((ck) => !matchesColCheck(ck));
                   return {
                     ...t,
                     checks: expression.trim()
-                      ? [...others, { name: null, expression: expression.trim() }]
+                      ? [...others, { name: existingCheck?.name ?? null, expression: expression.trim() }]
                       : others,
                   };
                 });

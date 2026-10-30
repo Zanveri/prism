@@ -533,3 +533,133 @@ export function TransactionIcon(props: ComponentProps<"svg">) {
     </Icon>
   );
 }
+
+/** Desfazer: seta curva para a esquerda. */
+export function UndoIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M5 6H10.5a3 3 0 0 1 0 6H7M5 6l2.5-2.5M5 6l2.5 2.5" />
+    </Icon>
+  );
+}
+
+/** Refazer: seta curva para a direita. */
+export function RedoIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M11 6H5.5a3 3 0 0 0 0 6H9M11 6L8.5 3.5M11 6L8.5 8.5" />
+    </Icon>
+  );
+}
+
+/** Mais ações: três pontos alinhados na horizontal. */
+export function MoreIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="3.5" cy="8" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="12.5" cy="8" r="1.2" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
+/** Alça de arrasto: seis pontos em duas colunas. */
+export function GripIcon(props: ComponentProps<"svg">) {
+  return (
+    <svg
+      width="12"
+      height="16"
+      viewBox="0 0 12 16"
+      fill="currentColor"
+      aria-hidden="true"
+      {...props}
+    >
+      <circle cx="4" cy="5" r="1" />
+      <circle cx="8" cy="5" r="1" />
+      <circle cx="4" cy="8" r="1" />
+      <circle cx="8" cy="8" r="1" />
+      <circle cx="4" cy="11" r="1" />
+      <circle cx="8" cy="11" r="1" />
+    </svg>
+  );
+}
+
+/** Mover pelo diagrama: cruz com setas nas quatro pontas. */
+export function MoveIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M8 2v12M2 8h12M8 2L6 4M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2" />
+    </Icon>
+  );
+}
+
+/** Cursor de seleção no diagrama. */
+export function CursorIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 2.5l4.2 10.5 1.6-4.2 4.2-1.6z" />
+    </Icon>
+  );
+}
+
+/** Ajustar à tela: quatro cantos de enquadramento. */
+export function FitIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />
+    </Icon>
+  );
+}
+
+/** Mini-mapa: quadro com recorte no canto inferior direito. */
+export function MinimapIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <rect x="8.5" y="7.5" width="4" height="3.5" rx="0.5" fill="currentColor" />
+    </Icon>
+  );
+}
+
+/** Chave primária (PK) nas linhas de coluna do diagrama. */
+export function KeyIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="5" cy="8" r="2.6" />
+      <path d="M7.6 8H14M11.5 8v2.2M13.5 8v1.6" />
+    </Icon>
+  );
+}
+
+/** Referência de chave estrangeira (FK) nas linhas de coluna do diagrama. */
+export function LinkIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 8h8M8 5l3.2 3L8 11" />
+      <circle cx="13" cy="8" r="1.5" />
+    </Icon>
+  );
+}
+
+/** Ligar colunas no modo Construir: curva entre dois nós. */
+export function ConnectColumnsIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="3.5" cy="4.5" r="2" />
+      <circle cx="12.5" cy="11.5" r="2" />
+      <path d="M5.5 4.5c3.5 0 1.5 7 5 7" />
+    </Icon>
+  );
+}
+
+/** Organizar automaticamente os cartões do diagrama. */
+export function AutoLayoutIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="2" width="4.5" height="3.5" rx="0.8" />
+      <rect x="9.5" y="2" width="4.5" height="3.5" rx="0.8" />
+      <rect x="5.8" y="10.5" width="4.5" height="3.5" rx="0.8" />
+      <path d="M4.2 5.5v2.5h7.6V5.5M8 8v2.5" />
+    </Icon>
+  );
+}

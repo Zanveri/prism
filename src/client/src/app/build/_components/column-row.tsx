@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { Button, ChevronIcon, Input, Select, type SelectOption } from "@/components/ui";
+import { Button, ChevronIcon, GripIcon, Input, Select, type SelectOption } from "@/components/ui";
 import type { ModelColumn } from "../_lib/build-model.schema";
 import type { RowState } from "../_lib/editor-rows";
 
@@ -132,21 +132,7 @@ export function ColumnRow({
             <span />
           )
         ) : (
-          <svg
-            width="12"
-            height="16"
-            viewBox="0 0 12 16"
-            fill="currentColor"
-            aria-hidden="true"
-            className="text-subtle"
-          >
-            <circle cx="4" cy="5" r="1" />
-            <circle cx="8" cy="5" r="1" />
-            <circle cx="4" cy="8" r="1" />
-            <circle cx="8" cy="8" r="1" />
-            <circle cx="4" cy="11" r="1" />
-            <circle cx="8" cy="11" r="1" />
-          </svg>
+          <GripIcon className="text-subtle" />
         )}
 
         <div className="relative min-w-0">

@@ -6,6 +6,7 @@ import type { Problem } from "@/app/build/_lib/model-check";
 import { countModelRelationsAndIndexes } from "@/app/build/_lib/model-summary";
 import {
   BuildIcon,
+  Button,
   ChevronIcon,
   DatabaseIcon,
   FolderIcon,
@@ -13,6 +14,7 @@ import {
   IndexIcon,
   PlusIcon,
   SearchIcon,
+  StatusBadge,
   TableIcon,
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
@@ -112,6 +114,7 @@ export function BuildSidebar({
 
   return (
     <aside
+      id="build-sidebar"
       aria-label={buildCopy.sidebarTitle}
       style={{ width }}
       className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
@@ -120,24 +123,28 @@ export function BuildSidebar({
         <span className="text-xs font-semibold tracking-wider text-muted uppercase">
           {buildCopy.sidebarTitle}
         </span>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           aria-label={buildCopy.newTableLabel}
           title={buildCopy.newTableTitle}
           onClick={onAddTable}
-          className="ml-auto flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-ink hover:bg-selected"
+          className="ml-auto text-ink"
         >
           <PlusIcon />
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           aria-label={buildCopy.importTablesLabel}
           title={buildCopy.importTablesLabel}
           onClick={onImportTables}
-          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-ink hover:bg-selected"
+          className="text-ink"
         >
           <DatabaseIcon />
-        </button>
+        </Button>
       </div>
 
       <label className="mx-2 mb-2 flex h-8 shrink-0 items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-subtle">
@@ -222,13 +229,19 @@ export function BuildSidebar({
                         {table.name}
                       </span>
                       {table.dropInDatabase ? (
-                        <span className="inline-flex h-4 shrink-0 items-center rounded border border-danger px-1.5 text-[10px] font-semibold text-danger">
+                        <StatusBadge
+                          tone="error"
+                          className="h-4 shrink-0 px-1.5 py-0 text-[10px] font-semibold"
+                        >
                           {buildCopy.droppedTableBadge}
-                        </span>
+                        </StatusBadge>
                       ) : changed ? (
-                        <span className="inline-flex h-4 shrink-0 items-center rounded border border-accent px-1.5 text-[10px] font-semibold text-accent">
+                        <StatusBadge
+                          tone="warning"
+                          className="h-4 shrink-0 px-1.5 py-0 text-[10px] font-semibold"
+                        >
                           {buildCopy.changedTableBadge}
-                        </span>
+                        </StatusBadge>
                       ) : null}
                       {(hasError || hasWarning) && (
                         <span

@@ -1,7 +1,7 @@
 import { AlertIcon, Button, InfoIcon, RefreshIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import { buildCopy } from "../_lib/build.copy";
-import type { Problem, ProblemFix } from "../_lib/model-check";
+import { fixButtonLabel, type Problem, type ProblemFix } from "../_lib/model-check";
 
 export type ProblemsListProps = {
   problems: readonly Problem[];
@@ -11,35 +11,6 @@ export type ProblemsListProps = {
   onGoToColumn?: (table: string, column: string | null) => void;
   onReread?: () => void;
 };
-
-function fixButtonLabel(fix: ProblemFix): string {
-  switch (fix.kind) {
-    case "removeForeignKey":
-      return "Remover a FK";
-    case "createUnique":
-      return `Criar único em (${fix.columns.join(", ")})`;
-    case "useFkAction":
-      return `Usar ${fix.onDelete}`;
-    case "useType":
-      return `Trocar para ${fix.type}`;
-    case "createIdColumn":
-      return "Criar coluna id";
-    case "createIndexes":
-      return `Criar os ${fix.items.length} índices`;
-    case "restore":
-      return "Restaurar";
-    case "revert":
-      return "Voltar como era";
-    case "removeReferencingForeignKeys":
-      return "Remover as FKs";
-    case "giveDefault":
-      return "Dar um padrão";
-    case "useIdentity":
-      return "Trocar por AI";
-    case "reread":
-      return buildCopy.toolbarReread;
-  }
-}
 
 function problemTitle(problem: Problem): string {
   switch (problem.code) {

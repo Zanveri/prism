@@ -109,5 +109,23 @@ describe("model-layout", () => {
         "matricula",
       ]);
     }
+
+    const modelWithoutPk = {
+      ...model,
+      tables: model.tables.map((t) =>
+        t.name === "operador" ? { ...t, primaryKey: null } : t,
+      ),
+    };
+    const noPkResult = connectColumn(
+      modelWithoutPk,
+      "manutencao.peca_trocada",
+      "ordem_id",
+      "producao.operador",
+    );
+    expect("needsDialog" in noPkResult).toBe(true);
+    if ("needsDialog" in noPkResult) {
+      expect(noPkResult.needsDialog.target.table).toBe("operador");
+      expect(noPkResult.needsDialog.target.columns).toEqual([]);
+    }
   });
 });

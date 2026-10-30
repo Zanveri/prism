@@ -31,4 +31,50 @@ export function applyText(
   };
 }
 
+export function createTextSyncController(
+  initialModel: BuildModel,
+  initialFormat: "sql" | "dbml",
+): {
+  initialDoc(): string;
+  receiveProps(
+    nextModel: BuildModel,
+    nextFormat: "sql" | "dbml",
+  ): { shouldReplaceDoc: boolean; nextDoc: string };
+  applyEditorText(editorText: string): {
+    model: BuildModel | null;
+    status: TextStatus;
+  };
+} {
+  let currentModel = initialModel;
+  let currentFormat = initialFormat;
+  let lastAppliedModel = initialModel;
+
+  return {
+    initialDoc() {
+      return printText(currentModel, currentFormat);
+    },
+    receiveProps(nextModel, nextFormat) {
+      if (nextFormat !== currentFormat || nextModel !== lastAppliedModel) {
+        currentModel = nextModel;
+        currentFormat = nextFormat;
+        lastAppliedModel = nextModel;
+        return {
+          shouldReplaceDoc: true,
+          nextDoc: printText(nextModel, nextFormat),
+        };
+      }
+      currentModel = nextModel;
+      return { shouldReplaceDoc: false, nextDoc: "" };
+    },
+    applyEditorText(editorText) {
+      const res = applyText(currentModel, currentFormat, editorText);
+      if (res.model !== null && res.status.kind === "applied") {
+        currentModel = res.model;
+        lastAppliedModel = res.model;
+      }
+      return res;
+    },
+  };
+}
+
 

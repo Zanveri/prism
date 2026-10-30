@@ -103,6 +103,9 @@ export function createSaveScheduler(deps: {
             result.error.status === 409 ||
             result.error.code === "BUILD_MODEL_CONFLICT" ||
             result.error.code === "BUILD_MODEL_CHANGED";
+          if (!isConflict && pendingModel === null) {
+            pendingModel = modelToSave;
+          }
           updateState({
             status: isConflict ? "conflict" : "failed",
             savedAt: currentState.savedAt,
@@ -111,6 +114,9 @@ export function createSaveScheduler(deps: {
           break;
         }
       } catch (err) {
+        if (pendingModel === null) {
+          pendingModel = modelToSave;
+        }
         updateState({
           status: "failed",
           savedAt: currentState.savedAt,
@@ -165,6 +171,12 @@ export function createSaveScheduler(deps: {
       expectedUpdatedAt = updatedAt;
     },
     dispose() {
+      if (pendingModel !== null || inFlight !== null) {
+        void flush().finally(() => {
+          unregister();
+        });
+        return;
+      }
       if (cancelTimer) {
         cancelTimer();
         cancelTimer = null;

@@ -16,7 +16,7 @@ const themes = (["light", "dark", ...extraThemes] as const).map((id) => ({ id, n
 
 const surfaces = ["background", "panel", "raised", "selected"] as const;
 const neutralText = ["ink", "body", "muted", "subtle"] as const;
-const toneText = ["accent", "postgres", "db2", "informix", "danger", "success"] as const;
+const toneText = ["accent", "postgres", "db2", "informix", "danger", "warning", "success"] as const;
 /** As cores de sintaxe do editor (RN-CONFIG-003): palavra-chave, texto entre aspas, número e comentário. O canvas as define em cada tema. */
 const syntaxText = ["syntax-keyword", "syntax-string", "syntax-number", "syntax-comment"] as const;
 /** RN-VAR-025: a cor da variável (o nome declarado e o `@nome` no SQL). O canvas não a desenha: cada tema traz a sua, e ela passa no mesmo contraste da sintaxe. */
@@ -77,7 +77,9 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
       db2: "#5ed3a3",
       informix: "#f591b6",
       danger: "#ff8a7a",
+      warning: "#ffb86b",
       success: "#5ed3a3",
+      "diagram-edge": "#566170",
       "syntax-keyword": "#7db2ff",
       "syntax-string": "#5ed3a3",
       "syntax-number": "#f2b644",

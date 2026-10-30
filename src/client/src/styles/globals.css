@@ -75,8 +75,13 @@
 
   /* Erro e o que não tem volta. */
   --color-danger: light-dark(#b32a1a, #ff8a7a);
+  /* Avisos do modelo (W*) e coluna com tipo alterado no diagrama. */
+  --color-warning: light-dark(#9a4a00, #ffb86b);
   /* RN-AVISO-001: o sucesso tem o mesmo verde do Db2; o canvas não traz outro. */
   --color-success: light-dark(#097244, #5ed3a3);
+
+  /* Traço das relações do diagrama em repouso. */
+  --color-diagram-edge: light-dark(#9aa3af, #566170);
 
   /* O véu atrás de um diálogo. */
   --color-scrim: light-dark(rgb(20 24 29 / 0.45), rgb(6 8 10 / 0.72));
@@ -1233,7 +1238,9 @@
     --color-db2: #5ed3a3;
     --color-informix: #f591b6;
     --color-danger: #ff8a7a;
+    --color-warning: #ffb86b;
     --color-success: #5ed3a3;
+    --color-diagram-edge: #566170;
     --color-syntax-keyword: #7db2ff;
     --color-syntax-string: #5ed3a3;
     --color-syntax-number: #f2b644;

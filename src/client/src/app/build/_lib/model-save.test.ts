@@ -111,4 +111,86 @@ describe("model-save", () => {
     await buildModelSync.flush();
     expect(save).toHaveBeenCalledTimes(1);
   });
+
+  it("dispose grava o que estava pendente no debounce em vez de descartar", async () => {
+    const clock = createFakeClock();
+    const save = vi.fn().mockResolvedValue(okResult);
+    const doc = createSaveScheduler({
+      save,
+      now: clock.now,
+      setTimer: clock.setTimer,
+    });
+
+    doc.change(edited);
+    clock.advance(200);
+    doc.dispose();
+    await Promise.resolve();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(edited, "");
+  });
+
+  it("flush tenta gravar de novo o mesmo modelo depois de uma falha", async () => {
+    const clock = createFakeClock();
+    const failResult: ApiResult<BuildModelDto> = {
+      ok: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        title: "Falha",
+        detail: "Não foi possível gravar o cofre.",
+        status: 500,
+        errors: null,
+        extensions: {},
+      },
+    };
+    const save = vi
+      .fn()
+      .mockResolvedValueOnce(failResult)
+      .mockResolvedValueOnce(okResult);
+    const doc = createSaveScheduler({
+      save,
+      now: clock.now,
+      setTimer: clock.setTimer,
+    });
+
+    doc.change(edited);
+    await doc.flush();
+    expect(doc.state().status).toBe("failed");
+
+    await doc.flush();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(doc.state().status).toBe("saved");
+  });
+
+  it("flush aguarda uma gravação que já estava em voo", async () => {
+    const clock = createFakeClock();
+    let resolveInFlight: ((res: ApiResult<BuildModelDto>) => void) | null = null;
+    const save = vi.fn().mockImplementation(
+      () =>
+        new Promise<ApiResult<BuildModelDto>>((resolve) => {
+          resolveInFlight = resolve;
+        }),
+    );
+    const doc = createSaveScheduler({
+      save,
+      now: clock.now,
+      setTimer: clock.setTimer,
+    });
+
+    doc.change(edited);
+    clock.advance(autosaveDelayMs);
+    expect(save).toHaveBeenCalledTimes(1);
+
+    let flushed = false;
+    const flushPromise = doc.flush().then(() => {
+      flushed = true;
+    });
+    await Promise.resolve();
+    expect(flushed).toBe(false);
+
+    resolveInFlight!(okResult);
+    await flushPromise;
+    expect(flushed).toBe(true);
+    expect(doc.state().status).toBe("saved");
+  });
 });

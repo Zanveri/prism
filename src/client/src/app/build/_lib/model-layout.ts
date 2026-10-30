@@ -16,7 +16,7 @@ import {
   type BuildModel,
   type ModelForeignKey,
 } from "./build-model";
-import type { Problem } from "./model-check";
+import { fixButtonLabel, type Problem } from "./model-check";
 
 const boxPadding = 12;
 const margin = 64;
@@ -98,14 +98,43 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
     const changes = tableChanges(model.engine, table);
     const pkSet = new Set(table.primaryKey?.columns ?? []);
     const fkSet = new Set(table.foreignKeys.flatMap((fk) => fk.columns));
+    const uniqueSet = new Set(
+      table.uniques.filter((u) => u.columns.length === 1).map((u) => u.columns[0]!),
+    );
+    const changedByColName = new Map(
+      changes.changedColumns.map((cc) => [cc.name, cc]),
+    );
 
-    const columns: DiagramColumn[] = table.columns.map((col) => ({
-      name: col.name,
-      type: col.type,
-      primaryKey: pkSet.has(col.name),
-      foreignKey: fkSet.has(col.name),
-      ...(table.origin !== null && col.originName === null ? { state: "added" as const } : {}),
-    }));
+    const columns: DiagramColumn[] = table.columns.map((col) => {
+      const changed = changedByColName.get(col.name);
+      const originCol =
+        table.origin && col.originName
+          ? table.origin.columns.find(
+              (oc) => (oc.originName ?? oc.name) === col.originName || oc.name === col.originName,
+            )
+          : undefined;
+      const state: DiagramColumn["state"] =
+        table.origin !== null && col.originName === null
+          ? "added"
+          : table.origin !== null && changed !== undefined
+            ? "changed"
+            : undefined;
+      const previousType =
+        changed?.type && originCol && originCol.type !== col.type
+          ? originCol.type
+          : undefined;
+
+      return {
+        name: col.name,
+        type: col.type,
+        primaryKey: pkSet.has(col.name),
+        foreignKey: fkSet.has(col.name),
+        nullable: col.nullable,
+        ...(uniqueSet.has(col.name) ? { unique: true } : {}),
+        ...(state ? { state } : {}),
+        ...(previousType ? { previousType } : {}),
+      };
+    });
 
     if (table.origin !== null && changes.removedColumns.length > 0) {
       for (const removedName of changes.removedColumns) {
@@ -145,6 +174,17 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
       ...(table.origin !== null && changes.kind === "changed" ? { badge: "alterada" } : {}),
       ...(table.dropInDatabase ? { dropped: true } : {}),
       ...(warning ? { warning } : {}),
+      ...(tableProbs.length > 0
+        ? {
+            problems: tableProbs.map((p) => ({
+              code: p.code,
+              severity: p.severity,
+              message: p.message,
+              key: p.key,
+              ...(p.fix ? { fixLabel: fixButtonLabel(p.fix) } : {}),
+            })),
+          }
+        : {}),
       center: false,
       x: savedPos ? savedPos.x : (autoBox?.x ?? margin),
       y: savedPos ? savedPos.y : (autoBox?.y ?? margin),
@@ -231,6 +271,15 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
         }
       }
 
+      const srcCol = table.columns.find((c) => c.name === fromCol);
+      const isSinglePk =
+        table.primaryKey?.columns.length === 1 && table.primaryKey.columns[0] === fromCol;
+      const isSingleUnique = table.uniques.some(
+        (u) => u.columns.length === 1 && u.columns[0] === fromCol,
+      );
+      const tableDiff = tableChanges(model.engine, table);
+      const isNewFk = table.origin === null || tableDiff.addedForeignKeys.includes(fk);
+
       edges.push({
         key: `${edgeOrder++}:${fromKey}:${fkName}:${fromCol ?? ""}`,
         name: fkName,
@@ -242,6 +291,10 @@ export function modelDiagram(model: BuildModel, problems: readonly Problem[]): D
         toTable: toKey,
         fromColumn: fromCol,
         toColumn: toCol,
+        cardinality: isSinglePk || isSingleUnique ? "1:1" : "1:N",
+        optional: Boolean(srcCol?.nullable),
+        self: fromKey === toKey,
+        variant: isNewFk ? "new" : "existing",
       });
     }
   }
@@ -310,12 +363,7 @@ export function connectColumn(
 
   const defaultOnDelete = model.engine === "informix" ? "noAction" : "restrict";
   const pkCols = targetTable.primaryKey?.columns ?? [];
-  const fallbackTargetCol =
-    pkCols.length === 1
-      ? pkCols[0]!
-      : pkCols.length === 0 && targetTable.columns.length > 0
-        ? targetTable.columns[0]!.name
-        : null;
+  const fallbackTargetCol = pkCols.length === 1 ? pkCols[0]! : null;
   if (fallbackTargetCol !== null) {
     const fk: ModelForeignKey = {
       name: null,
