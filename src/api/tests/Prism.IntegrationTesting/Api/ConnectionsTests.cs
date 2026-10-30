@@ -810,7 +810,7 @@ public sealed class ConnectionsTests
         // Uma segunda gravação, para o `.bak` também ter conteúdo.
         await CreateConnectionAsync(host, Body(name: "Outra"));
 
-        var files = Directory.GetFiles(host.DataDirectory, "*", SearchOption.AllDirectories);
+        var files = Directory.GetFiles(Path.Combine(host.DataDirectory, "vaults"), "*", SearchOption.AllDirectories);
 
         Assert.That(files.Select(Path.GetFileName), Is.EquivalentTo(new[] { "marina.costa.vault.json", "marina.costa.vault.json.bak" }));
 

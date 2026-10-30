@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Cifra do diário</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#7DB2FF}a:hover{color:#A9CBFF}
+</style>
+</helmet>
+<div style="width: 1440px; height: 860px; box-sizing: border-box; padding: 48px 56px; display: flex; flex-direction: column; gap: 32px; background: #0E1114; color: #E6EAF0; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 22px">
+<div>
+<h1 style="margin: 0; font-size: 26px; line-height: 34px; font-weight: 600">Sem a senha do Prism, o diário são bytes aleatórios</h1>
+<p style="margin: 6px 0 0; color: #B4BCC8; max-width: 90ch">A chave do diário nasce aleatória e só existe dentro do cofre. O cofre só abre com a senha da conta. Quem copia a pasta de dados leva arquivos que não dizem nada: nem comandos, nem nomes de conexão, nem datas.</p>
+</div>
+
+<div style="flex: 1 1 0; min-height: 0; display: flex; gap: 48px">
+
+<section aria-labelledby="cf-cadeia" style="flex: 0 0 520px; display: flex; flex-direction: column; gap: 0">
+<h2 id="cf-cadeia" style="margin: 0 0 16px; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8E99A8">A cadeia das chaves</h2>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: #14181D; border: 1px solid #38414D; border-radius: 8px"><span style="flex: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: #232A33; color: #E6EAF0; font-weight: 600">1</span><div><strong style="font-weight: 600">Senha da conta</strong><div style="color: #B4BCC8; font-size: 13px">Digitada na entrada. Não é gravada em lugar nenhum.</div></div></div>
+<div style="display: flex; align-items: center; gap: 10px; height: 34px; padding-left: 32px; color: #8E99A8; font-size: 12px"><svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="#38414D" stroke-width="1.5" aria-hidden="true"><path d="M6 0v18M2 14l4 4 4-4"></path></svg>Argon2id · 64 MiB · 3 passadas · sal de 16 bytes</div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: #14181D; border: 1px solid #38414D; border-radius: 8px"><span style="flex: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: #232A33; color: #E6EAF0; font-weight: 600">2</span><div><strong style="font-weight: 600">Chave derivada</strong><div style="color: #B4BCC8; font-size: 13px">Só na memória. Abre a chave do cofre (AES-256-GCM).</div></div></div>
+<div style="height: 26px; padding-left: 32px"><svg width="12" height="24" viewBox="0 0 12 24" fill="none" stroke="#38414D" stroke-width="1.5" aria-hidden="true"><path d="M6 0v22M2 18l4 4 4-4"></path></svg></div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: #14181D; border: 1px solid #38414D; border-radius: 8px"><span style="flex: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: #232A33; color: #E6EAF0; font-weight: 600">3</span><div><strong style="font-weight: 600">Cofre aberto</strong><div style="color: #B4BCC8; font-size: 13px">Conexões, pastas, scripts e, agora, a <span style="color: #7DB2FF">chave do diário</span> (256 bits aleatórios).</div></div></div>
+<div style="height: 26px; padding-left: 32px"><svg width="12" height="24" viewBox="0 0 12 24" fill="none" stroke="#7DB2FF" stroke-width="1.5" aria-hidden="true"><path d="M6 0v22M2 18l4 4 4-4"></path></svg></div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: #1E2C40; border: 1px solid #7DB2FF; border-radius: 8px"><span style="flex: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: #7DB2FF; color: #0E1114; font-weight: 600">4</span><div><strong style="font-weight: 600">Diário (SQLCipher 4)</strong><div style="color: #C9D1DC; font-size: 13px">AES-256 e HMAC-SHA512 em cada página, WAL cifrado, nada temporário em disco, o que se apaga é zerado.</div></div></div>
+<p style="margin: 16px 0 0; padding: 12px 14px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px; color: #B4BCC8; font-size: 13px">Trocar a senha troca a chave do cofre <em>e</em> a do diário (<span style="font-family: 'IBM Plex Mono', monospace">PRAGMA rekey</span>). Uma cópia antiga com a senha antiga não lê nada gravado depois.</p>
+</section>
+
+<section aria-labelledby="cf-disco" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<h2 id="cf-disco" style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8E99A8">O que alguém com acesso ao PC encontra</h2>
+<table style="width: 100%; border-collapse: collapse; background: #14181D; border: 1px solid #2A313B; border-radius: 8px; overflow: hidden">
+<thead><tr style="text-align: left; color: #B4BCC8; font-size: 12px; background: #1B2027"><th scope="col" style="padding: 10px 16px; font-weight: 500">Arquivo em PRISM_DATA_DIR</th><th scope="col" style="padding: 10px 16px; font-weight: 500">O que dá para ler sem a senha</th></tr></thead>
+<tbody>
+<tr style="border-top: 1px solid #2A313B"><td style="padding: 12px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">vaults/marina.costa.vault.json</td><td style="padding: 12px 16px; color: #B4BCC8">Versão, algoritmo, sal. O conteúdo é cifrado.</td></tr>
+<tr style="border-top: 1px solid #2A313B; background: #1E2C40"><td style="padding: 12px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">journal/marina.costa.journal.db</td><td style="padding: 12px 16px; color: #C9D1DC">Nada. Nem o cabeçalho do SQLite, nem os nomes das tabelas.</td></tr>
+<tr style="border-top: 1px solid #2A313B; background: #1E2C40"><td style="padding: 12px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">journal/marina.costa.journal.db-wal</td><td style="padding: 12px 16px; color: #C9D1DC">Nada: cifrado como o banco.</td></tr>
+<tr style="border-top: 1px solid #2A313B"><td style="padding: 12px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">journal/marina.costa.attempts</td><td style="padding: 12px 16px; color: #B4BCC8">Quantas entradas erraram a senha, e as horas. Só isso.</td></tr>
+<tr style="border-top: 1px solid #2A313B"><td style="padding: 12px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">logs/prism-20261030.log</td><td style="padding: 12px 16px; color: #B4BCC8">Contagens, durações, classe do erro. Nunca SQL nem nomes (RN-LOG-001).</td></tr>
+</tbody>
+</table>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div style="padding: 14px 16px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px"><strong style="display: block; font-weight: 600">Apagar o arquivo</strong><span style="color: #B4BCC8; font-size: 13px">É possível, mas não revela nada. Detectar o sumiço fica para depois.</span></div>
+<div style="padding: 14px 16px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px"><strong style="display: block; font-weight: 600">Adulterar uma página</strong><span style="color: #B4BCC8; font-size: 13px">O HMAC falha, o Prism separa o arquivo e grava um registro Crítico.</span></div>
+<div style="padding: 14px 16px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px"><strong style="display: block; font-weight: 600">Encurtar a guarda</strong><span style="color: #B4BCC8; font-size: 13px">Não dá: a escolha mora dentro do diário cifrado.</span></div>
+</div>
+
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8E99A8">O plano, em seis partes</h2>
+<ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; font-size: 12px; line-height: 17px">
+<li style="padding: 10px 12px; background: #14181D; border: 1px solid #F2B644; border-radius: 6px"><strong style="display: block; color: #F2B644">0 · Sonda</strong>SQLCipher nas 3 plataformas, no Electron</li>
+<li style="padding: 10px 12px; background: #14181D; border: 1px solid #2A313B; border-radius: 6px"><strong style="display: block">1 · Diário</strong>chave no cofre, abrir, fechar, rekey</li>
+<li style="padding: 10px 12px; background: #14181D; border: 1px solid #2A313B; border-radius: 6px"><strong style="display: block">2 · Nível</strong>CommandDanger e levels.json</li>
+<li style="padding: 10px 12px; background: #14181D; border: 1px solid #2A313B; border-radius: 6px"><strong style="display: block">3 · Gravar</strong>execuções e ações da conta</li>
+<li style="padding: 10px 12px; background: #14181D; border: 1px solid #2A313B; border-radius: 6px"><strong style="display: block">4 · Histórico</strong>rotas, painel, Ctrl+Shift+H</li>
+<li style="padding: 10px 12px; background: #14181D; border: 1px solid #2A313B; border-radius: 6px"><strong style="display: block">5 · Auditoria</strong>filtros, detalhe, guarda, apagar</li>
+</ol>
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -368,6 +368,7 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
             );
             CREATE INDEX IF NOT EXISTS ix_entries_started_at ON entries (started_at_ticks DESC, id DESC);
             CREATE INDEX IF NOT EXISTS ix_entries_connection_started_at ON entries (connection_id, started_at_ticks DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS ix_entries_connection_id ON entries (connection_id, id DESC);
             CREATE INDEX IF NOT EXISTS ix_entries_environment ON entries (environment_name);
             CREATE INDEX IF NOT EXISTS ix_entries_level ON entries (level);
             CREATE TABLE IF NOT EXISTS settings (
@@ -475,7 +476,8 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
         var errorMessage = TruncateErrorMessage(end?.ErrorMessage);
         var outcome = end?.Outcome ?? EJournalOutcome.InProgress;
         var historySearch = NormalizeSearchText(historyText ?? sqlText ?? start.Action);
-        var fullSearch = NormalizeSearchText(start.Action, start.Reason, snapshot.Name, snapshot.Database, sqlText, historyText, end?.ErrorCode, end?.SqlState, errorMessage);
+        var distinctHistoryText = string.Equals(sqlText, historyText, StringComparison.Ordinal) ? null : historyText;
+        var fullSearch = NormalizeSearchText(start.Action, start.Reason, snapshot.Name, snapshot.Database, sqlText, distinctHistoryText, end?.ErrorCode, end?.SqlState, errorMessage);
 
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -559,13 +561,17 @@ internal sealed class JournalDatabaseClient(IOptions<VaultOptions> options, ILog
     private static JournalPage QueryCore(SqliteConnection connection, JournalQuery query)
     {
         var limit = Math.Clamp(query.Limit, 1, 500);
-        using var countCommand = connection.CreateCommand();
+        var total = 0L;
+
+        if (!query.HistoryOnly)
+        {
+            using var countCommand = connection.CreateCommand();
+            var where = BuildWhereClause(query, countCommand, includeBeforeCursor: false);
+            countCommand.CommandText = $"SELECT COUNT(*) FROM entries {where};";
+            total = Convert.ToInt64(countCommand.ExecuteScalar(), CultureInfo.InvariantCulture);
+        }
+
         using var pageCommand = connection.CreateCommand();
-
-        var where = BuildWhereClause(query, countCommand, includeBeforeCursor: false);
-        countCommand.CommandText = $"SELECT COUNT(*) FROM entries {where};";
-        var total = Convert.ToInt64(countCommand.ExecuteScalar(), CultureInfo.InvariantCulture);
-
         var pageWhere = BuildWhereClause(query, pageCommand, includeBeforeCursor: true);
         pageCommand.CommandText = $"""
             SELECT id, started_at, ended_at, duration_ms, kind, action, level, reason, outcome, origin,
