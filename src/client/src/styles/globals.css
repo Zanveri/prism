@@ -1497,3 +1497,545 @@
   color: var(--color-ink);
   font-weight: 500;
 }
+
+
+/* ==========================================================================
+   Micro-animações de ícones em hover (estilo Resend / lucide-animated)
+   ========================================================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Alinhamento de transformações SVG: caixas individuais dos traços e centro */
+  svg[data-icon] > *,
+  svg[data-icon] [class*="icon-part-"] {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .icon-part-lid {
+    transform-origin: left bottom;
+  }
+
+  .icon-part-bar {
+    transform-origin: bottom;
+  }
+
+  .icon-part-hammer {
+    transform-origin: 20% 80%;
+  }
+
+  /* Desativa animações em controles interativos desabilitados */
+  :is(button:disabled, [aria-disabled="true"], :disabled) svg[data-icon] *,
+  :is(button:disabled, [aria-disabled="true"], :disabled) * svg[data-icon] * {
+    animation: none !important;
+  }
+
+  /* Famílias com partes articuladas (icon-part-*) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="trash"] .icon-part-lid,
+  svg[data-icon="trash"]:hover .icon-part-lid {
+    animation: prism-icon-lid 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="lock"] .icon-part-shackle,
+  svg[data-icon="lock"]:hover .icon-part-shackle {
+    animation: prism-icon-shackle 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="clock"] .icon-part-hand,
+  svg[data-icon="clock"]:hover .icon-part-hand {
+    animation: prism-icon-spin-hand 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="timer"] .icon-part-hand,
+  svg[data-icon="timer"]:hover .icon-part-hand {
+    animation: prism-icon-spin-hand 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="timer"] .icon-part-down,
+  svg[data-icon="timer"]:hover .icon-part-down {
+    animation: prism-icon-bounce-y-down 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="arrows-up-down"] .icon-part-up,
+  svg[data-icon="arrows-up-down"]:hover .icon-part-up {
+    animation: prism-icon-bounce-y-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="arrows-up-down"] .icon-part-down,
+  svg[data-icon="arrows-up-down"]:hover .icon-part-down {
+    animation: prism-icon-bounce-y-down 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="folder-plus"] .icon-part-pop,
+  svg[data-icon="folder-plus"]:hover .icon-part-pop {
+    animation: prism-icon-pop 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="folder-move"] .icon-part-right,
+  svg[data-icon="folder-move"]:hover .icon-part-right {
+    animation: prism-icon-bounce-x-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="eye"] .icon-part-pop,
+  svg[data-icon="eye"]:hover .icon-part-pop {
+    animation: prism-icon-pop 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="power"] .icon-part-down,
+  svg[data-icon="power"]:hover .icon-part-down {
+    animation: prism-icon-bounce-y-down 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="database"] .icon-part-up,
+  svg[data-icon="database"]:hover .icon-part-up {
+    animation: prism-icon-bounce-y-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="download"] .icon-part-down,
+  svg[data-icon="download"]:hover .icon-part-down {
+    animation: prism-icon-bounce-y-down 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="upload"] .icon-part-up,
+  svg[data-icon="upload"]:hover .icon-part-up {
+    animation: prism-icon-bounce-y-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="duplicate"] .icon-part-ne,
+  svg[data-icon="duplicate"]:hover .icon-part-ne {
+    animation: prism-icon-bounce-ne 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="play-script"] .icon-part-right,
+  svg[data-icon="play-script"]:hover .icon-part-right {
+    animation: prism-icon-bounce-x-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="chart"] .icon-part-bar,
+  svg[data-icon="chart"]:hover .icon-part-bar {
+    animation: prism-icon-bar 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="build"] .icon-part-hammer,
+  svg[data-icon="build"]:hover .icon-part-hammer {
+    animation: prism-icon-hammer 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="user"] .icon-part-up,
+  svg[data-icon="user"]:hover .icon-part-up {
+    animation: prism-icon-bounce-y-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="info"] .icon-part-pop,
+  svg[data-icon="info"]:hover .icon-part-pop {
+    animation: prism-icon-pop 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="transaction"] .icon-part-right,
+  svg[data-icon="transaction"]:hover .icon-part-right {
+    animation: prism-icon-bounce-x-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="transaction"] .icon-part-left,
+  svg[data-icon="transaction"]:hover .icon-part-left {
+    animation: prism-icon-bounce-x-left 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="link"] .icon-part-right,
+  svg[data-icon="link"]:hover .icon-part-right {
+    animation: prism-icon-bounce-x-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="settings"] .icon-part-knob-left,
+  svg[data-icon="settings"]:hover .icon-part-knob-left {
+    animation: prism-icon-knob-left 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="settings"] .icon-part-knob-right,
+  svg[data-icon="settings"]:hover .icon-part-knob-right {
+    animation: prism-icon-knob-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="collapse-all"] .icon-part-down,
+  svg[data-icon="collapse-all"]:hover .icon-part-down {
+    animation: prism-icon-bounce-y-down 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="collapse-all"] .icon-part-up,
+  svg[data-icon="collapse-all"]:hover .icon-part-up {
+    animation: prism-icon-bounce-y-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="external-editor"] .icon-part-ne,
+  svg[data-icon="external-editor"]:hover .icon-part-ne {
+    animation: prism-icon-bounce-ne 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Famílias com animações diretas nos elementos filhos (> *) */
+
+  /* Deslocamento vertical para baixo (bounce-y-down) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
+    svg[data-icon="chevron"],
+    svg[data-icon="arrow-down"]
+  ) > *,
+  :is(
+    svg[data-icon="chevron"],
+    svg[data-icon="arrow-down"]
+  ):hover > * {
+    animation: prism-icon-bounce-y-down 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Deslocamento vertical para cima (bounce-y-up) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="arrow-up"] > *,
+  svg[data-icon="arrow-up"]:hover > * {
+    animation: prism-icon-bounce-y-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Deslocamento horizontal para a direita (bounce-x-right) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
+    svg[data-icon="chevron-right"],
+    svg[data-icon="play"]
+  ) > *,
+  :is(
+    svg[data-icon="chevron-right"],
+    svg[data-icon="play"]
+  ):hover > * {
+    animation: prism-icon-bounce-x-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Rotação contínua de atualização (spin) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="refresh"] > *,
+  svg[data-icon="refresh"]:hover > * {
+    animation: prism-icon-spin 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Rotação / oscilação suave (wiggle) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
+    svg[data-icon="folder"],
+    svg[data-icon="pencil"],
+    svg[data-icon="eyedropper"],
+    svg[data-icon="plug"],
+    svg[data-icon="key"],
+    svg[data-icon="wrench"],
+    svg[data-icon="bug"],
+    svg[data-icon="flag"],
+    svg[data-icon="palette"]
+  ) > *,
+  :is(
+    svg[data-icon="folder"],
+    svg[data-icon="pencil"],
+    svg[data-icon="eyedropper"],
+    svg[data-icon="plug"],
+    svg[data-icon="key"],
+    svg[data-icon="wrench"],
+    svg[data-icon="bug"],
+    svg[data-icon="flag"],
+    svg[data-icon="palette"]
+  ):hover > * {
+    animation: prism-icon-wiggle 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Pulso / destaque de atenção (pulse) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
+    svg[data-icon="search"],
+    svg[data-icon="lightning"],
+    svg[data-icon="star"],
+    svg[data-icon="alert"],
+    svg[data-icon="puzzle"]
+  ) > *,
+  :is(
+    svg[data-icon="search"],
+    svg[data-icon="lightning"],
+    svg[data-icon="star"],
+    svg[data-icon="alert"],
+    svg[data-icon="puzzle"]
+  ):hover > * {
+    animation: prism-icon-pulse 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Leve deslocamento vertical de folha / painel (slide-v) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
+    svg[data-icon="document"],
+    svg[data-icon="table"],
+    svg[data-icon="panel"],
+    svg[data-icon="package"]
+  ) > *,
+  :is(
+    svg[data-icon="document"],
+    svg[data-icon="table"],
+    svg[data-icon="panel"],
+    svg[data-icon="package"]
+  ):hover > * {
+    animation: prism-icon-slide-v 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Deslocamento de linhas / texto (lines) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) :is(
+    svg[data-icon="lines"],
+    svg[data-icon="code"],
+    svg[data-icon="sequence"]
+  ) > *,
+  :is(
+    svg[data-icon="lines"],
+    svg[data-icon="code"],
+    svg[data-icon="sequence"]
+  ):hover > * {
+    animation: prism-icon-lines 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Confirmação (check) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="check"] > *,
+  svg[data-icon="check"]:hover > * {
+    animation: prism-icon-check 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Giro de fechamento / cruz (tilt) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="close"] > *,
+  svg[data-icon="close"]:hover > * {
+    animation: prism-icon-tilt 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Giro de adição (plus) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="plus"] > *,
+  svg[data-icon="plus"]:hover > * {
+    animation: prism-icon-plus 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Contração de subtração (minus) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="minus"] > *,
+  svg[data-icon="minus"]:hover > * {
+    animation: prism-icon-minus 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Interrupção / parada (stop) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="stop"] > *,
+  svg[data-icon="stop"]:hover > * {
+    animation: prism-icon-stop 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Desfazer (undo) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="undo"] > *,
+  svg[data-icon="undo"]:hover > * {
+    animation: prism-icon-turn-left 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Refazer (redo) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="redo"] > *,
+  svg[data-icon="redo"]:hover > * {
+    animation: prism-icon-turn-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Pontos de menu / grip (dots) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="dots"] > *,
+  svg[data-icon="dots"]:hover > * {
+    animation: prism-icon-dots 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Movimentação no canvas (move) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="move"] > *,
+  svg[data-icon="move"]:hover > * {
+    animation: prism-icon-move 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Cursor de seleção (cursor) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="cursor"] > *,
+  svg[data-icon="cursor"]:hover > * {
+    animation: prism-icon-cursor 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Expansão para tela cheia (expand) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="expand"] > *,
+  svg[data-icon="expand"]:hover > * {
+    animation: prism-icon-expand 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Redução / restauração de janela (shrink) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="shrink"] > *,
+  svg[data-icon="shrink"]:hover > * {
+    animation: prism-icon-shrink 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Diagonal sem cor (no-color) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="no-color"] > *,
+  svg[data-icon="no-color"]:hover > * {
+    animation: prism-icon-no-color 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Olho desativado (eye-off) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="eye-off"] > *,
+  svg[data-icon="eye-off"]:hover > * {
+    animation: prism-icon-eye-off 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Diagrama (diagram) */
+  :is(button, a, label, summary, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="treeitem"], [role="option"], .group):hover:not(:disabled):not([aria-disabled="true"]) svg[data-icon="diagram"] > *,
+  svg[data-icon="diagram"]:hover > * {
+    animation: prism-icon-diagram 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @keyframes prism-icon-bounce-y-down {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(2px); }
+  }
+
+  @keyframes prism-icon-bounce-y-up {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+
+  @keyframes prism-icon-bounce-x-right {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(2px); }
+  }
+
+  @keyframes prism-icon-bounce-x-left {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-2px); }
+  }
+
+  @keyframes prism-icon-bounce-ne {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(1.5px, -1.5px); }
+  }
+
+  @keyframes prism-icon-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(180deg); }
+  }
+
+  @keyframes prism-icon-spin-hand {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  @keyframes prism-icon-lid {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-2px) rotate(-12deg); }
+  }
+
+  @keyframes prism-icon-shackle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+
+  @keyframes prism-icon-hammer {
+    0%, 100% { transform: rotate(0deg); }
+    35% { transform: rotate(-14deg); }
+    70% { transform: rotate(8deg); }
+  }
+
+  @keyframes prism-icon-pop {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.22); }
+  }
+
+  @keyframes prism-icon-bar {
+    0%, 100% { transform: scaleY(1); }
+    50% { transform: scaleY(0.72); }
+  }
+
+  @keyframes prism-icon-knob-left {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(2.5px); }
+  }
+
+  @keyframes prism-icon-knob-right {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-2.5px); }
+  }
+
+  @keyframes prism-icon-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+  }
+
+  @keyframes prism-icon-wiggle {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-8deg); }
+    75% { transform: rotate(8deg); }
+  }
+
+  @keyframes prism-icon-expand {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+  }
+
+  @keyframes prism-icon-shrink {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(0.88); }
+  }
+
+  @keyframes prism-icon-turn-left {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-25deg); }
+  }
+
+  @keyframes prism-icon-turn-right {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(25deg); }
+  }
+
+  @keyframes prism-icon-tilt {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(90deg); }
+  }
+
+  @keyframes prism-icon-slide-v {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-1.5px); }
+  }
+
+  @keyframes prism-icon-dots {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+  }
+
+  @keyframes prism-icon-lines {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(1.5px); }
+  }
+
+  @keyframes prism-icon-check {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+
+  @keyframes prism-icon-stop {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(0.88); }
+  }
+
+  @keyframes prism-icon-no-color {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(45deg); }
+  }
+
+  @keyframes prism-icon-move {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(45deg); }
+  }
+
+  @keyframes prism-icon-cursor {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(2px, 2px); }
+  }
+
+  @keyframes prism-icon-minus {
+    0%, 100% { transform: scaleX(1); }
+    50% { transform: scaleX(0.72); }
+  }
+
+  @keyframes prism-icon-plus {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(90deg); }
+  }
+
+  @keyframes prism-icon-eye-off {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+
+  @keyframes prism-icon-diagram {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+}
