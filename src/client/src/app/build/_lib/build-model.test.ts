@@ -262,4 +262,28 @@ describe("build-model (RN-CONSTRUIR-011, RN-CONSTRUIR-012 e RN-CONSTRUIR-014)", 
         .every((t) => !t.dropInDatabase),
     ).toBe(true);
   });
+
+  it("moveColumn reordena colunas por índice e atualiza a ordem da chave primária composta em tabela nova", () => {
+    const added = addTable(emptyModel("postgresql", "public"), "public");
+    let model = added.model;
+    const key = added.key;
+    model = addColumn(model, key);
+    model = addColumn(model, key);
+    model = togglePrimaryKey(model, key, "coluna_2");
+
+    expect(model.tables[0]!.columns.map((c) => c.name)).toEqual([
+      "id",
+      "coluna_2",
+      "coluna_3",
+    ]);
+    expect(model.tables[0]!.primaryKey?.columns).toEqual(["id", "coluna_2"]);
+
+    const moved = moveColumn(model, key, 1, 0);
+    expect(moved.tables[0]!.columns.map((c) => c.name)).toEqual([
+      "coluna_2",
+      "id",
+      "coluna_3",
+    ]);
+    expect(moved.tables[0]!.primaryKey?.columns).toEqual(["coluna_2", "id"]);
+  });
 });

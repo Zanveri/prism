@@ -59,6 +59,9 @@ export type ColumnRowProps = {
   rowState: RowState;
   catalogTypes: readonly string[];
   checkExpression: string;
+  isDragging?: boolean;
+  isDropTargetBefore?: boolean;
+  isDropTargetAfter?: boolean;
   onUpdateColumn: (patch: Partial<ModelColumn>) => void;
   onTogglePk: () => void;
   onToggleUnique: () => void;
@@ -68,6 +71,13 @@ export type ColumnRowProps = {
   onRevert: () => void;
   onAddNextColumn?: () => void;
   onCtrlClickFk?: () => void;
+  onGripPointerDown?: (e: React.PointerEvent<HTMLElement>) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onDragStartRow?: (e: React.DragEvent<HTMLElement>) => void;
+  onDragOverRow?: (e: React.DragEvent<HTMLElement>) => void;
+  onDropRow?: (e: React.DragEvent<HTMLElement>) => void;
+  onDragEndRow?: () => void;
 };
 
 export function ColumnRow({
@@ -80,6 +90,9 @@ export function ColumnRow({
   rowState,
   catalogTypes,
   checkExpression,
+  isDragging = false,
+  isDropTargetBefore = false,
+  isDropTargetAfter = false,
   onUpdateColumn,
   onTogglePk,
   onToggleUnique,
@@ -89,6 +102,13 @@ export function ColumnRow({
   onRevert,
   onAddNextColumn,
   onCtrlClickFk,
+  onGripPointerDown,
+  onMoveUp,
+  onMoveDown,
+  onDragStartRow,
+  onDragOverRow,
+  onDropRow,
+  onDragEndRow,
 }: ColumnRowProps) {
   const [expanded, setExpanded] = useState(false);
   const typeOptions = useMemo(
@@ -108,38 +128,70 @@ export function ColumnRow({
         ? "border-success"
         : "border-border";
 
+  const gripTitle =
+    isExistingTable && rowState.marker === "changed"
+      ? "Alterada · Arrastar para reordenar coluna (ou Alt+↑ / Alt+↓)"
+      : isExistingTable && rowState.marker === "new"
+        ? "Nova · Arrastar para reordenar coluna (ou Alt+↑ / Alt+↓)"
+        : "Arrastar para reordenar coluna (ou Alt+↑ / Alt+↓)";
+
   return (
     <div
-      className={
+      data-column-row-index={index}
+      onDragOver={onDragOverRow}
+      onDrop={onDropRow}
+      className={`${
         expanded
           ? "flex flex-col rounded-md border border-border-strong bg-raised"
           : "flex flex-col"
-      }
+      } ${
+        isDragging
+          ? "rounded-md bg-selected/60 opacity-85 ring-1 ring-accent shadow-sm"
+          : ""
+      } ${isDropTargetBefore ? "border-t-2 border-t-accent" : ""} ${
+        isDropTargetAfter ? "border-b-2 border-b-accent" : ""
+      }`}
     >
       <div
         className={`grid h-8 grid-cols-[12px_minmax(0,1fr)_112px_repeat(4,26px)_24px] items-center gap-1 ${
           expanded ? "px-[3px]" : ""
         }`}
       >
-        {isExistingTable ? (
-          rowState.marker === "changed" ? (
-            <span
-              title="Alterada"
-              className="h-2 w-2 rounded-full bg-accent"
-            />
-          ) : rowState.marker === "new" ? (
-            <span
-              title="Nova"
-              className="text-center font-mono font-semibold text-success"
-            >
-              +
-            </span>
+        <button
+          type="button"
+          draggable
+          aria-label={`Reordenar coluna ${column.name}`}
+          title={gripTitle}
+          onPointerDown={onGripPointerDown}
+          onDragStart={onDragStartRow}
+          onDragEnd={onDragEndRow}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp" && onMoveUp) {
+              e.preventDefault();
+              onMoveUp();
+            } else if (e.key === "ArrowDown" && onMoveDown) {
+              e.preventDefault();
+              onMoveDown();
+            }
+          }}
+          className="group -ml-1 flex h-7 w-4 cursor-grab touch-none items-center justify-center rounded border-none bg-transparent p-0 text-subtle select-none hover:bg-selected hover:text-ink active:cursor-grabbing"
+        >
+          {isExistingTable && rowState.marker === "changed" ? (
+            <>
+              <span className="h-2 w-2 rounded-full bg-accent group-hover:hidden" />
+              <GripIcon className="hidden text-accent group-hover:block" />
+            </>
+          ) : isExistingTable && rowState.marker === "new" ? (
+            <>
+              <span className="text-center font-mono font-semibold text-success group-hover:hidden">
+                +
+              </span>
+              <GripIcon className="hidden text-success group-hover:block" />
+            </>
           ) : (
-            <span />
-          )
-        ) : (
-          <GripIcon className="text-subtle" />
-        )}
+            <GripIcon className="text-subtle group-hover:text-ink" />
+          )}
+        </button>
 
         <div className="relative min-w-0">
           <Input
@@ -149,6 +201,16 @@ export function ColumnRow({
             aria-describedby={beforeId}
             onChange={(e) => onUpdateColumn({ name: e.target.value })}
             onKeyDown={(e) => {
+              if (e.altKey && e.key === "ArrowUp" && onMoveUp) {
+                e.preventDefault();
+                onMoveUp();
+                return;
+              }
+              if (e.altKey && e.key === "ArrowDown" && onMoveDown) {
+                e.preventDefault();
+                onMoveDown();
+                return;
+              }
               if (e.key === "Enter" && onAddNextColumn) {
                 e.preventDefault();
                 onAddNextColumn();

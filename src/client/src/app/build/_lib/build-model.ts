@@ -627,7 +627,7 @@ export function renameColumn(
 export function moveColumn(
   model: BuildModel,
   key: string,
-  name: string,
+  nameOrFromIndex: string | number,
   toIndex: number,
 ): BuildModel {
   return {
@@ -636,8 +636,11 @@ export function moveColumn(
       if (tableKey(t) !== key) {
         return t;
       }
-      const fromIndex = t.columns.findIndex((c) => c.name === name);
-      if (fromIndex < 0) {
+      const fromIndex =
+        typeof nameOrFromIndex === "number"
+          ? nameOrFromIndex
+          : t.columns.findIndex((c) => c.name === nameOrFromIndex);
+      if (fromIndex < 0 || fromIndex >= t.columns.length) {
         return t;
       }
       const bounded = Math.max(0, Math.min(t.columns.length - 1, toIndex));
@@ -647,7 +650,17 @@ export function moveColumn(
       const columns = [...t.columns];
       const [moved] = columns.splice(fromIndex, 1);
       columns.splice(bounded, 0, moved!);
-      return { ...t, columns };
+
+      let primaryKey = t.primaryKey;
+      if (t.origin === null && primaryKey && primaryKey.columns.length > 1) {
+        const pkSet = new Set(primaryKey.columns);
+        primaryKey = {
+          ...primaryKey,
+          columns: columns.filter((c) => pkSet.has(c.name)).map((c) => c.name),
+        };
+      }
+
+      return { ...t, columns, primaryKey };
     }),
   };
 }

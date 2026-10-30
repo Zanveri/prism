@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import {
   Button,
@@ -18,6 +18,7 @@ import {
   addForeignKey,
   addIndex,
   copyAsNewTable,
+  moveColumn,
   moveTableToSchema,
   removeColumn,
   removeForeignKey,
@@ -65,11 +66,113 @@ export function SimpleEditor({
     null,
   );
   const [confirmDropOpen, setConfirmDropOpen] = useState(false);
+  const columnsListRef = useRef<HTMLDivElement | null>(null);
+  const [dragState, setDragState] = useState<{
+    fromIndex: number;
+    overIndex: number;
+    mode: "pointer" | "html5";
+  } | null>(null);
+  const dragStateRef = useRef(dragState);
+  dragStateRef.current = dragState;
 
   const table =
     model.tables.find((t) => getTableKey(t) === tableKey) ??
     model.tables[0] ??
     null;
+
+  const latestContextRef = useRef({
+    model,
+    currentKey: table ? getTableKey(table) : null,
+    onChange,
+  });
+  latestContextRef.current = {
+    model,
+    currentKey: table ? getTableKey(table) : null,
+    onChange,
+  };
+
+  useEffect(() => {
+    if (!dragState || dragState.mode !== "pointer") return;
+
+    const prevUserSelect = document.body.style.userSelect;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+
+    const handlePointerMove = (ev: PointerEvent) => {
+      const current = dragStateRef.current;
+      const listEl = columnsListRef.current;
+      if (!current || current.mode !== "pointer" || !listEl) return;
+
+      const rowEls = Array.from(
+        listEl.querySelectorAll<HTMLElement>("[data-column-row-index]"),
+      );
+      if (rowEls.length === 0) return;
+
+      let nextOver = current.overIndex;
+      for (let i = 0; i < rowEls.length; i++) {
+        const rect = rowEls[i]!.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (i < current.overIndex && ev.clientY < midY) {
+          nextOver = i;
+          break;
+        }
+        if (i > current.overIndex && ev.clientY > midY) {
+          nextOver = i;
+        }
+      }
+
+      if (nextOver !== current.overIndex) {
+        const updated = { ...current, overIndex: nextOver };
+        dragStateRef.current = updated;
+        setDragState(updated);
+      }
+    };
+
+    const finishDrag = (commit: boolean) => {
+      const current = dragStateRef.current;
+      dragStateRef.current = null;
+      setDragState(null);
+      const {
+        model: curModel,
+        currentKey: curKey,
+        onChange: curOnChange,
+      } = latestContextRef.current;
+      if (
+        commit &&
+        current &&
+        curKey &&
+        current.fromIndex !== current.overIndex
+      ) {
+        curOnChange(
+          moveColumn(curModel, curKey, current.fromIndex, current.overIndex),
+        );
+      }
+    };
+
+    const handlePointerUp = () => finishDrag(true);
+    const handlePointerCancel = () => finishDrag(false);
+    const handleKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        finishDrag(false);
+      }
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.userSelect = prevUserSelect;
+      document.body.style.cursor = prevCursor;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [dragState?.mode]);
 
   if (!table) {
     return (
@@ -311,89 +414,234 @@ export function SimpleEditor({
           <span />
         </div>
 
-        {table.columns.map((column, idx) => {
-          const isPk = table.primaryKey?.columns.includes(column.name) ?? false;
-          const isUnique = table.uniques.some(
-            (u) => u.columns.length === 1 && u.columns[0] === column.name,
-          );
-          const fk = table.foreignKeys.find(
-            (f) => f.columns.length === 1 && f.columns[0] === column.name,
-          );
-          const fkTargetDisplay = fk
-            ? sameName(
-                model.engine,
-                { name: fk.target.schema, exactName: false },
-                { name: table.schema, exactName: false },
-              )
-              ? fk.target.table
-              : `${fk.target.schema}.${fk.target.table}`
-            : null;
-          const state = columnRowState(model.engine, table, column);
-          const escapedColName = column.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const colCheckRegex = column.name
-            ? new RegExp(`(?:^|[^a-zA-Z0-9_$])${escapedColName}(?:$|[^a-zA-Z0-9_$])`)
-            : null;
-          const matchesColCheck = (ck: { name: string | null; expression: string }) =>
-            ck.name === column.name || (colCheckRegex !== null && colCheckRegex.test(ck.expression));
-          const colCheck =
-            table.checks.find(matchesColCheck)
-              ?.expression ?? "";
+        <div ref={columnsListRef} className="flex flex-col gap-1">
+          {(() => {
+            const baseEntries = table.columns.map((column, originalIndex) => ({
+              column,
+              originalIndex,
+            }));
+            const displayedEntries =
+              dragState &&
+              dragState.fromIndex >= 0 &&
+              dragState.fromIndex < baseEntries.length &&
+              dragState.overIndex >= 0 &&
+              dragState.overIndex < baseEntries.length &&
+              dragState.fromIndex !== dragState.overIndex
+                ? (() => {
+                    const reordered = [...baseEntries];
+                    const [moved] = reordered.splice(dragState.fromIndex, 1);
+                    reordered.splice(dragState.overIndex, 0, moved!);
+                    return reordered;
+                  })()
+                : baseEntries;
 
-          return (
-            <ColumnRow
-              key={column.originName ?? idx}
-              index={idx}
-              column={column}
-              isExistingTable={isExisting}
-              isPk={isPk}
-              isUnique={isUnique}
-              fkTargetDisplay={fkTargetDisplay}
-              rowState={state}
-              catalogTypes={catalogTypes}
-              checkExpression={colCheck}
-              onUpdateColumn={(patch) =>
-                onChange(updateColumn(model, currentKey, column.name, patch, idx))
-              }
-              onTogglePk={() =>
-                onChange(togglePrimaryKey(model, currentKey, column.name))
-              }
-              onToggleUnique={() =>
-                onChange(toggleUnique(model, currentKey, column.name))
-              }
-              onUpdateCheck={(expression) => {
-                const nextTables = model.tables.map((t) => {
-                  if (getTableKey(t) !== currentKey) return t;
-                  const existingCheck = t.checks.find(matchesColCheck);
-                  const others = t.checks.filter((ck) => !matchesColCheck(ck));
-                  return {
-                    ...t,
-                    checks: expression.trim()
-                      ? [...others, { name: existingCheck?.name ?? null, expression: expression.trim() }]
-                      : others,
-                  };
-                });
-                onChange({ ...model, tables: nextTables });
-              }}
-              onDuplicate={() => handleDuplicateColumn(column)}
-              onRemove={() =>
-                onChange(removeColumn(model, currentKey, column.name).model)
-              }
-              onRevert={() =>
-                onChange(revertColumn(model, currentKey, column.name))
-              }
-              onAddNextColumn={
-                idx === table.columns.length - 1
-                  ? () => onChange(addColumn(model, currentKey))
-                  : undefined
-              }
-              onCtrlClickFk={
-                fk && onFocusTableInDiagram
-                  ? () => onFocusTableInDiagram(`${fk.target.schema}.${fk.target.table}`)
-                  : undefined
-              }
-            />
-          );
-        })}
+            return displayedEntries.map(({ column, originalIndex }, visualIdx) => {
+              const isPk = table.primaryKey?.columns.includes(column.name) ?? false;
+              const isUnique = table.uniques.some(
+                (u) => u.columns.length === 1 && u.columns[0] === column.name,
+              );
+              const fk = table.foreignKeys.find(
+                (f) => f.columns.length === 1 && f.columns[0] === column.name,
+              );
+              const fkTargetDisplay = fk
+                ? sameName(
+                    model.engine,
+                    { name: fk.target.schema, exactName: false },
+                    { name: table.schema, exactName: false },
+                  )
+                  ? fk.target.table
+                  : `${fk.target.schema}.${fk.target.table}`
+                : null;
+              const state = columnRowState(model.engine, table, column);
+              const escapedColName = column.name.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&",
+              );
+              const colCheckRegex = column.name
+                ? new RegExp(
+                    `(?:^|[^a-zA-Z0-9_$])${escapedColName}(?:$|[^a-zA-Z0-9_$])`,
+                  )
+                : null;
+              const matchesColCheck = (ck: {
+                name: string | null;
+                expression: string;
+              }) =>
+                ck.name === column.name ||
+                (colCheckRegex !== null && colCheckRegex.test(ck.expression));
+              const colCheck =
+                table.checks.find(matchesColCheck)?.expression ?? "";
+              const isDragging =
+                dragState !== null && dragState.fromIndex === originalIndex;
+
+              return (
+                <ColumnRow
+                  key={column.originName ?? `col-${originalIndex}`}
+                  index={visualIdx}
+                  column={column}
+                  isExistingTable={isExisting}
+                  isPk={isPk}
+                  isUnique={isUnique}
+                  fkTargetDisplay={fkTargetDisplay}
+                  rowState={state}
+                  catalogTypes={catalogTypes}
+                  checkExpression={colCheck}
+                  isDragging={isDragging}
+                  onUpdateColumn={(patch) =>
+                    onChange(
+                      updateColumn(
+                        model,
+                        currentKey,
+                        column.name,
+                        patch,
+                        originalIndex,
+                      ),
+                    )
+                  }
+                  onTogglePk={() =>
+                    onChange(togglePrimaryKey(model, currentKey, column.name))
+                  }
+                  onToggleUnique={() =>
+                    onChange(toggleUnique(model, currentKey, column.name))
+                  }
+                  onUpdateCheck={(expression) => {
+                    const nextTables = model.tables.map((t) => {
+                      if (getTableKey(t) !== currentKey) return t;
+                      const existingCheck = t.checks.find(matchesColCheck);
+                      const others = t.checks.filter(
+                        (ck) => !matchesColCheck(ck),
+                      );
+                      return {
+                        ...t,
+                        checks: expression.trim()
+                          ? [
+                              ...others,
+                              {
+                                name: existingCheck?.name ?? null,
+                                expression: expression.trim(),
+                              },
+                            ]
+                          : others,
+                      };
+                    });
+                    onChange({ ...model, tables: nextTables });
+                  }}
+                  onDuplicate={() => handleDuplicateColumn(column)}
+                  onRemove={() =>
+                    onChange(removeColumn(model, currentKey, column.name).model)
+                  }
+                  onRevert={() =>
+                    onChange(revertColumn(model, currentKey, column.name))
+                  }
+                  onAddNextColumn={
+                    originalIndex === table.columns.length - 1
+                      ? () => onChange(addColumn(model, currentKey))
+                      : undefined
+                  }
+                  onCtrlClickFk={
+                    fk && onFocusTableInDiagram
+                      ? () =>
+                          onFocusTableInDiagram(
+                            `${fk.target.schema}.${fk.target.table}`,
+                          )
+                      : undefined
+                  }
+                  onMoveUp={
+                    originalIndex > 0
+                      ? () =>
+                          onChange(
+                            moveColumn(
+                              model,
+                              currentKey,
+                              originalIndex,
+                              originalIndex - 1,
+                            ),
+                          )
+                      : undefined
+                  }
+                  onMoveDown={
+                    originalIndex < table.columns.length - 1
+                      ? () =>
+                          onChange(
+                            moveColumn(
+                              model,
+                              currentKey,
+                              originalIndex,
+                              originalIndex + 1,
+                            ),
+                          )
+                      : undefined
+                  }
+                  onGripPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    const nextState = {
+                      fromIndex: originalIndex,
+                      overIndex: originalIndex,
+                      mode: "pointer" as const,
+                    };
+                    dragStateRef.current = nextState;
+                    setDragState(nextState);
+                  }}
+                  onDragStartRow={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", String(originalIndex));
+                    const nextState = {
+                      fromIndex: originalIndex,
+                      overIndex: originalIndex,
+                      mode: "html5" as const,
+                    };
+                    dragStateRef.current = nextState;
+                    setDragState(nextState);
+                  }}
+                  onDragOverRow={(e) => {
+                    if (!dragStateRef.current) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragStateRef.current.overIndex !== visualIdx) {
+                      const updated = {
+                        ...dragStateRef.current,
+                        overIndex: visualIdx,
+                      };
+                      dragStateRef.current = updated;
+                      setDragState(updated);
+                    }
+                  }}
+                  onDropRow={(e) => {
+                    e.preventDefault();
+                    const current = dragStateRef.current;
+                    dragStateRef.current = null;
+                    setDragState(null);
+                    if (current && current.fromIndex !== current.overIndex) {
+                      onChange(
+                        moveColumn(
+                          model,
+                          currentKey,
+                          current.fromIndex,
+                          current.overIndex,
+                        ),
+                      );
+                    }
+                  }}
+                  onDragEndRow={() => {
+                    const current = dragStateRef.current;
+                    dragStateRef.current = null;
+                    setDragState(null);
+                    if (current && current.fromIndex !== current.overIndex) {
+                      onChange(
+                        moveColumn(
+                          model,
+                          currentKey,
+                          current.fromIndex,
+                          current.overIndex,
+                        ),
+                      );
+                    }
+                  }}
+                />
+              );
+            });
+          })()}
+        </div>
 
         {removedCols.map((removed) => (
           <RemovedColumnRow

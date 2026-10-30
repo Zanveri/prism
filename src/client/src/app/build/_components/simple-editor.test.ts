@@ -121,4 +121,24 @@ describe("SimpleEditor", () => {
       'title="Mais opções de id (tipo/tamanho, valor padrão, check, comentário)"',
     );
   });
+
+  it("renderiza alça interativa de drag-and-drop para reordenar colunas", () => {
+    const model = readCanvasModel();
+    const html = renderToStaticMarkup(
+      createElement(SimpleEditor, {
+        model,
+        tableKey: "manutencao.ordem_manutencao",
+        baseLabel: "MES Produção / mes",
+        ddlContext,
+        onChange: () => {},
+      }),
+    );
+
+    expect(html).toContain('data-column-row-index="0"');
+    expect(html).toContain('aria-label="Reordenar coluna id"');
+    expect(html).toContain(
+      'title="Arrastar para reordenar coluna (ou Alt+↑ / Alt+↓)"',
+    );
+    expect(html).toContain('draggable="true"');
+  });
 });
