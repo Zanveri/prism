@@ -29,6 +29,9 @@ public static class DependencyInjection
     /// <param name="dataDirectory">`PRISM_DATA_DIR`. A Infrastructure não enxerga o `PrismHostOptions`, que é da Api, então recebe só a pasta: é nela que ficam os cofres.</param>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, string dataDirectory)
     {
+        // RN-DIARIO-001: carrega o binário nativo do SQLCipher antes da primeira conexão com o diário.
+        SQLitePCL.Batteries_V2.Init();
+
         // Os clients de integração logam pelo Serilog. Quem registra o logger de verdade é o `UseSerilog`
         // do Program.cs; este é o reserva para o host que não o chama (o ApiHost dos testes), e por ser
         // `TryAdd` nunca toma o lugar do outro.
