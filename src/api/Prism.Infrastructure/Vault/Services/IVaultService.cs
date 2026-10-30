@@ -27,6 +27,12 @@ public interface IVaultService
     event Action? Unlocked;
 
     /// <summary>
+    /// Disparado no quinto erro seguido de senha na conferência (<see cref="ReadIfPasswordMatchesAsync"/>, <see cref="ChangePasswordAsync"/> ou
+    /// <see cref="SaveWithPasswordAsync"/>), imediatamente antes de o cofre fechar (RN-AUDIT-004).
+    /// </summary>
+    event Action? FifthFailedVerification;
+
+    /// <summary>
     /// Cria o arquivo do usuário e já deixa o cofre aberto, fechando o que estava aberto (RN-COFRE-007).
     /// Uma criação recusada não muda nada: o cofre que estava aberto continua aberto.
     /// </summary>

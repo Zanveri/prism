@@ -31,6 +31,7 @@ internal sealed class JournalService : IJournalService, IDisposable
 
         _vaultService.Unlocked += OnVaultUnlocked;
         _vaultService.Locked += OnVaultLocked;
+        _vaultService.FifthFailedVerification += OnFifthFailedVerification;
 
         if (_vaultService.IsUnlocked)
             OnVaultUnlocked();
@@ -198,7 +199,16 @@ internal sealed class JournalService : IJournalService, IDisposable
     {
         _vaultService.Unlocked -= OnVaultUnlocked;
         _vaultService.Locked -= OnVaultLocked;
+        _vaultService.FifthFailedVerification -= OnFifthFailedVerification;
         OnVaultLocked();
+    }
+
+    private void OnFifthFailedVerification()
+    {
+        var now = _timeProvider.GetUtcNow();
+        Record(
+            new JournalEntryStart(now, EJournalKind.Security, "Quinto erro de senha", EJournalLevel.Critical, "Quinto erro seguido de senha: o cofre foi fechado."),
+            new JournalEntryEnd(now, 0, EJournalOutcome.Error, ErrorCode: "VAULT_LOCKED"));
     }
 
     private void OnVaultUnlocked()

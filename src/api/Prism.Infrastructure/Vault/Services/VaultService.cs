@@ -50,6 +50,8 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
 
     public event Action? Unlocked;
 
+    public event Action? FifthFailedVerification;
+
     public Task<UnitResult<EVaultError>> CreateAsync(string userName, string password, CancellationToken cancellationToken)
         => Exclusive(() => Create(userName, password, cancellationToken), cancellationToken);
 
@@ -443,10 +445,11 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
             return true;
         }
 
-        // RN-CONN-003: o quinto erro seguido fecha o cofre, e a resposta passa a ser a de cofre fechado.
+        // RN-CONN-003 e RN-AUDIT-004: o quinto erro seguido é gravado no diário antes de o cofre fechar, e a resposta passa a ser a de cofre fechado.
         if (++_failedVerifications < MaxFailedVerifications)
             return false;
 
+        FifthFailedVerification?.Invoke();
         Close();
 
         return EVaultError.Locked;

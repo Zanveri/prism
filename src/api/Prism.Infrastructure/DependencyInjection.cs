@@ -100,6 +100,7 @@ public static class DependencyInjection
         // RN-DIARIO-001 a 009: o diário SQLCipher do usuário que está com o cofre aberto. Singleton, como o cofre: assina `Unlocked` e `Locked`,
         // esvazia a fila numa única conexão e zera a chave no fechamento (resolvido na subida, em `UseApi`).
         services.AddTransient<IJournalDatabaseClient, JournalDatabaseClient>();
+        services.AddSingleton<ISignInAttemptsFile, SignInAttemptsFile>();
         services.AddSingleton<JournalService>();
         services.AddSingleton<IJournalService>(provider => provider.GetRequiredService<JournalService>());
         services.AddSingleton<IJournalRecorder>(provider => provider.GetRequiredService<JournalService>());
