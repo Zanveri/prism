@@ -333,7 +333,7 @@ export function TextPane({ model, format, onChange, onFocusTableInDiagram }: Tex
         ) : (
           <>
             <span className="size-2 flex-none rounded-full bg-danger" />
-            <span className="text-ink">
+            <span className="min-w-0 break-words [overflow-wrap:anywhere] text-ink">
               {buildCopy.textErrorLine(status.error.line, status.error.message)}
             </span>
             <span className="text-muted">{buildCopy.textErrorDiagramFollows}</span>
