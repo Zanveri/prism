@@ -762,7 +762,7 @@ public sealed class DatabaseSessionsTests
         await using var host = await ApiHost.StartAsync();
         var sessionID = await StartSessionAsync(host);
 
-        var response = await host.Client.ExecuteRawAsync(sessionID, "BEGIN");
+        var response = await host.Client.ExecuteRawAsync(sessionID, "COMMIT PREPARED 'x'");
 
         var body = await AssertProblemAsync(response, HttpStatusCode.UnprocessableEntity, "TRANSACTION_CONTROL_NOT_SUPPORTED");
         // RN-SESSAO-005 (Ruling 135): recusado antes de executar, sem `executed`.

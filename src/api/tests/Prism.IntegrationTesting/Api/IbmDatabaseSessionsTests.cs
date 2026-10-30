@@ -131,7 +131,7 @@ public abstract class IbmDatabaseSessionsTests
         // RN-SQL-008, 009, 003 e 001.
         var updated = await StepAsync("POST queries (UPDATE)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "UPDATE loja.cliente SET nome = nome WHERE id <= 4"), HttpStatusCode.OK);
         var syntax = await StepAsync("POST queries (erro de sintaxe)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "SELEC 1"), HttpStatusCode.UnprocessableEntity);
-        var refused = await StepAsync("POST queries (COMMIT)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "COMMIT"), HttpStatusCode.UnprocessableEntity);
+        var refused = await StepAsync("POST queries (COMMIT PREPARED)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "COMMIT PREPARED 'x'"), HttpStatusCode.UnprocessableEntity);
         var several = await StepAsync("POST queries (dois comandos num envio)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "UPDATE loja.cliente SET nome = nome WHERE id = 1; UPDATE loja.cliente SET nome = nome WHERE id = 2"), HttpStatusCode.UnprocessableEntity);
 
         // RN-SQL-010: o cancelamento se repete até a consulta voltar, porque o primeiro pode chegar antes de ela estar no banco.

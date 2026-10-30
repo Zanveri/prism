@@ -192,7 +192,7 @@ public sealed class InformixClientTests : IbmClientContractTests
         await using var connection = await OpenAsync();
 
         var refused = new List<EDatabaseFailure>();
-        foreach (var sql in new[] { "BEGIN WORK", "begin work;", "COMMIT WORK", "ROLLBACK WORK", "ROLLBACK WORK TO SAVEPOINT ponto", "RELEASE SAVEPOINT ponto", "{ abre } BEGIN WORK", "{ a; b }\n{ c } begin", "/* a /* b */ BEGIN WORK", "-- abre\nBEGIN WORK" })
+        foreach (var sql in new[] { "ROLLBACK WORK TO SAVEPOINT ponto", "rollback work to savepoint ponto;", "COMMIT PREPARED 'x'", "ROLLBACK PREPARED 'x'", "COMMIT AND CHAIN", "ROLLBACK AND CHAIN", "{ abre } ROLLBACK WORK TO SAVEPOINT ponto", "{ a; b }\n{ c } commit and chain", "/* a /* b */ ROLLBACK WORK TO SAVEPOINT ponto", "-- abre\nROLLBACK WORK TO SAVEPOINT ponto" })
             refused.Add((await connection.ExecuteAsync(sql, CancellationToken.None)).Error.Kind);
 
         var written = await connection.ExecuteAsync($"UPDATE {table} SET versao = 4 WHERE numero = 1004", CancellationToken.None);
@@ -329,7 +329,7 @@ public sealed class InformixClientTests : IbmClientContractTests
         var total = await connection.CountAsync("SELECT valor FROM numero", CancellationToken.None);
         var created = await connection.ExecuteAsync($"CREATE TABLE {table} (valor INTEGER)", CancellationToken.None);
         var inserted = await connection.ExecuteAsync($"INSERT INTO {table} SELECT valor FROM numero", CancellationToken.None);
-        var refused = await connection.ExecuteAsync("BEGIN WORK", CancellationToken.None);
+        var refused = await connection.ExecuteAsync("ROLLBACK WORK TO SAVEPOINT ponto", CancellationToken.None);
         var dropped = await connection.ExecuteAsync($"DROP TABLE {table}", CancellationToken.None);
 
         Assert.That(first.IsSuccess, Is.True, first.IsFailure ? first.Error.Message : null);

@@ -49,9 +49,13 @@ public sealed class ManualCommitTests
             Assert.That((opened.GetProperty("transactionsAvailable").GetBoolean(), opened.GetProperty("transaction").GetProperty("mode").GetString(), opened.GetProperty("transaction").GetProperty("open").GetBoolean()), Is.EqualTo((true, "manual", false)));
             var session = opened.GetProperty("id").GetGuid();
 
-            // RN-TX-004: em Auto-commit o BEGIN digitado é recusado, e a frase leva ao Commit manual.
-            var begin = await AssertStatusAsync(await host.Client.ExecuteRawAsync(auto, "BEGIN"), HttpStatusCode.UnprocessableEntity, "TRANSACTION_CONTROL_NOT_SUPPORTED");
-            Assert.That(begin.GetProperty("detail").GetString(), Does.Contain("Commit manual"));
+            // RN-TX-004: em Auto-commit o BEGIN digitado abre a transação explícita na aba, o ROLLBACK a encerra, e as formas não suportadas são recusadas.
+            var begin = await host.Client.ExecuteAsync(auto, "BEGIN");
+            Assert.That((begin.GetProperty("transaction").GetProperty("mode").GetString(), begin.GetProperty("transaction").GetProperty("open").GetBoolean(), begin.GetProperty("transaction").GetProperty("commands").GetInt32()), Is.EqualTo(("autoCommit", true, 0)));
+            var rolledBackAuto = await host.Client.ExecuteAsync(auto, "ROLLBACK");
+            Assert.That(rolledBackAuto.GetProperty("transaction").GetProperty("open").GetBoolean(), Is.False);
+            var unsupported = await AssertStatusAsync(await host.Client.ExecuteRawAsync(auto, "COMMIT PREPARED 'x'"), HttpStatusCode.UnprocessableEntity, "TRANSACTION_CONTROL_NOT_SUPPORTED");
+            Assert.That(unsupported.GetProperty("detail").GetString(), Does.Contain("PREPARE TRANSACTION"));
 
             // RN-TX-002 e 003: o primeiro comando abre a transação; o que ele gravou não é visto por outra sessão até o Commit.
             var inserted = await host.Client.ExecuteAsync(session, $"INSERT INTO {table} VALUES (1)");
