@@ -75,24 +75,33 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
   const schedulerRef = useRef<ReturnType<typeof createSaveScheduler> | null>(
     null,
   );
-  const namesByIdRef = useRef<Map<string, string>>(new Map());
-  if (id) {
-    namesByIdRef.current.set(id, initialDto?.name ?? docState.name);
-  }
-  const historyRef = useRef<History | null>(docState.history);
-  historyRef.current = docState.history;
+  const historyRef = useRef<{ id: string; history: History | null } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    historyRef.current = { id: docState.id, history: docState.history };
+  }, [docState.id, docState.history]);
 
   const performSave = useEffectEvent(
-    (docId: string, model: BuildModel, expectedUpdatedAt: string) =>
-      updateBuildModel(docId, {
-        name: namesByIdRef.current.get(docId) ?? "modelo",
+    (docId: string, model: BuildModel, expectedUpdatedAt: string) => {
+      const cachedName = queryClient
+        .getQueryData<readonly BuildModelDto[]>(buildModelsQuery.queryKey)
+        ?.find((m) => m.id === docId)?.name;
+      const resolvedName =
+        cachedName ??
+        (initialDto?.id === docId ? initialDto.name : undefined) ??
+        (docState.id === docId ? docState.name : undefined) ??
+        "modelo";
+      return updateBuildModel(docId, {
+        name: resolvedName,
         body: serializeModel(model),
         expectedUpdatedAt,
-      }),
+      });
+    },
   );
 
   const handleSaved = useEffectEvent((dto: BuildModelDto) => {
-    namesByIdRef.current.set(dto.id, dto.name);
     setDocState((prev) =>
       prev.id === dto.id ? { ...prev, name: dto.name } : prev,
     );
@@ -138,8 +147,15 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `initialUpdatedAt` é lido apenas na abertura do modelo; o agendador atualiza `expectedUpdatedAt` a cada gravação
   }, [id]);
 
+  function getLatestHistory(): History | null {
+    if (historyRef.current?.id === docState.id) {
+      return historyRef.current.history;
+    }
+    return docState.history;
+  }
+
   function applyModel(nextHistory: History) {
-    historyRef.current = nextHistory;
+    historyRef.current = { id: docState.id, history: nextHistory };
     setDocState((prev) => ({ ...prev, history: nextHistory }));
     schedulerRef.current?.change(nextHistory.present);
   }
@@ -149,12 +165,12 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
     history: docState.history ?? { past: [], present: null, future: [] },
     state: docState.state,
     change(next: BuildModel) {
-      const current = historyRef.current;
+      const current = getLatestHistory();
       if (!current) return;
       applyModel(commit(current, next));
     },
     undo() {
-      const current = historyRef.current;
+      const current = getLatestHistory();
       if (!current) return;
       const next = undoHistory(current);
       if (next !== current) {
@@ -162,7 +178,7 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
       }
     },
     redo() {
-      const current = historyRef.current;
+      const current = getLatestHistory();
       if (!current) return;
       const next = redoHistory(current);
       if (next !== current) {
@@ -180,6 +196,7 @@ export function useModelDocument(initialDto: BuildModelDto | null): {
           const freshModel =
             parseModelBody(res.data.body) ?? emptyModel("postgresql", "public", false);
           const freshHistory = startHistory(freshModel);
+          historyRef.current = { id, history: freshHistory };
           setDocState((prev) => ({
             ...prev,
             name: res.data.name,

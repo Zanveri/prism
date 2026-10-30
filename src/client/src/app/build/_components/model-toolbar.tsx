@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { engineRules } from "@/app/build/_lib/build-engines";
-import type { BuildEngine, BuildModel } from "@/app/build/_lib/build-model.schema";
+import type { BuildModel } from "@/app/build/_lib/build-model.schema";
 import { buildCopy } from "@/app/build/_lib/build.copy";
 import type { SaveState } from "@/app/build/_lib/model-save";
 import {

@@ -101,12 +101,10 @@ import { saveText } from "@/app/workbench/_lib/save-file";
 import { useWorkbench } from "@/app/workbench/_lib/workbench-state";
 import { TopBar } from "@/components/layout/top-bar";
 import {
-  AlertIcon,
   Button,
   ChevronIcon,
   CloseIcon,
   EngineTag,
-  Segmented,
   segmentedItem,
   useToast,
 } from "@/components/ui";

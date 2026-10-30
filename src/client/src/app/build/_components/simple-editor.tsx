@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 
 import {
   Button,
@@ -72,27 +72,29 @@ export function SimpleEditor({
     overIndex: number;
     mode: "pointer" | "html5";
   } | null>(null);
-  const dragStateRef = useRef(dragState);
-  dragStateRef.current = dragState;
+  const dragStateRef = useRef<{
+    fromIndex: number;
+    overIndex: number;
+    mode: "pointer" | "html5";
+  } | null>(null);
 
   const table =
     model.tables.find((t) => getTableKey(t) === tableKey) ??
     model.tables[0] ??
     null;
 
-  const latestContextRef = useRef({
-    model,
-    currentKey: table ? getTableKey(table) : null,
-    onChange,
-  });
-  latestContextRef.current = {
-    model,
-    currentKey: table ? getTableKey(table) : null,
-    onChange,
-  };
+  const isPointerDragging = dragState?.mode === "pointer";
+  const commitPointerDrag = useEffectEvent(
+    (fromIndex: number, overIndex: number) => {
+      const currentKey = table ? getTableKey(table) : null;
+      if (currentKey && fromIndex !== overIndex) {
+        onChange(moveColumn(model, currentKey, fromIndex, overIndex));
+      }
+    },
+  );
 
   useEffect(() => {
-    if (!dragState || dragState.mode !== "pointer") return;
+    if (!isPointerDragging) return;
 
     const prevUserSelect = document.body.style.userSelect;
     const prevCursor = document.body.style.cursor;
@@ -133,20 +135,8 @@ export function SimpleEditor({
       const current = dragStateRef.current;
       dragStateRef.current = null;
       setDragState(null);
-      const {
-        model: curModel,
-        currentKey: curKey,
-        onChange: curOnChange,
-      } = latestContextRef.current;
-      if (
-        commit &&
-        current &&
-        curKey &&
-        current.fromIndex !== current.overIndex
-      ) {
-        curOnChange(
-          moveColumn(curModel, curKey, current.fromIndex, current.overIndex),
-        );
+      if (commit && current) {
+        commitPointerDrag(current.fromIndex, current.overIndex);
       }
     };
 
@@ -172,7 +162,7 @@ export function SimpleEditor({
       window.removeEventListener("pointercancel", handlePointerCancel);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [dragState?.mode]);
+  }, [isPointerDragging]);
 
   if (!table) {
     return (

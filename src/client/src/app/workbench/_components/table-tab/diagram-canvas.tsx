@@ -234,8 +234,6 @@ function TableCard({
   onStartConnect,
   onDropConnect,
   onAddColumn,
-  onApplyProblemFix,
-  onIgnoreProblem,
   onNudgeTable,
   onOpen,
 }: TableCardProps) {
@@ -1308,8 +1306,6 @@ export function DiagramCanvas({
                   }
                   onDropConnect={onConnect ? (targetKey) => void finishConnect(targetKey) : undefined}
                   onAddColumn={onAddColumn}
-                  onApplyProblemFix={onApplyProblemFix}
-                  onIgnoreProblem={onIgnoreProblem}
                   onNudgeTable={
                     onMoveTable
                       ? (key, dx, dy) => {
