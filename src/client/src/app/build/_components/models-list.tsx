@@ -25,11 +25,7 @@ export type SavedModelEntry = {
   updatedAt: string;
 };
 
-const engineToNumber: Record<BuildEngine, 1 | 2 | 3> = {
-  postgresql: 1,
-  db2: 2,
-  informix: 3,
-};
+import { connectionEngineNumber } from "@/app/build/_lib/catalog-tree";
 
 type ModelsListProps = {
   models: readonly SavedModelEntry[];
@@ -217,7 +213,7 @@ export function ModelsList({
                     )}
                   >
                     <span className="inline-flex items-center gap-2">
-                      <EngineTag engine={engineToNumber[entry.engine]} />
+                      <EngineTag engine={connectionEngineNumber(entry.engine)} />
                       <span>{engineRules[entry.engine].label}</span>
                     </span>
                   </td>

@@ -93,6 +93,8 @@ describe("NewModelDialog", () => {
     expect(text).toContain("PostgreSQL");
     expect(text).toContain("Db2");
     expect(text).toContain("Informix");
+    expect(text).not.toContain("No Informix, que não tem esquemas");
+    expect(html).toContain("<img");
     expect(text).toContain("O Prism só lê o catálogo. Nada muda no banco.");
   });
 

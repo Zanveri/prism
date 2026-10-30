@@ -17,11 +17,7 @@ import {
   UndoIcon,
 } from "@/components/ui";
 
-const engineToNumber: Record<BuildEngine, 1 | 2 | 3> = {
-  postgresql: 1,
-  db2: 2,
-  informix: 3,
-};
+import { connectionEngineNumber } from "@/app/build/_lib/catalog-tree";
 
 type ModelToolbarProps = {
   model: BuildModel;
@@ -75,7 +71,7 @@ export function ModelToolbar({
         title={buildCopy.toolbarTargetHint}
         className="flex h-8 items-center gap-2 rounded-md border border-border px-2.5 text-ink"
       >
-        <EngineTag engine={engineToNumber[model.engine]} />
+        <EngineTag engine={connectionEngineNumber(model.engine)} />
         <span>{rules.label}</span>
       </span>
 

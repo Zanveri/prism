@@ -64,6 +64,7 @@ import {
 } from "@/app/build/_lib/catalog-import";
 import {
   connectionEngineNumber,
+  installedBuildEngines,
   supportedConnections,
 } from "@/app/build/_lib/catalog-tree";
 import { writeDbml } from "@/app/build/_lib/dbml";
@@ -74,6 +75,7 @@ import type { SaveState } from "@/app/build/_lib/model-save";
 import { useModelDocument } from "@/app/build/_lib/use-model-document";
 import { workbenchTarget } from "@/app/build/_lib/workbench-target";
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { NavigatorToggle } from "@/app/workbench/_components/navigator-toggle";
@@ -192,6 +194,7 @@ export type BuildPageViewProps = {
   onKeepMineConflict?: () => void;
   onExport?: (kind: "dbml" | "sql" | "png") => void;
   onGenerateDdl?: () => void;
+  onShowProblems?: () => void;
   onRenameModel?: (id: string, newName: string) => void;
   onDuplicateModel?: (id: string) => void;
   onExportModel?: (id: string, kind: "dbml" | "sql" | "png") => void;
@@ -307,6 +310,7 @@ export function BuildPageView({
   onKeepMineConflict,
   onExport,
   onGenerateDdl,
+  onShowProblems,
   onRenameModel,
   onDuplicateModel,
   onExportModel,
@@ -374,7 +378,7 @@ export function BuildPageView({
               onFocusTableInDiagram={onFocusTableInDiagram}
               onAddTable={onAddTable}
               onImportTables={onImportTables}
-              onOpenDdlView={onGenerateDdl}
+              onOpenDdlView={onShowProblems ?? onGenerateDdl}
             />
             <PaneResizeHandle
               label="Ajustar a largura das tabelas do modelo"
@@ -513,7 +517,7 @@ export function BuildPageView({
         modelName={activeModelName}
         connectionName={connectionName}
         problems={problems}
-        onOpenDdlView={onGenerateDdl}
+        onOpenDdlView={onShowProblems ?? onGenerateDdl}
       />
 
       {dialogs}
@@ -533,6 +537,11 @@ export function BuildPage() {
 
   const modelsQuery = useQuery(buildModelsQuery);
   const connections = useQuery(connectionsQuery);
+  const drivers = useQuery(driversQuery);
+  const availableEngines = useMemo(
+    () => installedBuildEngines(drivers.data),
+    [drivers.data],
+  );
 
   const [loadedUser, setLoadedUser] = useState(userName);
   const [tabsState, setTabsState] = useState<{ open: string[]; active: string | null }>(() =>
@@ -556,6 +565,7 @@ export function BuildPage() {
   } | null>(null);
   const [editorPane, setEditorPane] = useState<BuildEditorPane>("simple");
   const [ddlViewOpen, setDdlViewOpen] = useState(false);
+  const [diagramProblemsOpen, setDiagramProblemsOpen] = useState(false);
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const [newModelOpen, setNewModelOpen] = useState(false);
   const [importTablesOpen, setImportTablesOpen] = useState(false);
@@ -684,6 +694,7 @@ export function BuildPage() {
       setSelectedTableKey(null);
       setLastEditedTableKey(null);
       setRereadNotes([]);
+      setDiagramProblemsOpen(false);
     }
     setTabsState(next);
     setDdlViewOpen(false);
@@ -725,6 +736,12 @@ export function BuildPage() {
     } else {
       setDdlViewOpen(true);
     }
+  }
+
+  function handleShowProblems() {
+    if (!activeModel) return;
+    setDdlViewOpen(false);
+    setDiagramProblemsOpen(true);
   }
 
   function handleExportModelContent(
@@ -1171,7 +1188,7 @@ export function BuildPage() {
           setCatalogSchemas([]);
           setCatalogDatabases([]);
           setNewModelOpen(true);
-          const firstConn = supportedConnections(connectionsList)[0];
+          const firstConn = supportedConnections(connectionsList, undefined, availableEngines)[0];
           if (firstConn) {
             void loadCatalogPreview(firstConn.id);
           }
@@ -1189,7 +1206,7 @@ export function BuildPage() {
           setImportTablesOpen(true);
           const firstConnId =
             activeModel?.base?.connectionId ??
-            supportedConnections(connectionsList, activeModel?.engine)[0]?.id;
+            supportedConnections(connectionsList, activeModel?.engine, availableEngines)[0]?.id;
           const initialDb = activeModel?.base?.database ?? undefined;
           if (firstConnId) {
             void loadCatalogPreview(firstConnId, initialDb);
@@ -1207,6 +1224,7 @@ export function BuildPage() {
           }
         }}
         onGenerateDdl={handleGenerateDdl}
+        onShowProblems={handleShowProblems}
         onRenameModel={(id, newName) => renameMutation.mutate({ id, newName })}
         onDuplicateModel={(id) => duplicateMutation.mutate(id)}
         onExportModel={(id, kind) => {
@@ -1263,6 +1281,8 @@ export function BuildPage() {
               problems={problems}
               selectedTableKey={selectedTableKey}
               focusRequest={diagramFocusRequest}
+              problemsOpen={diagramProblemsOpen}
+              onCloseProblems={() => setDiagramProblemsOpen(false)}
               onSelectTable={handleSelectTable}
               onChange={doc.change}
               onUndo={doc.undo}
@@ -1311,6 +1331,7 @@ export function BuildPage() {
             {newModelOpen && (
               <NewModelDialog
                 connections={connectionsList}
+                availableEngines={availableEngines}
                 databases={catalogDatabases.length > 0 ? catalogDatabases : undefined}
                 schemas={catalogSchemas}
                 readingProgress={readingProgress}
@@ -1323,7 +1344,7 @@ export function BuildPage() {
                 onSelectDatabase={(db) => {
                   const connId =
                     selectedCatalogConnId ??
-                    supportedConnections(connectionsList)[0]?.id;
+                    supportedConnections(connectionsList, undefined, availableEngines)[0]?.id;
                   if (connId) {
                     setCatalogSchemas([]);
                     void loadCatalogPreview(connId, db);
@@ -1420,8 +1441,12 @@ export function BuildPage() {
                   <p className="m-0 text-xs text-muted">
                     {buildCopy.targetEngineHint}
                   </p>
-                  <Segmented aria-label={buildCopy.targetEngineLegend}>
-                    {(["postgresql", "db2", "informix"] as const).map((eng) => {
+                  <div
+                    role="group"
+                    aria-label={buildCopy.targetEngineLegend}
+                    className="flex flex-wrap gap-2"
+                  >
+                    {availableEngines.map((eng) => {
                       const active = pendingFileEngine === eng;
                       return (
                         <button
@@ -1436,7 +1461,7 @@ export function BuildPage() {
                         </button>
                       );
                     })}
-                  </Segmented>
+                  </div>
                   <div className="flex justify-end gap-2 pt-2">
                     <Button
                       type="button"

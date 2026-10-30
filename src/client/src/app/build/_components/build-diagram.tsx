@@ -65,6 +65,8 @@ export interface BuildDiagramProps {
   problems: readonly Problem[];
   selectedTableKey: string | null;
   focusRequest?: { key: string; seq: number } | null;
+  problemsOpen?: boolean;
+  onCloseProblems?: () => void;
   onSelectTable: (key: string | null) => void;
   onChange: (next: BuildModel) => void;
   onUndo?: () => void;
@@ -77,6 +79,8 @@ export function BuildDiagram({
   problems,
   selectedTableKey,
   focusRequest = null,
+  problemsOpen = false,
+  onCloseProblems,
   onSelectTable,
   onChange,
   onUndo,
@@ -193,6 +197,8 @@ export function BuildDiagram({
         showIncomingNotice={false}
         selectedKey={selectedTableKey}
         focusRequest={focusRequest}
+        problemsOpen={problemsOpen}
+        onCloseProblems={onCloseProblems}
         onSelect={onSelectTable}
         onOpenTable={handleOpenTable}
         onRefresh={handleOrganize}

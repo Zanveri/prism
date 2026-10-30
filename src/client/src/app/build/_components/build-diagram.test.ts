@@ -33,8 +33,23 @@ describe("BuildDiagram: cartões HTML, ligação de colunas e correção de prob
     expect(markup).toContain("Tabela");
     expect(markup).toContain("Ligar colunas");
     expect(markup).toContain("Organizar");
-    expect(markup).toContain(">W3<");
-    expect(markup).toContain("Criar os 5 índices");
+    // O aviso/problema não é exibido dentro do cartão da tabela no diagrama quando outra tabela sem problemas está selecionada
+    expect(markup).not.toContain(">W3<");
+
+    // Ao clicar em "Ver problemas" (problemsOpen: true) ou selecionar a tabela com problema, abre o card no canto superior direito
+    const markupWithProblemsCard = renderToStaticMarkup(
+      createElement(BuildDiagram, {
+        model,
+        problems,
+        selectedTableKey: "manutencao.ordem_manutencao",
+        problemsOpen: true,
+        onSelectTable: vi.fn(),
+        onChange: vi.fn(),
+      }),
+    );
+    expect(markupWithProblemsCard).toContain('aria-label="Problemas no diagrama"');
+    expect(markupWithProblemsCard).toContain(">W3<");
+    expect(markupWithProblemsCard).toContain("Criar os 5 índices");
 
     // Aplicar o fix de W3 (Criar os 5 índices) resolve o problema no modelo
     const w3 = problems.find((p) => p.code === "W3");

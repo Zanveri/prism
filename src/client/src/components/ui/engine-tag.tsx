@@ -1,5 +1,6 @@
-import type { ComponentProps } from "react";
+import type { CSSProperties, ComponentProps } from "react";
 
+import { databaseLogoOf, logoChips, type DatabaseLogo } from "@/assets/databases/database-logos";
 import { cn } from "@/lib/utils/cn";
 
 import { StatusBadge } from "./status-badge";
@@ -24,6 +25,23 @@ export const engineTags = {
 /** O banco, como a API o numera (RN-CONN-010). */
 export type Engine = keyof typeof engineTags;
 
+/** A chave da marca de cada banco para buscar a logo do fabricante. */
+const engineBrands: Record<Engine, string> = {
+  1: "postgresql",
+  2: "db2",
+  3: "informix",
+  4: "sqlite",
+  5: "mysql",
+  6: "mariadb",
+  7: "sql-server",
+  8: "oracle",
+  9: "firebird",
+  10: "duckdb",
+  11: "clickhouse",
+  12: "bigquery",
+  13: "databricks",
+};
+
 /** Um banco, uma cor (`globals.css`). */
 const engineColors: Record<Engine, string> = {
   1: "border-postgres text-postgres",
@@ -41,10 +59,45 @@ const engineColors: Record<Engine, string> = {
   13: "border-informix text-informix",
 };
 
-/** A etiqueta mono do banco, com a cor dele. Serve à lista, à árvore e à área de trabalho. */
-export function EngineTag({ engine, className, ...props }: { engine: Engine } & ComponentProps<"span">) {
+function chipBackground(chip: DatabaseLogo["chip"]): string | undefined {
+  if (chip === "both") return `light-dark(${logoChips.light}, ${logoChips.dark})`;
+  if (chip === "dark") return `light-dark(transparent, ${logoChips.dark})`;
+  return chip === "light" ? `light-dark(${logoChips.light}, transparent)` : undefined;
+}
+
+/** A marca do banco, com a logo do fabricante (ou a etiqueta mono como reserva). Serve à lista, à árvore e à área de trabalho. */
+export function EngineTag({ engine, className, style, ...props }: { engine: Engine } & ComponentProps<"span">) {
+  const logo = databaseLogoOf(engineBrands[engine]);
+  if (logo !== null) {
+    const glyph: CSSProperties = {
+      backgroundColor: logo.color ?? undefined,
+      maskImage: `url("${logo.src}")`,
+      maskSize: "contain",
+      maskRepeat: "no-repeat",
+      maskPosition: "center",
+    };
+
+    return (
+      <span
+        aria-label={engineTags[engine]}
+        className={cn(
+          "inline-flex h-5 w-6 flex-none items-center justify-center rounded-sm border border-border-strong p-0.5 align-middle",
+          className,
+        )}
+        style={{ backgroundColor: chipBackground(logo.chip), ...style }}
+        {...props}
+      >
+        {logo.kind === "image" ? (
+          <img src={logo.src} alt="" draggable={false} className="size-full object-contain" />
+        ) : (
+          <span className="size-full" style={glyph} />
+        )}
+      </span>
+    );
+  }
+
   return (
-    <StatusBadge className={cn("min-w-8 justify-center font-semibold", engineColors[engine], className)} {...props}>
+    <StatusBadge className={cn("min-w-8 justify-center font-semibold", engineColors[engine], className)} style={style} {...props}>
       {engineTags[engine]}
     </StatusBadge>
   );

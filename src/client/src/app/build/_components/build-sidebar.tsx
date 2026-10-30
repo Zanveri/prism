@@ -217,11 +217,9 @@ export function BuildSidebar({
                       key={tKey}
                       type="button"
                       aria-current={isSelected ? "true" : undefined}
-                      onClick={(e) => {
+                      onClick={() => {
                         onSelectTable?.(tKey);
-                        if (e.ctrlKey || e.metaKey) {
-                          onFocusTableInDiagram?.(tKey);
-                        }
+                        onFocusTableInDiagram?.(tKey);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Delete" && onDeleteTable) {

@@ -23,10 +23,12 @@ describe("build-model.schema (RN-CONSTRUIR-010)", () => {
   });
 
   it("motor do Prism ↔ destino", () => {
-    expect(buildEngines.map(engineIdOf)).toEqual([1, 2, 3]);
+    expect(buildEngines.map(engineIdOf)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
     expect(buildEngineOf(1)).toBe("postgresql");
     expect(buildEngineOf(2)).toBe("db2");
     expect(buildEngineOf(3)).toBe("informix");
-    expect(buildEngineOf(4)).toBeNull();
+    expect(buildEngineOf(4)).toBe("sqlite");
+    expect(buildEngineOf(13)).toBe("databricks");
+    expect(buildEngineOf(14)).toBeNull();
   });
 });

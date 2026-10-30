@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 
 import { engineRules } from "../_lib/build-engines";
-import type { BuildEngine } from "../_lib/build-model.schema";
+import { defaultBuildEngines, type BuildEngine } from "../_lib/build-model.schema";
 import { buildCopy } from "../_lib/build.copy";
 import type { CatalogSelection } from "../_lib/catalog-import";
 import {
@@ -63,6 +63,7 @@ export type NewModelSubmitPayload =
 export type NewModelDialogProps = {
   open?: boolean;
   connections: readonly Connection[];
+  availableEngines?: readonly BuildEngine[];
   initialMode?: "zero" | "database";
   initialName?: string;
   initialEngine?: BuildEngine;
@@ -81,11 +82,10 @@ export type NewModelDialogProps = {
   onSubmit?: (payload: NewModelSubmitPayload) => void;
 };
 
-const enginesList: readonly BuildEngine[] = ["postgresql", "db2", "informix"];
-
 export function NewModelDialog({
   open = true,
   connections,
+  availableEngines = defaultBuildEngines,
   initialMode,
   initialName = "",
   initialEngine = "postgresql",
@@ -104,16 +104,20 @@ export function NewModelDialog({
   onSubmit,
 }: NewModelDialogProps) {
   const idPrefix = useId();
+  const enginesList =
+    availableEngines.length > 0 ? availableEngines : defaultBuildEngines;
   const validConnections = useMemo(
-    () => supportedConnections(connections),
-    [connections],
+    () => supportedConnections(connections, undefined, enginesList),
+    [connections, enginesList],
   );
 
   const [mode, setMode] = useState<"zero" | "database">(
     initialMode ?? (validConnections.length > 0 ? "database" : "zero"),
   );
   const [name, setName] = useState(initialName);
-  const [engine, setEngine] = useState<BuildEngine>(initialEngine);
+  const [engine, setEngine] = useState<BuildEngine>(
+    enginesList.includes(initialEngine) ? initialEngine : (enginesList[0] ?? "postgresql"),
+  );
   const [connectionId, setConnectionId] = useState<string>(
     initialConnectionId ?? validConnections[0]?.id ?? "",
   );
@@ -577,15 +581,12 @@ export function NewModelDialog({
             <input
               type="checkbox"
               checked={createSchema}
-              disabled={isReading || effectiveEngine === "informix"}
+              disabled={isReading || !engineRules[effectiveEngine].hasSchemas}
               onChange={(e) => setCustomCreateSchema(e.target.checked)}
               className="size-4 accent-accent"
             />
             <span>{buildCopy.createSchemaCheckbox}</span>
           </label>
-          <p className="col-span-full m-0 text-xs text-muted">
-            {buildCopy.informixSchemaNote}
-          </p>
         </div>
 
         {errorMessage && (

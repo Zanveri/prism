@@ -351,51 +351,6 @@ function TableCard({
           </button>
         ) : null}
       </div>
-
-      {box.problems && box.problems.length > 0 ? (
-        <div
-          role="note"
-          onClick={(event) => event.stopPropagation()}
-          className={cn(
-            "mt-1.5 flex items-start gap-2 rounded-md border bg-overlay p-2 font-sans text-[11px] leading-snug text-body shadow-md",
-            box.warning === "error" ? "border-danger/50" : "border-warning/50",
-          )}
-        >
-          <span className={cn("font-mono font-bold", box.warning === "error" ? "text-danger" : "text-warning")}>
-            {box.problems[0].code}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-ink">{box.problems[0].message}</p>
-            {(box.problems[0].fixLabel && onApplyProblemFix) || onIgnoreProblem ? (
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {box.problems[0].fixLabel && onApplyProblemFix ? (
-                  <button
-                    type="button"
-                    onClick={() => onApplyProblemFix(box.problems![0].key)}
-                    className={cn(
-                      "cursor-pointer rounded border px-1.5 py-0.5 text-[10px] font-semibold transition-colors",
-                      box.warning === "error"
-                        ? "border-danger/40 bg-danger/15 text-danger hover:bg-danger/25"
-                        : "border-warning/40 bg-warning/15 text-warning hover:bg-warning/25",
-                    )}
-                  >
-                    {box.problems[0].fixLabel}
-                  </button>
-                ) : null}
-                {onIgnoreProblem ? (
-                  <button
-                    type="button"
-                    onClick={() => onIgnoreProblem(box.problems![0].key)}
-                    className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-selected hover:text-ink"
-                  >
-                    Ignorar
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </>
   );
 
@@ -578,6 +533,10 @@ export type DiagramCanvasProps = {
   onApplyProblemFix?: (problemId: string) => void;
   /** Callback para ignorar um aviso no cartão (Construir). */
   onIgnoreProblem?: (problemId: string) => void;
+  /** Abre explicitamente o card flutuante de problemas no canto superior direito do diagrama (Construir). */
+  problemsOpen?: boolean;
+  /** Callback ao fechar o card flutuante de problemas no diagrama (Construir). */
+  onCloseProblems?: () => void;
   /** Callbacks opcionais do painel flutuante da tabela selecionada na área de trabalho. */
   onOpenData?: (ref: TableRef) => void;
   onOpenStructure?: (ref: TableRef) => void;
@@ -617,6 +576,8 @@ export function DiagramCanvas({
   onOrganize,
   onApplyProblemFix,
   onIgnoreProblem,
+  problemsOpen = false,
+  onCloseProblems,
   onOpenData,
   onOpenStructure,
   onGenerateSelect,
@@ -634,6 +595,7 @@ export function DiagramCanvas({
   const [connectMode, setConnectMode] = useState(false);
   const [panLocked, setPanLocked] = useState(false);
   const [panning, setPanning] = useState(false);
+  const [dismissedProblemKey, setDismissedProblemKey] = useState<string | null>(null);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [dragState, setDragState] = useState<{ key: string; x: number; y: number } | null>(null);
   const dragStateRef = useRef<{ key: string; x: number; y: number } | null>(null);
@@ -975,8 +937,7 @@ export function DiagramCanvas({
 
   function handleMouseDown(event: ReactMouseEvent<HTMLDivElement>) {
     if (moveSession.current !== null || connectSession.current !== null) return;
-    const canLeftPan = event.button === 0;
-    if (!shouldStartDiagramPan(event.button, panLocked) && !canLeftPan) return;
+    if (!shouldStartDiagramPan(event.button, panLocked)) return;
     const element = scroller.current;
     if (element === null) return;
 
@@ -1023,7 +984,10 @@ export function DiagramCanvas({
     if (event.key === "+" || event.key === "=") zoomTo(zoomIn(zoom));
     else if (event.key === "-") zoomTo(zoomOut(zoom));
     else if (event.key === "0") fit();
-    else if ((event.key === "l" || event.key === "L") && onConnect) setConnectMode((current) => !current);
+    else if (event.key === "v" || event.key === "V") {
+      setPanLocked(false);
+      setConnectMode(false);
+    } else if ((event.key === "l" || event.key === "L") && onConnect) setConnectMode((current) => !current);
     else if (
       onMoveTable &&
       selectedKey !== null &&
@@ -1190,10 +1154,15 @@ export function DiagramCanvas({
             if (exportMenuOpen) setExportMenuOpen(false);
             setInternalSelectedKey(null);
             onSelectBox?.(null);
+            onCloseProblems?.();
           }}
           className={cn(
-            "min-h-0 flex-1 cursor-grab overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2 select-none",
-            panning ? "cursor-grabbing [&_*]:cursor-grabbing" : panLocked ? "cursor-grab [&_*]:cursor-grab" : undefined,
+            "min-h-0 flex-1 overflow-auto bg-background bg-[radial-gradient(var(--color-selected)_1px,transparent_1px)] bg-[length:24px_24px] -outline-offset-2 select-none",
+            panning
+              ? "cursor-grabbing [&_*]:cursor-grabbing"
+              : panLocked
+                ? "cursor-grab [&_*]:cursor-grab"
+                : "cursor-default",
           )}
         >
           <div
@@ -1271,6 +1240,7 @@ export function DiagramCanvas({
                       suppressClick.current = false;
                       return;
                     }
+                    setDismissedProblemKey(null);
                     if (onSelectBox) {
                       onSelectBox(key);
                     } else {
@@ -1620,6 +1590,133 @@ export function DiagramCanvas({
             </div>
           </aside>
         ) : null}
+
+        {/* Card flutuante de problemas/avisos no canto superior direito do diagrama (Construir) */}
+        {(() => {
+          if (!onConnect) return null;
+          const allProblemBoxes = displayBoxes.filter((b) => (b.problems?.length ?? 0) > 0);
+          if (allProblemBoxes.length === 0) return null;
+
+          const selectedHasProblems =
+            selectedBox !== null &&
+            (selectedBox.problems?.length ?? 0) > 0 &&
+            (problemsOpen || dismissedProblemKey !== selectedBox.key);
+
+          if (!problemsOpen && !selectedHasProblems) return null;
+
+          const boxesToShow = problemsOpen
+            ? selectedBox && (selectedBox.problems?.length ?? 0) > 0
+              ? [selectedBox, ...allProblemBoxes.filter((b) => b.key !== selectedBox.key)]
+              : allProblemBoxes
+            : selectedBox
+              ? [selectedBox]
+              : [];
+
+          if (boxesToShow.length === 0) return null;
+
+          const singleTable = boxesToShow.length === 1 ? boxesToShow[0]! : null;
+          const totalCount = boxesToShow.reduce((acc, b) => acc + (b.problems?.length ?? 0), 0);
+
+          return (
+            <aside
+              aria-label="Problemas no diagrama"
+              className="absolute right-3 top-3 z-20 flex max-h-[calc(100%-4rem)] w-80 flex-col overflow-hidden rounded-lg border border-border-strong bg-panel/95 shadow-lg backdrop-blur-xs"
+            >
+              <div className="flex items-start justify-between gap-2 border-b border-border px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="truncate font-sans text-sm font-semibold text-ink">
+                      {singleTable ? singleTable.ref.name : "Problemas no modelo"}
+                    </h3>
+                  </div>
+                  <p className="mt-0.5 font-mono text-[11px] text-subtle">
+                    {totalCount} {totalCount === 1 ? "aviso ou problema encontrado" : "avisos ou problemas encontrados"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Fechar problemas"
+                  onClick={() => {
+                    if (selectedBox) setDismissedProblemKey(selectedBox.key);
+                    onCloseProblems?.();
+                  }}
+                  className={iconButton}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+
+              <div className="flex-1 space-y-2.5 overflow-y-auto px-3 py-2.5 text-xs">
+                {boxesToShow.map((pBox) => (
+                  <div key={pBox.key} className="space-y-1.5">
+                    {!singleTable ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDismissedProblemKey(null);
+                          if (onSelectBox) onSelectBox(pBox.key);
+                          else setInternalSelectedKey(pBox.key);
+                        }}
+                        className="flex w-full cursor-pointer items-center justify-between rounded px-1.5 py-1 text-left font-mono text-[11px] font-semibold text-ink hover:bg-selected"
+                      >
+                        <span className="truncate">{pBox.ref.name}</span>
+                        <span className="text-[10px] text-subtle">! {pBox.problems?.length ?? 0}</span>
+                      </button>
+                    ) : null}
+
+                    {pBox.problems?.map((problem) => {
+                      const isError = problem.code.startsWith("E") || pBox.warning === "error";
+                      return (
+                        <div
+                          key={problem.key}
+                          role="note"
+                          className={cn(
+                            "flex items-start gap-2 rounded-md border bg-overlay p-2 font-sans text-[11px] leading-snug text-body",
+                            isError ? "border-danger/50" : "border-warning/50",
+                          )}
+                        >
+                          <span className={cn("font-mono font-bold", isError ? "text-danger" : "text-warning")}>
+                            {problem.code}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-ink">{problem.message}</p>
+                            {(problem.fixLabel && onApplyProblemFix) || (!isError && onIgnoreProblem) ? (
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {problem.fixLabel && onApplyProblemFix ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onApplyProblemFix(problem.key)}
+                                    className={cn(
+                                      "cursor-pointer rounded border px-1.5 py-0.5 text-[10px] font-semibold transition-colors",
+                                      isError
+                                        ? "border-danger/40 bg-danger/15 text-danger hover:bg-danger/25"
+                                        : "border-warning/40 bg-warning/15 text-warning hover:bg-warning/25",
+                                    )}
+                                  >
+                                    {problem.fixLabel}
+                                  </button>
+                                ) : null}
+                                {!isError && onIgnoreProblem ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onIgnoreProblem(problem.key)}
+                                    className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-selected hover:text-ink"
+                                  >
+                                    Ignorar
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </aside>
+          );
+        })()}
       </div>
 
       <div className="flex flex-none flex-wrap items-center gap-x-4 gap-y-1 border-t border-border bg-panel px-3 py-1.5 text-xs text-muted">

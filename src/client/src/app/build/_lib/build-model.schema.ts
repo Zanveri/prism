@@ -3,7 +3,22 @@ import { z } from "zod";
 /**
  * Formato do modelo do Construir (RN-CONSTRUIR-010) e do DTO da API (`api/user/build-models`).
  */
-export const buildEngines = ["postgresql", "db2", "informix"] as const;
+export const buildEngines = [
+  "postgresql",
+  "db2",
+  "informix",
+  "sqlite",
+  "mysql",
+  "mariadb",
+  "sqlserver",
+  "oracle",
+  "firebird",
+  "duckdb",
+  "clickhouse",
+  "bigquery",
+  "databricks",
+] as const;
+export const defaultBuildEngines: readonly (typeof buildEngines)[number][] = ["postgresql", "db2", "informix"];
 export type BuildEngine = (typeof buildEngines)[number];
 
 export const fkActions = ["noAction", "restrict", "cascade", "setNull"] as const;
@@ -163,17 +178,16 @@ export function serializeModel(model: BuildModel): string {
 
 export const serializeModelBody = serializeModel;
 
-export function engineIdOf(engine: BuildEngine): 1 | 2 | 3 {
-  if (engine === "postgresql") return 1;
-  if (engine === "db2") return 2;
-  return 3;
+export function engineIdOf(engine: BuildEngine): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 {
+  const index = buildEngines.indexOf(engine);
+  return ((index >= 0 ? index + 1 : 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13);
 }
 
 export function buildEngineOf(engineId: number): BuildEngine | null {
-  if (engineId === 1) return "postgresql";
-  if (engineId === 2) return "db2";
-  if (engineId === 3) return "informix";
-  return null;
+  if (!Number.isInteger(engineId) || engineId < 1 || engineId > buildEngines.length) {
+    return null;
+  }
+  return buildEngines[engineId - 1] ?? null;
 }
 
 export const buildModelDtoSchema = z.object({

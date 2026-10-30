@@ -1,5 +1,6 @@
+import { engineRules } from "./build-engines";
 import { emptyModel } from "./build-model";
-import type { BuildEngine, BuildModel } from "./build-model.schema";
+import { buildEngines, type BuildEngine, type BuildModel } from "./build-model.schema";
 import { readDbml } from "./dbml";
 import { readModelSql } from "./sql-model";
 import { applyTextRead, type TextError } from "./text-merge";
@@ -19,10 +20,11 @@ function detectDbmlEngine(text: string): BuildEngine | null {
   const body = projectMatch[1] ?? "";
   const dbTypeMatch = /database_type\s*:\s*(['"])(.*?)\1/i.exec(body);
   if (!dbTypeMatch) return null;
-  const raw = (dbTypeMatch[2] ?? "").trim().toLowerCase();
+  const raw = (dbTypeMatch[2] ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
   if (raw === "postgresql" || raw === "postgres") return "postgresql";
-  if (raw === "db2") return "db2";
-  if (raw === "informix") return "informix";
+  for (const engine of buildEngines) {
+    if (raw === engine) return engine;
+  }
   return null;
 }
 
@@ -32,9 +34,9 @@ function stripExtension(fileName: string): string {
   return stripped || "modelo";
 }
 
-function defaultSchemaForEngine(engine: BuildEngine): string {
-  if (engine === "informix") return "";
-  if (engine === "db2") return "PUBLIC";
+export function defaultSchemaForEngine(engine: BuildEngine): string {
+  if (!engineRules[engine].hasSchemas) return "";
+  if (engineRules[engine].fold === "upper") return "PUBLIC";
   return "public";
 }
 
@@ -62,7 +64,7 @@ export function modelFromFile(
 
   let model = applyTextRead(baseModel, read);
   if (
-    resolvedEngine !== "informix" &&
+    engineRules[resolvedEngine].hasSchemas &&
     model.tables.length > 0 &&
     !model.tables.some((t) => t.schema === model.defaultSchema)
   ) {

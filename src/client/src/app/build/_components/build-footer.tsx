@@ -1,15 +1,10 @@
-import type { BuildEngine, BuildModel } from "@/app/build/_lib/build-model.schema";
+import type { BuildModel } from "@/app/build/_lib/build-model.schema";
 import { buildCopy } from "@/app/build/_lib/build.copy";
+import { connectionEngineNumber } from "@/app/build/_lib/catalog-tree";
 import type { Problem } from "@/app/build/_lib/model-check";
 import { footerCountsLabel } from "@/app/build/_lib/model-summary";
 import { EngineTag, LockOpenIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
-
-const engineToNumber: Record<BuildEngine, 1 | 2 | 3> = {
-  postgresql: 1,
-  db2: 2,
-  informix: 3,
-};
 
 type BuildFooterProps = {
   userName: string;
@@ -51,7 +46,7 @@ export function BuildFooter({
   return (
     <footer className="flex min-h-7 flex-wrap items-center gap-x-5 gap-y-1 border-t border-border bg-panel px-3 py-1 text-xs leading-[18px] text-muted">
       <span className="flex items-center gap-1.5">
-        <EngineTag engine={engineToNumber[model.engine]} />
+        <EngineTag engine={connectionEngineNumber(model.engine)} />
         <span>
           Modelo {modelName ?? ""}
           {model.base && baseConn
