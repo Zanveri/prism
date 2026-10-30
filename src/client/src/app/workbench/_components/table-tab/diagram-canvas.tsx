@@ -1646,9 +1646,9 @@ export function DiagramCanvas({
                 </button>
               </div>
 
-              <div className="flex-1 space-y-2.5 overflow-y-auto px-3 py-2.5 text-xs">
+              <div className="flex-1 space-y-2.5 overflow-x-hidden overflow-y-auto px-3 py-2.5 text-xs">
                 {boxesToShow.map((pBox) => (
-                  <div key={pBox.key} className="space-y-1.5">
+                  <div key={pBox.key} className="min-w-0 space-y-1.5">
                     {!singleTable ? (
                       <button
                         type="button"
@@ -1657,10 +1657,10 @@ export function DiagramCanvas({
                           if (onSelectBox) onSelectBox(pBox.key);
                           else setInternalSelectedKey(pBox.key);
                         }}
-                        className="flex w-full cursor-pointer items-center justify-between rounded px-1.5 py-1 text-left font-mono text-[11px] font-semibold text-ink hover:bg-selected"
+                        className="flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded px-1.5 py-1 text-left font-mono text-[11px] font-semibold text-ink hover:bg-selected"
                       >
-                        <span className="truncate">{pBox.ref.name}</span>
-                        <span className="text-[10px] text-subtle">! {pBox.problems?.length ?? 0}</span>
+                        <span className="min-w-0 truncate">{pBox.ref.name}</span>
+                        <span className="shrink-0 text-[10px] text-subtle">! {pBox.problems?.length ?? 0}</span>
                       </button>
                     ) : null}
 
@@ -1671,15 +1671,15 @@ export function DiagramCanvas({
                           key={problem.key}
                           role="note"
                           className={cn(
-                            "flex items-start gap-2 rounded-md border bg-overlay p-2 font-sans text-[11px] leading-snug text-body",
+                            "flex min-w-0 items-start gap-2 rounded-md border bg-overlay p-2.5 font-sans text-[11px] leading-relaxed text-body",
                             isError ? "border-danger/50" : "border-warning/50",
                           )}
                         >
-                          <span className={cn("font-mono font-bold", isError ? "text-danger" : "text-warning")}>
+                          <span className={cn("shrink-0 font-mono font-bold", isError ? "text-danger" : "text-warning")}>
                             {problem.code}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="text-ink">{problem.message}</p>
+                            <p className="m-0 break-words [overflow-wrap:anywhere] text-ink">{problem.message}</p>
                             {(problem.fixLabel && onApplyProblemFix) || (!isError && onIgnoreProblem) ? (
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
                                 {problem.fixLabel && onApplyProblemFix ? (

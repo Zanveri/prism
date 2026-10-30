@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { engineRules } from "@/app/build/_lib/build-engines";
 import { tableChanges, tableKey } from "@/app/build/_lib/build-model";
 import type { BuildModel, ModelTable } from "@/app/build/_lib/build-model.schema";
 import { buildCopy } from "@/app/build/_lib/build.copy";
@@ -28,6 +29,9 @@ type BuildSidebarProps = {
   onSelectTable?: (tableKey: string) => void;
   onFocusTableInDiagram?: (tableKey: string) => void;
   onDeleteTable?: (tableKey: string) => void;
+  onDeleteTables?: (tableKeys: readonly string[]) => void;
+  onDeleteSchema?: (schemaName: string) => void;
+  onDropSchema?: (schemaName: string, drop: boolean) => void;
   onAddTable?: () => void;
   onImportTables?: () => void;
   onOpenDdlView?: () => void;
@@ -76,6 +80,9 @@ export function BuildSidebar({
   onSelectTable,
   onFocusTableInDiagram,
   onDeleteTable,
+  onDeleteTables,
+  onDeleteSchema,
+  onDropSchema,
   onAddTable,
   onImportTables,
   onOpenDdlView,
@@ -84,11 +91,36 @@ export function BuildSidebar({
   const [collapsedSchemas, setCollapsedSchemas] = useState<Record<string, boolean>>({});
   const [relationsExpanded, setRelationsExpanded] = useState(false);
   const [indexesExpanded, setIndexesExpanded] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{
-    tableKey: string;
-    tableName: string;
-    point: { x: number; y: number };
-  } | null>(null);
+  const [prevSelectedTableKey, setPrevSelectedTableKey] = useState(selectedTableKey);
+  const [multiSelectedKeys, setMultiSelectedKeys] = useState<string[]>(() =>
+    selectedTableKey ? [selectedTableKey] : [],
+  );
+  const [anchorKey, setAnchorKey] = useState<string | null>(selectedTableKey);
+  if (prevSelectedTableKey !== selectedTableKey) {
+    setPrevSelectedTableKey(selectedTableKey);
+    if (selectedTableKey === null) {
+      setMultiSelectedKeys([]);
+    } else if (!multiSelectedKeys.includes(selectedTableKey)) {
+      setMultiSelectedKeys([selectedTableKey]);
+      setAnchorKey(selectedTableKey);
+    }
+  }
+  const [contextMenu, setContextMenu] = useState<
+    | {
+        kind: "tables";
+        tableKeys: string[];
+        label: string;
+        point: { x: number; y: number };
+      }
+    | {
+        kind: "schema";
+        schema: string;
+        isExistingSchema: boolean;
+        isDropped: boolean;
+        point: { x: number; y: number };
+      }
+    | null
+  >(null);
 
   if (!model) {
     return (
@@ -117,6 +149,38 @@ export function BuildSidebar({
   const { relations, indexes } = countModelRelationsAndIndexes(model);
   const errorCount = problems.filter((p) => p.severity === "error").length;
   const warningCount = problems.filter((p) => p.severity === "warning").length;
+  const hasSchemas = engineRules[model.engine].hasSchemas;
+
+  const visibleTableKeys: string[] = [];
+  for (const group of groups) {
+    if (!collapsedSchemas[group.schema]) {
+      for (const table of group.tables) {
+        visibleTableKeys.push(tableKey(table));
+      }
+    }
+  }
+
+  const validModelKeys = new Set(model.tables.map((t) => tableKey(t)));
+  const validMultiKeys = multiSelectedKeys.filter((k) => validModelKeys.has(k));
+  const effectiveSelectedKeys =
+    validMultiKeys.length > 0
+      ? validMultiKeys
+      : selectedTableKey && validModelKeys.has(selectedTableKey)
+        ? [selectedTableKey]
+        : [];
+  const effectiveSelectedSet = new Set(effectiveSelectedKeys);
+
+  function executeDeleteTables(keys: readonly string[]) {
+    if (keys.length === 0) return;
+    if (onDeleteTables) {
+      onDeleteTables(keys);
+    } else if (onDeleteTable) {
+      for (const k of keys) {
+        onDeleteTable(k);
+      }
+    }
+    setMultiSelectedKeys([]);
+  }
 
   function toggleSchema(schema: string) {
     setCollapsedSchemas((prev) => ({ ...prev, [schema]: !prev[schema] }));
@@ -172,12 +236,44 @@ export function BuildSidebar({
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-3">
         {groups.map((group, idx) => {
           const isExpanded = !collapsedSchemas[group.schema];
+          const schemaEntry = model.schemas.find(
+            (s) => s.name.toLowerCase() === group.schema.toLowerCase(),
+          );
+          const isSchemaDropped =
+            Boolean(schemaEntry?.drop) ||
+            (group.isExistingSchema &&
+              group.tables.length > 0 &&
+              group.tables.every((t) => t.dropInDatabase));
+          const canActOnSchema = Boolean(onDeleteSchema || (hasSchemas && onDropSchema));
+
           return (
             <div key={group.schema} className={cn("flex flex-col", idx > 0 && "mt-1")}>
               <button
                 type="button"
                 aria-expanded={isExpanded}
                 onClick={() => toggleSchema(group.schema)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Delete" || !canActOnSchema) return;
+                  e.preventDefault();
+                  if (hasSchemas && group.isExistingSchema && onDropSchema) {
+                    onDropSchema(group.schema, !isSchemaDropped);
+                  } else if (onDeleteSchema) {
+                    onDeleteSchema(group.schema);
+                  } else if (hasSchemas && onDropSchema) {
+                    onDropSchema(group.schema, true);
+                  }
+                }}
+                onContextMenu={(e) => {
+                  if (!canActOnSchema) return;
+                  e.preventDefault();
+                  setContextMenu({
+                    kind: "schema",
+                    schema: group.schema,
+                    isExistingSchema: group.isExistingSchema,
+                    isDropped: isSchemaDropped,
+                    point: { x: e.clientX, y: e.clientY },
+                  });
+                }}
                 className="flex h-[30px] w-full cursor-pointer items-center gap-1.5 pr-3 pl-2.5 text-left font-semibold text-ink hover:bg-selected"
               >
                 <span className="shrink-0 text-subtle">
@@ -186,8 +282,22 @@ export function BuildSidebar({
                 <span className="shrink-0">
                   <FolderIcon />
                 </span>
-                <span className="min-w-0 flex-1 truncate font-mono">{group.schema}</span>
-                {group.isExistingSchema ? (
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate font-mono",
+                    isSchemaDropped && "line-through opacity-70",
+                  )}
+                >
+                  {group.schema}
+                </span>
+                {isSchemaDropped ? (
+                  <StatusBadge
+                    tone="error"
+                    className="h-4 shrink-0 px-1.5 py-0 text-[10px] font-semibold"
+                  >
+                    {buildCopy.droppedTableBadge}
+                  </StatusBadge>
+                ) : group.isExistingSchema ? (
                   <span className="inline-flex h-[18px] shrink-0 items-center rounded border border-dashed border-subtle px-1.5 text-[11px] font-medium text-muted">
                     {buildCopy.existingSchemaBadge}
                   </span>
@@ -204,7 +314,7 @@ export function BuildSidebar({
               {isExpanded &&
                 group.tables.map((table) => {
                   const tKey = tableKey(table);
-                  const isSelected = selectedTableKey === tKey;
+                  const isSelected = effectiveSelectedSet.has(tKey);
                   const isExisting = table.origin !== null;
                   const changes = tableChanges(model.engine, table);
                   const changed = isExisting && changes.kind === "changed";
@@ -217,22 +327,71 @@ export function BuildSidebar({
                       key={tKey}
                       type="button"
                       aria-current={isSelected ? "true" : undefined}
-                      onClick={() => {
+                      onClick={(e) => {
+                        if (e.shiftKey) {
+                          const startKey = anchorKey ?? selectedTableKey ?? tKey;
+                          const startIdx = visibleTableKeys.indexOf(startKey);
+                          const endIdx = visibleTableKeys.indexOf(tKey);
+                          if (startIdx >= 0 && endIdx >= 0) {
+                            const [from, to] =
+                              startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+                            const range = visibleTableKeys.slice(from, to + 1);
+                            const nextKeys =
+                              e.ctrlKey || e.metaKey
+                                ? Array.from(new Set([...effectiveSelectedKeys, ...range]))
+                                : range;
+                            setMultiSelectedKeys(nextKeys);
+                          } else {
+                            setMultiSelectedKeys([tKey]);
+                            setAnchorKey(tKey);
+                          }
+                          onSelectTable?.(tKey);
+                          return;
+                        }
+                        if (e.ctrlKey || e.metaKey) {
+                          const exists = effectiveSelectedSet.has(tKey);
+                          const nextKeys = exists
+                            ? effectiveSelectedKeys.filter((k) => k !== tKey)
+                            : [...effectiveSelectedKeys, tKey];
+                          const resolvedKeys = nextKeys.length > 0 ? nextKeys : [tKey];
+                          setMultiSelectedKeys(resolvedKeys);
+                          setAnchorKey(tKey);
+                          onSelectTable?.(tKey);
+                          return;
+                        }
+                        setMultiSelectedKeys([tKey]);
+                        setAnchorKey(tKey);
                         onSelectTable?.(tKey);
                         onFocusTableInDiagram?.(tKey);
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === "Delete" && onDeleteTable) {
+                        if (e.key === "Delete" && (onDeleteTables || onDeleteTable)) {
                           e.preventDefault();
-                          onDeleteTable(tKey);
+                          const targetKeys =
+                            effectiveSelectedSet.has(tKey) && effectiveSelectedKeys.length > 1
+                              ? effectiveSelectedKeys
+                              : [tKey];
+                          executeDeleteTables(targetKeys);
                         }
                       }}
                       onContextMenu={(e) => {
-                        if (!onDeleteTable) return;
+                        if (!onDeleteTables && !onDeleteTable) return;
                         e.preventDefault();
+                        const targetKeys =
+                          effectiveSelectedSet.has(tKey) && effectiveSelectedKeys.length > 1
+                            ? effectiveSelectedKeys
+                            : [tKey];
+                        if (!effectiveSelectedSet.has(tKey)) {
+                          setMultiSelectedKeys([tKey]);
+                          setAnchorKey(tKey);
+                        }
                         setContextMenu({
-                          tableKey: tKey,
-                          tableName: table.name,
+                          kind: "tables",
+                          tableKeys: targetKeys,
+                          label:
+                            targetKeys.length > 1
+                              ? `${targetKeys.length} tabelas`
+                              : table.name,
                           point: { x: e.clientX, y: e.clientY },
                         });
                       }}
@@ -330,18 +489,62 @@ export function BuildSidebar({
 
       {contextMenu !== null ? (
         <ContextMenu
-          label={`Ações de ${contextMenu.tableName}`}
+          label={
+            contextMenu.kind === "tables"
+              ? `Ações de ${contextMenu.label}`
+              : `Ações do esquema ${contextMenu.schema}`
+          }
           point={contextMenu.point}
-          groups={[
-            [
-              {
-                id: "delete-table",
-                label: "Deletar",
-                shortcut: "Delete",
-                onSelect: () => onDeleteTable?.(contextMenu.tableKey),
-              },
-            ],
-          ]}
+          groups={
+            contextMenu.kind === "tables"
+              ? [
+                  [
+                    {
+                      id: "delete-table",
+                      label:
+                        contextMenu.tableKeys.length > 1
+                          ? `Deletar (${contextMenu.tableKeys.length} tabelas)`
+                          : "Deletar",
+                      shortcut: "Delete",
+                      onSelect: () => executeDeleteTables(contextMenu.tableKeys),
+                    },
+                  ],
+                ]
+              : [
+                  [
+                    ...(hasSchemas && onDropSchema
+                      ? [
+                          {
+                            id: "drop-schema",
+                            label:
+                              contextMenu.isExistingSchema && contextMenu.isDropped
+                                ? "Cancelar drop do esquema"
+                                : "Dropar esquema",
+                            shortcut: "Delete",
+                            onSelect: () =>
+                              onDropSchema(
+                                contextMenu.schema,
+                                contextMenu.isExistingSchema ? !contextMenu.isDropped : true,
+                              ),
+                          },
+                        ]
+                      : []),
+                    ...(onDeleteSchema && (!hasSchemas || !onDropSchema || contextMenu.isExistingSchema)
+                      ? [
+                          {
+                            id: "delete-schema",
+                            label:
+                              hasSchemas && onDropSchema && contextMenu.isExistingSchema
+                                ? "Tirar esquema do modelo"
+                                : "Deletar esquema",
+                            shortcut: !hasSchemas || !onDropSchema ? "Delete" : undefined,
+                            onSelect: () => onDeleteSchema(contextMenu.schema),
+                          },
+                        ]
+                      : []),
+                  ],
+                ]
+          }
           onClose={() => setContextMenu(null)}
         />
       ) : null}

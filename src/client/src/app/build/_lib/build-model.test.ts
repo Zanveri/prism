@@ -16,6 +16,9 @@ import {
   removeForeignKey,
   removeIndex,
   removeTable,
+  removeTables,
+  removeSchema,
+  dropSchemaInDatabase,
   renameColumn,
   renameTable,
   replaceTables,
@@ -34,6 +37,7 @@ import {
   updateIndex,
 } from "./build-model";
 import { parseModelBody } from "./build-model.schema";
+import { generateChangesDdl } from "./ddl-changes";
 
 const repositoryRoot = new URL("../../../../../../", import.meta.url);
 const canvasModel = parseModelBody(
@@ -213,5 +217,49 @@ describe("build-model (RN-CONSTRUIR-011, RN-CONSTRUIR-012 e RN-CONSTRUIR-014)", 
     const redone = redo(undone);
     expect(redone.present.defaultSchema).toBe("esquema_101");
     expect(redone.future).toHaveLength(0);
+  });
+
+  it("removeTables remove múltiplas tabelas de uma só vez e limpa FKs de saída para elas", () => {
+    const updated = removeTables(canvasModel, [
+      "manutencao.peca",
+      "manutencao.peca_usada",
+    ]);
+    expect(updated.tables.some((t) => tableKey(t) === "manutencao.peca")).toBe(false);
+    expect(updated.tables.some((t) => tableKey(t) === "manutencao.peca_usada")).toBe(false);
+    expect(updated.layout["manutencao.peca"]).toBeUndefined();
+    expect(updated.layout["manutencao.peca_usada"]).toBeUndefined();
+  });
+
+  it("removeSchema remove o esquema e todas as tabelas que pertencem a ele", () => {
+    const updated = removeSchema(canvasModel, "manutencao");
+    expect(updated.schemas.some((s) => s.name === "manutencao")).toBe(false);
+    expect(updated.tables.some((t) => t.schema === "manutencao")).toBe(false);
+    expect(updated.tables.some((t) => t.schema === "producao")).toBe(true);
+  });
+
+  it("dropSchemaInDatabase marca esquema existente para DROP SCHEMA e gera DROP SCHEMA no DDL de alterações", () => {
+    const dropped = dropSchemaInDatabase(canvasModel, "producao", true);
+    expect(dropped.schemas.find((s) => s.name === "producao")?.drop).toBe(true);
+    expect(
+      dropped.tables
+        .filter((t) => t.schema === "producao")
+        .every((t) => t.dropInDatabase),
+    ).toBe(true);
+
+    const ddlResult = generateChangesDdl(dropped, {
+      modelName: "manutencao",
+      prismVersion: "0.1.0",
+      generatedAt: "30/10/2026 12:00",
+      baseLabel: "MES Produção / mes",
+    });
+    expect(ddlResult.text).toContain("DROP SCHEMA producao;");
+
+    const restored = dropSchemaInDatabase(dropped, "producao", false);
+    expect(restored.schemas.find((s) => s.name === "producao")?.drop).toBeUndefined();
+    expect(
+      restored.tables
+        .filter((t) => t.schema === "producao")
+        .every((t) => !t.dropInDatabase),
+    ).toBe(true);
   });
 });

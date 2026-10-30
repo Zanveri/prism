@@ -69,6 +69,9 @@ export const buildCopy = {
     `${count} ${count === 1 ? "modelo salvo" : "modelos salvos"}`,
   diagramLabel: "Diagrama do modelo",
   diagramTableRemoved: (table: string) => `Tabela "${table}" removida.`,
+  diagramTablesRemoved: (count: number) => `${count} tabelas removidas.`,
+  diagramSchemaRemoved: (schema: string) => `Esquema "${schema}" removido.`,
+  diagramSchemaDropped: (schema: string) => `Esquema "${schema}" marcado para exclusão no banco.`,
   undoAction: "Desfazer",
   textApplied: "Aplicado ao modelo.",
   textDbmlRebuildNote:

@@ -156,6 +156,14 @@ function buildChangesBody(
     dropTableLines.push(`DROP TABLE ${originQTable};`);
     statements++;
   }
+  if (!filterTableKey && rules.hasSchemas) {
+    for (const s of model.schemas) {
+      if (!s.drop) continue;
+      const suffix = engine === "db2" ? " RESTRICT" : "";
+      dropTableLines.push(`DROP SCHEMA ${quoteName(engine, s.name, false)}${suffix};`);
+      statements++;
+    }
+  }
   pushBlock(dropTableLines);
 
   // 5. Renomeações: de tabela, depois de coluna

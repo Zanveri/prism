@@ -1,4 +1,4 @@
-import type { CSSProperties, ComponentProps } from "react";
+import type { ComponentProps } from "react";
 
 import { databaseLogoOf, engineBrands } from "@/assets/databases/database-logos";
 import { cn } from "@/lib/utils/cn";
@@ -24,23 +24,6 @@ export const engineTags = {
 
 /** O banco, como a API o numera (RN-CONN-010). */
 export type Engine = keyof typeof engineTags;
-
-/** A chave da marca de cada banco para buscar a logo do fabricante. */
-const engineBrands: Record<Engine, string> = {
-  1: "postgresql",
-  2: "db2",
-  3: "informix",
-  4: "sqlite",
-  5: "mysql",
-  6: "mariadb",
-  7: "sql-server",
-  8: "oracle",
-  9: "firebird",
-  10: "duckdb",
-  11: "clickhouse",
-  12: "bigquery",
-  13: "databricks",
-};
 
 /** Um banco, uma cor (`globals.css`). */
 const engineColors: Record<Engine, string> = {
@@ -75,7 +58,7 @@ export function EngineTag({ engine, className, ...props }: { engine: Engine } & 
   }
 
   return (
-    <StatusBadge className={cn("min-w-8 justify-center font-semibold", engineColors[engine], className)} style={style} {...props}>
+    <StatusBadge className={cn("min-w-8 justify-center font-semibold", engineColors[engine], className)} {...props}>
       {engineTags[engine]}
     </StatusBadge>
   );

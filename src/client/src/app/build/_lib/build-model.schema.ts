@@ -109,6 +109,7 @@ export const buildModelSchema = z.object({
     z.object({
       name: z.string(),
       create: z.boolean(),
+      drop: z.boolean().optional(),
     }),
   ),
   base: z

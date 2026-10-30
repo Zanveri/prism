@@ -34,7 +34,15 @@ import {
   modelFromFile,
   needsScopeQuestion,
 } from "@/app/build/_lib/build-files";
-import { addTable, emptyModel, removeTable, tableKey } from "@/app/build/_lib/build-model";
+import {
+  addTable,
+  dropSchemaInDatabase,
+  emptyModel,
+  removeSchema,
+  removeTable,
+  removeTables,
+  tableKey,
+} from "@/app/build/_lib/build-model";
 import {
   parseModelBody,
   serializeModelBody,
@@ -182,6 +190,9 @@ export type BuildPageViewProps = {
   onShowModelsList?: () => void;
   onSelectTable?: (tableKey: string | null) => void;
   onDeleteTable?: (tableKey: string) => void;
+  onDeleteTables?: (tableKeys: readonly string[]) => void;
+  onDeleteSchema?: (schemaName: string) => void;
+  onDropSchema?: (schemaName: string, drop: boolean) => void;
   onFocusTableInDiagram?: (tableKey: string) => void;
   onAddTable?: () => void;
   onImportTables?: () => void;
@@ -298,6 +309,9 @@ export function BuildPageView({
   onShowModelsList,
   onSelectTable,
   onDeleteTable,
+  onDeleteTables,
+  onDeleteSchema,
+  onDropSchema,
   onFocusTableInDiagram,
   onAddTable,
   onImportTables,
@@ -375,6 +389,9 @@ export function BuildPageView({
               width={sidebarWidth}
               onSelectTable={(key) => onSelectTable?.(key)}
               onDeleteTable={onDeleteTable}
+              onDeleteTables={onDeleteTables}
+              onDeleteSchema={onDeleteSchema}
+              onDropSchema={onDropSchema}
               onFocusTableInDiagram={onFocusTableInDiagram}
               onAddTable={onAddTable}
               onImportTables={onImportTables}
@@ -682,6 +699,86 @@ export function BuildPage() {
       }
       toast.success(
         buildCopy.diagramTableRemoved(target.name),
+        undefined,
+        { label: buildCopy.undoAction, run: () => doc.undo() },
+      );
+    },
+    [activeModel, doc, lastEditedTableKey, selectedTableKey, toast],
+  );
+
+  const handleDeleteTables = useCallback(
+    (keys: readonly string[]) => {
+      if (!activeModel || keys.length === 0) return;
+      if (keys.length === 1) {
+        handleDeleteTable(keys[0]!);
+        return;
+      }
+      const keySet = new Set(keys);
+      const removedCount = activeModel.tables.filter((t) => keySet.has(tableKey(t))).length;
+      if (removedCount === 0) return;
+      doc.change(removeTables(activeModel, keys));
+      if (selectedTableKey && keySet.has(selectedTableKey)) {
+        setSelectedTableKey(null);
+      }
+      if (lastEditedTableKey && keySet.has(lastEditedTableKey)) {
+        setLastEditedTableKey(null);
+      }
+      toast.success(
+        buildCopy.diagramTablesRemoved(removedCount),
+        undefined,
+        { label: buildCopy.undoAction, run: () => doc.undo() },
+      );
+    },
+    [activeModel, doc, handleDeleteTable, lastEditedTableKey, selectedTableKey, toast],
+  );
+
+  const handleDeleteSchema = useCallback(
+    (schemaName: string) => {
+      if (!activeModel) return;
+      const next = removeSchema(activeModel, schemaName);
+      doc.change(next);
+      if (
+        selectedTableKey &&
+        !next.tables.some((t) => tableKey(t) === selectedTableKey)
+      ) {
+        setSelectedTableKey(null);
+      }
+      if (
+        lastEditedTableKey &&
+        !next.tables.some((t) => tableKey(t) === lastEditedTableKey)
+      ) {
+        setLastEditedTableKey(null);
+      }
+      toast.success(
+        buildCopy.diagramSchemaRemoved(schemaName),
+        undefined,
+        { label: buildCopy.undoAction, run: () => doc.undo() },
+      );
+    },
+    [activeModel, doc, lastEditedTableKey, selectedTableKey, toast],
+  );
+
+  const handleDropSchema = useCallback(
+    (schemaName: string, drop: boolean) => {
+      if (!activeModel) return;
+      const next = dropSchemaInDatabase(activeModel, schemaName, drop);
+      doc.change(next);
+      if (
+        selectedTableKey &&
+        !next.tables.some((t) => tableKey(t) === selectedTableKey)
+      ) {
+        setSelectedTableKey(null);
+      }
+      if (
+        lastEditedTableKey &&
+        !next.tables.some((t) => tableKey(t) === lastEditedTableKey)
+      ) {
+        setLastEditedTableKey(null);
+      }
+      toast.success(
+        drop
+          ? buildCopy.diagramSchemaDropped(schemaName)
+          : buildCopy.diagramSchemaRemoved(schemaName),
         undefined,
         { label: buildCopy.undoAction, run: () => doc.undo() },
       );
@@ -1197,6 +1294,9 @@ export function BuildPage() {
         onShowModelsList={() => updateTabs({ ...tabsState, active: null })}
         onSelectTable={handleSelectTable}
         onDeleteTable={handleDeleteTable}
+        onDeleteTables={handleDeleteTables}
+        onDeleteSchema={handleDeleteSchema}
+        onDropSchema={handleDropSchema}
         onFocusTableInDiagram={handleFocusTableInDiagram}
         onAddTable={handleAddTable}
         onImportTables={() => {
