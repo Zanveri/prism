@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Prism.Application.Common.Vault;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Vault.Services;
 
 namespace Prism.Application.Users.Features.ChangePassword;
@@ -19,15 +20,17 @@ public sealed record ChangePasswordCommand : IRequest<UnitResult<ApiErrorDto>>
     public override string ToString() => nameof(ChangePasswordCommand);
 }
 
-internal sealed class ChangePasswordHandler(IVaultService vaultService) : IRequestHandler<ChangePasswordCommand, UnitResult<ApiErrorDto>>
+internal sealed class ChangePasswordHandler(IVaultService vaultService, IJournalService? journalService = null) : IRequestHandler<ChangePasswordCommand, UnitResult<ApiErrorDto>>
 {
     public async Task<UnitResult<ApiErrorDto>> Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
     {
         // Conferir a senha atual, recusar a igual, re-embrulhar e gravar são uma operação só do serviço, com o cofre reservado: uma conferência feita
         // aqui, fora do semáforo, poderia ser de um cofre que outro usuário já trocou quando a gravação acontecesse.
-        var changed = await vaultService.ChangePasswordAsync(request.CurrentPassword, request.NewPassword, cancellationToken);
+        var changed = await vaultService.ChangePasswordAsync(request.CurrentPassword, request.NewPassword, cancellationToken, journalService is null ? null : journalService.RekeyAsync, journalService is null ? null : journalService.RevertRekeyAsync);
         if (changed.IsFailure)
             return UnitResult.Failure(VaultErrors.From(changed.Error));
+
+        journalService?.CommitRekey();
 
         return UnitResult.Success<ApiErrorDto>();
     }
