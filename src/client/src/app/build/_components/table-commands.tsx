@@ -45,6 +45,7 @@ export function TableCommands({ ddl, removedColumnNames }: TableCommandsProps) {
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
+            data-icon="alert"
             className="mt-px shrink-0 text-accent"
           >
             <path d="M8 2.5l6 10.5H2z" />

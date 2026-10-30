@@ -133,7 +133,7 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: str
       className="pointer-events-auto w-full animate-toast-in overflow-hidden rounded-lg border border-border-strong bg-raised shadow-2xl motion-reduce:animate-none"
     >
       <div className="flex items-start gap-2.5 py-3 pr-3 pl-4">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={cn("mt-[3px] flex-none", tone.text)}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon={toast.tone === "success" ? "check" : "alert"} className={cn("mt-[3px] flex-none", tone.text)}>
           {tone.icon}
         </svg>
 

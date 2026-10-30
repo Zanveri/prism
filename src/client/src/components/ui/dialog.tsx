@@ -183,7 +183,7 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
             </div>
             {dismissible === true ? (
               <button type="button" aria-label="Fechar" title="Fechar" onClick={onClose} disabled={pending} className={cn("-mr-2 inline-flex size-9 flex-none cursor-pointer items-center justify-center rounded-md text-muted transition-colors enabled:hover:bg-selected enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-50", icon === undefined && "-mt-2")}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true" data-icon="close">
                   <path d="M4 4l8 8M12 4l-8 8" />
                 </svg>
               </button>

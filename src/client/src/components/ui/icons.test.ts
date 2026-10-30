@@ -4,6 +4,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { SettingsIcon } from "@/app/settings/_components/settings-icon";
+import { DataFormatIcon, DatabaseTargetIcon } from "@/app/workbench/_components/data-export/format-icons";
+import { dataFormats } from "@/app/workbench/_lib/data-export/export-options";
+import { ResultPlaceIcon, ResultTabIcon } from "@/app/workbench/_components/result-place-button";
+
 import * as Icons from "./icons";
 
 const css = readFileSync(resolve(__dirname, "../../styles/globals.css"), "utf8");
@@ -45,5 +50,40 @@ describe("ícones animados em hover (icons.tsx + globals.css)", () => {
     expect(renderToStaticMarkup(createElement(Icons.TrashIcon))).toContain('class="icon-part-lid"');
     expect(renderToStaticMarkup(createElement(Icons.LockIcon))).toContain('class="icon-part-shackle"');
     expect(renderToStaticMarkup(createElement(Icons.ClockIcon))).toContain('class="icon-part-hand"');
+  });
+
+  it("SettingsIcon renderiza com data-icon='settings' e separa knobs deslizantes", () => {
+    const markup = renderToStaticMarkup(createElement(SettingsIcon));
+    expect(markup).toContain('data-icon="settings"');
+    expect(markup).toContain('class="icon-part-knob-left"');
+    expect(markup).toContain('class="icon-part-knob-right"');
+  });
+
+  it("DataFormatIcon mapeia todos os formatos para suas famílias e DatabaseTargetIcon usa database", () => {
+    const expectedFamilies: Record<string, string> = {
+      csv: "table",
+      sourceCode: "code",
+      dbUnit: "document",
+      html: "code",
+      json: "code",
+      markdown: "document",
+      sql: "database",
+      txt: "lines",
+      xlsx: "table",
+      xml: "code",
+    };
+
+    for (const format of dataFormats) {
+      const markup = renderToStaticMarkup(createElement(DataFormatIcon, { format }));
+      expect(markup, `formato ${format} deve ter data-icon="${expectedFamilies[format]}"`).toContain(`data-icon="${expectedFamilies[format]}"`);
+    }
+
+    const targetMarkup = renderToStaticMarkup(createElement(DatabaseTargetIcon));
+    expect(targetMarkup).toContain('data-icon="database"');
+  });
+
+  it("ResultTabIcon e ResultPlaceIcon renderizam com data-icon correto", () => {
+    expect(renderToStaticMarkup(createElement(ResultTabIcon))).toContain('data-icon="table"');
+    expect(renderToStaticMarkup(createElement(ResultPlaceIcon))).toContain('data-icon="panel"');
   });
 });

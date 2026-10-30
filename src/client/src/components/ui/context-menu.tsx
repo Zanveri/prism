@@ -153,7 +153,7 @@ export function ContextMenuItems({ groups, onChoose, expanded = null, onHover }:
       ) : null}
       {item.shortcut === undefined ? null : <span className="ml-6 flex-none font-mono text-[11px] text-subtle">{item.shortcut}</span>}
       {item.submenu === undefined ? null : (
-        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn("flex-none text-muted", item.shortcut === undefined && "ml-6")}>
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" data-icon="chevron-right" className={cn("flex-none text-muted", item.shortcut === undefined && "ml-6")}>
           <path d="M6 4l4 4-4 4" />
         </svg>
       )}
