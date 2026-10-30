@@ -22,6 +22,11 @@ public interface IVaultService
     event Action? Locked;
 
     /// <summary>
+    /// Disparado depois de um cofre abrir (`CreateAsync` ou `UnlockAsync`), já com o semáforo liberado.
+    /// </summary>
+    event Action? Unlocked;
+
+    /// <summary>
     /// Cria o arquivo do usuário e já deixa o cofre aberto, fechando o que estava aberto (RN-COFRE-007).
     /// Uma criação recusada não muda nada: o cofre que estava aberto continua aberto.
     /// </summary>
@@ -59,22 +64,22 @@ public interface IVaultService
     long Generation { get; }
 
     /// <summary>
-    /// RN-COFRE-013: troca a senha do usuário do cofre aberto. Confere a senha atual pelo mesmo caminho do <see cref="ReadIfPasswordMatchesAsync"/>
+    /// RN-COFRE-013 e RN-DIARIO-004: troca a senha do usuário do cofre aberto e gira a chave do diário. Confere a senha atual pelo mesmo caminho do <see cref="ReadIfPasswordMatchesAsync"/>
     /// (uma derivação com o sal e os parâmetros do arquivo, a mesma contagem de erros seguidos e o mesmo fechamento no quinto, RN-CONN-003), recusa
-    /// a nova igual a ela e RECIFRA o cofre (RN-COFRE-003): gera uma chave do cofre nova, cifra o conteúdo com ela (nonce novo, o cabeçalho novo como dado
+    /// a nova igual a ela, gera uma chave nova para o diário (passada a <paramref name="beforeSave"/> antes de gravar o cofre) e RECIFRA o cofre (RN-COFRE-003): gera uma chave do cofre nova, cifra o conteúdo com ela (nonce novo, o cabeçalho novo como dado
     /// autenticado, RN-COFRE-004) e a embrulha com a chave derivada da senha nova (sal novo, parâmetros atuais das opções, nunca mais fracos que os do arquivo: campo a campo, o maior dos dois). Assim, quem tem a senha antiga
     /// e uma cópia antiga do arquivo não lê nada do que for gravado depois: a chave que a cópia entrega é a antiga, que é zerada da memória. A gravação
     /// é a de sempre (RN-COFRE-005) e acontece com o cofre reservado, como a de <see cref="SaveAsync"/>: uma não se intercala com a outra, e uma gravação
     /// comum que entra logo depois da troca usa a chave nova. Segue-se uma segunda gravação do mesmo arquivo, para o `.bak` também ficar com a senha nova
     /// (sem ela, a senha antiga voltaria a abrir o cofre se o principal sumisse, porque o app promove o `.bak`).
     ///
-    /// O cofre continua aberto, com o mesmo documento: não dispara <see cref="Locked"/> nem muda a <see cref="Generation"/>, então as sessões com
+    /// O cofre continua aberto: não dispara <see cref="Locked"/> nem muda a <see cref="Generation"/>, então as sessões com
     /// os bancos não caem. Falhas: `CurrentPasswordInvalid` (conta um erro), `PasswordUnchanged` (depois da conferência), `Locked` (sem cofre
-    /// aberto, e no quinto erro seguido, já com o cofre fechado) e `Unavailable` (a PRIMEIRA gravação falhou: o arquivo e a memória seguem com a senha e a
+    /// aberto, e no quinto erro seguido, já com o cofre fechado) e `Unavailable` (`beforeSave` devolveu `false` ou a PRIMEIRA gravação falhou: se a primeira gravação falhar depois de `beforeSave`, <paramref name="onSaveFailed"/> é chamado, e o arquivo e a memória seguem com a senha e a
     /// chave antigas). A falha só da segunda gravação mantém a troca (sucesso) e vai ao log como aviso: o `.bak` fica com o embrulho antigo até a próxima
     /// gravação comum.
     /// </summary>
-    Task<UnitResult<EVaultError>> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken);
+    Task<UnitResult<EVaultError>> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken, Func<byte[], CancellationToken, Task<bool>>? beforeSave = null, Func<CancellationToken, Task>? onSaveFailed = null);
 
     Result<VaultDocument, EVaultError> Read();
 
