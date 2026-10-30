@@ -10,10 +10,46 @@ function Icon({ className, ...props }: ComponentProps<"svg">) {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={cn("flex-none", className)} {...props} />;
 }
 
-export function ChevronIcon(props: ComponentProps<"svg">) {
+export type ChevronDirection = "down" | "up" | "left" | "right";
+
+export type ChevronIconProps = Omit<ComponentProps<"svg">, "direction"> & {
+  direction?: ChevronDirection;
+};
+
+export function ChevronIcon({
+  direction = "down",
+  ...props
+}: ChevronIconProps) {
+  const path =
+    direction === "up"
+      ? "M4 10l4-4 4 4"
+      : direction === "left"
+        ? "M10 4L6 8l4 4"
+        : direction === "right"
+          ? "M6 4l4 4-4 4"
+          : "M4 6l4 4 4-4";
+
   return (
     <Icon {...props}>
-      <path d="M4 6l4 4 4-4" />
+      <path d={path} />
+    </Icon>
+  );
+}
+
+/** Seta para a esquerda (ex.: "Voltar ao diagrama"). */
+export function ArrowLeftIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M13 8H3M7 4L3 8l4 4" />
+    </Icon>
+  );
+}
+
+/** Seta para a direita. */
+export function ArrowRightIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M3 8h10M9 4l4 4-4 4" />
     </Icon>
   );
 }
