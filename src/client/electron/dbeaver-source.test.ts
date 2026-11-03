@@ -28,7 +28,7 @@ type Harness = {
 let harness: Harness;
 
 function setUp(overrides: Partial<DbeaverSourceDeps> = {}): Harness {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "prism-dbeaver-")));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "prism-dbeaver-")));
   const home = join(root, "casa");
   const dataDir = join(root, "dados");
   mkdirSync(home);
@@ -275,7 +275,7 @@ describe("Escolher a pasta do DBeaver (choose)", () => {
 
     mkdirSync(standard(), { recursive: true });
     await choose(null, 2);
-    expect(harness.dialogs[1]).toEqual({ windowId: 2, title: dbeaverDialogTitle, defaultPath: standard() });
+    expect(harness.dialogs[1]).toEqual({ windowId: 2, title: dbeaverDialogTitle, defaultPath: dbeaverRoots({ platform: "linux", env: {}, home: harness.home })[2].dir });
   });
 
   it("serve a pasta de dados, o workspace, o projeto e a própria `.dbeaver`", async () => {

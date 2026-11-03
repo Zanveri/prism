@@ -7,7 +7,7 @@ import { dotnetStaging, fontLicenses, projectNotices } from "./licenses.mjs";
 
 // O `electron-builder.yml` e o `package.json` são lidos como texto: não há analisador de YAML no projeto, e o que se confere
 // aqui são linhas que têm de bater entre os arquivos.
-const read = (name: string) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
+const read = (name: string) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8").replaceAll("\r\n", "\n");
 const builder = read("electron-builder.yml");
 const pkg = JSON.parse(read("package.json")) as { desktopName?: string };
 const lines = builder.split("\n");
