@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Moq;
 using Prism.Application.Connections.Features.RememberNetworkSecret;
+using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Queries;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
@@ -95,4 +96,10 @@ public sealed class RememberNetworkSecretHandlerTests : IDisposable
         _databaseSessionService.VerifyNoOtherCalls();
         Assert.Null(_unsavedSecrets.Ssh(_record.ID));
     }
+
+    /// <summary>RN-REDE-003: no "Testar conexão", a frase começa em minúscula e mantém a sigla ("do túnel SSH", não "do túnel ssh").</summary>
+    [Trait("ConnectionErrors", "NetworkSecretMissingToTest")]
+    [Fact(DisplayName = "OK a recusa do teste sem o segredo mantém a sigla SSH")]
+    public void NetworkSecretMissingToTest_ShouldBeOK_KeepsTheAcronym()
+        => Assert.Equal(["Informe a senha (ou frase secreta da chave) do túnel SSH para testar."], ((Dictionary<string, string[]>)ConnectionErrors.NetworkSecretMissingToTest("SshSecret").Extensions["errors"]!)["SshSecret"]);
 }

@@ -58,14 +58,14 @@ internal static class ConnectionErrors
 
     /// <summary>
     /// RN-REDE-003: o túnel SSH por senha, ou o proxy com usuário, sem o segredo: a conexão gravada sem "Salvar credenciais" e sem o segredo digitado desde que o cofre
-    /// abriu. `field` é o de <see cref="ConnectionRules.MissingNetworkSecret"/>; a tela abre o "Editar conexão" na aba dele.
+    /// abriu. `field` é o de <see cref="ConnectionRules.MissingNetworkSecret"/>; a tela pede o segredo (RN-REDE-006).
     /// </summary>
     public static ApiErrorDto NetworkSecretMissingToConnect(string field)
         => CredentialsMissing(field, $"{NetworkSecretOf(field)} não está gravada nesta conexão. Informe-a para conectar: sem \"Salvar credenciais\", ela fica só na memória até a conexão ser desconectada ou o Prism ser bloqueado.");
 
     /// <summary>O mesmo no "Testar conexão": o campo do segredo, vazio, sem o segredo gravado nem digitado antes.</summary>
     public static ApiErrorDto NetworkSecretMissingToTest(string field)
-        => CredentialsMissing(field, $"Informe {NetworkSecretOf(field).ToLowerInvariant()} para testar.");
+        => CredentialsMissing(field, $"Informe {char.ToLowerInvariant(NetworkSecretOf(field)[0])}{NetworkSecretOf(field)[1..]} para testar.");
 
     private static string NetworkSecretOf(string field)
         => field == "SshSecret" ? "A senha (ou frase secreta da chave) do túnel SSH" : "A senha do proxy";
