@@ -40,6 +40,7 @@ import {
   shouldCreateSchemaByDefault,
   supportedConnections,
 } from "../_lib/catalog-tree";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
 export type NewModelSubmitPayload =
   | {
@@ -472,7 +473,7 @@ export function NewModelDialog({
                       <div className="flex h-7.5 items-center gap-1.5 pr-2.5 pl-1.5">
                         <button
                           type="button"
-                          aria-label={`${isCollapsed ? "Expandir" : "Recolher"} ${group.schema}`}
+                          aria-label={isCollapsed ? buildUiCopy.schemaGroup.expand(group.schema) : buildUiCopy.schemaGroup.collapse(group.schema)}
                           aria-expanded={!isCollapsed}
                           onClick={() =>
                             setCollapsedSchemas((prev) => {

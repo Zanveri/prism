@@ -110,6 +110,7 @@ import {
 } from "@/components/ui";
 import { pathsConfig } from "@/config/paths.config";
 import { cn } from "@/lib/utils/cn";
+import { buildUiCopy } from "@/app/build/_lib/build-ui.copy";
 
 export function formatBuildTimestamp(now: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -424,7 +425,7 @@ export function BuildPageView({
               onCollapse={handleToggleSidebar}
             />
             <PaneResizeHandle
-              label="Ajustar a largura das tabelas do modelo"
+              label={buildUiCopy.page.resizeSidebar}
               width={sidebarWidth}
               minWidth={SIDEBAR_MIN_WIDTH}
               maxWidth={SIDEBAR_MAX_WIDTH}
@@ -521,7 +522,7 @@ export function BuildPageView({
                 {!isEditorHidden ? (
                   <>
                     <section
-                      aria-label="Editor do modelo"
+                      aria-label={buildUiCopy.page.editor}
                       style={{ width: editorWidth }}
                       className="flex min-h-0 min-w-0 flex-none flex-col overflow-hidden border-r border-border bg-panel"
                     >
@@ -573,7 +574,7 @@ export function BuildPageView({
                     </section>
 
                     <PaneResizeHandle
-                      label="Ajustar a largura do editor do modelo"
+                      label={buildUiCopy.page.resizeEditor}
                       width={editorWidth}
                       minWidth={EDITOR_MIN_WIDTH}
                       maxWidth={EDITOR_MAX_WIDTH}
@@ -582,7 +583,7 @@ export function BuildPageView({
                   </>
                 ) : (
                   <aside
-                    aria-label="Editor do modelo recolhido"
+                    aria-label={buildUiCopy.page.editorCollapsed}
                     className="flex w-9 flex-none flex-col items-center gap-2 border-r border-border bg-panel py-2"
                   >
                     <Button
@@ -611,7 +612,7 @@ export function BuildPageView({
                 )}
 
                 <section
-                  aria-label="Diagrama do modelo"
+                  aria-label={buildCopy.diagramLabel}
                   className="flex min-h-0 min-w-0 flex-[999_1_560px] flex-col overflow-hidden bg-background"
                 >
                   {diagramContent}
@@ -1095,7 +1096,7 @@ export function BuildPage() {
       handleOpenModel(res.data.id);
     } catch (err) {
       if ((err as { name?: string })?.name !== "AbortError") {
-        setCatalogError(err instanceof Error ? err.message : "Erro ao ler catálogo");
+        setCatalogError(err instanceof Error ? err.message : buildUiCopy.page.readCatalogFailed);
       }
     } finally {
       readingAbortRef.current = null;
@@ -1143,7 +1144,7 @@ export function BuildPage() {
       setImportTablesOpen(false);
     } catch (err) {
       if ((err as { name?: string })?.name !== "AbortError") {
-        setCatalogError(err instanceof Error ? err.message : "Erro ao importar tabelas");
+        setCatalogError(err instanceof Error ? err.message : buildUiCopy.page.importTablesFailed);
       }
     } finally {
       readingAbortRef.current = null;
@@ -1201,7 +1202,7 @@ export function BuildPage() {
       doc.change(nextModel);
     } catch (err) {
       if ((err as { name?: string })?.name !== "AbortError") {
-        toast.error(err instanceof Error ? err.message : "Erro ao reler do banco");
+        toast.error(err instanceof Error ? err.message : buildUiCopy.page.rereadFailed);
       }
     } finally {
       await closeDatabaseSession(sessionId);
@@ -1259,7 +1260,7 @@ export function BuildPage() {
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey }),
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Erro ao renomear modelo"),
+      toast.error(err instanceof Error ? err.message : buildUiCopy.page.renameFailed),
   });
 
   const duplicateMutation = useMutation({
@@ -1276,7 +1277,7 @@ export function BuildPage() {
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey }),
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Erro ao duplicar modelo"),
+      toast.error(err instanceof Error ? err.message : buildUiCopy.page.duplicateFailed),
   });
 
   const deleteMutation = useMutation({
@@ -1292,7 +1293,7 @@ export function BuildPage() {
       void queryClient.invalidateQueries({ queryKey: buildModelsQuery.queryKey });
     },
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Erro ao excluir modelo"),
+      toast.error(err instanceof Error ? err.message : buildUiCopy.page.deleteFailed),
   });
 
   useEffect(() => {

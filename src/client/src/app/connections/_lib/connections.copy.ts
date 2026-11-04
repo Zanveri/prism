@@ -1,11 +1,15 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { connectionsCopyEn } from "./connections.copy.en";
+import { connectionsCopyEs } from "./connections.copy.es";
 
 /**
  * Os textos das pastas e das conexões, num lugar só (RN-AVISO-002, RN-AVISO-003, RN-CONN-002): os diálogos de pasta, o diálogo de conexão
  * (RN-NAV-004 e 005), o de mover e o de renomear conexão e o de revelar a senha. A tela de Conexões deixou de existir (RN-NAV-001); o que o navegador diz
  * está em `workbench.copy.ts` e `navigator.copy.ts`.
  */
-export const connectionsCopy = {
+const pt = {
   folder: {
     parent: "Pasta pai",
     noParent: "Sem pasta pai",
@@ -238,4 +242,41 @@ export const connectionsCopy = {
     // RN-AVISO-003: o quinto erro de senha fecha o cofre e a tela volta ao login.
     vaultLockedAfterFiveAttempts: "Cofre fechado depois de cinco tentativas.",
   },
+
+  // As frases de validação do formulário (zod), a tela e a API conferem do mesmo jeito (RN-CONN-010, RN-PASTA-001, RN-VERIF-001).
+  validation: {
+    engine: "Escolha o banco de dados.",
+    port: "Informe uma porta de 1 a 65535.",
+    control: (field: string) => `${field} não pode ter caractere de controle nem de direção do texto.`,
+    fields: {
+      environmentName: "O nome do ambiente",
+      verificationQuery: "A consulta de verificação",
+      connectionName: "O nome da conexão",
+      host: "O host",
+      database: "O banco de dados",
+      databaseUser: "O usuário do banco",
+      folderName: "O nome da pasta",
+    },
+    environmentMax: "O ambiente pode ter no máximo 30 caracteres.",
+    colorFormat: "Use uma cor no formato #RRGGBB.",
+    confirmCommands: "Escolha não confirmar, só os comandos irreversíveis ou todos os comandos.",
+    verificationInterval: "A verificação deve ser feita a cada 5 a 3.600 segundos.",
+    verificationQueryMax: "A consulta de verificação pode ter no máximo 1.000 caracteres.",
+    connectionNameRequired: "Informe o nome da conexão.",
+    connectionNameMax: "O nome pode ter no máximo 80 caracteres.",
+    hostRequired: "Informe o host.",
+    hostMax: "O host pode ter até 255 caracteres.",
+    databaseRequired: "Informe o banco de dados.",
+    databaseMax: "O banco de dados pode ter até 128 caracteres.",
+    userRequired: "Informe o usuário do banco.",
+    userMax: "O usuário do banco pode ter até 128 caracteres.",
+    passwordRequired: "Informe a senha do banco.",
+    passwordMax: "A senha do banco pode ter até 1.024 caracteres.",
+    userPasswordRequired: "Informe a sua senha do Prism.",
+    folderNameRequired: "Informe o nome da pasta.",
+    folderNameMax: "O nome pode ter no máximo 60 caracteres.",
+  },
 } as const;
+
+export type ConnectionsCopy = Localized<typeof pt>;
+export const connectionsCopy = pickCopy({ "pt-BR": pt, en: connectionsCopyEn, es: connectionsCopyEs });

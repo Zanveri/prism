@@ -20,6 +20,7 @@ import {
   type ProblemFix,
 } from "../_lib/model-check";
 import { ProblemsList } from "./problems-list";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
 export type DdlViewProps = {
   model: BuildModel;
@@ -95,7 +96,7 @@ export function DdlView({
       : null;
 
   const lines = ddl.text.split("\n");
-  const summaryText = `${ddl.statements} ${ddl.statements === 1 ? "comando" : "comandos"} · ${lines.length} ${lines.length === 1 ? "linha" : "linhas"}`;
+  const summaryText = buildUiCopy.ddlSummary.summary(ddl.statements, lines.length);
 
   const setScope = (nextScope: "changes" | "full") => {
     onChangeModel({

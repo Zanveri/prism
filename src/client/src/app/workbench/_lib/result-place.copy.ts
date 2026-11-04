@@ -1,7 +1,12 @@
 import type { ResultPlace } from "./workbench-model";
 
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { resultPlaceCopyEn } from "./result-place.copy.en";
+import { resultPlaceCopyEs } from "./result-place.copy.es";
+
 /** Os textos do lugar do resultado (seção 39: RN-ABAS-011 a 016), na ordem em que a especificação os escreve. */
-export const resultPlaceCopy = {
+const pt = {
   /** O nome de cada lugar no menu "Onde mostrar o resultado" (RN-ABAS-014) e em Configurações › Resultados (RN-CONFIG-010). */
   places: { panel: "No painel", tab: "Numa aba", window: "Numa janela" } satisfies Record<ResultPlace, string>,
   /** O lugar de agora, no fim do nome e da dica do botão: "Onde mostrar o resultado: no painel". */
@@ -47,3 +52,6 @@ export const resultPlaceCopy = {
     hint: "Vale para as abas de consulta abertas daqui em diante. Cada aba guarda o lugar dela, que o botão 'Onde mostrar o resultado' da área de resultado troca.",
   },
 } as const;
+
+export type ResultPlaceCopy = Localized<typeof pt>;
+export const resultPlaceCopy = pickCopy({ "pt-BR": pt, en: resultPlaceCopyEn, es: resultPlaceCopyEs });

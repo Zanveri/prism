@@ -44,8 +44,7 @@ function kindKeyOf(counts: TransferCounts): KindKey {
 
 /** O que a saída cancela, como objeto do verbo: "a importação", "as cópias", "as transferências". */
 function whatOf(counts: TransferCounts): string {
-  const [one, many] = im.nouns[kindKeyOf(counts)];
-  return totalOf(counts) === 1 ? `a ${one}` : `as ${many}`;
+  return im.objects[kindKeyOf(counts)][totalOf(counts) === 1 ? 0 : 1];
 }
 
 /** As importações e as cópias, juntas, são uma só (a frase vai no singular). */
@@ -71,7 +70,7 @@ export function exitQuestion(counts: TransferCounts, exit: TransferExit): ExitQu
   else if (kind === "mixed") does = im.cancelsLoads(verb);
   else does = im.cancelsOne(verb, what, total === 1);
   return {
-    title: im.title(exit === "signOut" ? "Sair" : "Fechar", im.nouns[kind][1]),
+    title: im.title(im.titleVerbs[exit], im.nouns[kind][1]),
     description: `${im.count(counts.exports, counts.imports, counts.copies)} ${does}`,
     confirm: im.confirm(buttonVerb, what),
     keep: im.keep[kind],
@@ -86,7 +85,7 @@ export function canceledAheadNote(counts: TransferCounts): string | null {
   const kind = kindKeyOf(counts);
   if (kind === "export") return ex.canceledAhead(total);
   if (total === 1) return im.aheadOne(kind === "copy" ? im.copyNoun : im.nouns.import[0]);
-  if (kind !== "mixed") return im.aheadKind(total, kind === "copy" ? "cópias para outro banco" : im.nouns.import[1]);
+  if (kind !== "mixed") return im.aheadKind(total, kind === "copy" ? im.copyNounPlural : im.nouns.import[1]);
   return im.aheadMixed(total, im.loads(counts.imports, counts.copies), singleLoad(counts));
 }
 
@@ -97,6 +96,6 @@ export function connectionDeleteNote(counts: TransferCounts): string | null {
   const kind = kindKeyOf(counts);
   if (kind === "export") return ex.connectionDelete(total);
   if (total === 1) return im.connectionOne(kind === "copy" ? im.copyNoun : im.nouns.import[0]);
-  const plural = kind === "copy" ? "cópias para outro banco" : im.nouns[kind][1];
+  const plural = kind === "copy" ? im.copyNounPlural : im.nouns[kind][1];
   return im.connectionMany(total, plural, im.loads(counts.imports, counts.copies), singleLoad(counts));
 }

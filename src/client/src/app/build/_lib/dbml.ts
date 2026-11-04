@@ -16,6 +16,7 @@ import {
   type TextRead,
   type TextWarning,
 } from "@/app/build/_lib/text-merge";
+import { buildUiCopy } from "./build-ui.copy";
 
 function formatDbmlIdent(engine: BuildEngine, name: string, exactName: boolean): string {
   return quoteName(engine, name, exactName);
@@ -512,7 +513,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
           if (mapped !== before.engine) {
             warnings.push({
               line: i + 1,
-              message: `linha ${i + 1}: database_type '${rawDbType}' ignorado`,
+              message: buildUiCopy.parse.databaseTypeIgnored(i + 1, rawDbType),
             });
           }
         }
@@ -527,7 +528,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
 
     // Enum block
     if (/^Enum\s+/i.test(trimmed)) {
-      warnings.push({ line: lineNum, message: `linha ${lineNum}: Enum ignorado` });
+      warnings.push({ line: lineNum, message: buildUiCopy.parse.enumIgnored(lineNum) });
       if (trimmed.includes("{")) {
         let depth = 0;
         for (const ch of trimmed) {
@@ -550,7 +551,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
 
     // TableGroup block
     if (/^TableGroup\s+/i.test(trimmed)) {
-      warnings.push({ line: lineNum, message: `linha ${lineNum}: TableGroup ignorado` });
+      warnings.push({ line: lineNum, message: buildUiCopy.parse.tableGroupIgnored(lineNum) });
       if (trimmed.includes("{")) {
         let depth = 0;
         for (const ch of trimmed) {
@@ -592,7 +593,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
         if (!inlineMatch) {
           return {
             ok: false,
-            error: { line: lineNum, column: 1, message: "Ref inválida" },
+            error: { line: lineNum, column: 1, message: buildUiCopy.parse.invalidRef },
           };
         }
         refName = inlineMatch[1] ?? null;
@@ -607,7 +608,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
           error: {
             line: lineNum,
             column: colIdx >= 0 ? colIdx + 1 : 1,
-            message: "muitos-para-muitos não vira FK; crie a tabela de ligação",
+            message: buildUiCopy.parse.manyToMany,
           },
         };
       }
@@ -623,7 +624,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
       if (!opMatch) {
         return {
           ok: false,
-          error: { line: lineNum, column: 1, message: "Ref inválida" },
+          error: { line: lineNum, column: 1, message: buildUiCopy.parse.invalidRef },
         };
       }
 
@@ -633,7 +634,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
       if (!left || !right) {
         return {
           ok: false,
-          error: { line: lineNum, column: 1, message: "Ref inválida" },
+          error: { line: lineNum, column: 1, message: buildUiCopy.parse.invalidRef },
         };
       }
 
@@ -675,7 +676,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
         aliases.set(alias, { schema: qt.schema, table: qt.name });
         warnings.push({
           line: lineNum,
-          message: `linha ${lineNum}: alias de tabela ignorado`,
+          message: buildUiCopy.parse.aliasIgnored(lineNum),
         });
       }
 
@@ -720,7 +721,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
             if (idxTrim.includes("`")) {
               warnings.push({
                 line: idxLineNum,
-                message: `linha ${idxLineNum}: índice por expressão ignorado`,
+                message: buildUiCopy.parse.expressionIndexIgnored(idxLineNum),
               });
               i++;
               continue;
@@ -827,7 +828,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
               error: {
                 line: innerLineNum,
                 column: innerRaw.indexOf("[") + 1,
-                message: "esperava ] no fim das configurações da coluna",
+                message: buildUiCopy.parse.expectedClosingBracket,
               },
             };
           }
@@ -842,7 +843,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
             error: {
               line: innerLineNum,
               column: 1,
-              message: `esperava nome e tipo da coluna em '${innerTrim}'`,
+              message: buildUiCopy.parse.expectedNameAndType(innerTrim),
             },
           };
         }
@@ -900,7 +901,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
                   error: {
                     line: innerLineNum,
                     column: colIdx >= 0 ? colIdx + 1 : 1,
-                    message: "muitos-para-muitos não vira FK; crie a tabela de ligação",
+                    message: buildUiCopy.parse.manyToMany,
                   },
                 };
               }
@@ -911,7 +912,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
                   error: {
                     line: innerLineNum,
                     column: 1,
-                    message: "ref de coluna inválida",
+                    message: buildUiCopy.parse.invalidColumnRef,
                   },
                 };
               }
@@ -927,7 +928,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
                   error: {
                     line: innerLineNum,
                     column: 1,
-                    message: "destino da ref inválido",
+                    message: buildUiCopy.parse.invalidRefTarget,
                   },
                 };
               }
@@ -1003,7 +1004,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
       error: {
         line: lineNum,
         column: 1,
-        message: `construção DBML não reconhecida: '${trimmed}'`,
+        message: buildUiCopy.parse.unknownConstruct(trimmed),
       },
     };
   }
@@ -1022,7 +1023,7 @@ export function readDbml(text: string, before: BuildModel): TextRead {
         error: {
           line: ref.line,
           column: 1,
-          message: `tabela '${source.schema}.${source.table}' da Ref não encontrada`,
+          message: buildUiCopy.parse.refTableNotFound(`${source.schema}.${source.table}`),
         },
       };
     }

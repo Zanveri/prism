@@ -3,6 +3,7 @@ import { executeQuery, type QueryParam } from "@/app/workbench/_lib/query.servic
 import type { Engine } from "@/components/ui";
 
 import type { PluginBundle } from "./plugins.schema";
+import { pluginsCopy } from "./plugins.copy";
 
 export type PluginQueryResult = {
   columns: string[];
@@ -109,7 +110,7 @@ export const defaultPluginQueryExecutor: PluginQueryExecutor = async (sessionId,
     }
 
     if (!result.ok) {
-      throw new Error(result.error.detail || result.error.title || "Falha ao executar consulta do plugin.");
+      throw new Error(result.error.detail || result.error.title || pluginsCopy.queryFailed);
     }
 
     if (result.data.kind !== "rows") {
@@ -224,7 +225,7 @@ export async function enrichWithInternalDescriptions(
 
   return {
     tableDescription,
-    extraColumns: [{ key: "description", label: "Descrição" }],
+    extraColumns: [{ key: "description", label: pluginsCopy.descriptionColumn }],
     columnValues,
   };
 }

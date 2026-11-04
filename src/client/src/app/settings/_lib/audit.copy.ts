@@ -1,5 +1,10 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { auditCopyEn } from "./audit.copy.en";
+import { auditCopyEs } from "./audit.copy.es";
+
 /** Textos da seção Configurações › Auditoria (RN-AUDIT-010 a 016 e RN-DIARIO-008). */
-export const auditCopy = {
+const pt = {
   title: "Auditoria",
   subtitle: (userName: string) =>
     `Tudo o que foi executado e as ações da conta, cifrado no diário de ${userName}. Só quem entra com esta conta vê.`,
@@ -157,3 +162,6 @@ export const auditCopy = {
     errorToast: "Não foi possível apagar os registros do diário.",
   },
 } as const;
+
+export type AuditCopy = Localized<typeof pt>;
+export const auditCopy = pickCopy({ "pt-BR": pt, en: auditCopyEn, es: auditCopyEs });

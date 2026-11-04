@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { engineTags, type Engine } from "@/components/ui/engine-tag";
 
+import { connectionsCopy } from "./connections.copy";
+
+const { validation } = connectionsCopy;
+
 /** `""` é "nenhuma" nos campos opcionais do formulário; a API recebe `null`. */
 const emptyToNull = (value: string) => (value === "" ? null : value);
 
@@ -57,7 +61,7 @@ export type Folder = z.infer<typeof folderSchema>;
 
 export const foldersSchema = z.array(folderSchema);
 
-export const engineSchema = z.literal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], { error: "Escolha o banco de dados." });
+export const engineSchema = z.literal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], { error: validation.engine });
 
 /**
  * A conexão como a API a devolve: sem a senha, só `hasPassword` (RN-CONN-001). A tela não aceita
@@ -138,7 +142,7 @@ export function engineOption(engine: Engine) {
   return engineOptions.find((option) => option.value === engine) ?? engineOptions[0];
 }
 
-const portMessage = "Informe uma porta de 1 a 65535.";
+const portMessage = validation.port;
 
 /**
  * RN-PASTA-001 e RN-CONN-010: os caracteres de controle (U+0000 a U+001F e U+007F a U+009F) e os de direção do texto (U+200E, U+200F, U+202A a U+202E e U+2066
@@ -166,17 +170,17 @@ export function queryWithoutControl(value: string): boolean {
 }
 
 /** A frase da recusa, com o nome do campo (RN-CONN-010). */
-const controlMessage = (field: string) => `${field} não pode ter caractere de controle nem de direção do texto.`;
+const controlMessage = validation.control;
 
 /** O ambiente do formulário (RN-CONN-010), o mesmo na conexão e na pasta (RN-PASTA-005): o nome em branco e a cor vazia viram `null`. */
 const environmentFields = {
   environmentName: z
     .string()
     .trim()
-    .max(30, "O ambiente pode ter no máximo 30 caracteres.")
-    .refine((value) => withoutControl(value, true), controlMessage("O nome do ambiente"))
+    .max(30, validation.environmentMax)
+    .refine((value) => withoutControl(value, true), controlMessage(validation.fields.environmentName))
     .transform(emptyToNull),
-  environmentColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, "Use uma cor no formato #RRGGBB.").transform(emptyToNull),
+  environmentColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, validation.colorFormat).transform(emptyToNull),
 };
 
 /**
@@ -186,13 +190,13 @@ const environmentFields = {
  */
 const protectionFields = {
   confirmCommands: z
-    .enum(["none", "irreversible", "all"], { error: "Escolha não confirmar, só os comandos irreversíveis ou todos os comandos." })
+    .enum(["none", "irreversible", "all"], { error: validation.confirmCommands })
     .transform((value): Confirmation | null => (value === "none" ? null : value)),
   readOnly: z.enum(["true", "false"]).transform((value) => value === "true"),
 };
 
 /** RN-VERIF-001: a frase do intervalo fora da faixa, a mesma da API (na criação, na alteração e no teste). */
-const verificationIntervalMessage = "A verificação deve ser feita a cada 5 a 3.600 segundos.";
+const verificationIntervalMessage = validation.verificationInterval;
 
 /**
  * A sessão da conexão do formulário (RN-VERIF-001): "Verificar a cada [N] segundos" (`verificationEnabled`, `true` ou `false`, do campo escondido, e o
@@ -211,8 +215,8 @@ const verificationFields = {
   verificationQuery: z
     .string()
     .trim()
-    .max(1000, "A consulta de verificação pode ter no máximo 1.000 caracteres.")
-    .refine(queryWithoutControl, controlMessage("A consulta de verificação"))
+    .max(1000, validation.verificationQueryMax)
+    .refine(queryWithoutControl, controlMessage(validation.fields.verificationQuery))
     .transform(emptyToNull),
 };
 
@@ -226,14 +230,14 @@ const connectionFields = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "Informe o nome da conexão.")
-    .max(80, "O nome pode ter no máximo 80 caracteres.")
-    .refine((value) => withoutControl(value, true), controlMessage("O nome da conexão")),
+    .min(1, validation.connectionNameRequired)
+    .max(80, validation.connectionNameMax)
+    .refine((value) => withoutControl(value, true), controlMessage(validation.fields.connectionName)),
   folderID: z.string().transform(emptyToNull),
-  host: z.string().trim().min(1, "Informe o host.").max(255, "O host pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host")),
+  host: z.string().trim().min(1, validation.hostRequired).max(255, validation.hostMax).refine((value) => withoutControl(value), controlMessage(validation.fields.host)),
   port: z.string().trim().regex(/^\d+$/, portMessage).transform(Number).pipe(z.number().min(1, portMessage).max(65535, portMessage)),
-  database: z.string().trim().min(1, "Informe o banco de dados.").max(128, "O banco de dados pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O banco de dados")),
-  userName: z.string().trim().min(1, "Informe o usuário do banco.").max(128, "O usuário do banco pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O usuário do banco")),
+  database: z.string().trim().min(1, validation.databaseRequired).max(128, validation.databaseMax).refine((value) => withoutControl(value), controlMessage(validation.fields.database)),
+  userName: z.string().trim().min(1, validation.userRequired).max(128, validation.userMax).refine((value) => withoutControl(value), controlMessage(validation.fields.databaseUser)),
   ...environmentFields,
   ...protectionFields,
   ...verificationFields,
@@ -241,10 +245,10 @@ const connectionFields = z.object({
 });
 
 /** A senha do banco tem até 1.024 caracteres, contados como veio (RN-CONN-010): ela não é aparada. */
-const passwordMessage = "A senha do banco pode ter até 1.024 caracteres.";
+const passwordMessage = validation.passwordMax;
 
 /** Na criação a senha é obrigatória. Não é aparada: espaço nas pontas faz parte dela. */
-export const createConnectionSchema = connectionFields.extend({ password: z.string().min(1, "Informe a senha do banco.").max(1024, passwordMessage) });
+export const createConnectionSchema = connectionFields.extend({ password: z.string().min(1, validation.passwordRequired).max(1024, passwordMessage) });
 
 /** Na edição a senha vazia vira `null`, e a API mantém a gravada (RN-CONN-004). */
 export const editConnectionSchema = connectionFields.extend({ password: z.string().max(1024, passwordMessage).transform(emptyToNull) });
@@ -253,7 +257,7 @@ export const editConnectionSchema = connectionFields.extend({ password: z.string
  * RN-TRANSF-015: salvar a edição de uma conexão sem senha gravada (a que a importação trouxe sem ela) exige a senha: não há o que manter, e vazio é "Informe a
  * senha do banco.". O "Testar conexão" usa o `editConnectionSchema`: a senha em branco vai à API, que responde que a conexão não tem senha gravada.
  */
-export const editWithoutPasswordSchema = connectionFields.extend({ password: z.string().min(1, "Informe a senha do banco.").max(1024, passwordMessage) });
+export const editWithoutPasswordSchema = connectionFields.extend({ password: z.string().min(1, validation.passwordRequired).max(1024, passwordMessage) });
 
 /** RN-NAV-009: o diálogo de renomear conexão, só com o nome, na regra do formulário. */
 export const renameConnectionSchema = connectionFields.pick({ name: true });
@@ -279,15 +283,15 @@ export function verificationOf(connection: ConnectionVerification): ConnectionVe
 export type ConnectionInput = z.output<typeof editConnectionSchema>;
 
 /** A senha do usuário no diálogo de revelar. Como no login, não se apara nem se impõe regra de criação. */
-export const revealPasswordSchema = z.object({ password: z.string().min(1, "Informe a sua senha do Prism.") });
+export const revealPasswordSchema = z.object({ password: z.string().min(1, validation.userPasswordRequired) });
 
 /** RN-PASTA-001: o nome da pasta, de 1 a 60, sem caractere de controle nem de direção do texto (depois da normalização, que junta os espaços). */
 const folderName = z
   .string()
   .trim()
-  .min(1, "Informe o nome da pasta.")
-  .max(60, "O nome pode ter no máximo 60 caracteres.")
-  .refine((value) => withoutControl(value, true), "O nome da pasta não pode ter caractere de controle nem de direção do texto.");
+  .min(1, validation.folderNameRequired)
+  .max(60, validation.folderNameMax)
+  .refine((value) => withoutControl(value, true), controlMessage(validation.fields.folderName));
 
 /**
  * Criar uma pasta: o nome, onde ela fica (`""` é a raiz), a cor do ícone dela (RN-PASTA-007, no formato da cor do ambiente), o ambiente (RN-PASTA-005) e as

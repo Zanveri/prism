@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { locale } from "@/lib/i18n";
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
@@ -139,7 +140,7 @@ export function SchemaObjectsBody({
                   <td className="px-3 py-2 font-mono font-medium text-ink">{item.name}</td>
                   {kind === "tables" ? (
                     <td className="px-3 py-2 font-mono text-muted">
-                      {item.estimatedRows !== null && item.estimatedRows !== undefined ? item.estimatedRows.toLocaleString("pt-BR") : "—"}
+                      {item.estimatedRows !== null && item.estimatedRows !== undefined ? item.estimatedRows.toLocaleString(locale) : "—"}
                     </td>
                   ) : null}
                   {kind === "routines" ? <td className="px-3 py-2 font-mono text-muted">{item.kind}</td> : null}
@@ -212,7 +213,7 @@ export function SchemaDiagramBody({
       layout={layout}
       schema={schema}
       subject={database === undefined ? schema : `${database}-${schema}`}
-      diagramLabel="Diagrama do esquema"
+      diagramLabel={copy.diagramLabel}
       tableCount={diagram.tables.length}
       foreignKeyCount={diagram.foreignKeys.length}
       omitted={0}

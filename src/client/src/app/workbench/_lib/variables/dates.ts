@@ -1,4 +1,5 @@
 import { VariableError } from "./errors";
+import { phrase } from "./variables.copy";
 
 /*
  * As datas da linguagem (RN-VAR-007): os campos do calendário, do ano ao milissegundo, na hora local da máquina e sem fuso. Compara-se e soma-se pelos campos; só
@@ -76,7 +77,7 @@ export function dateText(fields: DateFields, precision: DatePrecision): string {
   return `${day} ${clock}${fields.millisecond === 0 ? "" : `.${String(fields.millisecond).padStart(3, "0")}`}`;
 }
 
-export const outOfRange = (offset: number) => new VariableError("A data passou do ano 9999 (ou ficou antes do ano 1).", offset);
+export const outOfRange = (offset: number) => new VariableError(phrase.dateOutOfRange(), offset);
 
 /** Os campos do dia `days` depois (ou antes) de `from`, mantendo a hora do relógio, ou `null` quando passa da faixa. */
 export function addDaysTo(from: DateFields, days: number): DateFields | null {

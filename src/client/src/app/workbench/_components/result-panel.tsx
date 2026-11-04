@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import { locale } from "@/lib/i18n";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { Button, DownloadIcon, RefreshIcon, StopIcon, UploadIcon } from "@/components/ui";
@@ -149,7 +150,7 @@ export function collapsedSummary(state: RunnerState): string {
   if (state.status === "affected") return copy.affected(state.rowsAffected, state.elapsedMs);
   if (state.status === "cancelled") return copy.cancelled;
   if (state.status === "notice") return state.message;
-  if (state.status === "variableErrors") return `${variableRunCopy.errors.title} · ${state.errors.length.toLocaleString("pt-BR")}`;
+  if (state.status === "variableErrors") return `${variableRunCopy.errors.title} · ${state.errors.length.toLocaleString(locale)}`;
   if (state.status === "error") return state.sqlState === null ? state.title : `${state.title} · ${copy.sqlState} ${state.sqlState}`;
   return copy.empty;
 }

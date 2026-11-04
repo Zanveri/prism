@@ -17,13 +17,10 @@ import type {
   ModelTable,
 } from "../_lib/build-model.schema";
 import { fkActionOptions } from "../_lib/editor-rows";
+import { buildCopy } from "../_lib/build.copy";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
-const deleteActionLabels: Record<FkAction, string> = {
-  noAction: "Ao excluir: impedir",
-  restrict: "Ao excluir: restringir",
-  cascade: "Ao excluir: cascata",
-  setNull: "Ao excluir: anular",
-};
+const deleteActionLabels: Record<FkAction, string> = buildUiCopy.foreignKeys.deleteActions;
 
 export type ForeignKeysSectionProps = {
   model: BuildModel;
@@ -128,7 +125,7 @@ export function ForeignKeysSection({
     >
       <div className="flex h-7 items-center gap-2">
         <h2 id="h-fks" className="m-0 text-[13px] font-semibold">
-          Chaves estrangeiras
+          {buildUiCopy.foreignKeys.title}
         </h2>
         <span className="text-xs text-subtle">{table.foreignKeys.length}</span>
         <Button
@@ -139,7 +136,7 @@ export function ForeignKeysSection({
           className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
         >
           <PlusIcon />
-          <span>Nova FK</span>
+          <span>{buildUiCopy.foreignKeys.add}</span>
         </Button>
       </div>
 
@@ -182,7 +179,7 @@ export function ForeignKeysSection({
                 }
                 openEditDraft(idx, fk);
               }}
-              title="Clique para editar a relação · Ctrl+clique para ir até a tabela no diagrama"
+              title={buildUiCopy.foreignKeys.editHint}
               className="min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-left font-mono text-xs text-ink hover:underline"
             >
               {colsLabel} <span className="text-accent">→</span> {targetDisplay}
@@ -193,7 +190,7 @@ export function ForeignKeysSection({
             </button>
 
             <Select
-              aria-label={`Ao excluir em ${colsLabel}`}
+              aria-label={buildUiCopy.foreignKeys.onDeleteIn(colsLabel)}
               value={fk.onDelete}
               onChange={(nextAction) =>
                 onUpdateForeignKey(idx, {
@@ -213,7 +210,7 @@ export function ForeignKeysSection({
               type="button"
               variant="ghost"
               size="compact"
-              aria-label={`Remover a FK de ${colsLabel}`}
+              aria-label={buildUiCopy.foreignKeys.remove(colsLabel)}
               onClick={() => onRemoveForeignKey(idx)}
               className="h-7 w-7 p-0"
             >
@@ -222,8 +219,7 @@ export function ForeignKeysSection({
 
             {!targetInModel ? (
               <span className="col-span-full font-sans text-xs leading-[18px] text-muted">
-                {fk.target.schema}.{fk.target.table} não está no modelo; a FK
-                continua como está no banco.
+                {buildUiCopy.foreignKeys.targetNotInModel(`${fk.target.schema}.${fk.target.table}`)}
               </span>
             ) : null}
           </div>
@@ -233,7 +229,7 @@ export function ForeignKeysSection({
       {draft !== null ? (
         <Dialog
           open
-          title={draft.editIndex !== null ? "Editar chave estrangeira" : "Nova chave estrangeira"}
+          title={draft.editIndex !== null ? buildUiCopy.foreignKeys.dialogEdit : buildUiCopy.foreignKeys.dialogNew}
           onClose={() => setDraft(null)}
           size="md"
           footer={
@@ -243,19 +239,19 @@ export function ForeignKeysSection({
                 variant="secondary"
                 onClick={() => setDraft(null)}
               >
-                Cancelar
+                {buildCopy.cancelButton}
               </Button>
               <Button type="button" variant="primary" onClick={submitDraft}>
-                Salvar
+                {buildUiCopy.foreignKeys.save}
               </Button>
             </>
           }
         >
           <div className="flex flex-col gap-3">
             <Field>
-              <FieldLabel>Coluna em {table.name}</FieldLabel>
+              <FieldLabel>{buildUiCopy.foreignKeys.columnIn(table.name)}</FieldLabel>
               <Select
-                aria-label={`Coluna em ${table.name}`}
+                aria-label={buildUiCopy.foreignKeys.columnIn(table.name)}
                 value={draft.sourceColumn}
                 onChange={(nextCol) =>
                   setDraft((prev) =>
@@ -274,9 +270,9 @@ export function ForeignKeysSection({
             </Field>
 
             <Field>
-              <FieldLabel>Tabela de destino</FieldLabel>
+              <FieldLabel>{buildUiCopy.foreignKeys.targetTable}</FieldLabel>
               <Select
-                aria-label="Tabela de destino"
+                aria-label={buildUiCopy.foreignKeys.targetTable}
                 value={draft.targetTableKey}
                 onChange={(nextKey) => {
                   const nextTarget = model.tables.find(
@@ -307,9 +303,9 @@ export function ForeignKeysSection({
             </Field>
 
             <Field>
-              <FieldLabel>Coluna de destino</FieldLabel>
+              <FieldLabel>{buildUiCopy.foreignKeys.targetColumn}</FieldLabel>
               <Select
-                aria-label="Coluna de destino"
+                aria-label={buildUiCopy.foreignKeys.targetColumn}
                 value={draft.targetColumn}
                 onChange={(nextCol) =>
                   setDraft((prev) =>
@@ -328,9 +324,9 @@ export function ForeignKeysSection({
             </Field>
 
             <Field>
-              <FieldLabel>Ao excluir</FieldLabel>
+              <FieldLabel>{buildUiCopy.foreignKeys.onDelete}</FieldLabel>
               <Select
-                aria-label="Ao excluir"
+                aria-label={buildUiCopy.foreignKeys.onDelete}
                 value={draft.onDelete}
                 onChange={(nextAction) =>
                   setDraft((prev) =>
@@ -349,8 +345,7 @@ export function ForeignKeysSection({
 
       {!table.origin ? (
         <p className="m-0 text-xs leading-[18px] text-muted">
-          Ou arraste uma coluna até a tabela de destino no diagrama. A FK pode
-          apontar para uma tabela existente.
+          {buildUiCopy.foreignKeys.diagramHint}
         </p>
       ) : null}
     </section>

@@ -29,6 +29,7 @@ import type {
   ModelTable,
 } from "./build-model.schema";
 import { buildCopy } from "./build.copy";
+import { buildUiCopy } from "./build-ui.copy";
 
 export type ProblemCode =
   | "E1"
@@ -85,27 +86,27 @@ export type ProblemFix =
 export function fixButtonLabel(fix: ProblemFix): string {
   switch (fix.kind) {
     case "removeForeignKey":
-      return "Remover a FK";
+      return buildUiCopy.fixes.removeForeignKey;
     case "createUnique":
-      return `Criar único em (${fix.columns.join(", ")})`;
+      return buildUiCopy.fixes.createUnique(fix.columns.join(", "));
     case "useFkAction":
-      return `Usar ${fix.onDelete}`;
+      return buildUiCopy.fixes.useFkAction(fix.onDelete);
     case "useType":
-      return `Trocar para ${fix.type}`;
+      return buildUiCopy.fixes.useType(fix.type);
     case "createIdColumn":
-      return "Criar coluna id";
+      return buildUiCopy.fixes.createIdColumn;
     case "createIndexes":
-      return `Criar os ${fix.items.length} índices`;
+      return buildUiCopy.fixes.createIndexes(fix.items.length);
     case "restore":
-      return "Restaurar";
+      return buildUiCopy.fixes.restore;
     case "revert":
-      return "Voltar como era";
+      return buildUiCopy.fixes.revert;
     case "removeReferencingForeignKeys":
-      return "Remover as FKs";
+      return buildUiCopy.fixes.removeReferencingForeignKeys;
     case "giveDefault":
-      return "Dar um padrão";
+      return buildUiCopy.fixes.giveDefault;
     case "useIdentity":
-      return "Trocar por AI";
+      return buildUiCopy.fixes.useIdentity;
     case "reread":
       return buildCopy.toolbarReread;
   }
@@ -324,7 +325,7 @@ export function checkModel(
   for (const table of activeTables) {
     const tKey = tableKey(table);
     if (isInvalidName(table.name) || isInvalidName(table.schema)) {
-      pushProblem("E1", "error", tKey, null, buildCopy.problems.e1("tabela"));
+      pushProblem("E1", "error", tKey, null, buildCopy.problems.e1("table"));
     }
     for (const col of table.columns) {
       if (isInvalidName(col.name)) {
@@ -333,7 +334,7 @@ export function checkModel(
           "error",
           tKey,
           col.name,
-          buildCopy.problems.e1("coluna"),
+          buildCopy.problems.e1("column"),
         );
       }
     }
@@ -344,7 +345,7 @@ export function checkModel(
           "error",
           tKey,
           null,
-          buildCopy.problems.e1("restrição"),
+          buildCopy.problems.e1("constraint"),
         );
       }
     }
@@ -355,7 +356,7 @@ export function checkModel(
           "error",
           tKey,
           null,
-          buildCopy.problems.e1("restrição"),
+          buildCopy.problems.e1("constraint"),
         );
       }
     }
@@ -366,7 +367,7 @@ export function checkModel(
           "error",
           tKey,
           null,
-          buildCopy.problems.e1("restrição"),
+          buildCopy.problems.e1("constraint"),
         );
       }
     }
@@ -377,7 +378,7 @@ export function checkModel(
           "error",
           tKey,
           null,
-          buildCopy.problems.e1("restrição"),
+          buildCopy.problems.e1("constraint"),
         );
       }
     }
@@ -388,7 +389,7 @@ export function checkModel(
           "error",
           tKey,
           null,
-          buildCopy.problems.e1("índice"),
+          buildCopy.problems.e1("index"),
         );
       }
     }
@@ -611,7 +612,7 @@ export function checkModel(
   for (const table of activeTables) {
     const tKey = tableKey(table);
     for (const ix of table.indexes) {
-      const ixLabel = ix.name ?? "(sem nome)";
+      const ixLabel = ix.name ?? buildUiCopy.unnamed;
       const missingCol =
         ix.columns.find(
           (ic) => !table.columns.some((c) => sameColName(engine, c.name, ic)),

@@ -1,5 +1,10 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { driversCopyEn } from "./drivers.copy.en";
+import { driversCopyEs } from "./drivers.copy.es";
+
 /** Os textos da tela de drivers, num lugar só (RN-DRIVER-001 a 009, RN-AVISO-002 a 004). */
-export const driversCopy = {
+const pt = {
   title: "Drivers",
   subtitle: "O Prism leva só o driver do PostgreSQL. Os dos outros bancos você baixa quando precisar, aceitando a licença do fabricante.",
   loading: "Carregando os drivers…",
@@ -101,3 +106,6 @@ export const driversCopy = {
   // Item G: o caminho a partir de uma conexão sem driver.
   installDriver: "Instalar driver",
 } as const;
+
+export type DriversCopy = Localized<typeof pt>;
+export const driversCopy = pickCopy({ "pt-BR": pt, en: driversCopyEn, es: driversCopyEs });

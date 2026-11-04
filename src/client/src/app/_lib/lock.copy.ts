@@ -1,5 +1,9 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+import { lockCopyEn } from "./lock.copy.en";
+import { lockCopyEs } from "./lock.copy.es";
+
 /** Os textos do bloqueio por inatividade, num lugar só: o aviso de 60 segundos antes e a tela de bloqueio (RN-SEG-001). */
-export const lockCopy = {
+const pt = {
   warning: {
     title: "O Prism vai bloquear por falta de uso.",
     // Quanto falta, em segundos; o que a pessoa faz para cancelar é mexer.
@@ -38,3 +42,6 @@ export const lockCopy = {
     closeFailed: "Não foi possível fechar o cofre no serviço. O Prism continua bloqueado nesta janela, mas o cofre pode continuar aberto lá: desbloqueie ou saia.",
   },
 } as const;
+
+export type LockCopy = Localized<typeof pt>;
+export const lockCopy = pickCopy({ "pt-BR": pt, en: lockCopyEn, es: lockCopyEs });

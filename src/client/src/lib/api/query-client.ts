@@ -4,6 +4,7 @@ import type { useToast } from "@/components/ui/toast";
 import type { ToastTone } from "@/components/ui/toast-queue";
 
 import { ApiRequestError } from "./prism-api";
+import { apiCopy } from "./api.copy";
 import { vaultLock } from "./vault-lock";
 
 /** A tela que mostra o erro no próprio lugar, sem aviso, passa `meta: { silent: true }`. */
@@ -21,15 +22,15 @@ export type ToastMessage = { tone: ToastTone; title: string; description?: strin
 /** O aviso que uma chamada que falhou merece, ou `null` quando ela não merece nenhum (RN-AVISO-004). */
 export function errorToastFor(error: unknown, meta?: ErrorMeta): ToastMessage | null {
   if (meta?.silent) return null;
-  if (!(error instanceof ApiRequestError)) return { tone: "error", title: "Erro inesperado." };
+  if (!(error instanceof ApiRequestError)) return { tone: "error", title: apiCopy.unexpectedError };
 
   const { code, title, detail, errors } = error.error;
 
   // Erro de campo aparece no campo, não em aviso.
   if (errors !== null && Object.keys(errors).length > 0) return null;
   // RN-AVISO-003: o cofre fechou e a pessoa pode seguir, entrando de novo.
-  if (code === "VAULT_LOCKED") return { tone: "warning", title: "Cofre fechado. Entre de novo." };
-  if (code === "NETWORK_ERROR") return { tone: "error", title: "Sem resposta da API." };
+  if (code === "VAULT_LOCKED") return { tone: "warning", title: apiCopy.vaultLocked };
+  if (code === "NETWORK_ERROR") return { tone: "error", title: apiCopy.noResponse };
 
   return detail === null ? { tone: "error", title } : { tone: "error", title, description: detail };
 }

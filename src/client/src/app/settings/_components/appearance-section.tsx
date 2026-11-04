@@ -1,7 +1,11 @@
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { Field, FieldLabel } from "@/components/ui";
+import { requestAppLocale } from "@/lib/api/bridge";
+import { locale, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils/cn";
+
+import { localeNames, locales } from "../../../../electron/locale";
 
 import { fontStack } from "../_lib/fonts";
 import { navigatorDensities } from "../_lib/preferences";
@@ -17,6 +21,7 @@ import { appliedPalette, fontSample, SqlSample, themeSample } from "./sql-sample
 const copy = settingsCopy.appearance;
 const fontCopy = copy.fonts;
 const densityCopy = copy.density;
+const languageCopy = copy.language;
 
 /**
  * O cartão de um tema: uma faixa com as cores dele e o nome. As cores são as da prévia do tema (ou da variante ativa dele), e não as do que está aplicado. A faixa é
@@ -44,6 +49,40 @@ function ThemeCard({ option, previewMode, kindLabel, selected, onPick }: { optio
         <span className="ml-auto text-xs text-muted">{kindLabel}</span>
       </span>
     </button>
+  );
+}
+
+/**
+ * O idioma do programa (`electron/locale.ts`): como o zoom, desta instalação e guardado pelo processo principal. Os textos são escolhidos ao carregar a
+ * janela, então a troca vale na próxima abertura, e até lá a dica diz isso.
+ */
+function LanguageControl() {
+  const [chosen, setChosen] = useState<Locale>(locale);
+  const [failed, setFailed] = useState(false);
+
+  async function pick(next: Locale) {
+    const previous = chosen;
+    setChosen(next);
+    const ok = await requestAppLocale(next);
+    setFailed(!ok);
+    if (!ok) setChosen(previous);
+  }
+
+  return (
+    <fieldset aria-describedby="cfg-idioma-dica" className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
+      <legend className="mb-1.5 p-0 text-sm text-muted">{languageCopy.label}</legend>
+      <div className="flex min-h-9 flex-wrap items-center gap-x-5 gap-y-2">
+        {locales.map((option) => (
+          <label key={option} lang={option} className="flex cursor-pointer items-center gap-2.5">
+            <input type="radio" name="cfg-idioma" value={option} checked={chosen === option} onChange={() => void pick(option)} className="m-0 size-[18px] flex-none cursor-pointer accent-accent" />
+            <span>{localeNames[option]}</span>
+          </label>
+        ))}
+      </div>
+      <p id="cfg-idioma-dica" className="text-xs text-muted">
+        {failed ? languageCopy.failed : chosen === locale ? languageCopy.hint : languageCopy.pending}
+      </p>
+    </fieldset>
   );
 }
 
@@ -138,6 +177,7 @@ export function AppearanceSection({ anchor }: { anchor: string }) {
 
       <div className="grid max-w-[900px] grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-4">
         <AppZoomControl />
+        <LanguageControl />
         <fieldset aria-describedby="cfg-densidade-dica" className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
           <legend className="mb-1.5 p-0 text-sm text-muted">{densityCopy.label}</legend>
           <div className="flex min-h-9 flex-wrap items-center gap-x-5 gap-y-2">

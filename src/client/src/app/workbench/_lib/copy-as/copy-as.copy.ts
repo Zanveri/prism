@@ -3,6 +3,11 @@ import type { DocumentFormat } from "../grid-export/document";
 import { gridSelectionCopy } from "../grid-selection.copy";
 import { recordsCopy } from "../records.copy";
 
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { copyAsCopyEn } from "./copy-as.copy.en";
+import { copyAsCopyEs } from "./copy-as.copy.es";
+
 const menu = gridSelectionCopy.menu;
 
 /**
@@ -14,7 +19,7 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 
 const nameOf = (format: DocumentFormat) => dataExportCopy.formats.names[format];
 
-export const copyAsCopy = {
+const pt = {
   // RN-GRADE-003: os itens do submenu "Copiar avançado", os mesmos do menu da grade (`gridSelectionCopy.menu`, que os desenha).
   menu: {
     submenu: menu.advanced,
@@ -71,7 +76,11 @@ export const copyAsCopy = {
     skipped: (count: number) => (count === 1 ? "1 linha não copiada, comentada no SQL: o comentário diz por quê." : `${formatCount(count)} linhas não copiadas, comentadas no SQL: o comentário de cada uma diz por quê.`),
     notWhole: (count: number) => (count === 1 ? "1 valor não pôde vir inteiro e foi cortado." : `${formatCount(count)} valores não puderam vir inteiros e foram cortados.`),
     // A recusa do limite e a falha da área de transferência são as do "Copiar" (RN-GRADE-002): uma frase só para os dois.
+    noColumns: 'As colunas escolhidas são todas calculadas pelo banco e ficam fora do INSERT: ligue "Incluir as colunas que o banco calcula" nas opções do SQL.',
     tooLarge: gridSelectionCopy.copy.tooLarge,
     failed: recordsCopy.edit.menu.notCopied,
   },
 };
+
+export type CopyAsCopy = Localized<typeof pt>;
+export const copyAsCopy = pickCopy({ "pt-BR": pt, en: copyAsCopyEn, es: copyAsCopyEs });
