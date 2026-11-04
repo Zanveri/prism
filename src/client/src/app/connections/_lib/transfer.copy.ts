@@ -217,8 +217,6 @@ export const transferCopy = {
     notice: {
       userName: "Esta conexão chegou sem usuário e senha. Preencha para conectar.",
       password: "Esta conexão chegou sem a senha. Preencha para conectar.",
-      sshSecret: 'A senha do túnel SSH não está gravada nesta conexão. Informe-a e salve para conectar: sem "Salvar credenciais", ela fica só na memória até o Prism ser bloqueado ou fechado.',
-      proxyPassword: 'A senha do proxy não está gravada nesta conexão. Informe-a e salve para conectar: sem "Salvar credenciais", ela fica só na memória até o Prism ser bloqueado ou fechado.',
     },
   },
 } as const;

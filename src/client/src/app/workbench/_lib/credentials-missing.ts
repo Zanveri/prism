@@ -12,10 +12,19 @@ import { ApiRequestError, type ApiError } from "@/lib/api/prism-api";
 export const credentialsMissingCode = "CONNECTION_CREDENTIALS_MISSING";
 
 /**
- * O campo que falta (RN-TRANSF-016 e RN-REDE-003): o usuário ou a senha do banco, ou o segredo do túnel SSH (`sshSecret`) ou do proxy (`proxyPassword`) que a conexão gravada sem "Salvar
- * credenciais" não guarda e que ninguém digitou desde que o cofre abriu (a API o guarda só na memória, até o cofre fechar).
+ * O campo que falta (RN-TRANSF-016, RN-REDE-003 e 006): o usuário ou a senha do banco, ou o segredo do túnel SSH (`sshSecret`, a senha ou a frase secreta da chave) ou
+ * do proxy (`proxyPassword`) que a conexão gravada sem "Salvar credenciais" não guarda e que ninguém digitou desde que ela foi conectada (a API o guarda só na
+ * memória, até a conexão ser desconectada ou o cofre fechar). O do banco abre o "Editar conexão"; o do túnel e o do proxy, o pedido do segredo (`NetworkSecretDialog`).
  */
-export type CredentialsField = "userName" | "password" | "sshSecret" | "proxyPassword";
+export type CredentialsField = DatabaseCredentialsField | NetworkSecretField;
+
+/** O usuário e a senha do banco, que se informam no "Editar conexão" (RN-TRANSF-016). */
+export type DatabaseCredentialsField = "userName" | "password";
+
+/** O segredo do túnel SSH ou do proxy, que se pede ao conectar (RN-REDE-006). */
+export type NetworkSecretField = "sshSecret" | "proxyPassword";
+
+export const isNetworkSecretField = (field: CredentialsField): field is NetworkSecretField => field === "sshSecret" || field === "proxyPassword";
 
 /** O campo que falta, numa recusa (ou num erro lançado) de abrir a sessão ou de testar; `null` quando não é esta recusa. */
 export function credentialsMissingField(error: ApiError | unknown): CredentialsField | null {

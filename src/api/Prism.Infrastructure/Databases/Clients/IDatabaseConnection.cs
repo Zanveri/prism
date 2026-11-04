@@ -12,6 +12,9 @@ public interface IDatabaseConnection : IAsyncDisposable
 {
     string ServerVersion { get; }
 
+    /// <summary>RN-REDE-005: a impressão digital da chave do servidor SSH aceita no primeiro acesso, quando o túnel desta conexão a aceitou; nula nos outros casos.</summary>
+    string? FirstUseHostKey => null;
+
     /// <summary>`false` quando a conexão caiu (rede, banco reiniciado, sessão derrubada por um administrador): depois de uma falha, é o que diz que ela não serve mais.</summary>
     bool IsOpen { get; }
 

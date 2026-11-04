@@ -1,3 +1,4 @@
+using Prism.Infrastructure.Databases.Models;
 using System.Text.Json.Serialization;
 
 namespace Prism.Application.ConnectionTransfers.Models;
@@ -31,7 +32,8 @@ internal sealed record TransferFolderEffective(bool ReadOnly, string? ConfirmCom
 /// RN-TRANSF-006 e 007: a conexão. O banco vai pelo nome (`PostgreSql`, `Db2` ou `Informix`), e não pelo número da API. O usuário e a senha vão conforme a
 /// escolha (RN-TRANSF-003): o que não vai não aparece no arquivo, nem vazio, e a senha só vem com o usuário. A verificação vai como vale (ligada ou não, o
 /// intervalo, e a consulta, nula quando é a do banco). `effective` é o que valia na origem (RN-PROT-004 e RN-PASTA-005), para a importação não a deixar mais
-/// fraca (RN-TRANSF-013).
+/// fraca (RN-TRANSF-013). O túnel SSH, o SSL e o proxy vão como a conexão os grava, e só quando ela tem (RN-REDE-004): o segredo do túnel e a senha do proxy vão
+/// só junto com a senha do banco.
 /// </summary>
 internal sealed record TransferFileConnection(
     string Key,
@@ -50,7 +52,10 @@ internal sealed record TransferFileConnection(
     bool VerificationEnabled,
     int VerificationInterval,
     string? VerificationQuery,
-    TransferConnectionEffective Effective)
+    TransferConnectionEffective Effective,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConnectionSshSettings? Ssh = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConnectionSslSettings? Ssl = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConnectionProxySettings? Proxy = null)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria o host, o usuário, a senha do banco e a consulta de verificação.</summary>
     public override string ToString()

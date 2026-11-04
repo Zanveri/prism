@@ -31,6 +31,12 @@ internal sealed class UnsavedSecretsService : IUnsavedSecretsService, IDisposabl
     public ConnectionProxySettings? Proxy(Guid connectionID)
         => _proxy.GetValueOrDefault(connectionID);
 
+    public void Forget(Guid connectionID)
+    {
+        _ssh.TryRemove(connectionID, out _);
+        _proxy.TryRemove(connectionID, out _);
+    }
+
     public void Dispose()
         => _vault.Locked -= Clear;
 

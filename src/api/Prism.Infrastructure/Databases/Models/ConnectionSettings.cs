@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Prism.Infrastructure.Databases.Models;
 
 /// <summary>O que um driver precisa para abrir a conexão com um banco. Carrega a senha do banco: nunca vai a log.</summary>
@@ -12,9 +14,10 @@ public sealed record ConnectionSettings(EDatabaseEngine Engine, string Host, int
 /// Configuração de túnel SSH de uma conexão com banco de dados. `Secret` guarda a senha SSH (quando `AuthMethod` é
 /// `password`) ou a frase secreta da chave privada (quando `AuthMethod` é `privateKey`); quando `SaveCredentials`
 /// é `false`, no cofre `Secret` fica vazio. `HostKeyFingerprint` é a impressão digital SHA256 da chave do servidor SSH (`SHA256:...`, a do
-/// `ssh-keygen -lf`): sem `IgnoreHostVerification`, o túnel só abre quando a chave apresentada confere com ela.
+/// `ssh-keygen -lf`): sem `IgnoreHostVerification`, o túnel só abre quando a chave apresentada confere com ela. O `Secret` nulo não é escrito no JSON (o do cofre e
+/// o do arquivo da exportação, RN-TRANSF-007): o segredo que não vai não aparece, nem vazio.
 /// </summary>
-public sealed record ConnectionSshSettings(string Host, int Port, string UserName, string AuthMethod = "password", string? PrivateKeyPath = null, string? Secret = null, bool SaveCredentials = true, bool IgnoreHostVerification = false, int KeepAliveIntervalMs = 0, int TunnelTimeoutMs = 0, string? LocalHost = null, int LocalPort = 0, string? RemoteHost = null, int RemotePort = 0, string? HostKeyFingerprint = null)
+public sealed record ConnectionSshSettings(string Host, int Port, string UserName, string AuthMethod = "password", string? PrivateKeyPath = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Secret = null, bool SaveCredentials = true, bool IgnoreHostVerification = false, int KeepAliveIntervalMs = 0, int TunnelTimeoutMs = 0, string? LocalHost = null, int LocalPort = 0, string? RemoteHost = null, int RemotePort = 0, string? HostKeyFingerprint = null)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado pelo compilador para `record` imprimiria `Secret`.</summary>
     public override string ToString()
@@ -35,7 +38,7 @@ public sealed record ConnectionSslSettings(string? CaCertificatePath = null, str
 /// Configuração de proxy SOCKS5 da conexão com o banco. Quando `SaveCredentials` é `false`, no cofre `Password`
 /// fica vazia.
 /// </summary>
-public sealed record ConnectionProxySettings(string Host, int Port = 1080, string? UserName = null, string? Password = null, bool SaveCredentials = true)
+public sealed record ConnectionProxySettings(string Host, int Port = 1080, string? UserName = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Password = null, bool SaveCredentials = true)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado pelo compilador para `record` imprimiria `Password`.</summary>
     public override string ToString()

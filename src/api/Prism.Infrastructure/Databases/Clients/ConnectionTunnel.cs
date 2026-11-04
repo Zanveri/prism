@@ -17,10 +17,11 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
     private readonly ForwardedPortLocal? _forwardedPort;
     private readonly TcpListener? _socksListener;
 
-    private ConnectionTunnel(string boundHost, int boundPort, SshClient? sshClient, ForwardedPortLocal? forwardedPort, TcpListener? socksListener)
+    private ConnectionTunnel(string boundHost, int boundPort, SshClient? sshClient, ForwardedPortLocal? forwardedPort, TcpListener? socksListener, string? firstUseHostKey = null)
     {
         BoundHost = boundHost;
         BoundPort = boundPort;
+        FirstUseHostKey = firstUseHostKey;
         _sshClient = sshClient;
         _forwardedPort = forwardedPort;
         _socksListener = socksListener;
@@ -29,6 +30,9 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
     public string BoundHost { get; }
 
     public int BoundPort { get; }
+
+    /// <summary>RN-REDE-005: a impressão digital (`SHA256:...`) da chave que o servidor SSH apresentou e foi aceita por ser o primeiro acesso; nula nos outros casos.</summary>
+    public string? FirstUseHostKey { get; }
 
     public static async Task<ConnectionTunnel> OpenAsync(ConnectionSettings settings, CancellationToken cancellationToken)
     {
@@ -55,13 +59,18 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
         if (ssh.KeepAliveIntervalMs > 0)
             client.KeepAliveInterval = TimeSpan.FromMilliseconds(ssh.KeepAliveIntervalMs);
 
-        // O SSH.NET confia em qualquer chave se ninguém disser o contrário: sem "Ignorar verificação de host", só a impressão digital informada passa.
+        // O SSH.NET confia em qualquer chave se ninguém disser o contrário. RN-REDE-005: sem "Ignorar verificação de host", só a impressão digital gravada passa,
+        // e a conexão que ainda não tem uma aceita a do primeiro acesso, que quem abriu a sessão grava.
         string? refusedKey = null;
+        string? firstUseKey = null;
         client.HostKeyReceived += (_, args) =>
         {
+            var presented = $"SHA256:{args.FingerPrintSHA256}";
             args.CanTrust = HostKeyIsTrusted(ssh, args.FingerPrintSHA256);
             if (!args.CanTrust)
-                refusedKey = $"SHA256:{args.FingerPrintSHA256}";
+                refusedKey = presented;
+            else if (!ssh.IgnoreHostVerification && ssh.HostKeyFingerprint is null)
+                firstUseKey = presented;
         };
 
         var connecting = client.ConnectAsync(cancellationToken);
@@ -70,9 +79,7 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
         {
             client.Dispose();
             if (refusedKey is not null)
-                throw new InvalidOperationException(ssh.HostKeyFingerprint is null
-                    ? $"A chave do servidor SSH não foi verificada. A impressão digital dela é {refusedKey}: confira com quem administra o servidor (ssh-keygen -lf) e informe-a em \"Impressão digital do host\", ou marque \"Ignorar verificação de host\"."
-                    : $"A chave do servidor SSH ({refusedKey}) não confere com a impressão digital informada. Pode haver outro servidor no caminho: confirme com quem administra o servidor antes de trocar a impressão digital.");
+                throw new InvalidOperationException($"A chave do servidor SSH ({refusedKey}) não confere com a impressão digital gravada na conexão ({ssh.HostKeyFingerprint}). Pode haver outro servidor no caminho: confirme com quem administra o servidor (ssh-keygen -lf). Se a chave mudou mesmo, informe a nova em \"Impressão digital do host\", em Editar conexão.");
 
             await connecting;
         }
@@ -86,15 +93,16 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
         client.AddForwardedPort(forwardedPort);
         forwardedPort.Start();
 
-        return new ConnectionTunnel(forwardedPort.BoundHost, (int)forwardedPort.BoundPort, client, forwardedPort, null);
+        return new ConnectionTunnel(forwardedPort.BoundHost, (int)forwardedPort.BoundPort, client, forwardedPort, null, firstUseKey);
     }
 
     /// <summary>
-    /// A chave do servidor vale com "Ignorar verificação de host" ou quando confere com a impressão digital informada. `presentedSha256` vem como o SSH.NET
-    /// a dá (base64 sem `=` e sem `SHA256:`); a informada aceita os dois. Base64 diferencia maiúsculas: a comparação é exata.
+    /// RN-REDE-005: a chave do servidor vale com "Ignorar verificação de host", quando a conexão ainda não tem impressão digital (o primeiro acesso), ou quando
+    /// confere com a gravada. `presentedSha256` vem como o SSH.NET a dá (base64 sem `=` e sem `SHA256:`); a gravada aceita os dois. Base64 diferencia
+    /// maiúsculas: a comparação é exata.
     /// </summary>
     internal static bool HostKeyIsTrusted(ConnectionSshSettings ssh, string presentedSha256)
-        => ssh.IgnoreHostVerification || (ssh.HostKeyFingerprint is { } expected && string.Equals(BareFingerprint(expected), BareFingerprint(presentedSha256), StringComparison.Ordinal));
+        => ssh.IgnoreHostVerification || ssh.HostKeyFingerprint is not { } expected || string.Equals(BareFingerprint(expected), BareFingerprint(presentedSha256), StringComparison.Ordinal);
 
     private static string BareFingerprint(string fingerprint)
     {
@@ -106,7 +114,7 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
     }
 
     private static string MissingSecret(string what)
-        => $"{what} não está gravada nesta conexão. Informe-a em \"Editar conexão\" e tente de novo: sem \"Salvar credenciais\", ela fica só na memória até o Prism ser bloqueado ou fechado.";
+        => $"{what} não está gravada nesta conexão. Conecte-se a ela e informe-a quando o Prism pedir: sem \"Salvar credenciais\", ela fica só na memória até a conexão ser desconectada.";
 
     private static string ProxyPasswordOf(ConnectionProxySettings proxy)
         => proxy.UserName is not null && string.IsNullOrEmpty(proxy.Password) ? throw new InvalidOperationException(MissingSecret("A senha do proxy")) : proxy.Password ?? string.Empty;

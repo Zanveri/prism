@@ -61,14 +61,14 @@ internal static class ConnectionErrors
     /// abriu. `field` é o de <see cref="ConnectionRules.MissingNetworkSecret"/>; a tela abre o "Editar conexão" na aba dele.
     /// </summary>
     public static ApiErrorDto NetworkSecretMissingToConnect(string field)
-        => CredentialsMissing(field, $"{NetworkSecretOf(field)} não está gravada nesta conexão. Informe-a em \"Editar conexão\" para conectar: sem \"Salvar credenciais\", ela fica só na memória até o Prism ser bloqueado ou fechado.");
+        => CredentialsMissing(field, $"{NetworkSecretOf(field)} não está gravada nesta conexão. Informe-a para conectar: sem \"Salvar credenciais\", ela fica só na memória até a conexão ser desconectada ou o Prism ser bloqueado.");
 
     /// <summary>O mesmo no "Testar conexão": o campo do segredo, vazio, sem o segredo gravado nem digitado antes.</summary>
     public static ApiErrorDto NetworkSecretMissingToTest(string field)
         => CredentialsMissing(field, $"Informe {NetworkSecretOf(field).ToLowerInvariant()} para testar.");
 
     private static string NetworkSecretOf(string field)
-        => field == "SshSecret" ? "A senha do túnel SSH" : "A senha do proxy";
+        => field == "SshSecret" ? "A senha (ou frase secreta da chave) do túnel SSH" : "A senha do proxy";
 
     private static ApiErrorDto CredentialsMissing(string field, string message)
         => ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", field, message);

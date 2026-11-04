@@ -23,7 +23,6 @@ type ConnectionFieldsProps = {
   /** A conexão gravada (os campos nascem com os valores dela), ou `null` para uma nova. */
   connection: Connection | null;
   /** A aba que abre primeiro: a do que falta para conectar, quando o diálogo abriu por isso. */
-  initialTab?: ConnectionTabId;
   folders: Folder[];
   errors: FieldErrors;
   folderID: string;
@@ -60,9 +59,9 @@ type ConnectionFieldsProps = {
  * o ambiente e as proteções, na ordem de leitura do canvas. O que é texto livre vai pelo `FormData` (campos não controlados); a pasta, a porta (que acompanha o
  * banco, RN-CONN-012), a senha, a cor, as proteções e a caixa da verificação são do diálogo.
  */
-export function ConnectionFields({ connection, initialTab = "main", folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [], confirm, onConfirmChange, readOnly, onReadOnlyChange, engine, verifying, onVerifyingChange, useInternalDescriptions = null, onUseInternalDescriptionsChange, checkIndicator }: ConnectionFieldsProps) {
+export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [], confirm, onConfirmChange, readOnly, onReadOnlyChange, engine, verifying, onVerifyingChange, useInternalDescriptions = null, onUseInternalDescriptionsChange, checkIndicator }: ConnectionFieldsProps) {
   const folder = folderID === "" ? null : folderID;
-  const [activeTab, setActiveTab] = useState<ConnectionTabId>(initialTab);
+  const [activeTab, setActiveTab] = useState<ConnectionTabId>("main");
   const [enabledTabs, setEnabledTabs] = useState<Record<NetworkTabId, boolean>>({
     ssh: Boolean(connection?.ssh),
     ssl: Boolean(connection?.ssl),

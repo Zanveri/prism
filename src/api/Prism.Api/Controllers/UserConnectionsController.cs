@@ -4,6 +4,7 @@ using Prism.Application.Connections.Features.DeleteConnection;
 using Prism.Application.Connections.Features.DuplicateConnection;
 using Prism.Application.Connections.Features.GetConnection;
 using Prism.Application.Connections.Features.GetConnections;
+using Prism.Application.Connections.Features.RememberNetworkSecret;
 using Prism.Application.Connections.Features.RevealConnectionPassword;
 using Prism.Application.Connections.Features.TestConnection;
 using Prism.Application.Connections.Features.UpdateConnection;
@@ -135,5 +136,20 @@ public sealed class UserConnectionsController(IMediator mediator) : ControllerBa
             return result.ToIActionResult();
 
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-REDE-006: o segredo do túnel SSH (`sshSecret`, a senha ou a frase secreta da chave) ou do proxy (`proxyPassword`) que a conexão sem "Salvar credenciais"
+    /// não grava, pedido ao conectar. A API conecta com ele e, se conectou (204), o guarda na memória até a conexão ser desconectada ou o cofre fechar; a
+    /// recusa do servidor é 422 `DATABASE_CONNECTION_FAILED` com a mensagem dele, e o segredo que ainda falta, 422 `CONNECTION_CREDENTIALS_MISSING` no campo dele.
+    /// </summary>
+    [HttpPost("{id:guid}/network-secret")]
+    public async Task<IActionResult> RememberNetworkSecret(Guid id, [FromBody] RememberNetworkSecretCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { ID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return NoContent();
     }
 }

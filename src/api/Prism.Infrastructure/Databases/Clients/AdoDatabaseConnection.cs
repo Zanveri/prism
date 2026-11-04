@@ -195,6 +195,8 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     protected virtual ConnectionSettings? TunnelSettings => null;
 
+    public string? FirstUseHostKey => _tunnel?.FirstUseHostKey;
+
     protected string EffectiveHost => _tunnel?.BoundHost ?? TunnelSettings?.Host ?? string.Empty;
 
     protected int EffectivePort => _tunnel?.BoundPort ?? TunnelSettings?.Port ?? 0;

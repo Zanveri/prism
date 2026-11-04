@@ -11,6 +11,7 @@ export const prismEndpoints = {
   userConnections: "api/user/connections",
   userConnection: (id: string) => `api/user/connections/${encodeURIComponent(id)}`,
   userConnectionPasswordReveal: (id: string) => `api/user/connections/${encodeURIComponent(id)}/password/reveal`,
+  userConnectionNetworkSecret: (id: string) => `api/user/connections/${encodeURIComponent(id)}/network-secret`,
   userConnectionDuplicate: (id: string) => `api/user/connections/${encodeURIComponent(id)}/duplicate`,
   userConnectionsTest: "api/user/connections/test",
   userConnectionVerification: (id: string) => `api/user/connections/${encodeURIComponent(id)}/verification`,

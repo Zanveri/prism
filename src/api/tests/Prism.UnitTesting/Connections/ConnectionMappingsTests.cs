@@ -225,7 +225,10 @@ public sealed class ConnectionMappingsTests
         Assert.Null(ConnectionRules.NormalizeProxy(otherProxy, storedProxy, forTest: true)!.Password);
     }
 
-    /// <summary>O segredo que a conexão não grava vem da memória só para o mesmo servidor, e sem ele a falta é dita no campo, antes do driver.</summary>
+    /// <summary>
+    /// O segredo que a conexão não grava vem da memória só para o mesmo servidor, e sem ele a falta é dita no campo, antes do driver (RN-REDE-003 e 006): a senha do
+    /// túnel por senha, a frase secreta da chave com "Pedir a frase secreta ao conectar" e a senha do proxy com usuário. A chave gravada sem frase e sem esse pedido não pede nada.
+    /// </summary>
     [Trait("ConnectionRules", "SshSslProxy")]
     [Fact(DisplayName = "OK o segredo lembrado só volta para o mesmo servidor, e o que falta para conectar é dito pelo campo")]
     public void WithRememberedAndMissingNetworkSecret_ShouldFillOnlyTheSameServer_AndNameTheMissingField()
@@ -244,10 +247,30 @@ public sealed class ConnectionMappingsTests
         Assert.Null(ConnectionRules.WithRemembered(proxy with { Host = "outro-socks" }, rememberedProxy)!.Password);
 
         Assert.Equal("SshSecret", ConnectionRules.MissingNetworkSecret(ssh, null));
-        Assert.Null(ConnectionRules.MissingNetworkSecret(ssh with { AuthMethod = "privateKey", PrivateKeyPath = "/chaves/id_ed25519" }, null));
+        Assert.Equal("SshSecret", ConnectionRules.MissingNetworkSecret(ssh with { AuthMethod = "privateKey", PrivateKeyPath = "/chaves/id_ed25519" }, null));
+        Assert.Null(ConnectionRules.MissingNetworkSecret(ssh with { AuthMethod = "privateKey", PrivateKeyPath = "/chaves/id_ed25519", SaveCredentials = true }, null));
         Assert.Equal("ProxyPassword", ConnectionRules.MissingNetworkSecret(rememberedSsh, proxy));
         Assert.Null(ConnectionRules.MissingNetworkSecret(null, proxy with { UserName = null }));
         Assert.Null(ConnectionRules.MissingNetworkSecret(rememberedSsh, rememberedProxy));
+    }
+
+    /// <summary>
+    /// RN-REDE-005: a impressão digital em branco no formulário é a gravada, se o túnel continua no mesmo servidor SSH: o formulário aberto antes do primeiro
+    /// acesso não a conhece, e salvá-lo não a apaga. A digitada vale; em outro servidor, a gravada não vai.
+    /// </summary>
+    [Trait("ConnectionRules", "SshSslProxy")]
+    [Fact(DisplayName = "OK a impressão digital em branco mantém a gravada só no mesmo servidor SSH")]
+    public void NormalizeSsh_ShouldKeepTheStoredFingerprint_OnlyOnTheSameServer()
+    {
+        //Arrange
+        var stored = new ConnectionSshSettings("bastion", 22, "ops", HostKeyFingerprint: "SHA256:gravada");
+        var input = new ConnectionSshInputDto { Host = " bastion ", Port = 22, UserName = "ops", HostKeyFingerprint = "  " };
+
+        //Act & Assert
+        Assert.Equal("SHA256:gravada", ConnectionRules.NormalizeSsh(input, stored)!.HostKeyFingerprint);
+        Assert.Equal("SHA256:nova", ConnectionRules.NormalizeSsh(input with { HostKeyFingerprint = " SHA256:nova " }, stored)!.HostKeyFingerprint);
+        Assert.Null(ConnectionRules.NormalizeSsh(input with { Port = 2222 }, stored)!.HostKeyFingerprint);
+        Assert.Null(ConnectionRules.NormalizeSsh(input)!.HostKeyFingerprint);
     }
 
     [Trait("ConnectionRules", "SshSslProxy")]

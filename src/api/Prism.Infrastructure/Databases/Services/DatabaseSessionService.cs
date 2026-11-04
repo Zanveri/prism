@@ -70,7 +70,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
         // RN-TX-013: a aba sabe, ao abrir a sessão, se o Commit manual existe no banco. A consulta que falha não o tira: o banco diz depois, no comando.
         var available = await opened.Value.TransactionsAvailableAsync(cancellationToken);
-        var session = new Session(new DatabaseSessionInfo(Guid.CreateVersion7(), connectionID, settings.Engine, settings.Database, opened.Value.ServerVersion, available.IsFailure || available.Value), settings, opened.Value, vaultGeneration);
+        var session = new Session(new DatabaseSessionInfo(Guid.CreateVersion7(), connectionID, settings.Engine, settings.Database, opened.Value.ServerVersion, available.IsFailure || available.Value, opened.Value.FirstUseHostKey), settings, opened.Value, vaultGeneration);
         session.IdleTimer = _timeProvider.CreateTimer(_ => OnCursorIdle(session), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
         if (!Register(session))

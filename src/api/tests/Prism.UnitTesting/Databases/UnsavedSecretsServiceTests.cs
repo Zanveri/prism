@@ -33,4 +33,24 @@ public sealed class UnsavedSecretsServiceTests
         Assert.Null(secrets.Ssh(id));
         Assert.Null(secrets.Proxy(id));
     }
+
+    [Trait("UnsavedSecretsService", "Forget")]
+    [Fact(DisplayName = "OK a conexão desconectada esquece só o segredo dela")]
+    public void Forget_ShouldDropOnlyThatConnection()
+    {
+        //Arrange
+        var vault = new Mock<IVaultService>();
+        using var secrets = new UnsavedSecretsService(vault.Object);
+        var (first, second) = (Guid.NewGuid(), Guid.NewGuid());
+        var ssh = new ConnectionSshSettings("bastion", 22, "ops", "privateKey", "/chaves/id_ed25519", "frase-ficticia", SaveCredentials: false);
+        secrets.Remember(first, ssh, null);
+        secrets.Remember(second, ssh, null);
+
+        //Act
+        secrets.Forget(first);
+
+        //Assert
+        Assert.Null(secrets.Ssh(first));
+        Assert.Equal("frase-ficticia", secrets.Ssh(second)?.Secret);
+    }
 }

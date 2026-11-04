@@ -96,18 +96,6 @@ describe("o diálogo de conexão sobre a área de trabalho (RN-NAV-004 e 005)", 
     expect(render({ mode: "edit", connection: mes })).not.toContain("Preencha para conectar.");
   });
 
-  it("aberto pela recusa de conectar sem a senha do túnel SSH que a conexão não grava: a frase no topo e a aba SSH à frente; pelo menu, nada", () => {
-    const ssh = { host: "bastion", port: 22, userName: "ops", authMethod: "password", privateKeyPath: null, hasSecret: false, saveCredentials: false, ignoreHostVerification: true, keepAliveIntervalMs: 0, tunnelTimeoutMs: 0, localHost: null, localPort: 0, remoteHost: null, remotePort: 0, hostKeyFingerprint: null } as const;
-
-    const refused = render({ mode: "edit", connection: { ...mes, ssh }, missing: "sshSecret" });
-    expect(refused).toContain("A senha do túnel SSH não está gravada nesta conexão.");
-    expect(refused).toMatch(/aria-selected="true"[^>]*>SSH</);
-
-    const fromMenu = render({ mode: "edit", connection: { ...mes, ssh } });
-    expect(fromMenu).not.toContain("A senha do túnel SSH não está gravada");
-    expect(fromMenu).not.toMatch(/aria-selected="true"[^>]*>SSH</);
-  });
-
   it("o driver do banco escolhido falta: o passo das configurações diz ali mesmo, com 'Instalar driver' (RN-NAV-005)", () => {
     const markup = render({ mode: "edit", connection: mes });
 

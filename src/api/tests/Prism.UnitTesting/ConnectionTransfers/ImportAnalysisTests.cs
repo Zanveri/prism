@@ -236,6 +236,13 @@ public sealed class ImportAnalysisTests
     [InlineData("consulta-com-nulo", "A consulta de verificação não pode ter caractere de controle nem de direção do texto.")]
     [InlineData("effective-texto", "O que valia na conexão não está no formato que este Prism lê.")]
     [InlineData("effective-readOnly-numero", "O que valia na conexão não está no formato que este Prism lê.")]
+    [InlineData("ssh-texto", "O túnel SSH não está no formato que este Prism lê.")]
+    [InlineData("ssh-porta-texto", "A porta do túnel SSH não está no formato que este Prism lê.")]
+    [InlineData("ssh-sem-host", "Informe o host do túnel SSH.")]
+    [InlineData("ssh-metodo", "Escolha o método de autenticação SSH: senha ou chave privada.")]
+    [InlineData("ssl-modo", "Escolha um modo SSL válido.")]
+    [InlineData("proxy-porta-zero", "Informe uma porta do proxy SOCKS de 1 a 65535.")]
+    [InlineData("proxy-salvar-texto", "O “Salvar credenciais” do proxy SOCKS não está no formato que este Prism lê.")]
     public void Analyze_ShouldBeOK_InvalidConnectionWithTheReason(string change, string reason)
     {
         //Arrange
@@ -273,6 +280,13 @@ public sealed class ImportAnalysisTests
             case "consulta-com-nulo": connection["verificationQuery"] = "SELECT 1 FROM systables\u0000 WHERE tabid = 1"; break;
             case "effective-texto": connection["effective"] = "somente leitura"; break;
             case "effective-readOnly-numero": connection["effective"]!["readOnly"] = 1; break;
+            case "ssh-texto": connection["ssh"] = "bastion"; break;
+            case "ssh-porta-texto": connection["ssh"] = new JsonObject { ["host"] = "bastion", ["port"] = "22", ["userName"] = "ops" }; break;
+            case "ssh-sem-host": connection["ssh"] = new JsonObject { ["port"] = 22, ["userName"] = "ops" }; break;
+            case "ssh-metodo": connection["ssh"] = new JsonObject { ["host"] = "bastion", ["userName"] = "ops", ["authMethod"] = "kerberos" }; break;
+            case "ssl-modo": connection["ssl"] = new JsonObject { ["sslMode"] = "sempre" }; break;
+            case "proxy-porta-zero": connection["proxy"] = new JsonObject { ["host"] = "socks", ["port"] = 0 }; break;
+            case "proxy-salvar-texto": connection["proxy"] = new JsonObject { ["host"] = "socks", ["saveCredentials"] = "sim" }; break;
         }
         var content = FileContent(connections: [connection, FileConnection("c2", null, "NOMINAL")]);
 

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDriverActions } from "@/app/drivers/_components/driver-actions";
 import { driverIdOf } from "@/app/drivers/_lib/drivers.model";
 import { driversQuery } from "@/app/drivers/_lib/drivers.service";
-import { credentialsMissingCode, missingCredentials, type CredentialsField } from "@/app/workbench/_lib/credentials-missing";
+import { credentialsMissingCode, missingCredentials, type DatabaseCredentialsField } from "@/app/workbench/_lib/credentials-missing";
 import { Button, ConfirmDialog, Dialog, FieldError, FormMessage, useToast, type Engine } from "@/components/ui";
 import { allowRefusal, type ApiError, type ApiResult } from "@/lib/api/prism-api";
 import { apiFieldErrors, focusFirstField, hasUnshownFieldErrors, parseForm, type FieldErrors } from "@/lib/utils/form";
@@ -44,7 +44,7 @@ const formID = "connection-dialog-form";
 const fieldNames = [...Object.keys(createConnectionSchema.shape), ...networkFieldNames];
 
 /** O que abre o diálogo: uma conexão nova (na pasta dada, ou na raiz) ou a edição de uma gravada. */
-export type ConnectionDialogRequest = { mode: "new"; folderID: string | null } | { mode: "edit"; connection: Connection; missing?: CredentialsField };
+export type ConnectionDialogRequest = { mode: "new"; folderID: string | null } | { mode: "edit"; connection: Connection; missing?: DatabaseCredentialsField };
 
 type ConnectionDialogProps = {
   request: ConnectionDialogRequest;
@@ -335,7 +335,6 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
             <FieldError id="cx-engine-error">{errors.engine}</FieldError>
             <ConnectionFields
               connection={connection}
-              initialTab={missing === "sshSecret" ? "ssh" : missing === "proxyPassword" ? "proxy" : "main"}
               folders={folders}
               errors={errors}
               folderID={folderID}

@@ -109,6 +109,15 @@ export function revealConnectionPassword(id: string, userPassword: string): Prom
   return apiRequest(prismEndpoints.userConnectionPasswordReveal(id), { method: "POST", body: { password: userPassword }, schema: revealedPasswordSchema });
 }
 
+/**
+ * RN-REDE-006: o segredo do túnel SSH (a senha ou a frase secreta da chave) ou do proxy que a conexão sem "Salvar credenciais" não grava, pedido ao conectar. A API
+ * conecta com ele e, se conectou, o guarda na memória (204); a recusa do servidor é 422 `DATABASE_CONNECTION_FAILED`, e o outro segredo que ainda falta, 422
+ * `CONNECTION_CREDENTIALS_MISSING` no campo dele.
+ */
+export function rememberNetworkSecret(id: string, field: "sshSecret" | "proxyPassword", value: string): Promise<ApiResult<void>> {
+  return apiRequest(prismEndpoints.userConnectionNetworkSecret(id), { method: "POST", body: { [field]: value } });
+}
+
 /** As duas listas da tela; a área de trabalho usa as mesmas, com a mesma chave. */
 export const foldersQuery = queryOptions({ queryKey: ["folders"], queryFn: async ({ signal }) => unwrap(await listFolders(signal)) });
 

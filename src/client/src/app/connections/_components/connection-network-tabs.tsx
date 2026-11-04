@@ -281,16 +281,17 @@ export function ConnectionNetworkPanels({ connection, activeTab, enabledTabs, er
               error={errors.sshSecret}
             />
 
+            {/* RN-REDE-006: na chave privada a caixa é a do pedido ao conectar, o contrário de "Salvar credenciais"; o campo escondido leva o valor de sempre. */}
             <input type="hidden" name="sshSaveCredentials" value={String(sshSaveCredentials)} />
             <label htmlFor="cx-ssh-save-credentials" className="mb-2.5 flex cursor-pointer items-center gap-2 text-sm text-ink">
               <input
                 id="cx-ssh-save-credentials"
                 type="checkbox"
-                checked={sshSaveCredentials}
-                onChange={(event) => setSshSaveCredentials(event.target.checked)}
+                checked={sshAuthMethod === "privateKey" ? !sshSaveCredentials : sshSaveCredentials}
+                onChange={(event) => setSshSaveCredentials(sshAuthMethod === "privateKey" ? !event.target.checked : event.target.checked)}
                 className="m-0 size-[18px] flex-none cursor-pointer accent-accent"
               />
-              <span>{copy.ssh.saveCredentials}</span>
+              <span>{sshAuthMethod === "privateKey" ? copy.ssh.askPassphrase : copy.ssh.saveCredentials}</span>
             </label>
           </div>
         </section>

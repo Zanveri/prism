@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Queries;
+using Prism.Application.Connections.Repositories;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -26,7 +27,7 @@ public sealed record OpenDatabaseSessionCommand : IRequest<Result<DatabaseSessio
     public string? IsolationLevel { get; init; }
 }
 
-internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<OpenDatabaseSessionCommand, Result<DatabaseSessionDto, ApiErrorDto>>
+internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService, IUnsavedSecretsService? unsavedSecrets = null, IConnectionRepository? connectionRepository = null) : IRequestHandler<OpenDatabaseSessionCommand, Result<DatabaseSessionDto, ApiErrorDto>>
 {
     public async Task<Result<DatabaseSessionDto, ApiErrorDto>> Handle(OpenDatabaseSessionCommand request, CancellationToken cancellationToken)
     {
@@ -71,6 +72,11 @@ internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQu
 
             return Result.Failure<DatabaseSessionDto, ApiErrorDto>(confirmed.IsFailure ? VaultErrors.From(confirmed.Error) : ConnectionErrors.NotFound(request.ConnectionID));
         }
+
+        // RN-REDE-005: a chave do servidor SSH aceita no primeiro acesso fica gravada na conexão, e o próximo acesso só passa com ela. A gravação que não acontece
+        // (o cofre fechou, outra janela mudou o túnel) não desfaz a sessão: o próximo acesso aceita e grava de novo.
+        if (opened.Value.FirstUseHostKey is { } hostKey && settings.Ssh is { } ssh && connectionRepository is not null)
+            await connectionRepository.TrustHostKey(record.ID, ssh.Host, ssh.Port, hostKey, cancellationToken);
 
         // RN-TX-001, 013 e RN-ISOL-002, 003: a sessão começa no modo e no nível de isolamento da aba antes de qualquer comando. No banco sem
         // transação o Commit manual é recusado, e o nível que o banco não aceita também: a sessão não fica, e a aba volta ao aceito.

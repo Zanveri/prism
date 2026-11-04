@@ -9,8 +9,8 @@ public sealed class ConnectionTunnelTests
     private const string Presented = "ohD8VZEXGWo6Ez8GSEJQ9WpafgLFsOfLOtGGQCQo6Og";
 
     [Trait("ConnectionTunnel", "HostKeyIsTrusted")]
-    [Theory(DisplayName = "OK a chave do servidor só vale com a impressão digital que confere ou com a verificação ignorada")]
-    [InlineData(false, null, false)]
+    [Theory(DisplayName = "OK a chave do servidor vale no primeiro acesso, com a impressão digital que confere ou com a verificação ignorada")]
+    [InlineData(false, null, true)]
     [InlineData(false, "SHA256:" + Presented, true)]
     [InlineData(false, "sha256:" + Presented + "=", true)]
     [InlineData(false, " " + Presented + " ", true)]

@@ -115,11 +115,12 @@ export const connectionsCopy = {
       password: "Senha",
       passphrase: "Frase secreta",
       saveCredentials: "Salvar credenciais",
+      askPassphrase: "Pedir a frase secreta ao conectar",
       advancedTitle: "Configurações avançadas",
       generalTitle: "Geral",
       ignoreHostVerification: "Ignorar verificação de host",
       hostKeyFingerprint: "Impressão digital do host",
-      hostKeyFingerprintPlaceholder: "SHA256:… (ssh-keygen -lf)",
+      hostKeyFingerprintPlaceholder: "Em branco: aceita e grava a do primeiro acesso",
       timeoutsTitle: "Timeouts",
       keepAliveIntervalMs: "Intervalo de keep-alive (ms)",
       tunnelTimeoutMs: "Timeout de conexão do túnel (ms)",
@@ -238,6 +239,19 @@ export const connectionsCopy = {
   },
 
   // RN-PROT-003: a senha do usuário que a mudança do somente leitura pede, num diálogo como o de revelar a senha.
+  networkSecret: {
+    title: (label: string) => `${label} para conectar`,
+    description: "Esta conexão não guarda este segredo. O Prism conecta com ele e o esquece quando você desconectar ou o Prism for bloqueado.",
+    passphrase: "Frase secreta da chave SSH",
+    sshPassword: "Senha do túnel SSH",
+    proxyPassword: "Senha do proxy",
+    required: (label: string) => `Informe a ${label.charAt(0).toLowerCase()}${label.slice(1)}.`,
+    forgotten: "Nada é gravado no cofre. Para não ser perguntado de novo, marque “Salvar credenciais” em Editar conexão.",
+    cancel: "Cancelar",
+    connect: "Conectar",
+    connecting: "Conectando…",
+  },
+
   userPassword: {
     title: "Confirme a sua senha",
     description: "Esta mudança tira ou põe uma proteção. Para salvar, digite a sua senha do Prism.",

@@ -203,8 +203,17 @@ internal static class ConnectionRules
             ssh.LocalPort,
             string.IsNullOrWhiteSpace(ssh.RemoteHost) ? null : ssh.RemoteHost.Trim(),
             ssh.RemotePort,
-            string.IsNullOrWhiteSpace(ssh.HostKeyFingerprint) ? null : ssh.HostKeyFingerprint.Trim());
+            HostKeyFingerprintOf(ssh, stored));
     }
+
+    /// <summary>
+    /// RN-REDE-005: a impressão digital em branco é a gravada, se o túnel continua no mesmo servidor SSH (como o segredo): o formulário aberto antes do primeiro
+    /// acesso não a conhece, e salvá-lo não a apaga. Para trocar a chave confiada, informa-se a nova.
+    /// </summary>
+    private static string? HostKeyFingerprintOf(ConnectionSshInputDto ssh, ConnectionSshSettings? stored)
+        => !string.IsNullOrWhiteSpace(ssh.HostKeyFingerprint) ? ssh.HostKeyFingerprint.Trim()
+            : stored is not null && SameServer(stored.Host, stored.Port, ssh.Host, ssh.Port) ? stored.HostKeyFingerprint
+            : null;
 
     /// <summary>
     /// RN-REDE-002: o que o driver recebe da conexão gravada: o banco pedido no lugar do dela (RN-ARVORE-006, `null` é o dela), e o túnel e o proxy com o segredo que a
@@ -223,11 +232,12 @@ internal static class ConnectionRules
         => proxy is { Password: null or "" } && remembered is not null && SameServer(remembered.Host, remembered.Port, proxy.Host, proxy.Port) ? proxy with { Password = remembered.Password } : proxy;
 
     /// <summary>
-    /// RN-REDE-003: o campo do segredo que falta para conectar, no nome do formulário: a senha do túnel SSH por senha (`SshSecret`) ou a do proxy com usuário
-    /// (`ProxyPassword`); `null` quando nada falta. A chave privada sem frase secreta é válida (a chave sem cifra não tem uma).
+    /// RN-REDE-003 e 006: o campo do segredo que falta para conectar, no nome do formulário: a senha do túnel SSH por senha, ou a frase secreta da chave com "Pedir a
+    /// frase secreta ao conectar" (`SshSecret`), ou a do proxy com usuário (`ProxyPassword`); `null` quando nada falta. A chave gravada sem frase secreta e sem
+    /// esse pedido é a chave sem cifra, e não falta nada.
     /// </summary>
     public static string? MissingNetworkSecret(ConnectionSshSettings? ssh, ConnectionProxySettings? proxy)
-        => ssh is { AuthMethod: "password", Secret: null or "" } ? "SshSecret"
+        => ssh is { Secret: null or "" } && (ssh.AuthMethod == "password" || !ssh.SaveCredentials) ? "SshSecret"
             : proxy is { UserName: not null, Password: null or "" } ? "ProxyPassword"
             : null;
 

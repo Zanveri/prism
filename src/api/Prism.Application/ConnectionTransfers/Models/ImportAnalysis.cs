@@ -3,6 +3,7 @@ using Prism.Application.Common.Environments;
 using Prism.Application.Common.Protections;
 using Prism.Application.Common.Texts;
 using Prism.Application.Connections.Models;
+using Prism.Application.Connections.Models.Dtos;
 using Prism.Application.Folders.Models;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Extensions;
@@ -259,12 +260,137 @@ internal sealed class ImportAnalysis
         if (Effective(connection.Effective, "o que valia na conexão", withEnvironment: true, out var effective) is { } effectiveRefusal)
             return effectiveRefusal;
 
+        if (Network(connection, out var ssh, out var ssl, out var proxy) is { } networkRefusal)
+            return networkRefusal;
+
         candidate = new ConnectionCandidate(
             name.NormalizeName(), engine, host!.Trim(), port, database!.Trim(), userName?.Trim() ?? string.Empty, password ?? string.Empty, environmentName, environmentColor,
             ProtectionRules.NormalizeConfirmation(confirm), readOnly, verificationEnabled, interval, ConnectionRules.NormalizeVerificationQuery(query),
-            effective.ReadOnly, effective.ConfirmCommands, effective.EnvironmentName, effective.EnvironmentColor);
+            effective.ReadOnly, effective.ConfirmCommands, effective.EnvironmentName, effective.EnvironmentColor, ssh, ssl, proxy);
 
         return null;
+    }
+
+    /// <summary>
+    /// RN-REDE-004: o túnel SSH, o SSL e o proxy, opcionais, com as regras do formulário (`ConnectionRules.SshRefusal`, `SslRefusal` e `ProxyRefusal`) e a
+    /// normalização da gravação: sem "Salvar credenciais" o segredo que veio não é gravado. O que falta para conectar é pedido ao conectar (RN-REDE-003).
+    /// </summary>
+    private static string? Network(ImportedConnection connection, out ConnectionSshSettings? ssh, out ConnectionSslSettings? ssl, out ConnectionProxySettings? proxy)
+    {
+        ssh = null;
+        ssl = null;
+        proxy = null;
+
+        if (connection.Ssh is { IsMissing: false } sshObject)
+        {
+            var fields = new NestedFields(sshObject, "o túnel SSH");
+            var input = new ConnectionSshInputDto
+            {
+                Host = fields.Text("host", "o host do túnel SSH") ?? string.Empty,
+                Port = fields.Number("port", "a porta do túnel SSH", 22),
+                UserName = fields.Text("userName", "o usuário do túnel SSH") ?? string.Empty,
+                AuthMethod = fields.Text("authMethod", "o método de autenticação SSH") ?? "password",
+                PrivateKeyPath = fields.Text("privateKeyPath", "o caminho da chave privada SSH"),
+                Secret = fields.Text("secret", "a senha do túnel SSH"),
+                SaveCredentials = fields.Flag("saveCredentials", "o “Salvar credenciais” do túnel SSH", true),
+                IgnoreHostVerification = fields.Flag("ignoreHostVerification", "o “Ignorar a verificação do host” do túnel SSH", false),
+                KeepAliveIntervalMs = fields.Number("keepAliveIntervalMs", "o intervalo de keep-alive SSH", 0),
+                TunnelTimeoutMs = fields.Number("tunnelTimeoutMs", "o timeout do túnel SSH", 0),
+                LocalHost = fields.Text("localHost", "o host local do túnel SSH"),
+                LocalPort = fields.Number("localPort", "a porta local do túnel SSH", 0),
+                RemoteHost = fields.Text("remoteHost", "o host remoto do túnel SSH"),
+                RemotePort = fields.Number("remotePort", "a porta remota do túnel SSH", 0),
+                HostKeyFingerprint = fields.Text("hostKeyFingerprint", "a impressão digital da chave do servidor SSH")
+            };
+
+            if ((fields.Refusal ?? ConnectionRules.SshRefusal(input)) is { } sshRefusal)
+                return sshRefusal;
+
+            ssh = ConnectionRules.NormalizeSsh(input);
+        }
+
+        if (connection.Ssl is { IsMissing: false } sslObject)
+        {
+            var fields = new NestedFields(sslObject, "o SSL");
+            var input = new ConnectionSslSettings(
+                fields.Text("caCertificatePath", "o certificado CA"),
+                fields.Text("clientCertificatePath", "o certificado de cliente"),
+                fields.Text("clientKeyPath", "a chave privada de cliente"),
+                fields.Text("sslMode", "o modo SSL"));
+
+            if ((fields.Refusal ?? ConnectionRules.SslRefusal(input)) is { } sslRefusal)
+                return sslRefusal;
+
+            ssl = ConnectionRules.NormalizeSsl(input);
+        }
+
+        if (connection.Proxy is { IsMissing: false } proxyObject)
+        {
+            var fields = new NestedFields(proxyObject, "o proxy SOCKS");
+            var input = new ConnectionProxyInputDto
+            {
+                Host = fields.Text("host", "o host do proxy SOCKS") ?? string.Empty,
+                Port = fields.Number("port", "a porta do proxy SOCKS", 1080),
+                UserName = fields.Text("userName", "o usuário do proxy SOCKS"),
+                Password = fields.Text("password", "a senha do proxy SOCKS"),
+                SaveCredentials = fields.Flag("saveCredentials", "o “Salvar credenciais” do proxy SOCKS", true)
+            };
+
+            if ((fields.Refusal ?? ConnectionRules.ProxyRefusal(input)) is { } proxyRefusal)
+                return proxyRefusal;
+
+            proxy = ConnectionRules.NormalizeProxy(input);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Os campos de um objeto do arquivo (<see cref="FileObject"/>), um a um: ausente ou nulo é o padrão do formulário; o primeiro de tipo errado (ou o objeto que
+    /// não é objeto) fica em `Refusal`, com a frase do tipo errado, e o item não é importado.
+    /// </summary>
+    private sealed class NestedFields(FileObject value, string label)
+    {
+        public string? Refusal { get; private set; } = value.Kind == JsonValueKind.Object ? null : WrongType(label);
+
+        public string? Text(string name, string fieldLabel)
+        {
+            var field = value[name];
+            if (field.IsMissing || field.IsText)
+                return field.Text;
+
+            Refusal ??= WrongType(fieldLabel);
+
+            return null;
+        }
+
+        public int Number(string name, string fieldLabel, int fallback)
+        {
+            var field = value[name];
+            if (field.IsMissing)
+                return fallback;
+
+            if (field.Integer is { } number)
+                return number;
+
+            Refusal ??= WrongType(fieldLabel);
+
+            return fallback;
+        }
+
+        public bool Flag(string name, string fieldLabel, bool fallback)
+        {
+            var field = value[name];
+            if (field.IsMissing)
+                return fallback;
+
+            if (field.Boolean is { } flag)
+                return flag;
+
+            Refusal ??= WrongType(fieldLabel);
+
+            return fallback;
+        }
     }
 
     /// <summary>Os bancos que este Prism conhece, escritos como o arquivo os escreve (RN-TRANSF-007): pelo nome, exato, e não pelo número da API.</summary>
@@ -431,7 +557,8 @@ internal sealed record FolderCandidate(string Name, string? Color, string? Envir
 internal sealed record ConnectionCandidate(
     string Name, EDatabaseEngine Engine, string Host, int Port, string Database, string UserName, string Password, string? EnvironmentName, string? EnvironmentColor,
     string? ConfirmCommands, bool ReadOnly, bool VerificationEnabled, int VerificationInterval, string? VerificationQuery,
-    bool EffectiveReadOnly, string? EffectiveConfirmCommands, string? EffectiveEnvironmentName, string? EffectiveEnvironmentColor)
+    bool EffectiveReadOnly, string? EffectiveConfirmCommands, string? EffectiveEnvironmentName, string? EffectiveEnvironmentColor,
+    ConnectionSshSettings? Ssh = null, ConnectionSslSettings? Ssl = null, ConnectionProxySettings? Proxy = null)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria o host, o usuário, a senha do banco e a consulta de verificação.</summary>
     public override string ToString()
