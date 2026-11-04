@@ -9,6 +9,7 @@ using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Drivers.Services;
 using Prism.Infrastructure.Journal.Models;
 using Prism.Infrastructure.Journal.Services;
@@ -44,7 +45,7 @@ public sealed record StartCopyCommand : IRequest<Result<TransferStartedDto, ApiE
 /// tabela ocupada, no registro, sob a trava com que o trabalho entra nele. RN-IMPORT-023: na cópia de Db2 ou de Informix com a origem e o destino no
 /// mesmo servidor, porta e banco de dados, a contagem é obrigatória, mesmo com `count: false`.
 /// </summary>
-internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, ITransferService transferService, IJournalRecorder? journalRecorder = null) : IRequestHandler<StartCopyCommand, Result<TransferStartedDto, ApiErrorDto>>
+internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, ITransferService transferService, IJournalRecorder? journalRecorder = null, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<StartCopyCommand, Result<TransferStartedDto, ApiErrorDto>>
 {
     public async Task<Result<TransferStartedDto, ApiErrorDto>> Handle(StartCopyCommand request, CancellationToken cancellationToken)
     {
@@ -82,8 +83,8 @@ internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVa
         if (CopyChecks.TargetIsSource(source, sourceRecord.Value, target, targetRecord.Value))
             return Result.Failure<TransferStartedDto, ApiErrorDto>(ImportErrors.TargetIsSource());
 
-        var sourceSettings = TransferConnections.SettingsOf(sourceRecord.Value, source.Database);
-        var targetSettings = TransferConnections.SettingsOf(targetRecord.Value, target.Database);
+        var sourceSettings = TransferConnections.SettingsOf(sourceRecord.Value, source.Database, unsavedSecrets);
+        var targetSettings = TransferConnections.SettingsOf(targetRecord.Value, target.Database, unsavedSecrets);
         var forcedCount = sourceSettings.Engine is EDatabaseEngine.Db2 or EDatabaseEngine.Informix && TablePlaces.SameServer(sourceSettings, targetSettings);
         var (load, _) = ImportRequestRules.Load(request.Load, copy: true);
 

@@ -7,6 +7,7 @@ using Prism.Application.Transfers.Models;
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
+using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Drivers.Services;
 using Prism.Infrastructure.Transfers.Imports;
 using Prism.Infrastructure.Transfers.Services;
@@ -38,7 +39,7 @@ public sealed record PreviewImportCommand : IRequest<Result<ImportPreviewDto, Ap
 /// e o somente leitura pelas proteções que valem no cofre agora (422 `CONNECTION_READ_ONLY`). Então a prévia: o arquivo lido, o catálogo da tabela numa
 /// conexão à parte, o mapeamento e as 20 primeiras linhas convertidas.
 /// </summary>
-internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries, IDriverService driverService, IImportPreviewService importPreviewService) : IRequestHandler<PreviewImportCommand, Result<ImportPreviewDto, ApiErrorDto>>
+internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries, IDriverService driverService, IImportPreviewService importPreviewService, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<PreviewImportCommand, Result<ImportPreviewDto, ApiErrorDto>>
 {
     public async Task<Result<ImportPreviewDto, ApiErrorDto>> Handle(PreviewImportCommand request, CancellationToken cancellationToken)
     {
@@ -81,7 +82,7 @@ internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries,
             return Result.Failure<ImportPreviewDto, ApiErrorDto>(ImportErrors.ReadOnly());
 
         var (options, _) = ImportReaderOptionsReader.Read(request.Format!, request.Reader, keys: true);
-        var settings = TransferConnections.SettingsOf(record, target.Database);
+        var settings = TransferConnections.SettingsOf(record, target.Database, unsavedSecrets);
         var mapping = request.Mapping?.Select(entry => new ImportMappingEntry(entry!.Source, entry.Target!)).ToList();
         var preview = await importPreviewService.PreviewAsync(new ImportPreviewRequest(fileID, ImportFormats.Canonical(request.Format!), options!, ImportRequestRules.Formats(request.Values), settings, target.Schema!, target.Table!, mapping), cancellationToken);
 

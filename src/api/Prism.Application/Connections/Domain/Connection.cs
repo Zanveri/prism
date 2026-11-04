@@ -34,6 +34,9 @@ internal sealed class Connection
     public int VerificationInterval { get; private set; }
     public string? VerificationQuery { get; private set; }
     public bool? UseInternalDescriptions { get; private set; }
+    public ConnectionSshSettings? Ssh { get; private set; }
+    public ConnectionSslSettings? Ssl { get; private set; }
+    public ConnectionProxySettings? Proxy { get; private set; }
     public DateTime CreatedAt { get; }
     public DateTime UpdatedAt { get; private set; }
 
@@ -56,13 +59,16 @@ internal sealed class Connection
         VerificationInterval = safeguards.VerificationInterval;
         VerificationQuery = safeguards.VerificationQuery;
         UseInternalDescriptions = safeguards.UseInternalDescriptions;
+        Ssh = safeguards.Ssh;
+        Ssl = safeguards.Ssl;
+        Proxy = safeguards.Proxy;
         CreatedAt = createdAt;
         UpdatedAt = updatedAt;
     }
 
     /// <summary>As proteções e a verificação, como a conexão as guarda: o que vem do pedido passa antes pelo <see cref="ConnectionSafeguards.Normalize"/>.</summary>
     public ConnectionSafeguards Safeguards
-        => new(ConfirmCommands, ReadOnly, VerificationEnabled, VerificationInterval, VerificationQuery, UseInternalDescriptions);
+        => new(ConfirmCommands, ReadOnly, VerificationEnabled, VerificationInterval, VerificationQuery, UseInternalDescriptions, Ssh, Ssl, Proxy);
 
     public static Connection Create(Guid? folderID, string name, EDatabaseEngine engine, string host, int port, string database, string userName, string password, string? environmentName, string? environmentColor, ConnectionSafeguards safeguards, DateTime createdAt)
         => new(Guid.CreateVersion7(), folderID, name.NormalizeName(), engine, host.Trim(), port, database.Trim(), userName.Trim(), password, EnvironmentRules.NormalizeName(environmentName), EnvironmentRules.NormalizeColor(environmentColor), safeguards.Normalize(), createdAt, createdAt);
@@ -99,6 +105,9 @@ internal sealed class Connection
         VerificationInterval = normalized.VerificationInterval;
         VerificationQuery = normalized.VerificationQuery;
         UseInternalDescriptions = normalized.UseInternalDescriptions;
+        Ssh = normalized.Ssh;
+        Ssl = normalized.Ssl;
+        Proxy = normalized.Proxy;
         UpdatedAt = updatedAt;
     }
 
@@ -116,15 +125,33 @@ internal sealed class Connection
 /// em cada construção. O padrão é o de uma conexão sem nada escolhido: sem confirmação, sem somente leitura, a verificação ligada a cada 30 segundos com a
 /// consulta do banco.
 /// </summary>
-internal sealed record ConnectionSafeguards(string? ConfirmCommands = null, bool ReadOnly = false, bool VerificationEnabled = true, int VerificationInterval = ConnectionRules.VerificationIntervalDefault, string? VerificationQuery = null, bool? UseInternalDescriptions = null)
+internal sealed record ConnectionSafeguards(
+    string? ConfirmCommands = null,
+    bool ReadOnly = false,
+    bool VerificationEnabled = true,
+    int VerificationInterval = ConnectionRules.VerificationIntervalDefault,
+    string? VerificationQuery = null,
+    bool? UseInternalDescriptions = null,
+    ConnectionSshSettings? Ssh = null,
+    ConnectionSslSettings? Ssl = null,
+    ConnectionProxySettings? Proxy = null)
 {
     /// <summary>O que veio do pedido (nulo é o padrão), já normalizado.</summary>
-    public static ConnectionSafeguards From(string? confirmCommands, bool readOnly, bool? verificationEnabled, int? verificationInterval, string? verificationQuery, bool? useInternalDescriptions = null)
-        => new ConnectionSafeguards(confirmCommands, readOnly, verificationEnabled ?? true, verificationInterval ?? ConnectionRules.VerificationIntervalDefault, verificationQuery, useInternalDescriptions).Normalize();
+    public static ConnectionSafeguards From(
+        string? confirmCommands,
+        bool readOnly,
+        bool? verificationEnabled,
+        int? verificationInterval,
+        string? verificationQuery,
+        bool? useInternalDescriptions = null,
+        ConnectionSshSettings? ssh = null,
+        ConnectionSslSettings? ssl = null,
+        ConnectionProxySettings? proxy = null)
+        => new ConnectionSafeguards(confirmCommands, readOnly, verificationEnabled ?? true, verificationInterval ?? ConnectionRules.VerificationIntervalDefault, verificationQuery, useInternalDescriptions, ssh, ssl, proxy).Normalize();
 
     /// <summary>"Não" e a consulta em branco se guardam nulos (uma forma só); a consulta é aparada, e vai ao banco como ficou.</summary>
     public ConnectionSafeguards Normalize()
-        => this with { ConfirmCommands = ProtectionRules.NormalizeConfirmation(ConfirmCommands), VerificationQuery = ConnectionRules.NormalizeVerificationQuery(VerificationQuery) };
+        => this with { ConfirmCommands = ProtectionRules.NormalizeConfirmation(ConfirmCommands), VerificationQuery = ConnectionRules.NormalizeVerificationQuery(VerificationQuery), Ssl = ConnectionRules.NormalizeSsl(Ssl) };
 
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria a consulta de verificação.</summary>
     public override string ToString()

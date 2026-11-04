@@ -1,3 +1,4 @@
+using Prism.Application.Connections.Models;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
@@ -25,6 +26,10 @@ internal static class TransferJobErrors
         => userNameMissing
             ? ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", "userName", "Esta conexão não tem usuário gravado. Preencha-o em Editar conexão e exporte de novo.")
             : ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", "password", "Esta conexão não tem senha gravada. Preencha-a em Editar conexão e exporte de novo.");
+
+    /// <summary>RN-REDE-003 e RN-EXPORT-015: o túnel SSH ou o proxy sem o segredo que a conexão não grava (<see cref="ConnectionRules.MissingNetworkSecret"/>), no campo dele.</summary>
+    public static ApiErrorDto NetworkSecretMissing(string field)
+        => ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", char.ToLowerInvariant(field[0]) + field[1..], $"{(field == "SshSecret" ? "A senha do túnel SSH" : "A senha do proxy")} não está gravada nesta conexão. Informe-a em Editar conexão e exporte de novo.");
 
     /// <summary>RN-ARVORE-006: o banco de dados pedido fora da regra da abertura de uma sessão.</summary>
     public static ApiErrorDto DatabaseNameInvalid()

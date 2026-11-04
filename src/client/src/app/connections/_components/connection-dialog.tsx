@@ -4,13 +4,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDriverActions } from "@/app/drivers/_components/driver-actions";
 import { driverIdOf } from "@/app/drivers/_lib/drivers.model";
 import { driversQuery } from "@/app/drivers/_lib/drivers.service";
-import { credentialsMissingCode, missingCredentials } from "@/app/workbench/_lib/credentials-missing";
+import { credentialsMissingCode, missingCredentials, type CredentialsField } from "@/app/workbench/_lib/credentials-missing";
 import { Button, ConfirmDialog, Dialog, FieldError, FormMessage, useToast, type Engine } from "@/components/ui";
 import { allowRefusal, type ApiError, type ApiResult } from "@/lib/api/prism-api";
 import { apiFieldErrors, focusFirstField, hasUnshownFieldErrors, parseForm, type FieldErrors } from "@/lib/utils/form";
 
 import { connectionsCopy } from "../_lib/connections.copy";
-import { createConnectionSchema, editConnectionSchema, editWithoutPasswordSchema, engineOption, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
+import {
+  createConnectionSchema,
+  editConnectionSchema,
+  editWithoutPasswordSchema,
+  engineOption,
+  networkFieldNames,
+  parseConnectionNetworkFields,
+  type Connection,
+  type ConnectionInput,
+  type Folder,
+} from "../_lib/connections.schema";
 import { connectionsQuery, createConnection, invalidateLists, runConnectionTest, updateConnection } from "../_lib/connections.service";
 import { choiceOf, engineChoices } from "../_lib/engine-choices";
 import { environmentLookup } from "../_lib/environment";
@@ -31,10 +41,10 @@ import { UserPasswordDialog } from "./user-password-dialog";
 const copy = connectionsCopy.form;
 const formID = "connection-dialog-form";
 /** Os campos que o formulário tem, pelo `name`: um erro da API com outra chave não apareceria em lugar nenhum. */
-const fieldNames = Object.keys(createConnectionSchema.shape);
+const fieldNames = [...Object.keys(createConnectionSchema.shape), ...networkFieldNames];
 
 /** O que abre o diálogo: uma conexão nova (na pasta dada, ou na raiz) ou a edição de uma gravada. */
-export type ConnectionDialogRequest = { mode: "new"; folderID: string | null } | { mode: "edit"; connection: Connection };
+export type ConnectionDialogRequest = { mode: "new"; folderID: string | null } | { mode: "edit"; connection: Connection; missing?: CredentialsField };
 
 type ConnectionDialogProps = {
   request: ConnectionDialogRequest;
@@ -108,7 +118,9 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
 
   // RN-TRANSF-016: a conexão gravada sem usuário, ou com o usuário e sem a senha (a que a importação trouxe sem eles), diz no topo o que falta e leva o foco a
   // esse campo, enquanto estiver assim: aberta sozinha, ao conectar, ou pelo menu.
-  const missing = connection === null ? null : missingCredentials(connection);
+  // RN-REDE-003: o segredo do túnel SSH ou do proxy que a conexão não grava só a recusa de conectar diz que falta (a API o guarda na memória depois de digitado): o
+  // diálogo aberto por ela abre na aba dele.
+  const missing = request.mode === "new" ? null : (missingCredentials(request.connection) ?? request.missing ?? null);
 
   // As configurações apareceram: a foto da abertura (uma vez) e o foco no nome, o primeiro campo, ou no que falta para conectar.
   useEffect(() => {
@@ -221,8 +233,18 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
     setTestFailure(null);
 
     const parsed = connection ? parseForm(form, purpose === "save" && !connection.hasPassword ? editWithoutPasswordSchema : editConnectionSchema) : parseForm(form, createConnectionSchema);
-    setErrors(parsed.ok ? {} : parsed.errors);
-    return parsed.ok ? parsed.data : null;
+    const raw = typeof HTMLFormElement !== "undefined" && form instanceof HTMLFormElement ? Object.fromEntries(new FormData(form)) : null;
+    const network = raw === null ? { ok: true as const, data: {} } : parseConnectionNetworkFields(raw);
+
+    if (!parsed.ok || !network.ok) {
+      const merged = { ...(parsed.ok ? {} : parsed.errors), ...(network.ok ? {} : network.errors) };
+      setErrors(merged);
+      focusFirstField(form, merged);
+      return null;
+    }
+
+    setErrors({});
+    return { ...parsed.data, ...network.data };
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -306,13 +328,14 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
             {connection ? <ShownEnvironmentPill environment={environmentLookup(folders).connection(connection)} className="h-[22px] px-[9px] text-xs leading-[22px]" /> : null}
           </div>
           {selected === undefined ? null : <DriverNotice choice={selected} actions={driverActions} />}
-          {missing === null ? null : <FormMessage tone="warning">{missing === "userName" ? transferCopy.credentials.noticeNoUser : transferCopy.credentials.noticeNoPassword}</FormMessage>}
+          {missing === null ? null : <FormMessage tone="warning">{transferCopy.credentials.notice[missing]}</FormMessage>}
 
           <form id={formID} ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
             <input type="hidden" name="engine" value={engine ?? ""} />
             <FieldError id="cx-engine-error">{errors.engine}</FieldError>
             <ConnectionFields
               connection={connection}
+              initialTab={missing === "sshSecret" ? "ssh" : missing === "proxyPassword" ? "proxy" : "main"}
               folders={folders}
               errors={errors}
               folderID={folderID}

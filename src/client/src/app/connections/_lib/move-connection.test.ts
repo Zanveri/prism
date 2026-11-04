@@ -34,4 +34,46 @@ describe("movedConnectionInput: mover uma conexão de pasta pelo navegador (RN-N
 
     expect(movedConnectionInput(protegida, "f2")).toEqual(fromForm);
   });
+
+  it("preserva SSH, SSL e Proxy quando presentes na conexão, mantendo o segredo SSH e a senha do proxy como nulos", () => {
+    const comRede: Connection = {
+      ...mes,
+      ssh: {
+        host: "bastion.exemplo.local",
+        port: 22,
+        userName: "pedro",
+        authMethod: "password",
+        privateKeyPath: null,
+        hasSecret: true,
+        saveCredentials: true,
+        ignoreHostVerification: false,
+        keepAliveIntervalMs: 0,
+        tunnelTimeoutMs: 0,
+        localHost: null,
+        localPort: 0,
+        remoteHost: null,
+        remotePort: 0,
+        hostKeyFingerprint: "SHA256:ohD8VZEXGWo6Ez8GSEJQ9WpafgLFsOfLOtGGQCQo6Og",
+      },
+      ssl: {
+        caCertificatePath: "/certs/ca.pem",
+        clientCertificatePath: "/certs/client.crt",
+        clientKeyPath: "/certs/client.key",
+        sslMode: "require",
+      },
+      proxy: {
+        host: "socks.exemplo.local",
+        port: 1080,
+        userName: "proxy_user",
+        hasPassword: true,
+        saveCredentials: false,
+      },
+    };
+
+    const moved = movedConnectionInput(comRede, "f2");
+    expect(moved.ssh).toMatchObject({ host: "bastion.exemplo.local", port: 22, userName: "pedro", secret: null, hostKeyFingerprint: "SHA256:ohD8VZEXGWo6Ez8GSEJQ9WpafgLFsOfLOtGGQCQo6Og" });
+    // A chave do cliente e o "não salvar a senha" voltam à API com os nomes dela: com outro nome, mover a conexão os perderia.
+    expect(moved.ssl).toEqual({ caCertificatePath: "/certs/ca.pem", clientCertificatePath: "/certs/client.crt", clientKeyPath: "/certs/client.key", sslMode: "require" });
+    expect(moved.proxy).toEqual({ host: "socks.exemplo.local", port: 1080, userName: "proxy_user", password: null, saveCredentials: false });
+  });
 });

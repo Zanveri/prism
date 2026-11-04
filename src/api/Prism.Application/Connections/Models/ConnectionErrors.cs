@@ -27,6 +27,14 @@ internal static class ConnectionErrors
     public static ApiErrorDto PasswordRequiredToTestOtherServer()
         => PasswordRequired("Para testar com outro host ou outra porta, informe a senha da conexão.");
 
+    /// <summary>RN-REDE-001 (a RN-CONN-004 no túnel SSH): o pedido omitiu o segredo SSH gravado e apontou o túnel para outro host ou outra porta.</summary>
+    public static ApiErrorDto SshSecretRequiredForOtherServer()
+        => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "CONNECTION_INVALID", "Ssh", "Ao mudar o host ou a porta do túnel SSH, informe a senha ou a frase secreta de novo.");
+
+    /// <summary>RN-REDE-001 (a RN-CONN-004 no proxy): o pedido omitiu a senha gravada do proxy e apontou para outro host ou outra porta.</summary>
+    public static ApiErrorDto ProxyPasswordRequiredForOtherServer()
+        => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "CONNECTION_INVALID", "Proxy", "Ao mudar o host ou a porta do proxy, informe a senha dele de novo.");
+
     /// <summary>
     /// RN-TRANSF-015: o `PATCH` sem usuário numa conexão que tem um. O usuário vazio só passa na conexão gravada já sem usuário (a que a importação trouxe
     /// sem ele); tirar o de uma que tem continua sendo a recusa do formulário, com a mesma frase, no campo.
@@ -47,6 +55,20 @@ internal static class ConnectionErrors
     /// <summary>RN-TRANSF-016 e RN-CONN-013: o "Testar conexão" de uma conexão gravada sem senha, sem a senha no pedido, em vez de testar com a senha vazia.</summary>
     public static ApiErrorDto CredentialsMissingToTest()
         => CredentialsMissing("Password", "Esta conexão não tem senha gravada. Informe a senha do banco para testar.");
+
+    /// <summary>
+    /// RN-REDE-003: o túnel SSH por senha, ou o proxy com usuário, sem o segredo: a conexão gravada sem "Salvar credenciais" e sem o segredo digitado desde que o cofre
+    /// abriu. `field` é o de <see cref="ConnectionRules.MissingNetworkSecret"/>; a tela abre o "Editar conexão" na aba dele.
+    /// </summary>
+    public static ApiErrorDto NetworkSecretMissingToConnect(string field)
+        => CredentialsMissing(field, $"{NetworkSecretOf(field)} não está gravada nesta conexão. Informe-a em \"Editar conexão\" para conectar: sem \"Salvar credenciais\", ela fica só na memória até o Prism ser bloqueado ou fechado.");
+
+    /// <summary>O mesmo no "Testar conexão": o campo do segredo, vazio, sem o segredo gravado nem digitado antes.</summary>
+    public static ApiErrorDto NetworkSecretMissingToTest(string field)
+        => CredentialsMissing(field, $"Informe {NetworkSecretOf(field).ToLowerInvariant()} para testar.");
+
+    private static string NetworkSecretOf(string field)
+        => field == "SshSecret" ? "A senha do túnel SSH" : "A senha do proxy";
 
     private static ApiErrorDto CredentialsMissing(string field, string message)
         => ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", field, message);

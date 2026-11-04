@@ -74,6 +74,7 @@ public static class DependencyInjection
         // especificação). Registrado pelo tipo, e não por instância pronta, para o contêiner descartá-lo no desligamento da API, que é
         // quando as sessões fecham (RN-SESSAO-004).
         services.AddSingleton<IDatabaseSessionService, DatabaseSessionService>();
+        services.AddSingleton<IUnsavedSecretsService, UnsavedSecretsService>();
 
         // O gerenciador de drivers sob demanda (seção 16 da especificação): catálogo, instalação e estado.
         services.AddDrivers(dataDirectory);

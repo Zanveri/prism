@@ -1,7 +1,10 @@
 using Prism.Application.Common.Texts;
+using Prism.Application.Connections.Models.Dtos;
 using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.Vault.Models;
 
 namespace Prism.Application.Connections.Models;
 
@@ -34,6 +37,7 @@ internal static class ConnectionRules
     public const int DatabaseMaxLength = 128;
     public const int UserNameMaxLength = 128;
     public const int PasswordMaxLength = 1024;
+    public const int PathMaxLength = 1024;
 
     public static bool NameIsValid(string? name)
         => name.NormalizeName().Length is >= 1 and <= NameMaxLength;
@@ -73,6 +77,184 @@ internal static class ConnectionRules
     /// <summary>A senha não é aparada nem conferida quanto aos caracteres: espaço e qualquer caractere fazem parte dela. Só o teto, contado como veio.</summary>
     public static string? PasswordRefusal(string? password)
         => password is { Length: > PasswordMaxLength } ? "A senha do banco pode ter até 1.024 caracteres." : null;
+
+    public static string? SshRefusal(ConnectionSshInputDto? ssh)
+    {
+        if (ssh is null)
+            return null;
+
+        if (Refusal(ssh.Host, required: true, HostMaxLength, "Informe o host do túnel SSH.", "O host do túnel SSH pode ter até 255 caracteres.", "O host do túnel SSH não pode ter caractere de controle nem de direção do texto.") is { } hostRefusal)
+            return hostRefusal;
+
+        if (ssh.Port is < 1 or > 65535)
+            return "Informe uma porta SSH de 1 a 65535.";
+
+        if (Refusal(ssh.UserName, required: true, UserNameMaxLength, "Informe o usuário do túnel SSH.", "O usuário do túnel SSH pode ter até 128 caracteres.", "O usuário do túnel SSH não pode ter caractere de controle nem de direção do texto.") is { } userRefusal)
+            return userRefusal;
+
+        var authMethod = ssh.AuthMethod?.Trim();
+        if (authMethod is not ("password" or "privateKey"))
+            return "Escolha o método de autenticação SSH: senha ou chave privada.";
+
+        if (authMethod == "privateKey" && Refusal(ssh.PrivateKeyPath, required: true, PathMaxLength, "Informe o caminho da chave privada SSH.", "O caminho da chave privada SSH pode ter até 1.024 caracteres.", "O caminho da chave privada SSH não pode ter caractere de controle nem de direção do texto.") is { } keyRefusal)
+            return keyRefusal;
+
+        if (ssh.Secret is { Length: > PasswordMaxLength })
+            return "A senha ou frase secreta do SSH pode ter até 1.024 caracteres.";
+
+        if (ssh.KeepAliveIntervalMs is < 0 or > 3_600_000)
+            return "O intervalo de keep-alive SSH deve ser de 0 a 3.600.000 ms.";
+
+        if (ssh.TunnelTimeoutMs is < 0 or > 600_000)
+            return "O timeout de conexão do túnel SSH deve ser de 0 a 600.000 ms.";
+
+        if (Refusal(ssh.LocalHost, required: false, HostMaxLength, string.Empty, "O host local do túnel SSH pode ter até 255 caracteres.", "O host local do túnel SSH não pode ter caractere de controle nem de direção do texto.") is { } localHostRefusal)
+            return localHostRefusal;
+
+        if (ssh.LocalPort is < 0 or > 65535)
+            return "Informe uma porta local de 0 a 65535.";
+
+        if (Refusal(ssh.RemoteHost, required: false, HostMaxLength, string.Empty, "O host remoto do túnel SSH pode ter até 255 caracteres.", "O host remoto do túnel SSH não pode ter caractere de controle nem de direção do texto.") is { } remoteHostRefusal)
+            return remoteHostRefusal;
+
+        if (Refusal(ssh.HostKeyFingerprint, required: false, HostMaxLength, string.Empty, "A impressão digital da chave do servidor SSH pode ter até 255 caracteres.", "A impressão digital da chave do servidor SSH não pode ter caractere de controle nem de direção do texto.") is { } fingerprintRefusal)
+            return fingerprintRefusal;
+
+        return ssh.RemotePort is < 0 or > 65535 ? "Informe uma porta remota de 0 a 65535." : null;
+    }
+
+    public static string? SslRefusal(ConnectionSslSettings? ssl)
+    {
+        if (ssl is null)
+            return null;
+
+        if (Refusal(ssl.CaCertificatePath, required: false, PathMaxLength, string.Empty, "O caminho do certificado CA pode ter até 1.024 caracteres.", "O caminho do certificado CA não pode ter caractere de controle nem de direção do texto.") is { } caRefusal)
+            return caRefusal;
+
+        if (Refusal(ssl.ClientCertificatePath, required: false, PathMaxLength, string.Empty, "O caminho do certificado de cliente pode ter até 1.024 caracteres.", "O caminho do certificado de cliente não pode ter caractere de controle nem de direção do texto.") is { } certRefusal)
+            return certRefusal;
+
+        if (Refusal(ssl.ClientKeyPath, required: false, PathMaxLength, string.Empty, "O caminho da chave privada de cliente pode ter até 1.024 caracteres.", "O caminho da chave privada de cliente não pode ter caractere de controle nem de direção do texto.") is { } keyRefusal)
+            return keyRefusal;
+
+        if (!string.IsNullOrWhiteSpace(ssl.SslMode))
+        {
+            var mode = ssl.SslMode.Trim().ToLowerInvariant();
+            if (mode is not ("disable" or "allow" or "prefer" or "require" or "verify-ca" or "verify-full"))
+                return "Escolha um modo SSL válido.";
+        }
+
+        return null;
+    }
+
+    public static string? ProxyRefusal(ConnectionProxyInputDto? proxy)
+    {
+        if (proxy is null)
+            return null;
+
+        if (Refusal(proxy.Host, required: true, HostMaxLength, "Informe o host do proxy SOCKS.", "O host do proxy SOCKS pode ter até 255 caracteres.", "O host do proxy SOCKS não pode ter caractere de controle nem de direção do texto.") is { } hostRefusal)
+            return hostRefusal;
+
+        if (proxy.Port is < 1 or > 65535)
+            return "Informe uma porta do proxy SOCKS de 1 a 65535.";
+
+        if (Refusal(proxy.UserName, required: false, UserNameMaxLength, string.Empty, "O usuário do proxy SOCKS pode ter até 128 caracteres.", "O usuário do proxy SOCKS não pode ter caractere de controle nem de direção do texto.") is { } userRefusal)
+            return userRefusal;
+
+        return proxy.Password is { Length: > PasswordMaxLength } ? "A senha do proxy SOCKS pode ter até 1.024 caracteres." : null;
+    }
+
+    /// <summary>
+    /// RN-REDE-001 (a RN-CONN-004 e a RN-CONN-013 no túnel SSH): o segredo gravado só vai ao servidor SSH para o qual foi gravado (o mesmo host e a mesma porta,
+    /// <see cref="SameServer"/>). `false` quando o pedido omite o segredo e aponta o túnel para outro servidor: quem chama recusa antes de conectar.
+    /// </summary>
+    public static bool SshSecretStaysOnItsServer(ConnectionSshInputDto? ssh, ConnectionSshSettings? stored)
+        => ssh is null || !string.IsNullOrEmpty(ssh.Secret) || stored?.Secret is null || SameServer(stored.Host, stored.Port, ssh.Host, ssh.Port);
+
+    /// <summary>RN-REDE-001: a mesma regra do <see cref="SshSecretStaysOnItsServer"/> para a senha do proxy SOCKS.</summary>
+    public static bool ProxyPasswordStaysOnItsServer(ConnectionProxyInputDto? proxy, ConnectionProxySettings? stored)
+        => proxy is null || !string.IsNullOrEmpty(proxy.Password) || stored?.Password is null || SameServer(stored.Host, stored.Port, proxy.Host, proxy.Port);
+
+    /// <summary>
+    /// RN-REDE-001 e 002: o segredo omitido é o gravado (`stored`), e só no mesmo servidor SSH. Fora do teste (`forTest`), sem "Salvar credenciais" o segredo não é guardado.
+    /// </summary>
+    public static ConnectionSshSettings? NormalizeSsh(ConnectionSshInputDto? ssh, ConnectionSshSettings? stored = null, bool forTest = false)
+    {
+        if (ssh is null)
+            return null;
+
+        var authMethod = ssh.AuthMethod.Trim() == "privateKey" ? "privateKey" : "password";
+        var privateKeyPath = authMethod == "privateKey" && !string.IsNullOrWhiteSpace(ssh.PrivateKeyPath) ? ssh.PrivateKeyPath.Trim() : null;
+        var resolvedSecret = !string.IsNullOrEmpty(ssh.Secret) ? ssh.Secret : SshSecretStaysOnItsServer(ssh, stored) ? stored?.Secret : null;
+        var secret = forTest || ssh.SaveCredentials ? resolvedSecret : null;
+
+        return new ConnectionSshSettings(
+            ssh.Host.Trim(),
+            ssh.Port,
+            ssh.UserName.Trim(),
+            authMethod,
+            privateKeyPath,
+            secret,
+            ssh.SaveCredentials,
+            ssh.IgnoreHostVerification,
+            ssh.KeepAliveIntervalMs,
+            ssh.TunnelTimeoutMs,
+            string.IsNullOrWhiteSpace(ssh.LocalHost) ? null : ssh.LocalHost.Trim(),
+            ssh.LocalPort,
+            string.IsNullOrWhiteSpace(ssh.RemoteHost) ? null : ssh.RemoteHost.Trim(),
+            ssh.RemotePort,
+            string.IsNullOrWhiteSpace(ssh.HostKeyFingerprint) ? null : ssh.HostKeyFingerprint.Trim());
+    }
+
+    /// <summary>
+    /// RN-REDE-002: o que o driver recebe da conexão gravada: o banco pedido no lugar do dela (RN-ARVORE-006, `null` é o dela), e o túnel e o proxy com o segredo que a
+    /// conexão não grava, quando a pessoa o digitou desde que o cofre abriu (<see cref="IUnsavedSecretsService"/>) e para o mesmo servidor (<see cref="SameServer"/>).
+    /// </summary>
+    public static ConnectionSettings SettingsOf(VaultConnectionRecord record, string? database, IUnsavedSecretsService? unsavedSecrets)
+        => new(record.Engine, record.Host, record.Port, database ?? record.Database, record.UserName, record.Password,
+            Ssh: WithRemembered(record.Ssh, unsavedSecrets?.Ssh(record.ID)), Ssl: record.Ssl, Proxy: WithRemembered(record.Proxy, unsavedSecrets?.Proxy(record.ID)));
+
+    /// <summary>O túnel sem o segredo gravado, com o que a pessoa digitou para o mesmo servidor SSH; o gravado, quando há, vale antes.</summary>
+    public static ConnectionSshSettings? WithRemembered(ConnectionSshSettings? ssh, ConnectionSshSettings? remembered)
+        => ssh is { Secret: null or "" } && remembered is not null && SameServer(remembered.Host, remembered.Port, ssh.Host, ssh.Port) ? ssh with { Secret = remembered.Secret } : ssh;
+
+    /// <summary>A mesma regra do <see cref="WithRemembered(ConnectionSshSettings?, ConnectionSshSettings?)"/> para a senha do proxy.</summary>
+    public static ConnectionProxySettings? WithRemembered(ConnectionProxySettings? proxy, ConnectionProxySettings? remembered)
+        => proxy is { Password: null or "" } && remembered is not null && SameServer(remembered.Host, remembered.Port, proxy.Host, proxy.Port) ? proxy with { Password = remembered.Password } : proxy;
+
+    /// <summary>
+    /// RN-REDE-003: o campo do segredo que falta para conectar, no nome do formulário: a senha do túnel SSH por senha (`SshSecret`) ou a do proxy com usuário
+    /// (`ProxyPassword`); `null` quando nada falta. A chave privada sem frase secreta é válida (a chave sem cifra não tem uma).
+    /// </summary>
+    public static string? MissingNetworkSecret(ConnectionSshSettings? ssh, ConnectionProxySettings? proxy)
+        => ssh is { AuthMethod: "password", Secret: null or "" } ? "SshSecret"
+            : proxy is { UserName: not null, Password: null or "" } ? "ProxyPassword"
+            : null;
+
+    public static ConnectionSslSettings? NormalizeSsl(ConnectionSslSettings? ssl)
+        => ssl is null
+            ? null
+            : new ConnectionSslSettings(
+                string.IsNullOrWhiteSpace(ssl.CaCertificatePath) ? null : ssl.CaCertificatePath.Trim(),
+                string.IsNullOrWhiteSpace(ssl.ClientCertificatePath) ? null : ssl.ClientCertificatePath.Trim(),
+                string.IsNullOrWhiteSpace(ssl.ClientKeyPath) ? null : ssl.ClientKeyPath.Trim(),
+                string.IsNullOrWhiteSpace(ssl.SslMode) ? null : ssl.SslMode.Trim().ToLowerInvariant());
+
+    public static ConnectionProxySettings? NormalizeProxy(ConnectionProxyInputDto? proxy, ConnectionProxySettings? stored = null, bool forTest = false)
+    {
+        if (proxy is null)
+            return null;
+
+        var resolvedPassword = !string.IsNullOrEmpty(proxy.Password) ? proxy.Password : ProxyPasswordStaysOnItsServer(proxy, stored) ? stored?.Password : null;
+        var password = forTest || proxy.SaveCredentials ? resolvedPassword : null;
+
+        return new ConnectionProxySettings(
+            proxy.Host.Trim(),
+            proxy.Port,
+            string.IsNullOrWhiteSpace(proxy.UserName) ? null : proxy.UserName.Trim(),
+            password,
+            proxy.SaveCredentials);
+    }
 
     private static string? Refusal(string? value, bool required, int maxLength, string missing, string tooLong, string control)
     {

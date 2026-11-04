@@ -10,6 +10,7 @@ using Prism.Application.Journal;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Journal.Models;
 using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Vault.Services;
@@ -51,6 +52,9 @@ public sealed record UpdateConnectionCommand : IRequest<Result<ConnectionDto, Ap
     public string? VerificationQuery { get; init; }
 
     public bool? UseInternalDescriptions { get; init; }
+    public ConnectionSshInputDto? Ssh { get; init; }
+    public ConnectionSslSettings? Ssl { get; init; }
+    public ConnectionProxyInputDto? Proxy { get; init; }
 
     /// <summary>RN-PROT-003: a senha do usuário do Prism, e não a do banco.</summary>
     public string? UserPassword { get; init; }
@@ -59,7 +63,7 @@ public sealed record UpdateConnectionCommand : IRequest<Result<ConnectionDto, Ap
     public override string ToString() => nameof(UpdateConnectionCommand);
 }
 
-internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueries, IConnectionRepository connectionRepository, TimeProvider timeProvider, IVaultService? vaultService = null, IJournalRecorder? journal = null) : IRequestHandler<UpdateConnectionCommand, Result<ConnectionDto, ApiErrorDto>>
+internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueries, IConnectionRepository connectionRepository, TimeProvider timeProvider, IVaultService? vaultService = null, IJournalRecorder? journal = null, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<UpdateConnectionCommand, Result<ConnectionDto, ApiErrorDto>>
 {
     public async Task<Result<ConnectionDto, ApiErrorDto>> Handle(UpdateConnectionCommand request, CancellationToken cancellationToken)
     {
@@ -75,8 +79,24 @@ internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueri
         var previousConfirm = ProtectionRules.NormalizeConfirmation(record.ConfirmCommands);
         var previousFolderID = record.FolderID;
 
+        // RN-REDE-001 (a RN-CONN-004 no túnel e no proxy): o segredo gravado não vai a outro servidor.
+        if (!ConnectionRules.SshSecretStaysOnItsServer(request.Ssh, record.Ssh))
+            return Result.Failure<ConnectionDto, ApiErrorDto>(ConnectionErrors.SshSecretRequiredForOtherServer());
+
+        if (!ConnectionRules.ProxyPasswordStaysOnItsServer(request.Proxy, record.Proxy))
+            return Result.Failure<ConnectionDto, ApiErrorDto>(ConnectionErrors.ProxyPasswordRequiredForOtherServer());
+
         var connection = ConnectionRecords.ToDomain(record);
-        var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery, request.UseInternalDescriptions);
+        var safeguards = ConnectionSafeguards.From(
+            request.ConfirmCommands,
+            request.ReadOnly,
+            request.VerificationEnabled,
+            request.VerificationInterval,
+            request.VerificationQuery,
+            request.UseInternalDescriptions,
+            ConnectionRules.NormalizeSsh(request.Ssh, record.Ssh),
+            ConnectionRules.NormalizeSsl(request.Ssl),
+            ConnectionRules.NormalizeProxy(request.Proxy, record.Proxy));
         connection.Update(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, startedAt.UtcDateTime);
 
         var updated = await connectionRepository.Update(connection, request.Password, request.UserPassword, cancellationToken);
@@ -96,6 +116,10 @@ internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueri
         }
 
         var (snapshot, _) = JournalSnapshots.FromRecord(vaultService, ConnectionRecords.ToRecord(connection));
+        // RN-REDE-002: sem "Salvar credenciais" o segredo digitado agora, ou o que estava gravado no mesmo servidor (quem desmarca não perde a conexão nesta execução), fica na
+        // memória para conectar até o cofre fechar; o campo vazio não apaga o que já estava lá.
+        unsavedSecrets?.Remember(record.ID, ConnectionRules.NormalizeSsh(request.Ssh, record.Ssh, forTest: true), ConnectionRules.NormalizeProxy(request.Proxy, record.Proxy, forTest: true));
+
         var (action, level, reason) = ClassifyChange(previousReadOnly, connection.ReadOnly, previousConfirm, ProtectionRules.NormalizeConfirmation(connection.ConfirmCommands), previousFolderID, connection.FolderID);
         journal?.Record(
             new JournalEntryStart(startedAt, EJournalKind.Connections, action, level, reason, Connection: snapshot, Protections: JournalSnapshots.ProtectionsText(updated.Value)),

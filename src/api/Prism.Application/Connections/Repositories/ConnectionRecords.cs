@@ -21,8 +21,11 @@ internal static class ConnectionRecords
             connection.VerificationEnabled ? null : false,
             connection.VerificationInterval == ConnectionRules.VerificationIntervalDefault ? null : connection.VerificationInterval,
             connection.VerificationQuery,
-            UseInternalDescriptions: connection.UseInternalDescriptions);
+            UseInternalDescriptions: connection.UseInternalDescriptions,
+            Ssh: connection.Ssh,
+            Ssl: connection.Ssl,
+            Proxy: connection.Proxy);
 
     public static ConnectionSafeguards SafeguardsOf(VaultConnectionRecord record)
-        => new(record.ConfirmCommands, record.ReadOnly == true, record.VerificationEnabled ?? true, record.VerificationInterval ?? ConnectionRules.VerificationIntervalDefault, record.VerificationQuery, record.UseInternalDescriptions);
+        => new(record.ConfirmCommands, record.ReadOnly == true, record.VerificationEnabled ?? true, record.VerificationInterval ?? ConnectionRules.VerificationIntervalDefault, record.VerificationQuery, record.UseInternalDescriptions, record.Ssh, record.Ssl, record.Proxy);
 }

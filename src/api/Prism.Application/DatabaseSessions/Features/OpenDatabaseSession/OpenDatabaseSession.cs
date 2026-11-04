@@ -26,7 +26,7 @@ public sealed record OpenDatabaseSessionCommand : IRequest<Result<DatabaseSessio
     public string? IsolationLevel { get; init; }
 }
 
-internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService) : IRequestHandler<OpenDatabaseSessionCommand, Result<DatabaseSessionDto, ApiErrorDto>>
+internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<OpenDatabaseSessionCommand, Result<DatabaseSessionDto, ApiErrorDto>>
 {
     public async Task<Result<DatabaseSessionDto, ApiErrorDto>> Handle(OpenDatabaseSessionCommand request, CancellationToken cancellationToken)
     {
@@ -50,7 +50,12 @@ internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQu
             return Result.Failure<DatabaseSessionDto, ApiErrorDto>(ConnectionErrors.CredentialsMissingToConnect(userNameMissing: string.IsNullOrWhiteSpace(record.UserName)));
 
         // RN-ARVORE-006: o nome pedido entra só no lugar do banco; host, porta, usuário e senha são os da conexão gravada.
-        var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, request.Database ?? record.Database, record.UserName, record.Password);
+        var settings = ConnectionRules.SettingsOf(record, request.Database, unsavedSecrets);
+
+        // RN-REDE-003: o túnel por senha ou o proxy com usuário sem o segredo ("Salvar credenciais" desmarcado, e nada digitado desde que o cofre abriu) também não chega
+        // ao driver: a recusa diz onde informá-lo, e a tela abre o "Editar conexão" na aba dele.
+        if (ConnectionRules.MissingNetworkSecret(settings.Ssh, settings.Proxy) is { } secretField)
+            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(ConnectionErrors.NetworkSecretMissingToConnect(secretField));
 
         var opened = await databaseSessionService.OpenAsync(record.ID, settings, generation, cancellationToken);
         if (opened.IsFailure)

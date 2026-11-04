@@ -661,7 +661,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
           if (reopened) autoRefresh.lost();
           // RN-TRANSF-016: a conexão sem usuário ou sem senha não chega ao driver. A aba fica com o resultado de antes e o comando sem executar (o erro de
           // campo não vira aviso), e o "Editar conexão" dela abre, com o que falta.
-          if (credentialsMissingField(opened.error) !== null) credentialsRequests.request(connection);
+          const missingField = credentialsMissingField(opened.error);
+          if (missingField !== null) credentialsRequests.request(connection, missingField);
           return opened;
         }
 

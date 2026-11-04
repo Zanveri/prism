@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { engineTags, type Engine } from "@/components/ui/engine-tag";
+import { firstFieldErrors, type FieldErrors, type ParsedForm } from "@/lib/utils/form";
 
 /** `""` é "nenhuma" nos campos opcionais do formulário; a API recebe `null`. */
 const emptyToNull = (value: string) => (value === "" ? null : value);
@@ -59,6 +60,54 @@ export const foldersSchema = z.array(folderSchema);
 
 export const engineSchema = z.literal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], { error: "Escolha o banco de dados." });
 
+/** A configuração de túnel SSH da conexão como a API a devolve (sem a senha ou frase secreta, só `hasSecret`). */
+export const connectionSshSchema = z.object({
+  host: z.string(),
+  port: z.number().int(),
+  userName: z.string(),
+  authMethod: z.enum(["password", "privateKey"]),
+  privateKeyPath: z.string().nullable(),
+  hasSecret: z.boolean(),
+  saveCredentials: z.boolean(),
+  ignoreHostVerification: z.boolean(),
+  keepAliveIntervalMs: z.number().int(),
+  tunnelTimeoutMs: z.number().int(),
+  localHost: z.string().nullable(),
+  localPort: z.number().int(),
+  remoteHost: z.string().nullable(),
+  remotePort: z.number().int(),
+  hostKeyFingerprint: z.string().nullable(),
+  secret: z.never().optional(),
+});
+
+export type ConnectionSsh = Omit<z.infer<typeof connectionSshSchema>, "secret">;
+
+export const sslModes = ["", "disable", "allow", "prefer", "require", "verify-ca", "verify-full"] as const;
+export type SslMode = (typeof sslModes)[number];
+
+/** A configuração SSL da conexão como a API a devolve e recebe (os nomes são os do `ConnectionSslSettings`; o modo "Padrão do driver" volta nulo). */
+export const connectionSslSchema = z.object({
+  caCertificatePath: z.string().nullable(),
+  clientCertificatePath: z.string().nullable(),
+  clientKeyPath: z.string().nullable(),
+  sslMode: z.enum(sslModes).nullable(),
+});
+
+export type ConnectionSsl = z.infer<typeof connectionSslSchema>;
+export type ConnectionSslInput = ConnectionSsl;
+
+/** A configuração de proxy SOCKS5 da conexão como a API a devolve (sem a senha, só `hasPassword`). */
+export const connectionProxySchema = z.object({
+  host: z.string(),
+  port: z.number().int(),
+  userName: z.string().nullable(),
+  hasPassword: z.boolean(),
+  saveCredentials: z.boolean(),
+  password: z.never().optional(),
+});
+
+export type ConnectionProxy = Omit<z.infer<typeof connectionProxySchema>, "password">;
+
 /**
  * A conexão como a API a devolve: sem a senha, só `hasPassword` (RN-CONN-001). A tela não aceita
  * senha fora do diálogo de revelar, então uma resposta que traga `password` (mesmo nula) é recusada
@@ -84,13 +133,19 @@ export const connectionSchema = z.object({
   verificationInterval: z.number().int(),
   verificationQuery: z.string().nullable(),
   useInternalDescriptions: z.boolean().nullable().optional(),
+  ssh: connectionSshSchema.nullable().optional(),
+  ssl: connectionSslSchema.nullable().optional(),
+  proxy: connectionProxySchema.nullable().optional(),
   protections: protectionsSchema,
   createdAt: timestamp,
   updatedAt: timestamp,
   password: z.never().optional(),
 });
 
-export type Connection = Omit<z.infer<typeof connectionSchema>, "password">;
+export type Connection = Omit<z.infer<typeof connectionSchema>, "password" | "ssh" | "proxy"> & {
+  ssh?: ConnectionSsh | null;
+  proxy?: ConnectionProxy | null;
+};
 
 export const connectionsSchema = z.array(connectionSchema);
 
@@ -258,6 +313,225 @@ export const editWithoutPasswordSchema = connectionFields.extend({ password: z.s
 /** RN-NAV-009: o diálogo de renomear conexão, só com o nome, na regra do formulário. */
 export const renameConnectionSchema = connectionFields.pick({ name: true });
 
+/** O que a API recebe para configurar o túnel SSH da conexão (`secret` nulo mantém a senha/frase secreta gravada). */
+export type ConnectionSshInput = {
+  host: string;
+  port: number;
+  userName: string;
+  authMethod: "password" | "privateKey";
+  privateKeyPath: string | null;
+  secret: string | null;
+  saveCredentials: boolean;
+  ignoreHostVerification: boolean;
+  keepAliveIntervalMs: number;
+  tunnelTimeoutMs: number;
+  localHost: string | null;
+  localPort: number;
+  remoteHost: string | null;
+  remotePort: number;
+  hostKeyFingerprint: string | null;
+};
+
+/** O que a API recebe para configurar o proxy SOCKS5 da conexão (`password` nulo mantém a senha gravada). */
+export type ConnectionProxyInput = {
+  host: string;
+  port: number;
+  userName: string | null;
+  password: string | null;
+  saveCredentials: boolean;
+};
+
+const sshPortMessage = "Informe uma porta SSH de 1 a 65535.";
+const sshKeepAliveMessage = "O intervalo de keep-alive SSH deve ficar entre 0 e 3.600.000 ms.";
+// O teto é o da API (`ConnectionRules.SshRefusal`).
+const sshTimeoutMessage = "O timeout do túnel SSH deve ficar entre 0 e 600.000 ms.";
+const sshLocalPortMessage = "A porta local do encaminhamento SSH deve ficar entre 0 e 65535.";
+const sshRemotePortMessage = "A porta remota do encaminhamento SSH deve ficar entre 0 e 65535.";
+const proxyPortMessage = "Informe uma porta de proxy de 1 a 65535.";
+
+const sshFormFieldsSchema = z
+  .object({
+    sshHost: z.string().trim().min(1, "Informe o host SSH.").max(255, "O host SSH pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host SSH")),
+    sshPort: z.string().trim().regex(/^\d+$/, sshPortMessage).transform(Number).pipe(z.number().min(1, sshPortMessage).max(65535, sshPortMessage)),
+    sshUserName: z.string().trim().min(1, "Informe o usuário SSH.").max(128, "O usuário SSH pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O usuário SSH")),
+    sshAuthMethod: z.enum(["password", "privateKey"], { error: "Escolha o método de autenticação SSH (senha ou chave privada)." }),
+    sshPrivateKeyPath: z.string().trim().max(1024, "O caminho da chave privada SSH pode ter até 1.024 caracteres.").refine((value) => withoutControl(value), controlMessage("O caminho da chave privada SSH")),
+    sshSecret: z.string().max(1024, "A senha ou frase secreta SSH pode ter até 1.024 caracteres.").transform(emptyToNull),
+    sshSaveCredentials: z.enum(["true", "false"]).transform((value) => value === "true"),
+    sshIgnoreHostVerification: z.enum(["true", "false"]).transform((value) => value === "true"),
+    sshKeepAliveIntervalMs: z.string().trim().regex(/^\d+$/, sshKeepAliveMessage).transform(Number).pipe(z.number().min(0, sshKeepAliveMessage).max(3600000, sshKeepAliveMessage)),
+    sshTunnelTimeoutMs: z.string().trim().regex(/^\d+$/, sshTimeoutMessage).transform(Number).pipe(z.number().min(0, sshTimeoutMessage).max(600000, sshTimeoutMessage)),
+    sshLocalHost: z.string().trim().max(255, "O host local do encaminhamento SSH pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host local do encaminhamento SSH")).transform(emptyToNull),
+    sshLocalPort: z.string().trim().regex(/^\d+$/, sshLocalPortMessage).transform(Number).pipe(z.number().min(0, sshLocalPortMessage).max(65535, sshLocalPortMessage)),
+    sshRemoteHost: z.string().trim().max(255, "O host remoto do encaminhamento SSH pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host remoto do encaminhamento SSH")).transform(emptyToNull),
+    sshRemotePort: z.string().trim().regex(/^\d+$/, sshRemotePortMessage).transform(Number).pipe(z.number().min(0, sshRemotePortMessage).max(65535, sshRemotePortMessage)),
+    sshHostKeyFingerprint: z.string().trim().max(255, "A impressão digital do host pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("A impressão digital do host")).transform(emptyToNull),
+  })
+  .superRefine((data, ctx) => {
+    if (data.sshAuthMethod === "privateKey" && data.sshPrivateKeyPath === "") {
+      ctx.addIssue({ code: "custom", path: ["sshPrivateKeyPath"], message: "Informe o caminho da chave privada SSH." });
+    }
+  })
+  .transform(
+    (data): ConnectionSshInput => ({
+      host: data.sshHost,
+      port: data.sshPort,
+      userName: data.sshUserName,
+      authMethod: data.sshAuthMethod,
+      privateKeyPath: data.sshAuthMethod === "privateKey" ? emptyToNull(data.sshPrivateKeyPath) : null,
+      secret: data.sshSecret,
+      saveCredentials: data.sshSaveCredentials,
+      ignoreHostVerification: data.sshIgnoreHostVerification,
+      keepAliveIntervalMs: data.sshKeepAliveIntervalMs,
+      tunnelTimeoutMs: data.sshTunnelTimeoutMs,
+      localHost: data.sshLocalHost,
+      localPort: data.sshLocalPort,
+      remoteHost: data.sshRemoteHost,
+      remotePort: data.sshRemotePort,
+      hostKeyFingerprint: data.sshHostKeyFingerprint,
+    }),
+  );
+
+const sslFormFieldsSchema = z
+  .object({
+    sslCaCertificatePath: z.string().trim().max(1024, "O caminho do certificado CA pode ter até 1.024 caracteres.").refine((value) => withoutControl(value), controlMessage("O caminho do certificado CA")).transform(emptyToNull),
+    sslClientCertificatePath: z.string().trim().max(1024, "O caminho do certificado de cliente pode ter até 1.024 caracteres.").refine((value) => withoutControl(value), controlMessage("O caminho do certificado de cliente")).transform(emptyToNull),
+    sslClientPrivateKeyPath: z.string().trim().max(1024, "O caminho da chave privada de cliente pode ter até 1.024 caracteres.").refine((value) => withoutControl(value), controlMessage("O caminho da chave privada de cliente")).transform(emptyToNull),
+    sslMode: z.enum(sslModes, { error: "Escolha um modo SSL válido." }),
+  })
+  .transform(
+    (data): ConnectionSslInput => ({
+      caCertificatePath: data.sslCaCertificatePath,
+      clientCertificatePath: data.sslClientCertificatePath,
+      clientKeyPath: data.sslClientPrivateKeyPath,
+      sslMode: data.sslMode,
+    }),
+  );
+
+const proxyFormFieldsSchema = z
+  .object({
+    proxyHost: z.string().trim().min(1, "Informe o host do proxy.").max(255, "O host do proxy pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host do proxy")),
+    proxyPort: z.string().trim().regex(/^\d+$/, proxyPortMessage).transform(Number).pipe(z.number().min(1, proxyPortMessage).max(65535, proxyPortMessage)),
+    proxyUserName: z.string().trim().max(128, "O usuário do proxy pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O usuário do proxy")).transform(emptyToNull),
+    proxyPassword: z.string().max(1024, "A senha do proxy pode ter até 1.024 caracteres.").transform(emptyToNull),
+    proxySavePassword: z.enum(["true", "false"]).transform((value) => value === "true"),
+  })
+  .transform(
+    (data): ConnectionProxyInput => ({
+      host: data.proxyHost,
+      port: data.proxyPort,
+      userName: data.proxyUserName,
+      password: data.proxyPassword,
+      saveCredentials: data.proxySavePassword,
+    }),
+  );
+
+/** Os nomes dos campos de SSH, SSL e Proxy no formulário, além das chaves `ssh`, `ssl` e `proxy` que a API pode devolver num 422. */
+export const networkFieldNames = [
+  "ssh",
+  "ssl",
+  "proxy",
+  "sshHost",
+  "sshPort",
+  "sshUserName",
+  "sshAuthMethod",
+  "sshPrivateKeyPath",
+  "sshSecret",
+  "sshSaveCredentials",
+  "sshIgnoreHostVerification",
+  "sshKeepAliveIntervalMs",
+  "sshTunnelTimeoutMs",
+  "sshLocalHost",
+  "sshLocalPort",
+  "sshRemoteHost",
+  "sshRemotePort",
+  "sshHostKeyFingerprint",
+  "sslCaCertificatePath",
+  "sslClientCertificatePath",
+  "sslClientPrivateKeyPath",
+  "sslMode",
+  "proxyHost",
+  "proxyPort",
+  "proxyUserName",
+  "proxyPassword",
+  "proxySavePassword",
+] as const;
+
+export type ConnectionNetworkInput = {
+  ssh?: ConnectionSshInput | null;
+  ssl?: ConnectionSslInput | null;
+  proxy?: ConnectionProxyInput | null;
+};
+
+/**
+ * Valida as abas opcionais de rede (SSH, SSL e Proxy) quando presentes no formulário (`sshEnabled`, `sslEnabled`, `proxyEnabled`).
+ * Quando uma aba está desativada (`"false"`), devolve `null` para que o `PATCH` apague a configuração anterior; quando omitida (nos testes sem DOM), não inclui a chave.
+ */
+export function parseConnectionNetworkFields(raw: Record<string, unknown>): ParsedForm<ConnectionNetworkInput> {
+  const errors: FieldErrors = {};
+  const data: ConnectionNetworkInput = {};
+
+  if (raw.sshEnabled === "true") {
+    const parsed = sshFormFieldsSchema.safeParse(raw);
+    if (parsed.success) data.ssh = parsed.data;
+    else Object.assign(errors, firstFieldErrors(parsed.error));
+  } else if (raw.sshEnabled === "false") {
+    data.ssh = null;
+  }
+
+  if (raw.sslEnabled === "true") {
+    const parsed = sslFormFieldsSchema.safeParse(raw);
+    if (parsed.success) data.ssl = parsed.data;
+    else Object.assign(errors, firstFieldErrors(parsed.error));
+  } else if (raw.sslEnabled === "false") {
+    data.ssl = null;
+  }
+
+  if (raw.proxyEnabled === "true") {
+    const parsed = proxyFormFieldsSchema.safeParse(raw);
+    if (parsed.success) data.proxy = parsed.data;
+    else Object.assign(errors, firstFieldErrors(parsed.error));
+  } else if (raw.proxyEnabled === "false") {
+    data.proxy = null;
+  }
+
+  return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, data };
+}
+
+/** Converte o túnel SSH gravado na entrada do `PATCH` que mantém a senha/frase secreta gravada (`secret: null`). */
+export function sshInputOf(ssh: ConnectionSsh | null | undefined): ConnectionSshInput | null {
+  if (!ssh) return null;
+  return {
+    host: ssh.host,
+    port: ssh.port,
+    userName: ssh.userName,
+    authMethod: ssh.authMethod,
+    privateKeyPath: ssh.privateKeyPath,
+    secret: null,
+    saveCredentials: ssh.saveCredentials,
+    ignoreHostVerification: ssh.ignoreHostVerification,
+    keepAliveIntervalMs: ssh.keepAliveIntervalMs,
+    tunnelTimeoutMs: ssh.tunnelTimeoutMs,
+    localHost: ssh.localHost,
+    localPort: ssh.localPort,
+    remoteHost: ssh.remoteHost,
+    remotePort: ssh.remotePort,
+    hostKeyFingerprint: ssh.hostKeyFingerprint,
+  };
+}
+
+/** Converte o proxy gravado na entrada do `PATCH` que mantém a senha gravada (`password: null`). */
+export function proxyInputOf(proxy: ConnectionProxy | null | undefined): ConnectionProxyInput | null {
+  if (!proxy) return null;
+  return {
+    host: proxy.host,
+    port: proxy.port,
+    userName: proxy.userName,
+    password: null,
+    saveCredentials: proxy.saveCredentials,
+  };
+}
+
 /**
  * RN-VERIF-001: a verificação periódica da conexão. O formulário a pergunta (o painel "Sessão da conexão"), e o `PATCH` grava a conexão por inteiro: quem
  * não a pergunta (renomear, mover) manda a que a conexão já tem (`verificationOf`).
@@ -276,7 +550,7 @@ export function verificationOf(connection: ConnectionVerification): ConnectionVe
  * O que a API recebe para criar ou alterar uma conexão; `password` nulo só na alteração. O `PATCH` grava a conexão por inteiro: as proteções e a
  * verificação vão sempre, as que a conexão já tem quando quem chama não as pergunta (sem elas, voltariam ao padrão).
  */
-export type ConnectionInput = z.output<typeof editConnectionSchema>;
+export type ConnectionInput = z.output<typeof editConnectionSchema> & ConnectionNetworkInput;
 
 /** A senha do usuário no diálogo de revelar. Como no login, não se apara nem se impõe regra de criação. */
 export const revealPasswordSchema = z.object({ password: z.string().min(1, "Informe a sua senha do Prism.") });

@@ -174,6 +174,8 @@ export function refusalsOf(error: ApiError): WizardRefusal[] {
       const fields = new Set(fieldErrors.map((refusal) => refusal.field));
       const refusals: WizardRefusal[] = [];
       if (fields.has("userName")) refusals.push({ field: null, message: c.userNameMissing });
+      // O segredo do túnel SSH ou do proxy que a conexão não grava: a frase da API diz qual.
+      for (const refusal of fieldErrors) if (refusal.field === "sshSecret" || refusal.field === "proxyPassword") refusals.push({ field: null, message: refusal.message });
       if (fields.has("password") || refusals.length === 0) refusals.push({ field: null, message: c.passwordMissing });
       return refusals;
     }

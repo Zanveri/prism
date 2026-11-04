@@ -1,11 +1,13 @@
 using CSharpFunctionalExtensions;
 using Prism.Application.Connections.Domain;
+using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Models.Dtos;
 using Prism.Application.Connections.Repositories;
 using Prism.Application.Journal;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Journal.Models;
 using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Vault.Services;
@@ -41,22 +43,37 @@ public sealed record CreateConnectionCommand : IRequest<Result<ConnectionDto, Ap
     public string? VerificationQuery { get; init; }
 
     public bool? UseInternalDescriptions { get; init; }
+    public ConnectionSshInputDto? Ssh { get; init; }
+    public ConnectionSslSettings? Ssl { get; init; }
+    public ConnectionProxyInputDto? Proxy { get; init; }
 
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e esta é a senha do banco (e o host e o usuário vão junto).</summary>
     public override string ToString() => nameof(CreateConnectionCommand);
 }
 
-internal sealed class CreateConnectionHandler(IConnectionRepository connectionRepository, TimeProvider timeProvider, IVaultService? vaultService = null, IJournalRecorder? journal = null) : IRequestHandler<CreateConnectionCommand, Result<ConnectionDto, ApiErrorDto>>
+internal sealed class CreateConnectionHandler(IConnectionRepository connectionRepository, TimeProvider timeProvider, IVaultService? vaultService = null, IJournalRecorder? journal = null, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<CreateConnectionCommand, Result<ConnectionDto, ApiErrorDto>>
 {
     public async Task<Result<ConnectionDto, ApiErrorDto>> Handle(CreateConnectionCommand request, CancellationToken cancellationToken)
     {
         var startedAt = timeProvider.GetUtcNow();
-        var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery, request.UseInternalDescriptions);
+        var safeguards = ConnectionSafeguards.From(
+            request.ConfirmCommands,
+            request.ReadOnly,
+            request.VerificationEnabled,
+            request.VerificationInterval,
+            request.VerificationQuery,
+            request.UseInternalDescriptions,
+            ConnectionRules.NormalizeSsh(request.Ssh),
+            ConnectionRules.NormalizeSsl(request.Ssl),
+            ConnectionRules.NormalizeProxy(request.Proxy));
         var connection = Connection.Create(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, startedAt.UtcDateTime);
 
         var inserted = await connectionRepository.Insert(connection, cancellationToken);
         if (inserted.IsFailure)
             return Result.Failure<ConnectionDto, ApiErrorDto>(inserted.Error);
+
+        // RN-REDE-002: sem "Salvar credenciais" o segredo digitado não vai ao cofre, e fica na memória para conectar até o cofre fechar.
+        unsavedSecrets?.Remember(connection.ID, ConnectionRules.NormalizeSsh(request.Ssh, forTest: true), ConnectionRules.NormalizeProxy(request.Proxy, forTest: true));
 
         var endedAt = timeProvider.GetUtcNow();
         var (snapshot, _) = JournalSnapshots.FromRecord(vaultService, ConnectionRecords.ToRecord(connection));

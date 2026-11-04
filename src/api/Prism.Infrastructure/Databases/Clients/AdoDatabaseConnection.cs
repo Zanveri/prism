@@ -191,6 +191,13 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>RN-IMPORT-016: o lote da carga em andamento (PostgreSQL), para o <see cref="Send{T}"/> dizer qual comando dele o banco recusou.</summary>
     private DbBatch? _loadBatch;
+    private ConnectionTunnel? _tunnel;
+
+    protected virtual ConnectionSettings? TunnelSettings => null;
+
+    protected string EffectiveHost => _tunnel?.BoundHost ?? TunnelSettings?.Host ?? string.Empty;
+
+    protected int EffectivePort => _tunnel?.BoundPort ?? TunnelSettings?.Port ?? 0;
 
     public string ServerVersion { get; private set; } = string.Empty;
 
@@ -681,6 +688,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         var opened = await Send<IDatabaseConnection>(nameof(OpenAsync), EDatabaseFailure.ConnectionFailed, async () =>
         {
+            if (TunnelSettings is { } tunnelSettings && (tunnelSettings.Ssh is not null || tunnelSettings.Proxy is not null))
+                _tunnel = await ConnectionTunnel.OpenAsync(tunnelSettings, cancellationToken);
+
             _connection = CreateConnection();
             await _connection.OpenAsync(cancellationToken);
             ServerVersion = _connection.ServerVersion;
@@ -1681,6 +1691,12 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         await Send(nameof(DisposeAsync), EDatabaseFailure.ExecutionFailed, async () =>
         {
             await DisposeDriverAsync();
+
+            if (_tunnel is { } tunnel)
+            {
+                _tunnel = null;
+                await tunnel.DisposeAsync();
+            }
 
             return true;
         });

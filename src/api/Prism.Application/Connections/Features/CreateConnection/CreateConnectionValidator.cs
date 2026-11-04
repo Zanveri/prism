@@ -37,6 +37,10 @@ public sealed class CreateConnectionValidator : AbstractValidator<CreateConnecti
             if (ConnectionRules.VerificationQueryRefusal(query, context.InstanceToValidate.Engine) is { } refusal)
                 context.AddFailure(new ValidationFailure(nameof(CreateConnectionCommand.VerificationQuery), refusal) { ErrorCode = "CONNECTION_INVALID" });
         });
+
+        RuleFor(request => request.Ssh).MustPass(ConnectionRules.SshRefusal).WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.Ssl).MustPass(ConnectionRules.SslRefusal).WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.Proxy).MustPass(ConnectionRules.ProxyRefusal).WithErrorCode("CONNECTION_INVALID");
     }
 
     /// <summary>RN-VERIF-001: a mensagem do intervalo fora da faixa, a mesma na criação, na alteração, no teste e na importação (`ConnectionRules`).</summary>

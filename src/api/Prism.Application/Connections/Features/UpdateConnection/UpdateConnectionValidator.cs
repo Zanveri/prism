@@ -38,5 +38,9 @@ public sealed class UpdateConnectionValidator : AbstractValidator<UpdateConnecti
             if (ConnectionRules.VerificationQueryRefusal(query, context.InstanceToValidate.Engine) is { } refusal)
                 context.AddFailure(new ValidationFailure(nameof(UpdateConnectionCommand.VerificationQuery), refusal) { ErrorCode = "CONNECTION_INVALID" });
         });
+
+        RuleFor(request => request.Ssh).MustPass(ConnectionRules.SshRefusal).WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.Ssl).MustPass(ConnectionRules.SslRefusal).WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.Proxy).MustPass(ConnectionRules.ProxyRefusal).WithErrorCode("CONNECTION_INVALID");
     }
 }

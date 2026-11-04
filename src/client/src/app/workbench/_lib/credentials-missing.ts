@@ -11,11 +11,18 @@ import { ApiRequestError, type ApiError } from "@/lib/api/prism-api";
  */
 export const credentialsMissingCode = "CONNECTION_CREDENTIALS_MISSING";
 
+/**
+ * O campo que falta (RN-TRANSF-016 e RN-REDE-003): o usuário ou a senha do banco, ou o segredo do túnel SSH (`sshSecret`) ou do proxy (`proxyPassword`) que a conexão gravada sem "Salvar
+ * credenciais" não guarda e que ninguém digitou desde que o cofre abriu (a API o guarda só na memória, até o cofre fechar).
+ */
+export type CredentialsField = "userName" | "password" | "sshSecret" | "proxyPassword";
+
 /** O campo que falta, numa recusa (ou num erro lançado) de abrir a sessão ou de testar; `null` quando não é esta recusa. */
-export function credentialsMissingField(error: ApiError | unknown): "userName" | "password" | null {
+export function credentialsMissingField(error: ApiError | unknown): CredentialsField | null {
   const apiError = error instanceof ApiRequestError ? error.error : isApiError(error) ? error : null;
   if (apiError === null || apiError.code !== credentialsMissingCode) return null;
-  return apiError.errors !== null && "userName" in apiError.errors ? "userName" : "password";
+  const errors = apiError.errors ?? {};
+  return "userName" in errors ? "userName" : "sshSecret" in errors ? "sshSecret" : "proxyPassword" in errors ? "proxyPassword" : "password";
 }
 
 function isApiError(value: unknown): value is ApiError {
@@ -38,15 +45,15 @@ export function credentialsHint(connection: { userName: string; hasPassword: boo
   return missing === "userName" ? transferCopy.credentials.rowNoCredentials : missing === "password" ? transferCopy.credentials.rowNoPassword : "";
 }
 
-/** Um pedido de abrir o "Editar conexão" da conexão sem credenciais; o número diz se é o mesmo pedido ou um novo. */
-export type CredentialsRequest = { readonly connectionId: string; readonly seq: number };
+/** Um pedido de abrir o "Editar conexão" da conexão sem credenciais, com o campo que falta; o número diz se é o mesmo pedido ou um novo. */
+export type CredentialsRequest = { readonly connectionId: string; readonly field: CredentialsField; readonly seq: number };
 
 /**
  * O pedido viaja daqui até quem abre o diálogo (a página da área de trabalho): a árvore, as vistas de uma tabela, a barra do editor e o executor de cada aba
  * abrem sessões por caminhos diferentes, e nenhum deles tem o diálogo. Um pedido só, o último.
  */
 export type CredentialsRequests = {
-  request: (connectionId: string) => void;
+  request: (connectionId: string, field: CredentialsField) => void;
   /** O pedido à espera, se há: o MESMO objeto enquanto nada muda (é o que o React compara). */
   pending: () => CredentialsRequest | null;
   /** O pedido foi atendido: sai, se ainda é o mesmo. */
@@ -68,7 +75,7 @@ export function createCredentialsRequests(): CredentialsRequests {
   }
 
   return {
-    request: (connectionId) => set({ connectionId, seq: ++seq }),
+    request: (connectionId, field) => set({ connectionId, field, seq: ++seq }),
     pending: () => pending,
     take: (taken) => {
       if (pending?.seq === taken) set(null);
@@ -93,6 +100,7 @@ export function watchCredentialsMissing(queryClient: QueryClient, requests: Cred
     if (event.type !== "updated" || event.action.type !== "error") return;
     const [family, connectionId] = event.query.queryKey;
     if (family !== "database-session" || typeof connectionId !== "string") return;
-    if (credentialsMissingField(event.action.error) !== null) requests.request(connectionId);
+    const field = credentialsMissingField(event.action.error);
+    if (field !== null) requests.request(connectionId, field);
   });
 }

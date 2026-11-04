@@ -69,6 +69,8 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
         => AppContext.SetSwitch("Npgsql.EnableSqlRewriting", false);
 
     /// <summary>RN-CONN-013.</summary>
+    protected override ConnectionSettings? TunnelSettings => settings;
+
     protected override string PingSql => "SELECT 1";
 
     /// <summary>
@@ -490,7 +492,9 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// </summary>
     protected override DbConnection CreateConnection()
     {
-        _dataSource = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder { Host = settings.Host, Port = settings.Port, Database = settings.Database, Username = settings.UserName, Password = settings.Password, Pooling = false, IncludeErrorDetail = true, IncludeFailedBatchedCommand = true }.ConnectionString);
+        var builder = new NpgsqlConnectionStringBuilder { Host = EffectiveHost, Port = EffectivePort, Database = settings.Database, Username = settings.UserName, Password = settings.Password, Pooling = false, IncludeErrorDetail = true, IncludeFailedBatchedCommand = true };
+        ApplySsl(builder, settings.Ssl);
+        _dataSource = NpgsqlDataSource.Create(builder.ConnectionString);
 
         return _dataSource.CreateConnection();
     }
@@ -499,6 +503,39 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     {
         if (_dataSource is not null)
             await _dataSource.DisposeAsync();
+    }
+
+    private static void ApplySsl(NpgsqlConnectionStringBuilder builder, ConnectionSslSettings? ssl)
+    {
+        if (ssl is null)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(ssl.SslMode))
+        {
+            builder.SslMode = ssl.SslMode.ToLowerInvariant() switch
+            {
+                "disable" => SslMode.Disable,
+                "allow" => SslMode.Allow,
+                "prefer" => SslMode.Prefer,
+                "require" => SslMode.Require,
+                "verify-ca" => SslMode.VerifyCA,
+                "verify-full" => SslMode.VerifyFull,
+                _ => SslMode.Prefer
+            };
+        }
+        else if (!string.IsNullOrWhiteSpace(ssl.CaCertificatePath) || !string.IsNullOrWhiteSpace(ssl.ClientCertificatePath) || !string.IsNullOrWhiteSpace(ssl.ClientKeyPath))
+        {
+            builder.SslMode = SslMode.Require;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ssl.CaCertificatePath))
+            builder.RootCertificate = ssl.CaCertificatePath;
+
+        if (!string.IsNullOrWhiteSpace(ssl.ClientCertificatePath))
+            builder.SslCertificate = ssl.ClientCertificatePath;
+
+        if (!string.IsNullOrWhiteSpace(ssl.ClientKeyPath))
+            builder.SslKey = ssl.ClientKeyPath;
     }
 
     /// <summary>

@@ -1,7 +1,9 @@
 using Prism.Application.Common.Vault;
+using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Queries;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Vault.Models;
 
@@ -21,9 +23,12 @@ internal static class TransferConnections
     public static bool IsDatabaseName(string? database)
         => database is null || (!string.IsNullOrWhiteSpace(database) && database.Length <= MaxDatabaseLength && !database.Any(char.IsControl));
 
-    /// <summary>A conexão à parte do trabalho: a conexão gravada no cofre, lida agora, com o banco de dados pedido.</summary>
-    public static ConnectionSettings SettingsOf(VaultConnectionRecord record, string? database)
-        => new(record.Engine, record.Host, record.Port, database ?? record.Database, record.UserName, record.Password);
+    /// <summary>
+    /// A conexão à parte do trabalho: a conexão gravada no cofre, lida agora, com o banco de dados pedido, e pelo túnel SSH, o SSL e o proxy dela (sem eles
+    /// o trabalho iria direto ao host, que é o do outro lado do túnel). Os segredos que a conexão não grava, sem `unsavedSecrets`, faltam.
+    /// </summary>
+    public static ConnectionSettings SettingsOf(VaultConnectionRecord record, string? database, IUnsavedSecretsService? unsavedSecrets = null)
+        => ConnectionRules.SettingsOf(record, database, unsavedSecrets);
 
     /// <summary>
     /// RN-PROT-006 e RN-IMPORT-014: antes de cada comando, o trabalho lê as proteções da conexão de destino no cofre, como a sessão faz a cada comando (a

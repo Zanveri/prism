@@ -49,6 +49,11 @@
         "resolved": "35.6.5",
         "contentHash": "2FGZn+aAVHjmCgClgmGkTDBVZk0zkLvAKGaxEf5JL6b3i9JbHTE4wnuY4vHCuzlCmJdU6VZjgDfHwmYkQF8VAA=="
       },
+      "BouncyCastle.Cryptography": {
+        "type": "Transitive",
+        "resolved": "2.7.0",
+        "contentHash": "U+12df8UEWHgBi04YVf/Lgi2dy3SItlIYvHjjEVa/BngCQIzDCDRBk50DDByCfDvSbe5pRNFr3b7UrVK2kMcLw=="
+      },
       "Castle.Core": {
         "type": "Transitive",
         "resolved": "5.1.1",
@@ -309,6 +314,15 @@
           "SQLitePCLRaw.core": "2.1.10"
         }
       },
+      "SSH.NET": {
+        "type": "Transitive",
+        "resolved": "2026.0.0",
+        "contentHash": "Yu9dirPq8l3oaat0+OQ7K0nUf5MmYltpia5UGqsApTG4zTPvBC1cxbNnC3NERij26dUST0A3Ef1QdHSn5ArbWQ==",
+        "dependencies": {
+          "BouncyCastle.Cryptography": "2.7.0",
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.3"
+        }
+      },
       "System.Data.DataSetExtensions": {
         "type": "Transitive",
         "resolved": "4.5.0",
@@ -392,7 +406,8 @@
           "Microsoft.Data.Sqlite.Core": "[10.0.0, )",
           "Npgsql": "[10.0.3, )",
           "Prism.Core": "[1.0.0, )",
-          "SQLitePCLRaw.bundle_e_sqlcipher": "[2.1.10, )"
+          "SQLitePCLRaw.bundle_e_sqlcipher": "[2.1.10, )",
+          "SSH.NET": "[2026.0.0, )"
         }
       },
       "prism.testingcore": {

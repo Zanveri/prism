@@ -13091,3 +13091,33 @@ Qualquer rota com o diário desligado responde 503 `JOURNAL_UNAVAILABLE` (RN-DIA
 - Saber que o diário inteiro sumiu ou foi trocado por um antigo: o cofre guardaria o último número e um elo de verificação, conferidos na entrada.
 - Favoritar comandos do Histórico e dar nome a eles (os scripts salvos, seção 23, já cobrem o comando que se quer guardar).
 - Pedir a senha de novo para abrir a Auditoria; hoje vale o bloqueio por inatividade (RN-SEG-001).
+
+## 44. Complemento de 2026-11-04: o segredo do túnel SSH e do proxy que a conexão não grava
+
+**Pedido do dono em 2026-11-04:** corrigir a conexão com túnel SSH ou proxy SOCKS5 gravada com "Salvar credenciais" desmarcado, que não abria (o SSH.NET respondia "Value cannot be null. (Parameter 's')"), e escrever a regra do que acontece com o segredo dela.
+
+O túnel SSH, o SSL e o proxy da conexão ainda não têm regras nesta especificação (44.3). Esta seção cobre só o segredo deles: onde fica, a que servidor vai e o que acontece quando falta.
+
+### 44.1. O segredo do túnel e do proxy
+
+- **RN-REDE-001.** O segredo e o servidor dele. "O segredo" é a senha do túnel SSH (autenticação por senha), a frase secreta da chave privada (autenticação por chave) e a senha do proxy SOCKS5. Com "Salvar credenciais" marcado, ele vai ao cofre, como a senha do banco; desmarcado, não vai, e a resposta diz `hasSecret: false` (túnel) ou `hasPassword: false` (proxy). Como a senha do banco (RN-CONN-004), o segredo gravado só vai ao servidor para o qual foi gravado, o mesmo host e a mesma porta do túnel ou do proxy: o "Editar conexão" e o "Testar conexão" com o `id` que mudam o host ou a porta sem redigitar o segredo são recusados com 422 `CONNECTION_INVALID`, sem gravar nem conectar, no campo `ssh` ("Ao mudar o host ou a porta do túnel SSH, informe a senha ou a frase secreta de novo.") ou `proxy` ("Ao mudar o host ou a porta do proxy, informe a senha dele de novo."). No mesmo servidor, o segredo omitido mantém o gravado.
+- **RN-REDE-002.** Sem "Salvar credenciais", na memória até o cofre fechar. O segredo de uma conexão sem "Salvar credenciais" fica na memória da API, ligado à conexão, até o cofre fechar por qualquer caminho (RN-COFRE-008: Sair, troca de usuário, quinto erro de senha, bloqueio por inatividade, app fechando). Nunca vai ao cofre, a outro arquivo, ao log (RN-LOG-001) nem a uma resposta. Entra na memória o digitado ao criar a conexão, o digitado ao editá-la e o que estava gravado, quando o "Editar conexão" desmarca "Salvar credenciais" sem mudar o servidor (quem desmarca não perde a conexão até o cofre fechar). O campo vazio no "Editar conexão" não apaga o que está na memória. O segredo do cofre, quando há, vale antes do da memória, e o da memória só vale para o mesmo host e a mesma porta do túnel ou do proxy com que foi digitado (RN-REDE-001).
+- **RN-REDE-003.** Conectar sem o segredo. Abrir uma sessão, o "Testar conexão" com o `id`, exportar dados, importar e copiar para outro banco usam o segredo do cofre ou, sem ele, o da memória (RN-REDE-002). Falta o segredo quando o túnel é por senha e não há senha, ou quando o proxy tem usuário e não há senha; a chave privada sem frase secreta (a chave sem cifra) e o proxy sem usuário não precisam de um. Sem o segredo, nada chega ao driver:
+  - Abrir uma sessão (pelos mesmos caminhos da RN-TRANSF-016): 422 `CONNECTION_CREDENTIALS_MISSING` no campo `sshSecret` ou `proxyPassword`, "A senha do túnel SSH não está gravada nesta conexão. Informe-a em "Editar conexão" para conectar: sem "Salvar credenciais", ela fica só na memória até o Prism ser bloqueado ou fechado." ("A senha do proxy…" no proxy). A recusa vem depois da que falta o usuário ou a senha do banco. A tela faz como na RN-TRANSF-016 e abre o "Editar conexão" da conexão, já na aba SSH ou Proxy, com a frase no topo ("A senha do túnel SSH não está gravada nesta conexão. Informe-a e salve para conectar: sem "Salvar credenciais", ela fica só na memória até o Prism ser bloqueado ou fechado.") e o foco no campo do segredo. O "Editar conexão" aberto pelo menu não mostra a frase nem troca de aba: só a recusa diz que o segredo falta, porque a tela não sabe o que a API tem na memória. Nada conecta sozinho depois de salvar.
+  - "Testar conexão": 422 `CONNECTION_CREDENTIALS_MISSING` no campo do segredo, "Informe a senha do túnel SSH para testar." ("Informe a senha do proxy para testar."), sem conectar.
+  - Exportar dados: 422 `CONNECTION_CREDENTIALS_MISSING` no campo do segredo, "A senha do túnel SSH não está gravada nesta conexão. Informe-a em Editar conexão e exporte de novo.", no alto do assistente (RN-EXPORT-015).
+  - Importar e copiar para outro banco: a prévia ou o trabalho falha com a mensagem do túnel, como uma falha do banco: "A senha do túnel SSH não está gravada nesta conexão. Informe-a em "Editar conexão" e tente de novo: sem "Salvar credenciais", ela fica só na memória até o Prism ser bloqueado ou fechado." (44.3).
+
+### 44.2. O que muda nas regras existentes
+
+- **RN-COFRE-008**: fechar o cofre também esquece os segredos que estão na memória (RN-REDE-002).
+- **RN-TRANSF-016**: a recusa de abrir a sessão ganha os campos `sshSecret` e `proxyPassword`, e o "Editar conexão" que ela abre vai à aba do campo (RN-REDE-003).
+- A importação, a cópia para outro banco e as prévias delas (seção 36) passam pelo túnel SSH, pelo SSL e pelo proxy da conexão, como a sessão e a exportação. Antes iam direto ao host gravado, que é o do outro lado do túnel.
+
+### 44.3. Fica para depois
+
+- As regras do túnel SSH, do SSL e do proxy: os campos e os tetos, a verificação da chave do servidor pela impressão digital, o tempo do túnel e o intervalo do keep-alive.
+- Pedir o segredo na hora de conectar, como o DBeaver, em vez de abrir o "Editar conexão".
+- A recusa no campo do segredo também na importação e na cópia para outro banco, antes da prévia.
+- Reconhecer, antes de conectar, a chave privada cifrada sem a frase secreta (hoje a recusa é a do SSH.NET).
+- Levar o túnel, o SSL e o proxy na exportação e na importação de conexões (seção 34).

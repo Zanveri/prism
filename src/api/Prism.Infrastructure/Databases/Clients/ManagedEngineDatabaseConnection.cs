@@ -866,6 +866,8 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
         }
     }
 
+    protected override ConnectionSettings? TunnelSettings => settings;
+
     protected override DbConnection CreateConnection()
     {
         var (assemblyName, typeName) = DriverTypeOf(engine);
@@ -885,6 +887,8 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
     internal string BuildConnectionString()
     {
         var builder = new DbConnectionStringBuilder();
+        var host = EffectiveHost;
+        var port = EffectivePort;
         var fileTarget = string.IsNullOrWhiteSpace(settings.Database) ? settings.Host : settings.Database;
 
         switch (engine)
@@ -899,8 +903,9 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
 
             case EDatabaseEngine.MySql:
             case EDatabaseEngine.MariaDb:
-                builder["Server"] = settings.Host;
-                builder["Port"] = settings.Port;
+                builder["Server"] = host;
+                builder["Port"] = port;
+
                 builder["Database"] = settings.Database;
                 builder["User ID"] = settings.UserName;
                 builder["Password"] = settings.Password;
@@ -910,7 +915,7 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
                 break;
 
             case EDatabaseEngine.SqlServer:
-                builder["Data Source"] = $"{settings.Host},{settings.Port}";
+                builder["Data Source"] = $"{host},{port}";
                 builder["Initial Catalog"] = settings.Database;
                 builder["User ID"] = settings.UserName;
                 builder["Password"] = settings.Password;
@@ -920,7 +925,7 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
                 break;
 
             case EDatabaseEngine.Oracle:
-                builder["Data Source"] = $"//{settings.Host}:{settings.Port}/{settings.Database}";
+                builder["Data Source"] = $"//{host}:{port}/{settings.Database}";
                 builder["User Id"] = settings.UserName;
                 builder["Password"] = settings.Password;
                 builder["Pooling"] = false;
@@ -928,8 +933,9 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
                 break;
 
             case EDatabaseEngine.Firebird:
-                builder["DataSource"] = settings.Host;
-                builder["Port"] = settings.Port;
+                builder["DataSource"] = host;
+                builder["Port"] = port;
+
                 builder["Database"] = settings.Database;
                 builder["UserID"] = settings.UserName;
                 builder["Password"] = settings.Password;
@@ -943,8 +949,9 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
                 break;
 
             case EDatabaseEngine.ClickHouse:
-                builder["Host"] = settings.Host;
-                builder["Port"] = settings.Port;
+                builder["Host"] = host;
+                builder["Port"] = port;
+
                 builder["Database"] = settings.Database;
                 builder["Username"] = settings.UserName;
                 builder["Password"] = settings.Password;
@@ -952,8 +959,9 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
 
             case EDatabaseEngine.BigQuery:
                 builder["Driver"] = "{Google BigQuery}";
-                builder["Host"] = settings.Host;
-                builder["Port"] = settings.Port;
+                builder["Host"] = host;
+                builder["Port"] = port;
+
                 builder["Catalog"] = settings.Database;
                 builder["UID"] = settings.UserName;
                 builder["PWD"] = settings.Password;
@@ -961,8 +969,9 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
 
             case EDatabaseEngine.Databricks:
                 builder["Driver"] = "{Simba Spark ODBC Driver}";
-                builder["Host"] = settings.Host;
-                builder["Port"] = settings.Port;
+                builder["Host"] = host;
+                builder["Port"] = port;
+
                 builder["Schema"] = settings.Database;
                 builder["UID"] = settings.UserName;
                 builder["PWD"] = settings.Password;
@@ -972,7 +981,47 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
                 break;
         }
 
+        ApplySsl(builder, engine, settings.Ssl);
+
         return builder.ConnectionString;
+    }
+
+    private static void ApplySsl(DbConnectionStringBuilder builder, EDatabaseEngine engine, ConnectionSslSettings? ssl)
+    {
+        if (ssl is null)
+            return;
+
+        switch (engine)
+        {
+            case EDatabaseEngine.MySql:
+            case EDatabaseEngine.MariaDb:
+                builder["SslMode"] = ssl.SslMode?.ToLowerInvariant() switch
+                {
+                    "disable" => "None",
+                    "allow" or "prefer" => "Preferred",
+                    "verify-ca" => "VerifyCA",
+                    "verify-full" => "VerifyFull",
+                    _ => "Required"
+                };
+                if (!string.IsNullOrWhiteSpace(ssl.CaCertificatePath))
+                    builder["SslCa"] = ssl.CaCertificatePath;
+                if (!string.IsNullOrWhiteSpace(ssl.ClientCertificatePath))
+                    builder["SslCert"] = ssl.ClientCertificatePath;
+                if (!string.IsNullOrWhiteSpace(ssl.ClientKeyPath))
+                    builder["SslKey"] = ssl.ClientKeyPath;
+                break;
+
+            case EDatabaseEngine.SqlServer:
+                builder["Encrypt"] = !string.Equals(ssl.SslMode, "disable", StringComparison.OrdinalIgnoreCase);
+                builder["TrustServerCertificate"] = ssl.SslMode is not ("verify-ca" or "verify-full");
+                if (!string.IsNullOrWhiteSpace(ssl.CaCertificatePath))
+                    builder["ServerCertificate"] = ssl.CaCertificatePath;
+                break;
+
+            case EDatabaseEngine.ClickHouse:
+                builder["Protocol"] = string.Equals(ssl.SslMode, "disable", StringComparison.OrdinalIgnoreCase) ? "http" : "https";
+                break;
+        }
     }
 
     private static (string AssemblyName, string TypeName) DriverTypeOf(EDatabaseEngine engine)

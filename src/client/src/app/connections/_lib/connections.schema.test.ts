@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, editWithoutPasswordSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema, queryWithoutControl, withoutControl } from "./connections.schema";
+import {
+  connectionSchema,
+  createConnectionSchema,
+  createFolderSchema,
+  editConnectionSchema,
+  editWithoutPasswordSchema,
+  engineOptions,
+  folderSchema,
+  moveFolderSchema,
+  editFolderSchema,
+  renameFolderSchema,
+  parseConnectionNetworkFields,
+  queryWithoutControl,
+  withoutControl,
+} from "./connections.schema";
 
 const form = {
   engine: "1",
@@ -313,6 +327,199 @@ describe("connectionSchema (RN-CONN-001)", () => {
     expect(connectionSchema.safeParse(withoutProtections).success).toBe(false);
     expect(connectionSchema.safeParse({ ...saved, confirmCommands: "sempre" }).success).toBe(false);
     expect(connectionSchema.safeParse({ ...saved, readOnly: undefined }).success).toBe(false);
+  });
+
+  // Os objetos como a API os escreve (`ConnectionSshDto`, `ConnectionSslSettings` e `ConnectionProxyDto`, em camelCase; o `ConnectionsTests` da API fixa os
+  // mesmos nomes). O modo SSL "Padrão do driver" volta nulo.
+  it("aceita SSH, SSL e Proxy como a API os devolve (com hasSecret e hasPassword, nunca o segredo nem a senha)", () => {
+    const withNetwork = connectionSchema.safeParse({
+      ...saved,
+      ssh: {
+        host: "bastion.exemplo.local",
+        port: 22,
+        userName: "pedro",
+        authMethod: "privateKey",
+        privateKeyPath: "/chaves/id_ed25519",
+        hasSecret: true,
+        saveCredentials: true,
+        ignoreHostVerification: false,
+        keepAliveIntervalMs: 15000,
+        tunnelTimeoutMs: 10000,
+        localHost: "127.0.0.1",
+        localPort: 0,
+        remoteHost: null,
+        remotePort: 0,
+        hostKeyFingerprint: "SHA256:ohD8VZEXGWo6Ez8GSEJQ9WpafgLFsOfLOtGGQCQo6Og",
+      },
+      ssl: {
+        caCertificatePath: "/certs/ca.pem",
+        clientCertificatePath: "/certs/client.crt",
+        clientKeyPath: "/certs/client.key",
+        sslMode: null,
+      },
+      proxy: {
+        host: "socks.exemplo.local",
+        port: 1080,
+        userName: "proxy_user",
+        hasPassword: true,
+        saveCredentials: false,
+      },
+    });
+
+    expect(withNetwork.success).toBe(true);
+    expect(
+      connectionSchema.safeParse({
+        ...saved,
+        ssh: {
+          host: "bastion.exemplo.local",
+          port: 22,
+          userName: "pedro",
+          authMethod: "password",
+          privateKeyPath: null,
+          hasSecret: true,
+          secret: "segredo",
+          saveCredentials: true,
+          ignoreHostVerification: false,
+          keepAliveIntervalMs: 0,
+          tunnelTimeoutMs: 0,
+          localHost: null,
+          localPort: 0,
+          remoteHost: null,
+          remotePort: 0,
+          hostKeyFingerprint: null,
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      connectionSchema.safeParse({
+        ...saved,
+        proxy: {
+          host: "socks.exemplo.local",
+          port: 1080,
+          userName: "proxy_user",
+          hasPassword: true,
+          password: "senha",
+          saveCredentials: true,
+        },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("parseConnectionNetworkFields: as abas opcionais de SSH, SSL e Proxy", () => {
+  const sshFields = {
+    sshEnabled: "true",
+    sshHost: " bastion.exemplo.local ",
+    sshPort: "2222",
+    sshUserName: " pedro ",
+    sshAuthMethod: "privateKey",
+    sshPrivateKeyPath: " /chaves/id_ed25519 ",
+    sshSecret: "frase secreta",
+    sshSaveCredentials: "true",
+    sshIgnoreHostVerification: "false",
+    sshKeepAliveIntervalMs: "15000",
+    sshTunnelTimeoutMs: "10000",
+    sshLocalHost: " 127.0.0.1 ",
+    sshLocalPort: "54321",
+    sshRemoteHost: "",
+    sshRemotePort: "0",
+    sshHostKeyFingerprint: " SHA256:ohD8VZEXGWo6Ez8GSEJQ9WpafgLFsOfLOtGGQCQo6Og ",
+  };
+
+  const sslFields = {
+    sslEnabled: "true",
+    sslCaCertificatePath: " /certs/ca.pem ",
+    sslClientCertificatePath: "",
+    sslClientPrivateKeyPath: "",
+    sslMode: "verify-full",
+  };
+
+  const proxyFields = {
+    proxyEnabled: "true",
+    proxyHost: " socks.exemplo.local ",
+    proxyPort: "1080",
+    proxyUserName: " proxy_user ",
+    proxyPassword: "",
+    proxySavePassword: "true",
+  };
+
+  it("valida e normaliza SSH, SSL e Proxy quando as abas estão ativadas", () => {
+    const parsed = parseConnectionNetworkFields({ ...sshFields, ...sslFields, ...proxyFields });
+
+    expect(parsed).toEqual({
+      ok: true,
+      data: {
+        ssh: {
+          host: "bastion.exemplo.local",
+          port: 2222,
+          userName: "pedro",
+          authMethod: "privateKey",
+          privateKeyPath: "/chaves/id_ed25519",
+          secret: "frase secreta",
+          saveCredentials: true,
+          ignoreHostVerification: false,
+          keepAliveIntervalMs: 15000,
+          tunnelTimeoutMs: 10000,
+          localHost: "127.0.0.1",
+          localPort: 54321,
+          remoteHost: null,
+          remotePort: 0,
+          hostKeyFingerprint: "SHA256:ohD8VZEXGWo6Ez8GSEJQ9WpafgLFsOfLOtGGQCQo6Og",
+        },
+        ssl: {
+          caCertificatePath: "/certs/ca.pem",
+          clientCertificatePath: null,
+          clientKeyPath: null,
+          sslMode: "verify-full",
+        },
+        proxy: {
+          host: "socks.exemplo.local",
+          port: 1080,
+          userName: "proxy_user",
+          password: null,
+          saveCredentials: true,
+        },
+      },
+    });
+  });
+
+  it("entrega null para as abas fechadas (`false`) para que o PATCH apague a configuração anterior", () => {
+    expect(parseConnectionNetworkFields({ sshEnabled: "false", sslEnabled: "false", proxyEnabled: "false" })).toEqual({
+      ok: true,
+      data: { ssh: null, ssl: null, proxy: null },
+    });
+  });
+
+  it("recusa host SSH vazio, chave privada ausente quando o método é chave privada, portas fora da faixa e caracteres de controle", () => {
+    const invalid = parseConnectionNetworkFields({
+      ...sshFields,
+      sshHost: "",
+      sshPort: "70000",
+      sshPrivateKeyPath: "   ",
+      sslEnabled: "true",
+      sslCaCertificatePath: "/certs/ca\u202E.pem",
+      sslClientCertificatePath: "",
+      sslClientPrivateKeyPath: "",
+      sslMode: "require",
+      proxyEnabled: "true",
+      proxyHost: "",
+      proxyPort: "0",
+      proxyUserName: "",
+      proxyPassword: "",
+      proxySavePassword: "true",
+    });
+
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(invalid.errors).toEqual({
+        sshHost: "Informe o host SSH.",
+        sshPort: "Informe uma porta SSH de 1 a 65535.",
+        sshPrivateKeyPath: "Informe o caminho da chave privada SSH.",
+        sslCaCertificatePath: "O caminho do certificado CA não pode ter caractere de controle nem de direção do texto.",
+        proxyHost: "Informe o host do proxy.",
+        proxyPort: "Informe uma porta de proxy de 1 a 65535.",
+      });
+    }
   });
 });
 

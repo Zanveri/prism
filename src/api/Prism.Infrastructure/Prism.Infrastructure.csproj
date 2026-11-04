@@ -23,6 +23,7 @@
 		<PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.0" />
 		<PackageReference Include="Npgsql" Version="10.0.3" />
 		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.10" />
+		<PackageReference Include="SSH.NET" Version="2026.0.0" />
 	</ItemGroup>
 
 	<!-- O driver da IBM (Db2 e Informix) é um pacote por plataforma, todos com o IBM.Data.Db2.dll e a pasta

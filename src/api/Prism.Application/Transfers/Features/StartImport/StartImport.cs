@@ -8,6 +8,7 @@ using Prism.Application.Transfers.Models;
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
+using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Drivers.Services;
 using Prism.Infrastructure.Journal.Models;
 using Prism.Infrastructure.Journal.Services;
@@ -45,7 +46,7 @@ public sealed record StartImportCommand : IRequest<Result<TransferStartedDto, Ap
 /// proteções que valem no cofre agora; (4) o limite, a tabela ocupada e a troca de nome do arquivo, no registro, sob a trava com que o trabalho entra
 /// nele. Conectar, ler o catálogo, conferir o arquivo e gravar acontecem no trabalho.
 /// </summary>
-internal sealed class StartImportHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, IImportPreviewService importPreviewService, ITransferService transferService, IJournalRecorder? journalRecorder = null) : IRequestHandler<StartImportCommand, Result<TransferStartedDto, ApiErrorDto>>
+internal sealed class StartImportHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, IImportPreviewService importPreviewService, ITransferService transferService, IJournalRecorder? journalRecorder = null, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<StartImportCommand, Result<TransferStartedDto, ApiErrorDto>>
 {
     public async Task<Result<TransferStartedDto, ApiErrorDto>> Handle(StartImportCommand request, CancellationToken cancellationToken)
     {
@@ -88,7 +89,7 @@ internal sealed class StartImportHandler(IConnectionQueries connectionQueries, I
 
         var (options, _) = ImportReaderOptionsReader.Read(request.Format!, request.Reader, keys: true);
         var (load, _) = ImportRequestRules.Load(request.Load, copy: false);
-        var settings = TransferConnections.SettingsOf(record, target.Database);
+        var settings = TransferConnections.SettingsOf(record, target.Database, unsavedSecrets);
 
         var entryId = -1L;
         if (journalRecorder is not null)

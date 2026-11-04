@@ -4,6 +4,7 @@ using Prism.Application.Transfers.Models;
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
+using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Drivers.Services;
 using Prism.Infrastructure.Transfers.Services;
 
@@ -30,7 +31,7 @@ public sealed record PreviewCopyCommand : IRequest<Result<CopyPreviewDto, ApiErr
 /// somente leitura dele; (4) a tabela de destino que é a própria origem (`IMPORT_TARGET_IS_SOURCE`). Então o catálogo da tabela de destino, numa conexão
 /// à parte, e o mapeamento. A origem não é lida.
 /// </summary>
-internal sealed class PreviewCopyHandler(IConnectionQueries connectionQueries, IDriverService driverService, IImportPreviewService importPreviewService) : IRequestHandler<PreviewCopyCommand, Result<CopyPreviewDto, ApiErrorDto>>
+internal sealed class PreviewCopyHandler(IConnectionQueries connectionQueries, IDriverService driverService, IImportPreviewService importPreviewService, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<PreviewCopyCommand, Result<CopyPreviewDto, ApiErrorDto>>
 {
     public async Task<Result<CopyPreviewDto, ApiErrorDto>> Handle(PreviewCopyCommand request, CancellationToken cancellationToken)
     {
@@ -55,7 +56,7 @@ internal sealed class PreviewCopyHandler(IConnectionQueries connectionQueries, I
             return Result.Failure<CopyPreviewDto, ApiErrorDto>(ImportErrors.TargetIsSource());
 
         var mapping = request.Mapping is null ? null : ImportRequestRules.MappingOf(request.Mapping);
-        var settings = TransferConnections.SettingsOf(targetRecord.Value, target.Database);
+        var settings = TransferConnections.SettingsOf(targetRecord.Value, target.Database, unsavedSecrets);
         var preview = await importPreviewService.PreviewCopyAsync(new CopyPreviewRequest(settings, target.Schema!, target.Table!, [.. request.Columns.Select(column => column.Name!)], mapping), cancellationToken);
 
         return preview.IsFailure ? ImportErrors.From(preview.Error) : preview.Value.ToDto();

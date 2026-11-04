@@ -132,7 +132,7 @@ export function WorkbenchPage() {
   const [answeredCredentials, setAnsweredCredentials] = useState(0);
   if (credentialsRequest !== null && credentialsRequest.seq !== answeredCredentials && onScreen && connectionIds !== null) {
     setAnsweredCredentials(credentialsRequest.seq);
-    if (dialog === null && connectionIds.has(credentialsRequest.connectionId)) setDialog({ request: { mode: "edit", connectionId: credentialsRequest.connectionId }, epoch: lockEpoch });
+    if (dialog === null && connectionIds.has(credentialsRequest.connectionId)) setDialog({ request: { mode: "edit", connectionId: credentialsRequest.connectionId, missing: credentialsRequest.field }, epoch: lockEpoch });
   }
   useEffect(() => {
     if (answeredCredentials !== 0) credentialsRequests.take(answeredCredentials);
@@ -262,7 +262,7 @@ export function WorkbenchPage() {
 
   const editingId = dialog?.request.mode === "edit" ? dialog.request.connectionId : null;
   const editing = editingId === null ? undefined : connections.data?.find((connection) => connection.id === editingId);
-  const dialogRequest = dialog === null ? null : dialog.request.mode === "new" ? dialog.request : editing === undefined ? null : ({ mode: "edit", connection: editing } as const);
+  const dialogRequest = dialog === null ? null : dialog.request.mode === "new" ? dialog.request : editing === undefined ? null : ({ mode: "edit", connection: editing, missing: dialog.request.missing } as const);
 
   return (
     // RN-CONFIG-009: a área de trabalho inteira na escala do canvas, 13/20 (`text-sm`), aqui e só aqui; quem tem tamanho próprio (o editor, a grade, as

@@ -165,8 +165,27 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
     /// aspas do construtor; o servidor de destino é só o host e a porta (RN-CONN-004). Sem pool: cada sessão é dona da própria
     /// conexão.
     /// </summary>
+    protected override ConnectionSettings? TunnelSettings => settings;
+
     protected override DbConnection CreateConnection()
-        => new DB2Connection(new DB2ConnectionStringBuilder { Server = $"{settings.Host}:{settings.Port}", Database = settings.Database, UserID = settings.UserName, Password = settings.Password, Pooling = false, Connect_Timeout = ConnectTimeoutSeconds }.ConnectionString);
+    {
+        var builder = new DB2ConnectionStringBuilder { Server = $"{EffectiveHost}:{EffectivePort}", Database = settings.Database, UserID = settings.UserName, Password = settings.Password, Pooling = false, Connect_Timeout = ConnectTimeoutSeconds };
+        if (settings.Ssl is { } ssl && !string.Equals(ssl.SslMode, "disable", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.Security = "SSL";
+            if (!string.IsNullOrWhiteSpace(ssl.CaCertificatePath))
+                builder["SSLServerCertificate"] = ssl.CaCertificatePath;
+
+            if (!string.IsNullOrWhiteSpace(ssl.ClientCertificatePath))
+                builder["SSLClientKeystoredb"] = ssl.ClientCertificatePath;
+
+            if (!string.IsNullOrWhiteSpace(ssl.ClientKeyPath))
+                builder["SSLClientKeystash"] = ssl.ClientKeyPath;
+        }
+
+        return new DB2Connection(builder.ConnectionString);
+    }
+
 
     /// <summary>
     /// RN-SQL-006. O `;` do fim e o que vem depois dele saem: o driver dividiria o envio ali. As quebras de linha fazem um comentário

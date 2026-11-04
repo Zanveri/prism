@@ -505,7 +505,8 @@
           "Microsoft.Data.Sqlite.Core": "[10.0.0, )",
           "Npgsql": "[10.0.3, )",
           "Prism.Core": "[1.0.0, )",
-          "SQLitePCLRaw.bundle_e_sqlcipher": "[2.1.10, )"
+          "SQLitePCLRaw.bundle_e_sqlcipher": "[2.1.10, )",
+          "SSH.NET": "[2026.0.0, )"
         }
       },
       "prism.testingcore": {

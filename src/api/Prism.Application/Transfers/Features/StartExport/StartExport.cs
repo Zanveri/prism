@@ -10,6 +10,7 @@ using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Drivers.Services;
 using Prism.Infrastructure.Journal.Models;
 using Prism.Infrastructure.Journal.Services;
@@ -46,7 +47,7 @@ public sealed record StartExportCommand : IRequest<Result<TransferStartedDto, Ap
 /// uma sessão; (3) o que depende do banco da conexão: mais de um comando, o filtro e a leitura, pelo dialeto dele (RN-PROT-005), e as linhas por comando
 /// no Informix; (4) o limite e o cofre, no registro, sob a trava com que o trabalho entra nele.
 /// </summary>
-internal sealed class StartExportHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, ITransferService transferService, IJournalRecorder? journalRecorder = null) : IRequestHandler<StartExportCommand, Result<TransferStartedDto, ApiErrorDto>>
+internal sealed class StartExportHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IDriverService driverService, ITransferService transferService, IJournalRecorder? journalRecorder = null, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<StartExportCommand, Result<TransferStartedDto, ApiErrorDto>>
 {
     /// <summary>RN-ARVORE-006: o teto do nome de outro banco do servidor, o mesmo da abertura de uma sessão.</summary>
     private const int MaxDatabaseLength = 128;
@@ -95,7 +96,9 @@ internal sealed class StartExportHandler(IConnectionQueries connectionQueries, I
         var output = request.Output ?? new();
         var columns = request.Columns!.OrderBy(column => column.Position).Select(column => new ExportColumnChoice(column.Position, column.Name!)).ToList();
         var canonicalFormat = ExportFormats.Canonical(request.Format!);
-        var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, source.Database ?? record.Database, record.UserName, record.Password);
+        var settings = ConnectionRules.SettingsOf(record, source.Database, unsavedSecrets);
+        if (ConnectionRules.MissingNetworkSecret(settings.Ssh, settings.Proxy) is { } secretField)
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(TransferJobErrors.NetworkSecretMissing(secretField));
 
         var entryId = -1L;
         if (journalRecorder is not null)
