@@ -1,5 +1,7 @@
 import type { z } from "zod";
 
+import { locale } from "@/lib/i18n";
+
 import { apiErrorSchema } from "./api-error.schema";
 import { apiCopy } from "./api.copy";
 import { getBridge } from "./bridge";
@@ -94,7 +96,8 @@ export async function apiRequest<T = void>(path: string, options: ApiRequestOpti
     const { baseUrl, token } = await getBridge().getApiConfig();
     response = await fetch(`${baseUrl}/${path}`, {
       method,
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      // O idioma do Prism, não o do sistema (que o Electron mandaria): a API escreve as mensagens nele.
+      headers: { Accept: "application/json", "Accept-Language": locale, Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
     });

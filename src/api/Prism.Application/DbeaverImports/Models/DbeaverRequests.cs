@@ -70,7 +70,7 @@ internal static class DbeaverRequests
         => overwrite is null || (overwrite.Count <= MaxOverwrite && overwrite.All(key => key is not null) && overwrite.Distinct(StringComparer.Ordinal).Count() == overwrite.Count);
 
     public static IRuleBuilderOptions<T, string?> MustBeASourceId<T>(this IRuleBuilder<T, string?> rule)
-        => rule.Must(IsSourceId).WithMessage("O identificador da cópia do DBeaver não é válido.").WithErrorCode("IMPORT_INVALID");
+        => rule.Must(IsSourceId).WithMessage(_ => DbeaverErrors.SourceIdInvalidMessage).WithErrorCode("IMPORT_INVALID");
 
     public static string Digits(int value)
         => value.ToString(CultureInfo.InvariantCulture);

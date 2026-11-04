@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="IDInvalid" xml:space="preserve">
+    <value>El ID de esta conexión en DBeaver no sirve para Prism.</value>
+  </data>
+  <data name="UnknownEngine" xml:space="preserve">
+    <value>Prism todavía no admite esta base de datos ({0}).</value>
+  </data>
+  <data name="JdbcUrlUnreadable" xml:space="preserve">
+    <value>No se pudo leer la URL JDBC de esta conexión.</value>
+  </data>
+  <data name="JdbcUrlUnreadableAt" xml:space="preserve">
+    <value>No se pudo leer la URL JDBC de esta conexión ({0}).</value>
+  </data>
+  <data name="NoHost" xml:space="preserve">
+    <value>La conexión no tiene host.</value>
+  </data>
+  <data name="NoPort" xml:space="preserve">
+    <value>La conexión no tiene puerto.</value>
+  </data>
+  <data name="NoDatabase" xml:space="preserve">
+    <value>La conexión no tiene base de datos: Prism necesita una.</value>
+  </data>
+  <data name="Variables" xml:space="preserve">
+    <value>La conexión usa variables de DBeaver (${…}), que Prism no tiene.</value>
+  </data>
+</root>

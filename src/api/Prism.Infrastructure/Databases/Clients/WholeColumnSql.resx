@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CountNote" xml:space="preserve">
+    <value>A contagem confere, antes do UPDATE, que o comando ainda devolve as linhas confirmadas.</value>
+  </data>
+  <data name="BatchNote" xml:space="preserve">
+    <value>As chaves vão em lotes de até 1.000.</value>
+  </data>
+  <data name="JoinReason" xml:space="preserve">
+    <value>num resultado de junção, a coluna inteira não se altera: escolha as células da coluna (arraste, ou Shift+clique), e a edição vale para elas</value>
+  </data>
+  <data name="NotReadReason" xml:space="preserve">
+    <value>a coluna inteira executa de novo o comando do resultado, e ele não é só de leitura</value>
+  </data>
+  <data name="LimitReason" xml:space="preserve">
+    <value>o comando limita as linhas sem uma ordem, e o banco pode escolher outras linhas ao executar de novo: acrescente um ORDER BY, ou escolha as células da coluna</value>
+  </data>
+  <data name="SampleReason" xml:space="preserve">
+    <value>o comando sorteia as linhas, e o banco escolheria outras ao executar de novo: escolha as células da coluna</value>
+  </data>
+  <data name="TooManyKeysReason" xml:space="preserve">
+    <value>o comando devolve mais de 1.000.000 de linhas, e neste banco a coluna inteira de um comando com limite de linhas lê as chaves antes: tire o limite do comando, ou altere por partes</value>
+  </data>
+  <data name="KeyReason" xml:space="preserve">
+    <value>{0} é da chave de {1}: na coluna inteira, todas as linhas ficariam com a mesma chave</value>
+  </data>
+  <data name="RepeatedKeyReason" xml:space="preserve">
+    <value>{0}, da chave de {1}, aparece com o mesmo nome em mais de uma coluna do resultado</value>
+  </data>
+  <data name="CountChanged" xml:space="preserve">
+    <value>O resultado mudou desde a contagem: o comando devolve agora {0}, e não {1}. Nada foi gravado; salve de novo para contar outra vez.</value>
+  </data>
+  <data name="UpdateChanged" xml:space="preserve">
+    <value>O resultado mudou desde a contagem: o comando alterou {0}, e não {1}. Nada foi gravado; salve de novo para contar outra vez. Se o número se repetir nas tentativas seguintes, o motivo pode ser um gatilho, uma regra ou uma cascata do banco, que a contagem não vê.</value>
+  </data>
+  <data name="WrittenAnyway" xml:space="preserve">
+    <value>A coluna inteira foi alterada em {0}, e não {1}: o resultado mudou desde a contagem. Este banco não tem log de transação, e a alteração ficou gravada.</value>
+  </data>
+  <data name="CountedOne" xml:space="preserve">
+    <value>na 1 contada</value>
+  </data>
+  <data name="CountedMany" xml:space="preserve">
+    <value>nas {0} contadas</value>
+  </data>
+  <data name="LinesOne" xml:space="preserve">
+    <value>1 linha</value>
+  </data>
+  <data name="LinesMany" xml:space="preserve">
+    <value>{0} linhas</value>
+  </data>
+  <data name="ConfirmedOne" xml:space="preserve">
+    <value>a 1 confirmada</value>
+  </data>
+  <data name="ConfirmedMany" xml:space="preserve">
+    <value>as {0} confirmadas</value>
+  </data>
+  <data name="NotSupported" xml:space="preserve">
+    <value>A coluna inteira não se altera neste resultado: {0}.</value>
+  </data>
+  <data name="SeveralWholeChanges" xml:space="preserve">
+    <value>O pedido tem mais de uma alteração da coluna inteira: mande uma só, com todas as colunas no set.</value>
+  </data>
+  <data name="CountTakesOnlyWhole" xml:space="preserve">
+    <value>A contagem leva só a alteração da coluna inteira (updateAll).</value>
+  </data>
+  <data name="CountNeedsWhole" xml:space="preserve">
+    <value>A contagem precisa da alteração da coluna inteira (updateAll).</value>
+  </data>
+  <data name="RowsMissing" xml:space="preserve">
+    <value>Informe quantas linhas a contagem deu (rows).</value>
+  </data>
+  <data name="RowsInvalid" xml:space="preserve">
+    <value>O número de linhas (rows) tem de ser um inteiro de 0 em diante.</value>
+  </data>
+  <data name="TableNotInResult" xml:space="preserve">
+    <value>A tabela da alteração não existe neste resultado.</value>
+  </data>
+  <data name="TableNotEditable" xml:space="preserve">
+    <value>A tabela da alteração não se edita: {0}.</value>
+  </data>
+  <data name="WholeChangeHasNoColumn" xml:space="preserve">
+    <value>A alteração da coluna inteira não tem nenhuma coluna.</value>
+  </data>
+  <data name="ColumnNotInResult" xml:space="preserve">
+    <value>A coluna não existe no resultado.</value>
+  </data>
+  <data name="ColumnNotInTable" xml:space="preserve">
+    <value>A coluna não é da tabela da alteração.</value>
+  </data>
+  <data name="ColumnNotEditable" xml:space="preserve">
+    <value>A coluna não se edita: {0}.</value>
+  </data>
+  <data name="ColumnRepeated" xml:space="preserve">
+    <value>A mesma coluna aparece duas vezes na alteração.</value>
+  </data>
+</root>

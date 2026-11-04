@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FileMissingTitle" xml:space="preserve">
+    <value>Import file not found.</value>
+  </data>
+  <data name="FileMissingDetail" xml:space="preserve">
+    <value>The chosen file is no longer with Prism. Choose the file again.</value>
+  </data>
+  <data name="FileTooLargeTitle" xml:space="preserve">
+    <value>File too large.</value>
+  </data>
+  <data name="UnreadableTitle" xml:space="preserve">
+    <value>The file could not be read.</value>
+  </data>
+  <data name="TableNotFoundTitle" xml:space="preserve">
+    <value>Table not found.</value>
+  </data>
+  <data name="NotATableTitle" xml:space="preserve">
+    <value>The target is not a table.</value>
+  </data>
+  <data name="MappingInvalidTitle" xml:space="preserve">
+    <value>Invalid mapping.</value>
+  </data>
+  <data name="ReadOnlyTitle" xml:space="preserve">
+    <value>Read-only connection.</value>
+  </data>
+  <data name="ReadOnlyDetail" xml:space="preserve">
+    <value>The connection is read-only, and the import writes to the table. Nothing was sent to the database.</value>
+  </data>
+  <data name="TargetBusyTitle" xml:space="preserve">
+    <value>Table busy.</value>
+  </data>
+  <data name="TargetBusyCopyDetail" xml:space="preserve">
+    <value>There is already a copy to {0}.{1} in progress. Wait for it to finish, or cancel it in the status bar.</value>
+  </data>
+  <data name="TargetBusyImportDetail" xml:space="preserve">
+    <value>There is already an import into {0}.{1} in progress. Wait for it to finish, or cancel it in the status bar.</value>
+  </data>
+  <data name="TargetIsSourceTitle" xml:space="preserve">
+    <value>The target is the source itself.</value>
+  </data>
+  <data name="TargetIsSourceDetail" xml:space="preserve">
+    <value>The target table is the source itself. Choose another table.</value>
+  </data>
+  <data name="CredentialsMissingTitle" xml:space="preserve">
+    <value>Connection without a user or password.</value>
+  </data>
+  <data name="SourceUserNameMissingDetail" xml:space="preserve">
+    <value>The source connection has no saved user. Fill it in under Edit connection and copy again.</value>
+  </data>
+  <data name="SourcePasswordMissingDetail" xml:space="preserve">
+    <value>The source connection has no saved password. Fill it in under Edit connection and copy again.</value>
+  </data>
+  <data name="TargetUserNameMissingDetail" xml:space="preserve">
+    <value>The target connection has no saved user. Fill it in under Edit connection and copy again.</value>
+  </data>
+  <data name="TargetPasswordMissingDetail" xml:space="preserve">
+    <value>The target connection has no saved password. Fill it in under Edit connection and copy again.</value>
+  </data>
+  <data name="UserNameMissingDetail" xml:space="preserve">
+    <value>This connection has no saved user. Fill it in under Edit connection and import again.</value>
+  </data>
+  <data name="PasswordMissingDetail" xml:space="preserve">
+    <value>This connection has no saved password. Fill it in under Edit connection and import again.</value>
+  </data>
+  <data name="CopiedFileUnreadable" xml:space="preserve">
+    <value>The copied file could not be read.</value>
+  </data>
+</root>

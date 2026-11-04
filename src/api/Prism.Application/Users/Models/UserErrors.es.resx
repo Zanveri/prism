@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AlreadyExistsTitle" xml:space="preserve">
+    <value>El usuario ya existe.</value>
+  </data>
+  <data name="AlreadyExistsDetail" xml:space="preserve">
+    <value>Ya existe un usuario con este nombre en este equipo. Elige otro nombre o inicia sesión con él.</value>
+  </data>
+  <data name="CurrentPasswordInvalidTitle" xml:space="preserve">
+    <value>Contraseña incorrecta.</value>
+  </data>
+  <data name="CurrentPasswordInvalidDetail" xml:space="preserve">
+    <value>La contraseña actual no coincide.</value>
+  </data>
+  <data name="PasswordUnchangedTitle" xml:space="preserve">
+    <value>La contraseña nueva es igual a la actual.</value>
+  </data>
+  <data name="PasswordUnchangedDetail" xml:space="preserve">
+    <value>La contraseña nueva debe ser distinta de la actual.</value>
+  </data>
+</root>

@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Transfers.Models;
+using Prism.Infrastructure.Transfers.Services;
 using Prism.Infrastructure.Transfers.Writers;
 using System.IO.Compression;
 using ILogger = Serilog.ILogger;
@@ -254,11 +255,11 @@ internal sealed class TransferFileClient(TransferSettings settings, ILogger logg
 
         return exception switch
         {
-            _ when diskFull => new TransferFileFailure(true, "não há espaço em disco"),
-            UnauthorizedAccessException => new TransferFileFailure(false, "sem permissão para gravar na pasta de dados do Prism"),
-            DirectoryNotFoundException => new TransferFileFailure(false, "a pasta das transferências não existe mais"),
-            IOException => new TransferFileFailure(false, $"o sistema recusou a gravação (código {code})"),
-            _ => new TransferFileFailure(false, $"o arquivo não pôde ser escrito ({exception.GetType().Name})")
+            _ when diskFull => new TransferFileFailure(true, TransferMessages.Say("ReasonDiskFull")),
+            UnauthorizedAccessException => new TransferFileFailure(false, TransferMessages.Say("ReasonDenied")),
+            DirectoryNotFoundException => new TransferFileFailure(false, TransferMessages.Say("ReasonFolderGone")),
+            IOException => new TransferFileFailure(false, TransferMessages.Say("ReasonSystem", code)),
+            _ => new TransferFileFailure(false, TransferMessages.Say("ReasonOther", exception.GetType().Name))
         };
     }
 }

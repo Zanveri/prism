@@ -1,6 +1,7 @@
 #if PRISM_IBM_DRIVER
 using IBM.Data.Db2;
 using IBM.Data.DB2Types;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using System.Data.Common;
 using System.Runtime.InteropServices;
@@ -154,9 +155,9 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
     /// sem o valor, para o host, a senha, o banco e o usuário.
     /// </summary>
     protected override string? SettingsRefusal
-        => new[] { (Value: settings.Host, Field: "no host"), (Value: settings.Password, Field: "na senha"), (Value: settings.Database, Field: "no nome do banco"), (Value: settings.UserName, Field: "no usuário") }
+        => new[] { (Value: settings.Host, Key: "SemicolonInHost"), (Value: settings.Password, Key: "SemicolonInPassword"), (Value: settings.Database, Key: "SemicolonInDatabase"), (Value: settings.UserName, Key: "SemicolonInUserName") }
             .Where(setting => setting.Value.Contains(';'))
-            .Select(setting => $"O driver da IBM não aceita `;` {setting.Field}: é o caractere com que ele separa os dados da conexão.")
+            .Select(setting => Texts.Get(setting.Key))
             .FirstOrDefault();
 
     /// <summary>

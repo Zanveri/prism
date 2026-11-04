@@ -1,3 +1,4 @@
+using System.Resources;
 using Prism.Application.Common.Texts;
 using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Clients;
@@ -11,6 +12,9 @@ namespace Prism.Application.Connections.Models;
 /// </summary>
 internal static class ConnectionRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ConnectionRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ConnectionRules));
+
     /// <summary>
     /// RN-CONN-004 e RN-CONN-013: a senha gravada só é enviada ao servidor para o qual foi gravada, e "o mesmo servidor" é o mesmo host e a
     /// mesma porta. O host é comparado de forma EXATA (`Ordinal`), depois da única normalização que a gravação aplica, aparar as pontas
@@ -49,30 +53,30 @@ internal static class ConnectionRules
     {
         var normalized = name.NormalizeName();
         if (normalized.Length is < 1 or > NameMaxLength)
-            return "O nome da conexão deve ter de 1 a 80 caracteres.";
+            return Texts.Get("NameLength");
 
-        return TextRules.HasControlOrDirection(normalized) ? "O nome da conexão não pode ter caractere de controle nem de direção do texto." : null;
+        return TextRules.HasControlOrDirection(normalized) ? Texts.Get("NameControl") : null;
     }
 
     public static string? HostRefusal(string? host)
-        => Refusal(host, required: true, HostMaxLength, "Informe o host.", "O host pode ter até 255 caracteres.", "O host não pode ter caractere de controle nem de direção do texto.");
+        => Refusal(host, required: true, HostMaxLength, Texts.Get("HostRequired"), Texts.Get("HostLength"), Texts.Get("HostControl"));
 
     public static string? PortRefusal(int port)
-        => port is >= 1 and <= 65535 ? null : "Informe uma porta de 1 a 65535.";
+        => port is >= 1 and <= 65535 ? null : Texts.Get("PortRange");
 
     public static string? DatabaseRefusal(string? database)
-        => Refusal(database, required: true, DatabaseMaxLength, "Informe o banco de dados.", "O banco de dados pode ter até 128 caracteres.", "O banco de dados não pode ter caractere de controle nem de direção do texto.");
+        => Refusal(database, required: true, DatabaseMaxLength, Texts.Get("DatabaseRequired"), Texts.Get("DatabaseLength"), Texts.Get("DatabaseControl"));
 
     /// <summary>
     /// `required` é o formulário de criar e o teste. No `PATCH` o usuário vazio passa aqui, e quem decide é a gravação: ele só fica vazio na conexão gravada
     /// já sem usuário (a que a importação trouxe sem ele, RN-TRANSF-015). Na importação ele é opcional.
     /// </summary>
     public static string? UserNameRefusal(string? userName, bool required)
-        => Refusal(userName, required, UserNameMaxLength, "Informe o usuário do banco.", "O usuário do banco pode ter até 128 caracteres.", "O usuário do banco não pode ter caractere de controle nem de direção do texto.");
+        => Refusal(userName, required, UserNameMaxLength, Texts.Get("UserNameRequired"), Texts.Get("UserNameLength"), Texts.Get("UserNameControl"));
 
     /// <summary>A senha não é aparada nem conferida quanto aos caracteres: espaço e qualquer caractere fazem parte dela. Só o teto, contado como veio.</summary>
     public static string? PasswordRefusal(string? password)
-        => password is { Length: > PasswordMaxLength } ? "A senha do banco pode ter até 1.024 caracteres." : null;
+        => password is { Length: > PasswordMaxLength } ? Texts.Get("PasswordLength") : null;
 
     private static string? Refusal(string? value, bool required, int maxLength, string missing, string tooLong, string control)
     {
@@ -95,7 +99,7 @@ internal static class ConnectionRules
     public const int VerificationQueryMaxLength = 1000;
 
     /// <summary>RN-VERIF-001: a frase do intervalo fora da faixa, a mesma no formulário, no teste e na importação (RN-TRANSF-014).</summary>
-    public const string VerificationIntervalMessage = "A verificação deve ser feita a cada 5 a 3.600 segundos.";
+    public static string VerificationIntervalMessage => Texts.Get("VerificationIntervalMessage");
 
     /// <summary>Opcional: ausente ou nulo é o padrão (30).</summary>
     public static bool VerificationIntervalIsValid(int? interval)
@@ -117,12 +121,12 @@ internal static class ConnectionRules
             return null;
 
         if (normalized.Length > VerificationQueryMaxLength)
-            return "A consulta de verificação pode ter no máximo 1.000 caracteres.";
+            return Texts.Get("VerificationQueryLength");
 
         if (TextRules.HasControlOrDirectionBesidesLineBreaks(normalized))
-            return "A consulta de verificação não pode ter caractere de controle nem de direção do texto.";
+            return Texts.Get("VerificationQueryControl");
 
-        return ReadOnlySql.VerificationRefusal(normalized, engine) is { } reason ? $"A consulta de verificação tem de ser uma leitura só: {reason}." : null;
+        return ReadOnlySql.VerificationRefusal(normalized, engine) is { } reason ? Texts.Get("VerificationQueryNotReadOnly", reason) : null;
     }
 
     /// <summary>

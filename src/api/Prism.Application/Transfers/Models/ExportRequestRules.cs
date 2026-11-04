@@ -1,9 +1,11 @@
 using Prism.Application.Scripts.Models;
 using Prism.Application.Transfers.Features.StartExport;
 using Prism.Application.Transfers.Models.Dtos;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Transfers.Writers;
 using System.Globalization;
+using System.Resources;
 
 namespace Prism.Application.Transfers.Models;
 
@@ -14,6 +16,9 @@ namespace Prism.Application.Transfers.Models;
 /// </summary>
 internal static class ExportRequestRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ExportRequestRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ExportRequestRules));
+
     /// <summary>Seção 6: as colunas de um pedido, no máximo.</summary>
     public const int MaxColumns = 32767;
 
@@ -37,7 +42,7 @@ internal static class ExportRequestRules
 
         var format = request.Format;
         if (!ExportFormats.Exists(format))
-            refusals.Add(("format", $"O formato deve ser um destes: {string.Join(", ", ExportFormats.All)}."));
+            refusals.Add(("format", Texts.Get("FormatInvalid", string.Join(", ", ExportFormats.All))));
         else
             refusals.AddRange(ExportOptionsReader.Read(format!, request.Options, DefaultTable(source)).Errors.Select(error => (error.Field, error.Message)));
 
@@ -48,30 +53,30 @@ internal static class ExportRequestRules
         if (format == ExportFormats.Xlsx)
         {
             if (output.Bom)
-                refusals.Add(("output.bom", "O XLSX não é texto: não leva BOM."));
+                refusals.Add(("output.bom", Texts.Get("XlsxBom")));
 
             if (output.Zip)
-                refusals.Add(("output.zip", "O XLSX já é um arquivo compactado."));
+                refusals.Add(("output.zip", Texts.Get("XlsxZip")));
 
             if (output.Clipboard)
-                refusals.Add(("output.clipboard", "O XLSX não é texto: não vai para a área de transferência."));
+                refusals.Add(("output.clipboard", Texts.Get("XlsxClipboard")));
         }
         else if (output.Clipboard)
         {
             if (output.Bom)
-                refusals.Add(("output.bom", "Com a área de transferência, o texto não leva BOM."));
+                refusals.Add(("output.bom", Texts.Get("ClipboardBom")));
 
             if (output.Zip)
-                refusals.Add(("output.zip", "Com a área de transferência, o texto não vai num .zip."));
+                refusals.Add(("output.zip", Texts.Get("ClipboardZip")));
         }
 
         if (output.Zip && !IsEntryName(output.EntryName))
-            refusals.Add(("output.entryName", $"O nome do arquivo dentro do .zip tem de 1 a {MaxEntryNameLength} caracteres, sem / nem \\, sem caractere de controle nem marca de direção, e não é . nem ..."));
+            refusals.Add(("output.entryName", Texts.Get("EntryNameInvalid", MaxEntryNameLength)));
         else if (!output.Zip && output.EntryName is not null)
-            refusals.Add(("output.entryName", "O nome do arquivo dentro do .zip só vale com o .zip."));
+            refusals.Add(("output.entryName", Texts.Get("EntryNameWithoutZip")));
 
         if (request.WindowID <= 0)
-            refusals.Add(("windowID", "O número da janela é um inteiro positivo."));
+            refusals.Add(("windowID", Texts.Get("WindowInvalid")));
 
         return refusals;
     }
@@ -84,34 +89,34 @@ internal static class ExportRequestRules
     {
         var refusals = new List<(string, string)>();
         if (source is null)
-            refusals.Add(("source", "Informe a origem da exportação."));
+            refusals.Add(("source", Texts.Get("SourceRequired")));
         else if (source.Kind == "table")
         {
             if (!IsName(source.Schema))
-                refusals.Add(("source.schema", NameMessage("O esquema")));
+                refusals.Add(("source.schema", Texts.Get("SchemaNameLength", MaxNameLength)));
 
             if (!IsName(source.Table))
-                refusals.Add(("source.table", NameMessage("A tabela")));
+                refusals.Add(("source.table", Texts.Get("TableNameLength", MaxNameLength)));
 
             if (source.Params is { } given && !(given.ValueKind is System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined || (given.ValueKind == System.Text.Json.JsonValueKind.Array && given.GetArrayLength() == 0)))
-                refusals.Add(("source.params", "Os valores dos marcadores só valem na origem query."));
+                refusals.Add(("source.params", Texts.Get("ParamsOnlyQuery")));
         }
         else if (source.Kind == "query")
         {
             if (string.IsNullOrWhiteSpace(source.Sql))
-                refusals.Add(("source.sql", "Informe o comando da origem."));
+                refusals.Add(("source.sql", Texts.Get("SqlRequired")));
             else if (!ScriptRules.FitsTheLimit(source.Sql))
-                refusals.Add(("source.sql", "O comando pode ter até 1 MB."));
+                refusals.Add(("source.sql", Texts.Get("SqlTooLarge")));
 
             if (source.Name is not null && !IsName(source.Name))
-                refusals.Add(("source.name", NameMessage("O nome da origem")));
+                refusals.Add(("source.name", Texts.Get("SourceNameLength", MaxNameLength)));
 
             // RN-VAR-032 e 033: os valores dos marcadores do comando, na forma da rota das consultas, cada erro no campo dele.
             refusals.AddRange(QueryParameterRules.Refusals(source.Params, "source.params"));
         }
         else
         {
-            refusals.Add(("source.kind", "A origem deve ser table ou query."));
+            refusals.Add(("source.kind", Texts.Get("KindInvalid")));
         }
 
         return refusals;
@@ -121,12 +126,12 @@ internal static class ExportRequestRules
     public static IReadOnlyList<(string Field, string Message)> ColumnsRefusals(IReadOnlyList<ExportColumnDto>? columns)
     {
         if (columns is null || columns.Count is 0 or > MaxColumns)
-            return [("columns", "Marque de 1 a 32.767 colunas.")];
+            return [("columns", Texts.Get("ColumnsCount"))];
 
         if (columns.Any(column => column is null || column.Position < 0) || columns.Select(column => column.Position).Distinct().Count() != columns.Count)
-            return [("columns", "Cada coluna tem uma posição a partir de 0, sem repetir.")];
+            return [("columns", Texts.Get("ColumnsPosition"))];
 
-        return columns.Any(column => !IsName(column.Name)) ? [("columns", NameMessage("O nome de cada coluna"))] : [];
+        return columns.Any(column => !IsName(column.Name)) ? [("columns", Texts.Get("ColumnNameLength", MaxNameLength))] : [];
     }
 
     /// <summary>
@@ -136,17 +141,17 @@ internal static class ExportRequestRules
     private static string? FormatColumnsRefusal(string? format, IReadOnlyList<ExportColumnDto> columns)
     {
         if (format == ExportFormats.Sql && columns.GroupBy(column => column?.Name, StringComparer.Ordinal).FirstOrDefault(group => group.Key is not null && group.Count() > 1) is { } repeated)
-            return $"O resultado tem duas colunas chamadas {repeated.Key}: deixe uma de fora na Extração.";
+            return Texts.Get("DuplicateColumn", repeated.Key);
 
         if (format == ExportFormats.Xlsx && columns.Count > MaxSheetColumns)
-            return $"Uma planilha do Excel tem no máximo 16.384 colunas: deixe {Thousands(columns.Count - MaxSheetColumns)} de fora na Extração, ou escolha outro formato.";
+            return Texts.Get("XlsxColumns", Thousands(columns.Count - MaxSheetColumns));
 
         return null;
     }
 
-    /// <summary>O número com o ponto de milhar do português ("1.234"), sem depender da cultura da máquina.</summary>
+    /// <summary>O número com o separador de milhar do idioma do pedido ("1.234" em português e espanhol, "1,234" em inglês), sem depender da cultura da máquina.</summary>
     private static string Thousands(int value)
-        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');
+        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en" ? ',' : '.');
 
     /// <summary>RN-EXPORT-011 e 012: a tabela de destino do SQL e do DbUnit, quando ela não vem: a da origem (`source.table`, ou `source.name` nos Registros).</summary>
     public static string? DefaultTable(Dtos.ExportSourceDto? source)
@@ -154,9 +159,6 @@ internal static class ExportRequestRules
 
     private static bool IsName(string? name)
         => name is { Length: >= 1 and <= MaxNameLength } && !name.Contains('\0');
-
-    private static string NameMessage(string what)
-        => $"{what} tem de 1 a {MaxNameLength} caracteres, sem U+0000.";
 
     /// <summary>Seção 6: o nome dentro do .zip, pelas regras do nome do arquivo (RN-EXPORT-014).</summary>
     private static bool IsEntryName(string? name)

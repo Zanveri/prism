@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="TableNotInResult" xml:space="preserve">
+    <value>A tabela da alteração não existe neste resultado.</value>
+  </data>
+  <data name="TableNotEditable" xml:space="preserve">
+    <value>A tabela da alteração não se edita: {0}.</value>
+  </data>
+  <data name="NoRowOperations" xml:space="preserve">
+    <value>Este resultado não aceita linha nova nem exclusão de linha.</value>
+  </data>
+  <data name="KeyValuesMissing" xml:space="preserve">
+    <value>A chave da linha não tem os valores das colunas da chave.</value>
+  </data>
+  <data name="NewRowEmpty" xml:space="preserve">
+    <value>A linha nova não tem nenhuma coluna preenchida.</value>
+  </data>
+  <data name="ChangeHasNoColumn" xml:space="preserve">
+    <value>A alteração não tem nenhuma coluna.</value>
+  </data>
+  <data name="ColumnNotInResult" xml:space="preserve">
+    <value>A coluna não existe no resultado.</value>
+  </data>
+  <data name="ColumnNotInTable" xml:space="preserve">
+    <value>A coluna não é da tabela da alteração.</value>
+  </data>
+  <data name="ColumnNotEditable" xml:space="preserve">
+    <value>A coluna não se edita: {0}.</value>
+  </data>
+  <data name="ColumnRepeated" xml:space="preserve">
+    <value>A mesma coluna aparece duas vezes na alteração.</value>
+  </data>
+</root>

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PlatformUnsupported" xml:space="preserve">
+    <value>This driver cannot be downloaded on this platform.</value>
+  </data>
+  <data name="Redirected" xml:space="preserve">
+    <value>The server redirected the download to another address, and Prism does not follow redirects.</value>
+  </data>
+  <data name="NugetStatus" xml:space="preserve">
+    <value>nuget.org responded {0} to the package request.</value>
+  </data>
+  <data name="SizeMismatch" xml:space="preserve">
+    <value>The file offered by the server is not the size of the catalog package. Nothing was installed.</value>
+  </data>
+  <data name="TooMuchData" xml:space="preserve">
+    <value>The server sent more data than the catalog package has. Nothing was installed.</value>
+  </data>
+  <data name="EarlyEnd" xml:space="preserve">
+    <value>The download ended before the end of the file.</value>
+  </data>
+  <data name="HashMismatch" xml:space="preserve">
+    <value>The downloaded file does not match the catalog SHA-512. Nothing was installed.</value>
+  </data>
+  <data name="Timeout" xml:space="preserve">
+    <value>The download did not finish in time.</value>
+  </data>
+  <data name="NameResolution" xml:space="preserve">
+    <value>Could not find the address of nuget.org. Check your internet connection.</value>
+  </data>
+  <data name="SecureConnection" xml:space="preserve">
+    <value>The secure connection to nuget.org was not accepted: the certificate presented is not valid on this computer. On a network that intercepts HTTPS, the driver cannot be downloaded.</value>
+  </data>
+  <data name="Proxy" xml:space="preserve">
+    <value>The network proxy refused the connection to nuget.org.</value>
+  </data>
+  <data name="ConnectionError" xml:space="preserve">
+    <value>Could not connect to nuget.org.</value>
+  </data>
+  <data name="ConnectionDropped" xml:space="preserve">
+    <value>The connection dropped during the download.</value>
+  </data>
+  <data name="PackageUnreadable" xml:space="preserve">
+    <value>The downloaded package could not be read. Nothing was installed.</value>
+  </data>
+  <data name="DiskError" xml:space="preserve">
+    <value>Could not write the driver to Prism's data folder (disk full or no permission).</value>
+  </data>
+  <data name="Unexpected" xml:space="preserve">
+    <value>The installation failed with an unexpected error. The details are in the Prism log.</value>
+  </data>
+  <data name="Canceled" xml:space="preserve">
+    <value>The installation was canceled.</value>
+  </data>
+</root>

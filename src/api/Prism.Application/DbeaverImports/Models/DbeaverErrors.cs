@@ -1,4 +1,6 @@
 using Prism.Core.Api.Models.Dtos;
+using Prism.Core.Extensions;
+using System.Resources;
 
 namespace Prism.Application.DbeaverImports.Models;
 
@@ -9,34 +11,46 @@ namespace Prism.Application.DbeaverImports.Models;
 /// </summary>
 internal static class DbeaverErrors
 {
-    /// <summary>RN-DBEAVER-007: a frase do limite, e o que se acrescenta quando há mais de um projeto na origem.</summary>
-    public const string LimitsMessage = "O DBeaver tem mais do que o Prism importa de uma vez: até 2.000 conexões, 2.000 pastas e 32 níveis de pastas.";
+    /// <summary>Os textos, no idioma do pedido: <c>DbeaverErrors.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DbeaverErrors));
 
-    public const string LimitsMessageWithManyProjects = LimitsMessage + " Escolha um projeto só.";
+    /// <summary>RN-DBEAVER-007: a frase do limite, e o que se acrescenta quando há mais de um projeto na origem.</summary>
+    public static string LimitsMessage => Texts.Get("LimitsMessage");
+
+    public static string LimitsMessageWithManyProjects => Texts.Get("LimitsMessageManyProjects");
+
+    /// <summary>As frases de `IMPORT_INVALID` que os validators do "Importar do DBeaver" dão ao campo.</summary>
+    public static string SourceIdInvalidMessage => Texts.Get("SourceIdInvalidMessage");
+
+    public static string WithPasswordsInvalidMessage => Texts.Get("WithPasswordsInvalidMessage");
+
+    public static string DrdaPortsInvalidMessage => Texts.Get("DrdaPortsInvalidMessage");
+
+    public static string OverwriteInvalidMessage => Texts.Get("OverwriteInvalidMessage");
 
     /// <summary>Nota de seção 6: a cópia que não existe (apagada, de outra execução, ou com o manifesto ausente). A tela pede outra origem sozinha.</summary>
     public static ApiErrorDto SourceMissing()
-        => ApiErrorDto.CreateNotFound("Cópia do DBeaver não localizada.", "DBEAVER_SOURCE_MISSING", "A cópia do DBeaver não existe mais. Procure o DBeaver de novo.");
+        => ApiErrorDto.CreateNotFound(Texts.Get("SourceMissingTitle"), "DBEAVER_SOURCE_MISSING", Texts.Get("SourceMissingDetail"));
 
     /// <summary>Nenhum projeto da cópia pôde ser lido: os `data-sources*.json` malformados, ou todos os projetos protegidos ou com nome que o Prism não aceita.</summary>
     public static ApiErrorDto SourceInvalid()
-        => ApiErrorDto.CreateUnprocessableEntity("Cópia do DBeaver ilegível.", "DBEAVER_SOURCE_INVALID", "O Prism não conseguiu ler as conexões deste DBeaver.");
+        => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("SourceInvalidTitle"), "DBEAVER_SOURCE_INVALID", Texts.Get("SourceInvalidDetail"));
 
     /// <summary>O projeto que não está no manifesto, ou está protegido por senha de projeto, ou tem o nome que o Prism não aceita.</summary>
     public static ApiErrorDto ProjectNotFound()
-        => ApiErrorDto.CreateNotFound("Projeto do DBeaver não localizado.", "DBEAVER_PROJECT_NOT_FOUND", "Este projeto não está na cópia do DBeaver, ou está protegido por senha de projeto.");
+        => ApiErrorDto.CreateNotFound(Texts.Get("ProjectNotFoundTitle"), "DBEAVER_PROJECT_NOT_FOUND", Texts.Get("ProjectNotFoundDetail"));
 
     public static ApiErrorDto LimitsExceeded(bool manyProjects)
-        => ApiErrorDto.CreateUnprocessableEntity("DBeaver além dos limites.", "DBEAVER_LIMITS_EXCEEDED", manyProjects ? LimitsMessageWithManyProjects : LimitsMessage);
+        => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("LimitsExceededTitle"), "DBEAVER_LIMITS_EXCEEDED", manyProjects ? LimitsMessageWithManyProjects : LimitsMessage);
 
     public static ApiErrorDto SourceIdInvalid()
-        => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "IMPORT_INVALID", "SourceId", "O identificador da cópia do DBeaver não é válido.");
+        => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("InvalidTitle"), "IMPORT_INVALID", "SourceId", SourceIdInvalidMessage);
 
     /// <summary>RN-DBEAVER-016: uma chave marcada que a cópia não tem. A tela não deixa chegar a isso.</summary>
     public static ApiErrorDto UnknownItem()
-        => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "IMPORT_INVALID", "Items", "Uma chave marcada não está na cópia do DBeaver.");
+        => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("InvalidTitle"), "IMPORT_INVALID", "Items", Texts.Get("UnknownItemDetail"));
 
     /// <summary>RN-DBEAVER-017: uma chave de `overwrite` que não é de uma conexão marcada (a que não está em `items`, ou é de pasta).</summary>
     public static ApiErrorDto UnknownOverwrite()
-        => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "IMPORT_INVALID", "Overwrite", "Só se sobrescreve uma conexão marcada.");
+        => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("InvalidTitle"), "IMPORT_INVALID", "Overwrite", Texts.Get("UnknownOverwriteDetail"));
 }

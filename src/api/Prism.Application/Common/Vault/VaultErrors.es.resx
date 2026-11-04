@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LockedTitle" xml:space="preserve">
+    <value>Caja fuerte cerrada.</value>
+  </data>
+  <data name="LockedDetail" xml:space="preserve">
+    <value>Inicia sesión con tu usuario y tu contraseña para abrir la caja fuerte.</value>
+  </data>
+  <data name="UnavailableTitle" xml:space="preserve">
+    <value>Caja fuerte no disponible.</value>
+  </data>
+  <data name="UnavailableDetail" xml:space="preserve">
+    <value>No se pudo leer ni escribir el archivo de la caja fuerte. Inténtalo de nuevo en unos instantes.</value>
+  </data>
+  <data name="FormatUnsupportedTitle" xml:space="preserve">
+    <value>Caja fuerte de una versión más reciente de Prism.</value>
+  </data>
+  <data name="FormatUnsupportedDetail" xml:space="preserve">
+    <value>Esta caja fuerte fue creada por una versión más reciente de Prism. Actualiza Prism para abrirla.</value>
+  </data>
+</root>

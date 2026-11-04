@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PasswordRequiredTitle" xml:space="preserve">
+    <value>Senha do usuário necessária.</value>
+  </data>
+  <data name="PasswordRequiredDetail" xml:space="preserve">
+    <value>Para marcar ou desmarcar "Somente leitura", ou para tirar uma conexão de uma pasta somente leitura, informe a sua senha do Prism.</value>
+  </data>
+  <data name="InvalidPasswordTitle" xml:space="preserve">
+    <value>Senha incorreta.</value>
+  </data>
+  <data name="InvalidPasswordDetail" xml:space="preserve">
+    <value>A senha informada não é a do seu usuário no Prism.</value>
+  </data>
+</root>

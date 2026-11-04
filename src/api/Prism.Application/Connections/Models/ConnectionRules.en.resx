@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="VerificationIntervalMessage" xml:space="preserve">
+    <value>The check must run every 5 to 3,600 seconds.</value>
+  </data>
+  <data name="NameLength" xml:space="preserve">
+    <value>The connection name must be 1 to 80 characters long.</value>
+  </data>
+  <data name="NameControl" xml:space="preserve">
+    <value>The connection name cannot contain control or text direction characters.</value>
+  </data>
+  <data name="HostRequired" xml:space="preserve">
+    <value>Enter the host.</value>
+  </data>
+  <data name="HostLength" xml:space="preserve">
+    <value>The host can have up to 255 characters.</value>
+  </data>
+  <data name="HostControl" xml:space="preserve">
+    <value>The host cannot contain control or text direction characters.</value>
+  </data>
+  <data name="PortRange" xml:space="preserve">
+    <value>Enter a port from 1 to 65535.</value>
+  </data>
+  <data name="DatabaseRequired" xml:space="preserve">
+    <value>Enter the database.</value>
+  </data>
+  <data name="DatabaseLength" xml:space="preserve">
+    <value>The database can have up to 128 characters.</value>
+  </data>
+  <data name="DatabaseControl" xml:space="preserve">
+    <value>The database cannot contain control or text direction characters.</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Enter the database user.</value>
+  </data>
+  <data name="UserNameLength" xml:space="preserve">
+    <value>The database user can have up to 128 characters.</value>
+  </data>
+  <data name="UserNameControl" xml:space="preserve">
+    <value>The database user cannot contain control or text direction characters.</value>
+  </data>
+  <data name="PasswordLength" xml:space="preserve">
+    <value>The database password can have up to 1,024 characters.</value>
+  </data>
+  <data name="VerificationQueryLength" xml:space="preserve">
+    <value>The check query can have at most 1,000 characters.</value>
+  </data>
+  <data name="VerificationQueryControl" xml:space="preserve">
+    <value>The check query cannot contain control or text direction characters.</value>
+  </data>
+  <data name="VerificationQueryNotReadOnly" xml:space="preserve">
+    <value>The check query must be a single read: {0}.</value>
+  </data>
+</root>

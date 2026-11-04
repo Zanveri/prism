@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Modelo no encontrado.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>No existe un modelo con el ID {0}.</value>
+  </data>
+  <data name="AlreadyExistsTitle" xml:space="preserve">
+    <value>El modelo ya existe.</value>
+  </data>
+  <data name="AlreadyExistsDetail" xml:space="preserve">
+    <value>Ya existe un modelo llamado {0}. El nombre no se puede repetir, ni siquiera con otras mayúsculas y minúsculas.</value>
+  </data>
+  <data name="ChangedTitle" xml:space="preserve">
+    <value>Este modelo cambió en otra ventana.</value>
+  </data>
+  <data name="ChangedDetail" xml:space="preserve">
+    <value>El modelo {0} se guardó después de la versión que leyó esta ventana.</value>
+  </data>
+</root>

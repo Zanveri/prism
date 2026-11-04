@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Folder not found.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>There is no scripts folder with the ID {0}.</value>
+  </data>
+  <data name="ParentNotFoundTitle" xml:space="preserve">
+    <value>Parent folder not found.</value>
+  </data>
+  <data name="ParentNotFoundDetail" xml:space="preserve">
+    <value>The parent folder no longer exists.</value>
+  </data>
+  <data name="DestinationNotFoundTitle" xml:space="preserve">
+    <value>Destination folder not found.</value>
+  </data>
+  <data name="DestinationNotFoundDetail" xml:space="preserve">
+    <value>The destination folder no longer exists.</value>
+  </data>
+  <data name="ChosenNotFoundDetail" xml:space="preserve">
+    <value>The chosen folder no longer exists.</value>
+  </data>
+  <data name="AlreadyExistsTitle" xml:space="preserve">
+    <value>Folder already exists.</value>
+  </data>
+  <data name="AlreadyExistsAtRootDetail" xml:space="preserve">
+    <value>A folder named {0} already exists at the root of the Scripts section.</value>
+  </data>
+  <data name="AlreadyExistsInDetail" xml:space="preserve">
+    <value>A folder named {0} already exists in {1}.</value>
+  </data>
+  <data name="CycleTitle" xml:space="preserve">
+    <value>Invalid move.</value>
+  </data>
+  <data name="CycleDetail" xml:space="preserve">
+    <value>A folder can't go into itself or into one of its subfolders.</value>
+  </data>
+  <data name="NotEmptyTitle" xml:space="preserve">
+    <value>Folder isn't empty.</value>
+  </data>
+  <data name="NotEmptyDetail" xml:space="preserve">
+    <value>The folder {0} has {1}. Only an empty folder can be deleted: first move or delete what's inside it.</value>
+  </data>
+  <data name="ContentsSubfolderOne" xml:space="preserve">
+    <value>1 subfolder</value>
+  </data>
+  <data name="ContentsSubfolderMany" xml:space="preserve">
+    <value>{0} subfolders</value>
+  </data>
+  <data name="ContentsScriptOne" xml:space="preserve">
+    <value>1 script</value>
+  </data>
+  <data name="ContentsScriptMany" xml:space="preserve">
+    <value>{0} scripts</value>
+  </data>
+  <data name="ContentsJoin" xml:space="preserve">
+    <value> and </value>
+  </data>
+</root>

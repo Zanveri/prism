@@ -103,7 +103,7 @@ internal sealed class ImportFileClient(TransferSettings settings, ILogger logger
 
             _logger.Warning("O arquivo da importação não abriu ({ExceptionType}, HResult {HResult}).", exception.GetType().Name, exception.HResult);
 
-            return new ImportFileRefusal(EImportFileRefusal.Unreadable, Reason: $"Não foi possível ler o arquivo copiado (código {exception.HResult & 0xFFFF}).");
+            return new ImportFileRefusal(EImportFileRefusal.Unreadable, Reason: ImportText.Say("ReadFailedCode", exception.HResult & 0xFFFF));
         }
     }
 }

@@ -30,8 +30,8 @@ internal static class LoadSteps
     /// `IMPORT_TABLE_NOT_FOUND`; a que deixou de ser tabela, `IMPORT_TARGET_NOT_TABLE`; a coluna mapeada que sumiu, passou a ser calculada pelo banco,
     /// mudou para um tipo que não se importa ou, desde a leitura de antes (`before`), converte de outro jeito, `IMPORT_TABLE_CHANGED`.
     /// </summary>
-    /// <param name="what">"a importação" ou "a cópia", na frase da tabela que mudou.</param>
-    public static async Task<Result<(ImportTargetTable Table, IReadOnlyList<ImportTargetColumn> Columns), LoadStop>> DescribeAsync(IDatabaseConnection connection, EDatabaseEngine engine, string schema, string table, IReadOnlyList<ImportMappingEntry> mapping, IReadOnlyList<ImportTargetColumn>? before, string what, CancellationToken cancellationToken)
+    /// <param name="changedKey">`TableChangedImport` ou `TableChangedCopy`: a frase da tabela que mudou, da importação ou da cópia.</param>
+    public static async Task<Result<(ImportTargetTable Table, IReadOnlyList<ImportTargetColumn> Columns), LoadStop>> DescribeAsync(IDatabaseConnection connection, EDatabaseEngine engine, string schema, string table, IReadOnlyList<ImportMappingEntry> mapping, IReadOnlyList<ImportTargetColumn>? before, string changedKey, CancellationToken cancellationToken)
     {
         var described = await connection.DescribeImportTargetAsync(schema, table, cancellationToken);
         if (described.IsFailure)
@@ -39,10 +39,10 @@ internal static class LoadSteps
 
         var name = $"{schema}.{table}";
         if (described.Value is not { } catalog)
-            return Prism(ETransferError.ImportTableNotFound, $"A tabela {name} não existe mais.");
+            return Prism(ETransferError.ImportTableNotFound, TransferMessages.Say("TableGone", name));
 
         if (ImportTargets.NotATableReason(engine, catalog.Table.Kind) is { } kind)
-            return Prism(ETransferError.ImportTargetNotTable, $"Só uma tabela recebe linhas: {name} {kind}.");
+            return Prism(ETransferError.ImportTargetNotTable, TransferMessages.Say("TargetNotTable", name, kind));
 
         var target = ImportTargets.TableOf(engine, catalog);
         var columns = new List<ImportTargetColumn>(mapping.Count);
@@ -50,7 +50,7 @@ internal static class LoadSteps
         {
             var column = target.Columns.FirstOrDefault(candidate => candidate.Name == mapping[index].Target);
             if (column is not { Importable: true } || (before is not null && !ImportTargets.ConvertsTheSame(before[index], column)))
-                return Prism(ETransferError.ImportTableChanged, $"As colunas de {name} mudaram desde a prévia. Abra {what} de novo.");
+                return Prism(ETransferError.ImportTableChanged, TransferMessages.Say(changedKey, name));
 
             columns.Add(column);
         }

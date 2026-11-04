@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="VerificationIntervalMessage" xml:space="preserve">
+    <value>La verificación debe hacerse cada 5 a 3.600 segundos.</value>
+  </data>
+  <data name="NameLength" xml:space="preserve">
+    <value>El nombre de la conexión debe tener de 1 a 80 caracteres.</value>
+  </data>
+  <data name="NameControl" xml:space="preserve">
+    <value>El nombre de la conexión no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="HostRequired" xml:space="preserve">
+    <value>Indica el host.</value>
+  </data>
+  <data name="HostLength" xml:space="preserve">
+    <value>El host puede tener hasta 255 caracteres.</value>
+  </data>
+  <data name="HostControl" xml:space="preserve">
+    <value>El host no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="PortRange" xml:space="preserve">
+    <value>Indica un puerto de 1 a 65535.</value>
+  </data>
+  <data name="DatabaseRequired" xml:space="preserve">
+    <value>Indica la base de datos.</value>
+  </data>
+  <data name="DatabaseLength" xml:space="preserve">
+    <value>La base de datos puede tener hasta 128 caracteres.</value>
+  </data>
+  <data name="DatabaseControl" xml:space="preserve">
+    <value>La base de datos no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Indica el usuario de la base de datos.</value>
+  </data>
+  <data name="UserNameLength" xml:space="preserve">
+    <value>El usuario de la base de datos puede tener hasta 128 caracteres.</value>
+  </data>
+  <data name="UserNameControl" xml:space="preserve">
+    <value>El usuario de la base de datos no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="PasswordLength" xml:space="preserve">
+    <value>La contraseña de la base de datos puede tener hasta 1.024 caracteres.</value>
+  </data>
+  <data name="VerificationQueryLength" xml:space="preserve">
+    <value>La consulta de verificación puede tener como máximo 1.000 caracteres.</value>
+  </data>
+  <data name="VerificationQueryControl" xml:space="preserve">
+    <value>La consulta de verificación no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="VerificationQueryNotReadOnly" xml:space="preserve">
+    <value>La consulta de verificación debe ser una sola lectura: {0}.</value>
+  </data>
+</root>

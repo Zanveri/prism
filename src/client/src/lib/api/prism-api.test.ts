@@ -40,6 +40,8 @@ describe("apiRequest", () => {
     expect(url).toBe("http://127.0.0.1:51234/api/public/sessions");
     expect(init.method).toBe("DELETE");
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer token-de-teste");
+    // O idioma do Prism (nos testes, o padrão), para a API escrever as mensagens nele.
+    expect(new Headers(init.headers).get("Accept-Language")).toBe("pt-BR");
   });
 
   it("envia o corpo em JSON com o método PUT (a troca de senha)", async () => {

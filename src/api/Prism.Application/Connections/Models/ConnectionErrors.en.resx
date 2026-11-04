@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Connection not found.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>There is no connection with ID {0}.</value>
+  </data>
+  <data name="AlreadyExistsTitle" xml:space="preserve">
+    <value>The connection already exists.</value>
+  </data>
+  <data name="AlreadyExistsDetail" xml:space="preserve">
+    <value>A connection named {0} already exists here. The name cannot be repeated in the same folder, not even with different capitalization.</value>
+  </data>
+  <data name="InvalidPasswordTitle" xml:space="preserve">
+    <value>Incorrect password.</value>
+  </data>
+  <data name="InvalidPasswordDetail" xml:space="preserve">
+    <value>The password you entered is not your Prism user's password.</value>
+  </data>
+  <data name="PasswordRequiredToChangeServer" xml:space="preserve">
+    <value>When changing the host or the port, enter the connection password again.</value>
+  </data>
+  <data name="PasswordRequiredToTestOtherServer" xml:space="preserve">
+    <value>To test with another host or port, enter the connection password.</value>
+  </data>
+  <data name="RequestInvalidTitle" xml:space="preserve">
+    <value>Error sending data to the API.</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Enter the database user.</value>
+  </data>
+  <data name="UserNameMissingToConnect" xml:space="preserve">
+    <value>The connection has no saved user. Fill in the user and password in "Edit connection" to connect.</value>
+  </data>
+  <data name="PasswordMissingToConnect" xml:space="preserve">
+    <value>The connection has no saved password. Fill in the password in "Edit connection" to connect.</value>
+  </data>
+  <data name="PasswordMissingToTest" xml:space="preserve">
+    <value>This connection has no saved password. Enter the database password to test.</value>
+  </data>
+  <data name="CredentialsMissingTitle" xml:space="preserve">
+    <value>Connection without a user or password.</value>
+  </data>
+</root>

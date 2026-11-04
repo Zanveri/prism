@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FromInvalid" xml:space="preserve">
+    <value>A data inicial do filtro é inválida.</value>
+  </data>
+  <data name="ToInvalid" xml:space="preserve">
+    <value>A data final do filtro é inválida.</value>
+  </data>
+  <data name="DateOrderInvalid" xml:space="preserve">
+    <value>A data inicial não pode ser posterior à data final.</value>
+  </data>
+  <data name="ConnectionIdInvalid" xml:space="preserve">
+    <value>O identificador da conexão é inválido.</value>
+  </data>
+  <data name="LevelInvalid" xml:space="preserve">
+    <value>O nível de perigo informado é inválido.</value>
+  </data>
+  <data name="KindInvalid" xml:space="preserve">
+    <value>O tipo de registro informado é inválido.</value>
+  </data>
+  <data name="OutcomeInvalid" xml:space="preserve">
+    <value>O resultado informado é inválido.</value>
+  </data>
+  <data name="ScriptRunInvalid" xml:space="preserve">
+    <value>O identificador da execução do script é inválido.</value>
+  </data>
+  <data name="CursorInvalid" xml:space="preserve">
+    <value>O cursor de paginação deve ser positivo.</value>
+  </data>
+  <data name="LimitInvalid" xml:space="preserve">
+    <value>O limite da auditoria deve estar entre 1 e 500.</value>
+  </data>
+</root>

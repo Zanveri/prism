@@ -379,8 +379,10 @@ Fora da especificação (não há `RN-*` para isto): português (padrão), ingl�
 - **Os testes rodam em português** (não há `window.prism`), e as fixtures continuam o contrato em português.
 - **Um idioma novo**: entra em `locales` e em `localeNames`; o `pnpm typecheck` aponta cada `*.copy.ts` sem ele; cada um ganha o `x.copy.<id>.ts`.
   O plural é o de `formatCount` (1 é singular): um idioma com outras regras de plural pede `Intl.PluralRules`.
-- **O que ainda está só em português**: as mensagens da API (títulos e detalhes de erro, validação, o diário) e as do processo principal que vão
-  à tela (atualização, cópia de arquivo, DBeaver). O splash tem os textos dele em `splash.ts`, por idioma. Ficam em português de propósito, por
+- **A API escreve no idioma da tela**: o `apiRequest` manda `Accept-Language` com o `locale` (sem ele, o Electron mandaria o do sistema), e a API
+  responde títulos, detalhes e validação nele (seção `## Idiomas` de `src/api/AGENTS.md`). Por isso a tela nunca compara o texto de uma recusa: decide
+  pelo código. O texto gravado no diário é histórico e fica em português.
+- **O que ainda está só em português**: as mensagens do processo principal que vão à tela (atualização, cópia de arquivo, DBeaver). O splash tem os textos dele em `splash.ts`, por idioma. Ficam em português de propósito, por
   serem contrato: o conteúdo dos arquivos exportados e do SQL/DDL gerado (comentários, "Resultado"), os nomes de tipo da linguagem das variáveis
   (`Date (dia)`) e as variáveis do nome de arquivo (`${tabela}`).
 

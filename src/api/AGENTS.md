@@ -29,11 +29,22 @@ O restore usa só o nuget.org (RN-ABERTO-002): o `nuget.config` limpa as fontes 
 
 ## A porta de entrada (`Prism.Api`)
 
-A ordem do pipeline está em `UseApi` (`DependencyInjection.cs`): exceção não tratada (500 `INTERNAL_SERVER_ERROR` fixo, exceção inteira no log) → filtro de host → roteamento → CORS → `LaunchTokenMiddleware` → `VaultGateMiddleware` → endpoints. O CORS vem antes do token porque o preflight do navegador não leva token. Controllers novos entram em `Prism.Api/Controllers/`; o application part de `AddApi` os acha mesmo no `ApiHost` dos testes.
+A ordem do pipeline está em `UseApi` (`DependencyInjection.cs`): idioma do pedido (ver "Idiomas") → exceção não tratada (500 `INTERNAL_SERVER_ERROR` fixo, exceção inteira no log) → filtro de host → roteamento → CORS → `LaunchTokenMiddleware` → `VaultGateMiddleware` → endpoints. O CORS vem antes do token porque o preflight do navegador não leva token. Controllers novos entram em `Prism.Api/Controllers/`; o application part de `AddApi` os acha mesmo no `ApiHost` dos testes.
 
 JSON: o padrão do MVC (camelCase) escreve `ID` como `id` e `FolderID` como `folderID`. Não há configuração a copiar do etio, e as telas dependem dessa grafia.
 
 `HostErrors` guarda os erros da porta de entrada e a escrita deles (`application/problem+json`). `VaultLocked()` é a escrita do `VaultErrors.From(Locked)` (Application), a mesma que um handler devolve quando o cofre fecha no meio da operação.
+
+## Idiomas
+
+As mensagens que chegam à tela saem em pt-BR (padrão), en ou es, pelo `Accept-Language` que a tela manda em todo pedido. Termos: o glossário de `## Idiomas` em [src/client/AGENTS.md](../client/AGENTS.md); inglês e espanhol em sentença, espanhol com "tú".
+
+- **O pedido** (`UseLanguages`, primeiro passo do `UseApi`): `UseRequestLocalization` só com o provider do `Accept-Language`; en-US vale en, e um idioma fora da lista (ou nenhum) é o português. **Só a UICulture muda**: a CurrentCulture é a do processo em todo pedido, a mesma instância de antes, porque exportação, importação e conversões formatam número e data com ela e as fixtures comparam a saída. Fora de um pedido (partida, temporizador criado nela) a UICulture é pt-BR em qualquer máquina. Trabalho em segundo plano iniciado por um pedido herda o idioma dele pelo contexto de execução; o que nasce fora de um pedido e manda texto para a tela guarda a `CultureInfo.CurrentUICulture` do pedido que o pediu.
+- **Os textos**: um `.resx` ao lado de cada classe que tem mensagens, com o nome dela: `BuildModelErrors.resx` (o português, sem sufixo: `NeutralLanguage` pt-BR no `Directory.Build.props`), `BuildModelErrors.en.resx` e `BuildModelErrors.es.resx`. Sem `Designer.cs`. O SDK dá ao recurso o nome da classe do `.cs` ao lado, e os satélites vão para `en/` e `es/` da saída e da publicação. Chave em PascalCase, descritiva (`NotFoundTitle`, `NotFoundDetail`); argumentos `{0}`, `{1}`, na ordem que a tradução quiser.
+- **A leitura**: `private static readonly ResourceManager Texts = new(typeof(Classe));` e `Texts.Get("Chave", args)` (`Prism.Core/Extensions/ResourceManagerExtensions`): o modelo da UICulture, os argumentos formatados na CurrentCulture, a chave que falta devolvida como veio (a resposta de erro não cai) e, sem argumentos, o texto como está. No validator, sempre a forma com função, `.WithMessage(_ => Texts.Get("Chave"))`, para a mensagem ser lida na validação e não na construção. Modelo: `BuildModels/Models/BuildModelErrors.cs` e `BuildModels/Features/CreateBuildModel/CreateBuildModelValidator.cs`.
+- **O português sai idêntico, byte a byte**: o `.resx` sem sufixo tem o texto que o código tinha, e o `$"... {id}"` vira `{0}` com o mesmo argumento. Os testes que comparam mensagens em português não mudam: os dois projetos de teste fixam a UICulture em pt-BR (`TestAssemblySetup` e o `SetUICulture` do `GlobalUsings`).
+- **A conferência**: `Prism.UnitTesting/Core/ResxTranslationsTests` lê os recursos compilados dos quatro assemblies e exige, para todo `.resx` em português, o `.en` e o `.es` com as mesmas chaves, sem texto vazio e com os mesmos marcadores em cada chave. `Api/AcceptLanguageTests` pede pela API com `Accept-Language` en, en-US, es, fr e sem cabeçalho.
+- **Não se traduz** (fica em português, como está): log (`Log*`, `logger`), exceção de invariante ou de configuração da partida, o diário (é histórico gravado), o conteúdo de arquivo exportado e o SQL/DDL gerado (comentários `--` inclusive), SQL, nomes de produto, os códigos de erro, a mensagem que vem do banco (decisão 4 da raiz) e todo texto que uma fixture de `src/test-fixtures` compara ou que o programa lê de volta. Na dúvida, procure os usos e as fixtures.
 
 ## Usuários, entrada e barreira do cofre
 
@@ -470,7 +481,7 @@ A importação (o arquivo para uma tabela) e a cópia para outro banco (a origem
 
 ## O que não existe aqui, e por quê
 
-- **`AddCore` e `IDatabaseFactory`.** Não há banco do produto: os dados são o cofre (decisão 2 da raiz). O `Prism.Core` é só `ApiErrorDto`, `ApiSuccessDto`, `ResultExtensions`, `StringExtensions`, `DomainDto` e o mediador.
+- **`AddCore` e `IDatabaseFactory`.** Não há banco do produto: os dados são o cofre (decisão 2 da raiz). O `Prism.Core` é só `ApiErrorDto`, `ApiSuccessDto`, `ResultExtensions`, `StringExtensions`, `ResourceManagerExtensions` (ver "Idiomas"), `DomainDto` e o mediador.
 - **Políticas de autorização, papéis, `ICurrentUser`.** Não há Keycloak nem JWT (decisão 1). A autenticação é o token de lançamento; a liberação dos dados é o cofre aberto (RN-API-005: rotas `api/user/...` respondem 401 `VAULT_LOCKED` sem ele), e as rotas `api/public/...` exigem só o token.
 - **Rate limiting, Turnstile, cabeçalhos de proxy, HTTPS e background jobs.** A API só existe em loopback para o próprio app (decisão 7). Não há biblioteca de jobs: os serviços em segundo plano são o `ParentProcessWatcher` e o registro das transferências (`TransferService`), cujos trabalhos vivem só na memória desta execução, com as tarefas e o temporizador dele (o que uma queda deixa no disco, a partida seguinte apaga).
 - **Dapper.** As consultas de catálogo passam pelo mesmo caminho de leitura das consultas do usuário, nos drivers.

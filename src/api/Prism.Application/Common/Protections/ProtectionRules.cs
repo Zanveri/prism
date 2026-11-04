@@ -1,5 +1,7 @@
 using FluentValidation;
 using Prism.Infrastructure.Vault.Models;
+using Prism.Core.Extensions;
+using System.Resources;
 
 namespace Prism.Application.Common.Protections;
 
@@ -11,6 +13,9 @@ namespace Prism.Application.Common.Protections;
 /// </summary>
 internal static class ProtectionRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ProtectionRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ProtectionRules));
+
     public const string ConfirmNone = "none";
     public const string ConfirmIrreversible = "irreversible";
     public const string ConfirmAll = "all";
@@ -19,7 +24,7 @@ internal static class ProtectionRules
     public static readonly IReadOnlyList<string> ConfirmLevels = [ConfirmNone, ConfirmIrreversible, ConfirmAll];
 
     public static IRuleBuilderOptions<T, string?> MustBeAConfirmation<T>(this IRuleBuilder<T, string?> rule)
-        => rule.Must(ConfirmationIsValid).WithMessage("Escolha não confirmar, só os comandos irreversíveis ou todos os comandos.");
+        => rule.Must(ConfirmationIsValid).WithMessage(_ => Texts.Get("ConfirmationInvalid"));
 
     /// <summary>Opcional: em branco é "Não". Quando vem, é um da lista, como está escrito (`none`, `irreversible` ou `all`).</summary>
     public static bool ConfirmationIsValid(string? confirmCommands)

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Blocked" xml:space="preserve">
+    <value>The folder {0} cannot be imported.</value>
+  </data>
+  <data name="Missing" xml:space="preserve">
+    <value>{0} is missing from the file.</value>
+  </data>
+  <data name="WrongType" xml:space="preserve">
+    <value>{0} is not in the format this Prism reads.</value>
+  </data>
+  <data name="PasswordWithoutUser" xml:space="preserve">
+    <value>The database password came without the user.</value>
+  </data>
+  <data name="EngineUnknown" xml:space="preserve">
+    <value>This Prism does not know the database engine {0}.</value>
+  </data>
+  <data name="ConfirmationInvalid" xml:space="preserve">
+    <value>Choose not to confirm, irreversible statements only, or all statements.</value>
+  </data>
+  <data name="LabelFolderName" xml:space="preserve">
+    <value>the folder name</value>
+  </data>
+  <data name="LabelFolderColor" xml:space="preserve">
+    <value>the folder color</value>
+  </data>
+  <data name="LabelFolderConfirmation" xml:space="preserve">
+    <value>the folder confirmation</value>
+  </data>
+  <data name="LabelFolderReadOnly" xml:space="preserve">
+    <value>the folder read-only setting</value>
+  </data>
+  <data name="LabelFolderEffective" xml:space="preserve">
+    <value>what applied to the folder</value>
+  </data>
+  <data name="LabelConnectionName" xml:space="preserve">
+    <value>the connection name</value>
+  </data>
+  <data name="LabelEngine" xml:space="preserve">
+    <value>the connection database engine</value>
+  </data>
+  <data name="LabelHost" xml:space="preserve">
+    <value>the host</value>
+  </data>
+  <data name="LabelPort" xml:space="preserve">
+    <value>the port</value>
+  </data>
+  <data name="LabelDatabase" xml:space="preserve">
+    <value>the database</value>
+  </data>
+  <data name="LabelUserName" xml:space="preserve">
+    <value>the database user</value>
+  </data>
+  <data name="LabelPassword" xml:space="preserve">
+    <value>the database password</value>
+  </data>
+  <data name="LabelConnectionConfirmation" xml:space="preserve">
+    <value>the connection confirmation</value>
+  </data>
+  <data name="LabelConnectionReadOnly" xml:space="preserve">
+    <value>the connection read-only setting</value>
+  </data>
+  <data name="LabelVerificationEnabled" xml:space="preserve">
+    <value>the connection verification</value>
+  </data>
+  <data name="LabelVerificationQuery" xml:space="preserve">
+    <value>the verification query</value>
+  </data>
+  <data name="LabelConnectionEffective" xml:space="preserve">
+    <value>what applied to the connection</value>
+  </data>
+  <data name="LabelEnvironmentFolder" xml:space="preserve">
+    <value>the folder environment</value>
+  </data>
+  <data name="LabelEnvironmentColorFolder" xml:space="preserve">
+    <value>the folder environment color</value>
+  </data>
+  <data name="LabelEnvironmentConnection" xml:space="preserve">
+    <value>the connection environment</value>
+  </data>
+  <data name="LabelEnvironmentColorConnection" xml:space="preserve">
+    <value>the connection environment color</value>
+  </data>
+  <data name="LabelEnvironmentEffective" xml:space="preserve">
+    <value>the environment that applied to the connection</value>
+  </data>
+  <data name="LabelEnvironmentColorEffective" xml:space="preserve">
+    <value>the color of the environment that applied to the connection</value>
+  </data>
+</root>

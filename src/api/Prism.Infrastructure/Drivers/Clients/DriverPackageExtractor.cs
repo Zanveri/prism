@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using Prism.Infrastructure.Drivers.Models;
 using System.IO.Compression;
 
@@ -14,6 +16,9 @@ namespace Prism.Infrastructure.Drivers.Clients;
 /// </summary>
 internal static class DriverPackageExtractor
 {
+    /// <summary>Os textos, no idioma do pedido: <c>DriverPackageExtractor.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DriverPackageExtractor));
+
     /// <summary>O maior driver de hoje ocupa 127 MB extraído. O teto conta os bytes gravados, e não o tamanho que a entrada declara.</summary>
     public const long MaxExtractedBytes = 512L * 1024 * 1024;
 
@@ -29,7 +34,7 @@ internal static class DriverPackageExtractor
         using var archive = new ZipArchive(package, ZipArchiveMode.Read, leaveOpen: true);
 
         if (archive.Entries.Count > MaxEntries)
-            return Refusal("O pacote tem mais arquivos do que um driver pode ter.");
+            return Refusal(Texts.Get("TooManyFiles"));
 
         var targets = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
 
@@ -38,11 +43,11 @@ internal static class DriverPackageExtractor
             // O nome é conferido em toda entrada, também nas que não seriam extraídas. Uma entrada de pasta (termina em `/`) não tem conteúdo.
             var isFolder = entry.FullName.EndsWith('/');
             if (!(isFolder ? DriverPaths.IsSafeTree(entry.FullName) : DriverPaths.IsSafe(entry.FullName)) || IsSymbolicLink(entry))
-                return Refusal("O pacote tem um arquivo com caminho que sai da pasta do driver. Nada foi instalado.");
+                return Refusal(Texts.Get("PathEscapes"));
 
             // Dois nomes para o mesmo destino (o Windows não diferencia maiúsculas): não há como dizer qual dos dois é o arquivo do driver.
             if (!isFolder && TargetOf(entry.FullName, layout) is { } target && !targets.TryAdd(target, entry))
-                return Refusal("O pacote tem dois arquivos para o mesmo lugar. Nada foi instalado.");
+                return Refusal(Texts.Get("DuplicateTarget"));
         }
 
         var root = Path.GetFullPath(targetDirectory);
@@ -54,7 +59,7 @@ internal static class DriverPackageExtractor
             // A última conferência, sobre o caminho já resolvido pelo sistema: o destino tem de ficar dentro da pasta.
             var path = Path.GetFullPath(Path.Combine(root, target.Replace('/', Path.DirectorySeparatorChar)));
             if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-                return Refusal("O pacote tem um arquivo com caminho que sai da pasta do driver. Nada foi instalado.");
+                return Refusal(Texts.Get("PathEscapes"));
 
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
@@ -68,13 +73,13 @@ internal static class DriverPackageExtractor
 
                 written += read;
                 if (written > maxExtractedBytes)
-                    return Refusal("O pacote é maior, depois de extraído, do que um driver pode ser. Nada foi instalado.");
+                    return Refusal(Texts.Get("TooBig"));
 
                 destination.Write(buffer, 0, read);
             }
         }
 
-        return targets.ContainsKey(layout.ManagedAssembly) && (layout.NativeLibrary is null || targets.ContainsKey(layout.NativeLibrary)) ? null : Refusal("O pacote não tem os arquivos que o driver precisa. Nada foi instalado.");
+        return targets.ContainsKey(layout.ManagedAssembly) && (layout.NativeLibrary is null || targets.ContainsKey(layout.NativeLibrary)) ? null : Refusal(Texts.Get("MissingFiles"));
     }
 
     /// <summary>Para onde vai a entrada, na pasta do driver; nulo quando o catálogo não a espera (assinatura, `tools/`, o `.nuspec`).</summary>

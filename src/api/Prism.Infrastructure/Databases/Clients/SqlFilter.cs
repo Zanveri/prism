@@ -1,5 +1,7 @@
 using CSharpFunctionalExtensions;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 using System.Text;
 using static Prism.Infrastructure.Databases.Clients.EditableSql;
 
@@ -31,6 +33,10 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal static class SqlFilter
 {
+    /// <summary>Os textos, no idioma do pedido: <c>SqlFilter.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(SqlFilter));
+
+    // Os textos abaixo são o português de `SqlFilter.resx`, mantidos como constantes porque os testes os usam em atributos; quem os lê é o `Texts`, pela mesma chave.
     public const string Terminator = "O filtro não pode ter ponto e vírgula.";
     public const string OpenQuote = "O filtro tem aspas sem fechar.";
     public const string OpenComment = "O filtro tem um comentário sem fechar.";
@@ -83,7 +89,7 @@ internal static class SqlFilter
             tokens.RemoveAt(0);
 
         if (tokens.Any(token => token.Is(";")))
-            return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatements);
+            return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, Texts.Get(nameof(SeveralStatements)));
 
         return Merge(sql, tokens, condition, order, dialect) is { } merged
             ? new FilteredSql(merged, EFilterApplied.Merged)
@@ -100,14 +106,14 @@ internal static class SqlFilter
         // aberto e chega ao fim como pedaço é texto ou identificador entre aspas; o que não chega como pedaço nenhum é comentário.
         var probe = Lex($"{filter}\n1", dialect).LastOrDefault();
         if (probe.Start != filter.Length + 1)
-            return (null, null, probe.End == filter.Length + 2 && probe.Kind is ETokenKind.Text or ETokenKind.Identifier ? OpenQuote : OpenComment);
+            return (null, null, probe.End == filter.Length + 2 && probe.Kind is ETokenKind.Text or ETokenKind.Identifier ? Texts.Get(nameof(OpenQuote)) : Texts.Get(nameof(OpenComment)));
 
         var tokens = Lex(filter, dialect).ToList();
         if (tokens.Any(token => token.Is(";")))
-            return (null, null, Terminator);
+            return (null, null, Texts.Get(nameof(Terminator)));
 
         if (tokens.Count == 0 || tokens[^1].End != filter.TrimEnd().Length)
-            return (null, null, EndsInComment);
+            return (null, null, Texts.Get(nameof(EndsInComment)));
 
         var depth = 0;
         var orders = new List<int>();
@@ -116,19 +122,19 @@ internal static class SqlFilter
             if (tokens[index].Is("("))
                 depth++;
             else if (tokens[index].Is(")") && --depth < 0)
-                return (null, null, Parentheses);
+                return (null, null, Texts.Get(nameof(Parentheses)));
             else if (depth == 0 && IsOrderBy(tokens, index))
                 orders.Add(index);
         }
 
         if (depth != 0)
-            return (null, null, Parentheses);
+            return (null, null, Texts.Get(nameof(Parentheses)));
 
         return orders switch
         {
             [] => (filter[tokens[0].Start..tokens[^1].End], null, null),
             [var order] => (order > 0 ? filter[tokens[0].Start..tokens[order - 1].End] : null, order + 2 < tokens.Count ? filter[tokens[order + 2].Start..tokens[^1].End] : string.Empty, null),
-            _ => (null, null, SeveralOrders)
+            _ => (null, null, Texts.Get(nameof(SeveralOrders)))
         };
     }
 

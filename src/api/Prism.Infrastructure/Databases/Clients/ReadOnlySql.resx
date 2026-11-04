@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="EditsRefusal" xml:space="preserve">
+    <value>A conexão é somente leitura: nada se grava nela, e a edição de registros não vale. Nada foi enviado ao banco.</value>
+  </data>
+  <data name="ResultReason" xml:space="preserve">
+    <value>a conexão é somente leitura</value>
+  </data>
+  <data name="WithoutAReadMessage" xml:space="preserve">
+    <value>o comando não começa por SELECT, WITH ou VALUES</value>
+  </data>
+  <data name="IntoMessage" xml:space="preserve">
+    <value>o SELECT ... INTO grava o resultado numa tabela</value>
+  </data>
+  <data name="LockMessage" xml:space="preserve">
+    <value>a trava de linha (FOR UPDATE, FOR SHARE) é para alterar as linhas</value>
+  </data>
+  <data name="SequenceMessage" xml:space="preserve">
+    <value>avançar uma sequência (NEXT VALUE FOR, NEXTVAL) não volta atrás</value>
+  </data>
+  <data name="Db2TableFunctionMessage" xml:space="preserve">
+    <value>no Db2, uma função de tabela (TABLE (...)) pode gravar sem que o comando mostre</value>
+  </data>
+  <data name="Db2ExplainMessage" xml:space="preserve">
+    <value>no Db2, o EXPLAIN grava nas tabelas de explicação</value>
+  </data>
+  <data name="ExplainAnalyzeMessage" xml:space="preserve">
+    <value>o EXPLAIN ANALYZE executa o comando</value>
+  </data>
+  <data name="SeveralStatementsMessage" xml:space="preserve">
+    <value>o texto tem mais de um comando</value>
+  </data>
+  <data name="RefusalMessage" xml:space="preserve">
+    <value>A conexão é somente leitura, e só leituras são executadas nela: {0}. Nada foi enviado ao banco.</value>
+  </data>
+  <data name="NotARead" xml:space="preserve">
+    <value>um {0} não é leitura</value>
+  </data>
+  <data name="HasWriteWord" xml:space="preserve">
+    <value>o comando tem um {0}, que grava</value>
+  </data>
+</root>
