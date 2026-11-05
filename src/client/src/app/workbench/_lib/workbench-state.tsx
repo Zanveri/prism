@@ -356,7 +356,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const renameScript = useCallback((scriptId: string, name: string) => setTabs((current) => (current.some((tab) => tab.script?.id === scriptId) ? current.map((tab) => (tab.script?.id === scriptId ? { ...tab, title: name, script: { ...tab.script, name } } : tab)) : current)), []);
+  // RN-VAR-029: a aba de execução do script também muda de nome, com o número que tinha ("Pedidos (2)").
+  const renameScript = useCallback(
+    (scriptId: string, name: string) =>
+      setTabs((current) =>
+        current.some((tab) => tab.script?.id === scriptId || tab.execution?.scriptId === scriptId)
+          ? current.map((tab) => (tab.script?.id === scriptId ? { ...tab, title: name, script: { ...tab.script, name } } : tab.execution?.scriptId === scriptId ? { ...tab, title: name + tab.title.slice(tab.execution.name.length), execution: { ...tab.execution, name } } : tab))
+          : current,
+      ),
+    [],
+  );
 
   const forgetScript = useCallback(
     (scriptId: string) =>

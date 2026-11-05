@@ -8,8 +8,12 @@ import type { QueryTab } from "./workbench-model";
  * "Executar" do navegador reusa, os valores da aba como campos do diálogo e as fichas do cabeçalho.
  */
 export function executionTitle(tabs: readonly QueryTab[], scriptId: string, name: string): string {
-  const open = tabs.filter((tab) => tab.execution?.scriptId === scriptId).length;
-  return open === 0 ? name : `${name} (${open + 1})`;
+  const open = tabs.filter((tab) => tab.execution?.scriptId === scriptId);
+  if (open.length === 0) return name;
+  // Fechar a segunda e abrir outra não repete o número da terceira.
+  let number = open.length + 1;
+  while (open.some((tab) => tab.title === `${name} (${number})`)) number += 1;
+  return `${name} (${number})`;
 }
 
 /** A aba de execução mais recente do script nesta janela (a mais à direita na faixa) na mesma conexão e no mesmo banco; nenhuma, e o navegador abre outra. */

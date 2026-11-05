@@ -118,6 +118,10 @@ import { Random } from "../_lib/variables/random";
 import { ScriptRun as Evaluation } from "../_lib/variables/run";
 import { readScript } from "../_lib/variables/script";
 import { createRevealStore, createTabValuesStore } from "../_lib/variables/tab-values";
+import { ExecutionHeader } from "./execution-header";
+import { ValuesDialog } from "./values-dialog";
+import { fullFieldsOf, type ValuesQuestion } from "../_lib/variable-fields";
+import type { RunHooks } from "../_lib/use-query-runner";
 
 const copy = recordsCopy.edit;
 /** PostgreSQL, como a API numera os bancos. */
@@ -2485,5 +2489,85 @@ describe("QueryTabPanel: o painel lateral de Visualizar valor (F7)", () => {
     expect(viewValueItem?.shortcut).toBe("F7");
     viewValueItem!.onSelect!();
     expect(view.show().area.editing?.valueViewer?.open).toBe(true);
+  });
+});
+
+describe("QueryTabPanel: a aba de execução (RN-VAR-029)", () => {
+  const text = "let x: number\nselect @x;";
+  const execution = { scriptId: "0199c3a0-0000-7000-8000-00000000000a", name: "Pedidos", generic: false, values: null, ranAt: null, pending: null };
+  const key = (over: Record<string, unknown>) => ({ key: "x", code: "KeyX", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault: vi.fn(), ...over });
+
+  function view(runner: ReturnType<typeof fakeRunner>) {
+    const { props } = mount(runner, { sql: text, execution });
+    const panel = (QueryTabPanel as unknown as { type: (props: ComponentProps<typeof QueryTabPanel>) => ReactNode }).type;
+    const show = () => {
+      rt.render(() => panel(props));
+      const found = elementsOf(rt.render(() => panel(props)));
+      return {
+        found,
+        header: found.find((element) => element.type === ExecutionHeader)!.props as unknown as ComponentProps<typeof ExecutionHeader>,
+        area: found.find((element) => element.type === ResultPanel)!.props as unknown as ComponentProps<typeof ResultPanel>,
+        keys: found.find((element) => typeof element.props.onKeyDown === "function")!.props.onKeyDown as (event: unknown) => void,
+        dialog: found.find((element) => element.type === ValuesDialog)?.props as unknown as ComponentProps<typeof ValuesDialog> | undefined,
+      };
+    };
+    return { props, show };
+  }
+
+  it("sem editor e sem a barra dele: o cabeçalho tem a conexão e o banco; a área não tem o lugar do resultado nem recolher", () => {
+    const { found, header, area } = view(fakeRunner(rowsState())).show();
+    expect(found.some((element) => element.type === SqlEditor || element.type === EditorToolbar || element.type === ResultSplitter)).toBe(false);
+    expect(elementsOf(header.place).some((element) => element.type === ConnectionPicker)).toBe(true);
+    expect(area.placeControl).toBeUndefined();
+    expect(area.actions).toBeUndefined();
+    expect(area.collapsed).toBe(false);
+  });
+
+  it("Alt+X é \"Executar de novo\" e Shift+Alt+X \"Mudar os valores…\"; o F6, o Ctrl+S e o Ctrl+9 não fazem nada; o F5 segue sendo o do resultado", () => {
+    const runner = fakeRunner(rowsState());
+    const tabView = view(runner);
+    const { header, keys } = tabView.show();
+    const actions = { rerun: vi.fn(), change: vi.fn() };
+    header.actionsRef.current = actions;
+
+    keys(key({ altKey: true }));
+    keys(key({ altKey: true, shiftKey: true }));
+    expect(actions.rerun).toHaveBeenCalledOnce();
+    expect(actions.change).toHaveBeenCalledOnce();
+
+    for (const inert of [key({ key: "F6", code: "F6" }), key({ key: "s", code: "KeyS", ctrlKey: true }), key({ key: "9", code: "Digit9", ctrlKey: true })]) {
+      keys(inert);
+      expect(inert.preventDefault).toHaveBeenCalledOnce();
+    }
+    expect(tabView.props.onSave).not.toHaveBeenCalled();
+
+    keys(key({ key: "F5", code: "F5" }));
+    expect(runner.rerun).toHaveBeenCalledOnce();
+  });
+
+  it("os valores que servem vão sem diálogo; \"Mudar os valores…\" abre o diálogo com eles, e \"Executar numa aba nova\" não executa aqui", async () => {
+    const runner = fakeRunner(rowsState());
+    const tabView = view(runner);
+    const { header } = tabView.show();
+    const model = readScript(text, pg, { blankLines: false });
+    const { fields } = fullFieldsOf(model, pg, undefined, new Set());
+    const question: ValuesQuestion = { mode: "full", model, engine: pg, fields, calculated: [], tab: new Map() };
+    const options = { offerNewTab: true, onAnswered: vi.fn(), onNewTab: vi.fn(), onCancel: vi.fn() };
+    const askOf = (call: number) => (runner.runScriptDoc.mock.calls[call] as unknown as [unknown, RunHooks])[1];
+
+    header.onRun(text, { x: { type: "number", value: "7" } }, { ...options, dialog: false });
+    expect(askOf(0).withValues).toBe(true);
+    const direct = await askOf(0).ask!(question);
+    expect([...(direct ?? new Map()).values()]).toEqual([{ kind: "number", value: 7 }]);
+    expect(options.onAnswered).toHaveBeenCalledWith({ x: { type: "number", value: "7" } });
+
+    header.onRun(text, { x: { type: "number", value: "7" } }, { ...options, dialog: true });
+    const answer = askOf(1).ask!(question);
+    const { dialog } = tabView.show();
+    expect(dialog?.question).toMatchObject({ prefill: { x: { type: "number", value: "7" } }, offerNewTab: true });
+    expect(dialog?.title).toBe("Pedidos");
+    dialog!.onRun(new Map([[fields[0].index, { kind: "number", value: 8 }]]), true);
+    expect(await answer).toBeNull();
+    expect(options.onNewTab).toHaveBeenCalledWith({ x: { type: "number", value: "8" } });
   });
 });

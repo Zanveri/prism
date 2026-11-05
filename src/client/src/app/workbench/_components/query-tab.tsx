@@ -726,7 +726,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
 
   // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    // RN-VAR-029: na aba de execução o Alt+X e o Shift+Alt+X são os botões do cabeçalho; o que depende do editor (o F6, o Ctrl+S, o histórico) não faz nada.
+    // RN-VAR-029: na aba de execução o Alt+X e o Shift+Alt+X são os botões do cabeçalho; o que depende do editor (o F6, o Ctrl+S, o Ctrl+9, o histórico) não faz
+    // nada. O F5 segue sendo o "Executar de novo" do resultado do último comando (RN-GRADE-012).
     if (tab.execution !== undefined && !event.defaultPrevented) {
       const withValues = valuesShortcut(event, platform);
       if (withValues || scriptShortcut(event, platform)) {
@@ -734,7 +735,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         if (!event.repeat) (withValues ? executionActions.current?.change : executionActions.current?.rerun)?.();
         return;
       }
-      if (isF6(event) || saveShortcut(event) !== null || ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "h")) {
+      if (isF6(event) || saveShortcut(event) !== null || connectionShortcut(event) || ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "h")) {
         event.preventDefault();
         return;
       }
@@ -834,7 +835,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   return (
     <>
       <div ref={root} onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
-        {tab.connectionId === null ? <NoConnectionBar reason={tab.execution !== undefined ? "generic" : tab.script === undefined ? "restored" : tab.script.generic === true ? "generic" : "scriptMissing"} onAssign={handleChooseConnection} /> : null}
+        {tab.connectionId === null ? <NoConnectionBar reason={tab.execution !== undefined ? (tab.execution.generic ? "generic" : "scriptMissing") : tab.script === undefined ? "restored" : tab.script.generic === true ? "generic" : "scriptMissing"} onAssign={handleChooseConnection} /> : null}
         {tab.execution !== undefined ? (
           <ExecutionHeader
             tab={tab}
