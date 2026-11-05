@@ -93,4 +93,13 @@
   <data name="SemicolonInUserName" xml:space="preserve">
     <value>O driver da IBM não aceita `;` no usuário: é o caractere com que ele separa os dados da conexão.</value>
   </data>
+  <data name="VariableTooManyColumns" xml:space="preserve">
+    <value>A consulta de uma variável tem até {0} colunas, e esta tem {1}.</value>
+  </data>
+  <data name="VariableTooManyRows" xml:space="preserve">
+    <value>A consulta de uma variável lê até {0} linhas, e esta devolveu mais.</value>
+  </data>
+  <data name="VariableTooManyBytes" xml:space="preserve">
+    <value>Os valores da consulta de uma variável passam de 16 MiB.</value>
+  </data>
 </root>

@@ -63,4 +63,10 @@
   <data name="SessionBusy" xml:space="preserve">
     <value>A sessão está ocupada com outro comando.</value>
   </data>
+  <data name="VariableSeveralStatementsMessage" xml:space="preserve">
+    <value>A consulta de uma variável é um comando só, e o texto tem mais de um; nada foi executado.</value>
+  </data>
+  <data name="VariableQueryNotRead" xml:space="preserve">
+    <value>A consulta de uma variável tem de ser uma leitura: {0}.</value>
+  </data>
 </root>

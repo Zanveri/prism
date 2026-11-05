@@ -1,7 +1,10 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+import { variableFieldsCopyEn } from "./variable-fields.copy.en";
+import { variableFieldsCopyEs } from "./variable-fields.copy.es";
 
 /** Os textos da pergunta dos valores (RN-VAR-021) e dos campos do "Executar com valores…" (RN-VAR-027), com a escolha pela chave (RN-VAR-031). */
-export const variableFieldsCopy = {
+const pt = {
   title: "Valores para executar",
   /** RN-VAR-027: o diálogo do "Executar com valores…". */
   fullTitle: (name: string) => `Executar com valores · ${name}`,
@@ -57,3 +60,6 @@ export const variableFieldsCopy = {
   missing: (values: readonly string[], table: string, column: string) =>
     values.length === 1 ? `O valor ${values[0]} não existe em ${table} (${column}).` : `Os valores ${values.slice(0, -1).join(", ")} e ${values[values.length - 1]} não existem em ${table} (${column}).`,
 } as const;
+
+export type VariableFieldsCopy = Localized<typeof pt>;
+export const variableFieldsCopy = pickCopy({ "pt-BR": pt, en: variableFieldsCopyEn, es: variableFieldsCopyEs });

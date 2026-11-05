@@ -13195,7 +13195,10 @@ As duas primeiras partes não mudam regra: são as regras da seção 41 que a te
   - duas interfaces com a mesma forma se trocam (`const b: B = a`), e o tipo mostrado (RN-VAR-024) é o nome da
     anotação; o `type` de um tipo simples é o próprio tipo (`type Id = number` mostra `number`), e o do objeto escrito
     mostra a forma, cortada em 60 caracteres;
-  - ler um campo que o tipo não tem é erro, também na reatribuição e no `@c.extra` (RN-VAR-016).
+  - ler um campo que o tipo não tem é erro, também na reatribuição e no `@c.extra` (RN-VAR-016);
+  - a lista de objetos com campos diferentes (`[{ id: 1 }, {}]`) é uma lista só, como no TypeScript: o campo que
+    falta num dos itens fica opcional no tipo da lista, e a anotação confere item a item ("l[1] não tem o campo id,
+    que Item pede."). Antes era "A lista mistura objeto e objeto.".
 
 - **RN-VAR-039.** A consulta na forma de um tipo. Altera a RN-VAR-011: anotada com um objeto (`let alvo: Cliente =
   query(…)`), a linha é sempre um objeto, também com uma coluna só, e `Cliente[]` é a lista das linhas. As colunas casam

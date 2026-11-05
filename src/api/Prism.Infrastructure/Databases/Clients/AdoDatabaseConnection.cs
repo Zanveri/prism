@@ -2401,7 +2401,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private async Task<Result<FullRows, DatabaseFailure>> ReadFullRowsAsync(DbDataReader reader, long started, int? maxRows, CancellationToken cancellationToken)
     {
         if (maxRows is not null && reader.FieldCount > QueryPaging.MaxVariableColumns)
-            return TooLarge("columns", QueryPaging.MaxVariableColumns, $"A consulta de uma variável tem até {QueryPaging.MaxVariableColumns} colunas, e esta tem {reader.FieldCount}.");
+            return TooLarge("columns", QueryPaging.MaxVariableColumns, Texts.Get("VariableTooManyColumns", QueryPaging.MaxVariableColumns, reader.FieldCount));
 
         IReadOnlyList<QueryColumn> columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal)))];
         var rows = new List<string?[]>();
@@ -2412,7 +2412,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         {
             _rowPending = false;
             if (rows.Count == maxRows)
-                return TooLarge("rows", maxRows.Value, $"A consulta de uma variável lê até {Thousands(maxRows.Value)} linhas, e esta devolveu mais.");
+                return TooLarge("rows", maxRows.Value, Texts.Get("VariableTooManyRows", Thousands(maxRows.Value)));
 
             var row = new string?[columns.Count];
             for (var column = 0; column < row.Length; column++)
@@ -2422,7 +2422,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             }
 
             if (maxRows is not null && bytes > QueryPaging.MaxVariableBytes)
-                return TooLarge("bytes", QueryPaging.MaxVariableBytes, "Os valores da consulta de uma variável passam de 16 MiB.");
+                return TooLarge("bytes", QueryPaging.MaxVariableBytes, Texts.Get("VariableTooManyBytes"));
 
             rows.Add(row);
         }

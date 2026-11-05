@@ -90,4 +90,13 @@
   <data name="ConnectionReadOnlyTitle" xml:space="preserve">
     <value>Conexión de solo lectura.</value>
   </data>
+  <data name="VariableQueryNotReadTitle" xml:space="preserve">
+    <value>La consulta de la variable no es una lectura.</value>
+  </data>
+  <data name="VariableQueryTooLargeTitle" xml:space="preserve">
+    <value>La consulta de la variable pasó del límite.</value>
+  </data>
+  <data name="ValuesTableNotFoundTitle" xml:space="preserve">
+    <value>Tabla no encontrada.</value>
+  </data>
 </root>

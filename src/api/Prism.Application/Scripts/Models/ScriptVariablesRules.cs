@@ -1,4 +1,6 @@
+using Prism.Core.Extensions;
 using System.Globalization;
+using System.Resources;
 using System.Text;
 using System.Text.Json;
 
@@ -12,6 +14,9 @@ namespace Prism.Application.Scripts.Models;
 internal static class ScriptVariablesRules
 {
     public const string InvalidCode = "SCRIPT_RUN_VALUES_INVALID";
+
+    /// <summary>Os textos, no idioma do pedido: <c>ScriptVariablesRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ScriptVariablesRules));
 
     /// <summary>Até 500 nomes, e até 64 KiB no todo: os bytes de UTF-8 do texto JSON de `values` como veio no corpo, que é o `JSON.stringify` da tela.</summary>
     public const int MaxNames = 500;
@@ -132,23 +137,23 @@ internal static class ScriptVariablesRules
     public static IReadOnlyList<(string Field, string Message)> RunValuesRefusals(JsonElement? values)
     {
         if (values is not { ValueKind: JsonValueKind.Object } map)
-            return [("values", "Informe os valores como um objeto do nome de cada variável para { type, value }.")];
+            return [("values", Texts.Get("ValuesNotObject"))];
 
         // Os limites antes das entradas: a resposta de um corpo grande demais tem uma recusa, e não uma por entrada.
         if (Encoding.UTF8.GetByteCount(map.GetRawText()) > MaxValuesBytes)
-            return [("values", "Os valores lembrados passam de 64 KiB.")];
+            return [("values", Texts.Get("ValuesTooLarge"))];
 
         if (map.EnumerateObject().Count() > MaxNames)
-            return [("values", "Lembre até 500 valores.")];
+            return [("values", Texts.Get("TooManyValues"))];
 
         var refusals = new List<(string, string)>();
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in map.EnumerateObject())
         {
             if (!TryRead(() => property.Name, out var name) || !IsVariableName(name))
-                refusals.Add(("values", "Cada nome é um nome de variável: começa por letra, _ ou $, tem até 64 caracteres e não é uma palavra reservada nem um nome do Prism."));
+                refusals.Add(("values", Texts.Get("NameInvalid")));
             else if (!names.Add(name))
-                refusals.Add(("values", "Um nome aparece duas vezes nos valores."));
+                refusals.Add(("values", Texts.Get("NameRepeated")));
             else
                 refusals.AddRange(EntryRefusals(property.Value, $"values.{name}", allowsList: true));
         }
@@ -160,15 +165,15 @@ internal static class ScriptVariablesRules
     private static IReadOnlyList<(string Field, string Message)> EntryRefusals(JsonElement entry, string path, bool allowsList)
     {
         if (entry.ValueKind != JsonValueKind.Object || !entry.TryGetProperty("type", out var typeElement) || typeElement.ValueKind != JsonValueKind.String || !TryRead(typeElement.GetString, out var type))
-            return [(path, "Cada valor é um objeto { type, value }, ou { type: \"list\", items }.")];
+            return [(path, Texts.Get("EntryInvalid"))];
 
         if (type == "list")
         {
             if (!allowsList)
-                return [($"{path}.type", "Uma lista não leva outra lista dentro.")];
+                return [($"{path}.type", Texts.Get("ListInList"))];
 
             if (!HasOnlyTheKeys(entry, "type", "items") || entry.GetProperty("items").ValueKind != JsonValueKind.Array)
-                return [($"{path}.items", "Os itens da lista são uma lista de { type, value }.")];
+                return [($"{path}.items", Texts.Get("ItemsInvalid"))];
 
             var refusals = new List<(string, string)>();
             var index = 0;
@@ -179,20 +184,20 @@ internal static class ScriptVariablesRules
         }
 
         if (!ValueTypes.Contains(type, StringComparer.Ordinal))
-            return [($"{path}.type", "O tipo é number, text, boolean, date, timestamp, sql, object, null ou list.")];
+            return [($"{path}.type", Texts.Get("TypeInvalid"))];
 
         if (!HasOnlyTheKeys(entry, "type", "value"))
-            return [(path, "Cada valor é um objeto com type e value.")];
+            return [(path, Texts.Get("EntryKeysInvalid"))];
 
         var value = entry.GetProperty("value");
         if (type == "null")
-            return value.ValueKind == JsonValueKind.Null ? [] : [($"{path}.value", "O valor do tipo null é nulo.")];
+            return value.ValueKind == JsonValueKind.Null ? [] : [($"{path}.value", Texts.Get("NullValueInvalid"))];
 
         if (value.ValueKind != JsonValueKind.String)
-            return [($"{path}.value", "O valor é um texto.")];
+            return [($"{path}.value", Texts.Get("ValueNotText"))];
 
         // A metade de um par UTF-16 e o UTF-8 inválido: ler o texto lança, e o cofre não os grava. É a recusa do campo, e nunca o 500.
-        return TryRead(value.GetString, out _) ? [] : [($"{path}.value", "O texto tem metade de um par UTF-16 ou UTF-8 inválido.")];
+        return TryRead(value.GetString, out _) ? [] : [($"{path}.value", Texts.Get("TextInvalid"))];
     }
 
     private static bool HasOnlyTheKeys(JsonElement entry, string first, string second)

@@ -32,7 +32,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     private static string CanceledBeforeItRanMessage => Texts.Get(nameof(CanceledBeforeItRanMessage));
 
     /// <summary>RN-VAR-034: a consulta de uma variável é um comando só.</summary>
-    private const string VariableSeveralStatementsMessage = "A consulta de uma variável é um comando só, e o texto tem mais de um; nada foi executado.";
+    private static string VariableSeveralStatementsMessage => Texts.Get(nameof(VariableSeveralStatementsMessage));
 
     /// <summary>
     /// RN-BUSCA-002: quantos nomes de tabela e de visão o índice da busca traz de um banco, no máximo. A consulta lê um a mais, só para dizer
@@ -372,7 +372,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             // RN-PROT-005: a mesma lista do somente leitura, em qualquer conexão. No PostgreSQL em Auto-commit o banco também recusa, na transação só de leitura.
             // O detalhe é o da regra ("...: um DELETE não é."), sem repetir a "leitura" do motivo; o `reason` vai como o somente leitura o escreve.
             if (ReadOnlySql.Refusal(sql, engine) is { } reason)
-                return new DatabaseFailure(EDatabaseFailure.VariableQueryNotRead, $"A consulta de uma variável tem de ser uma leitura: {(reason.EndsWith(" não é leitura", StringComparison.Ordinal) ? reason[..^" leitura".Length] : reason)}.", Reason: reason);
+                return new DatabaseFailure(EDatabaseFailure.VariableQueryNotRead, Texts.Get("VariableQueryNotRead", reason.EndsWith(" não é leitura", StringComparison.Ordinal) ? reason[..^" leitura".Length] : reason), Reason: reason);
 
             if (session.Connection.Transaction == ETransactionState.Failed)
                 return TransactionFailed(session);

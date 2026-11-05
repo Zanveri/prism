@@ -63,4 +63,10 @@
   <data name="SessionBusy" xml:space="preserve">
     <value>La sesión está ocupada con otra sentencia.</value>
   </data>
+  <data name="VariableSeveralStatementsMessage" xml:space="preserve">
+    <value>La consulta de una variable es una sola sentencia, y el texto tiene más de una; no se ejecutó nada.</value>
+  </data>
+  <data name="VariableQueryNotRead" xml:space="preserve">
+    <value>La consulta de una variable tiene que ser una lectura: {0}.</value>
+  </data>
 </root>

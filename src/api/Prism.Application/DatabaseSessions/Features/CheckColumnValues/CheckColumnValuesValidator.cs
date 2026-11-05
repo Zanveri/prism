@@ -1,7 +1,9 @@
 using FluentValidation;
 using FluentValidation.Results;
 using Prism.Application.DatabaseSessions.Models;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Clients;
+using System.Resources;
 using System.Text.Json;
 
 namespace Prism.Application.DatabaseSessions.Features.CheckColumnValues;
@@ -14,6 +16,9 @@ public sealed class CheckColumnValuesValidator : AbstractValidator<CheckColumnVa
 {
     private const string QueryInvalidCode = "QUERY_INVALID";
 
+    /// <summary>Os textos, no idioma do pedido: <c>CheckColumnValuesValidator.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(CheckColumnValuesValidator));
+
     public CheckColumnValuesValidator()
         => RuleFor(request => request).Custom((request, context) =>
         {
@@ -22,7 +27,7 @@ public sealed class CheckColumnValuesValidator : AbstractValidator<CheckColumnVa
 
             if (request.Values is not { ValueKind: JsonValueKind.Array } values || values.GetArrayLength() is 0 or > ColumnValuesRules.MaxCheckValues)
             {
-                context.AddFailure(new ValidationFailure("values", "Informe de 1 a 1.000 valores, como uma lista de { type, value }.") { ErrorCode = QueryInvalidCode });
+                context.AddFailure(new ValidationFailure("values", Texts.Get("ValuesInvalid")) { ErrorCode = QueryInvalidCode });
 
                 return;
             }

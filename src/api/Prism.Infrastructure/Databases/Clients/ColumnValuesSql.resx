@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotAvailable" xml:space="preserve">
+    <value>Os valores de uma coluna só se listam no PostgreSQL, no Db2 e no Informix.</value>
+  </data>
+  <data name="TableNotInCatalog" xml:space="preserve">
+    <value>A tabela ou a visão não está no catálogo da sessão.</value>
+  </data>
+  <data name="ColumnNotInTable" xml:space="preserve">
+    <value>A coluna não é da tabela.</value>
+  </data>
+  <data name="ColumnBinary" xml:space="preserve">
+    <value>A coluna é binária ou de objeto grande, e os valores dela não se listam.</value>
+  </data>
+  <data name="DescriptionIsColumn" xml:space="preserve">
+    <value>A descrição é outra coluna da tabela, e não a própria coluna dos valores.</value>
+  </data>
+  <data name="DescriptionNotInTable" xml:space="preserve">
+    <value>A coluna da descrição não é da tabela.</value>
+  </data>
+  <data name="DescriptionBinary" xml:space="preserve">
+    <value>A coluna da descrição é binária ou de objeto grande.</value>
+  </data>
+</root>

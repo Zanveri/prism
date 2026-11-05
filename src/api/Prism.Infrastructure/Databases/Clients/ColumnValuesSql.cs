@@ -1,44 +1,12 @@
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using System.Globalization;
 using System.Numerics;
+using System.Resources;
 using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Prism.Infrastructure.Databases.Clients;
-
-/// <summary>
-/// RN-VAR-035: como a coluna de um valor é comparada na conferência (`values/check`), pelo tipo do catálogo. O inteiro tem a faixa do tamanho dele, para o
-/// valor que não cabe não chegar ao banco (o PostgreSQL recusaria o comando inteiro).
-/// </summary>
-internal enum EColumnValueClass
-{
-    SmallInteger,
-    Integer,
-    BigInteger,
-    Decimal,
-    Float,
-
-    /// <summary>O texto de tamanho fixo (`CHAR`), comparado sem os espaços do fim.</summary>
-    FixedText,
-    Text,
-    Date,
-    Timestamp,
-
-    /// <summary>O instante com fuso do PostgreSQL (`timestamptz`).</summary>
-    TimestampWithZone,
-    Boolean
-}
-
-/// <summary>
-/// RN-VAR-035: a conferência montada. `Keys` tem a chave de cada valor pedido, na ordem, nula no que não converte para o tipo da coluna; `Sql` e `Parameters` são o
-/// `IN` com os valores que convertem, um por chave, como vão ao banco (nulo quando nenhum converte, e nada vai ao banco). Leva valores: o `ToString()` escreve só
-/// o nome do tipo (RN-VAR-036).
-/// </summary>
-internal sealed record ColumnValuesCheck(EColumnValueClass Class, IReadOnlyList<string?> Keys, string? Sql, IReadOnlyList<QueryParameter> Parameters)
-{
-    public override string ToString()
-        => nameof(ColumnValuesCheck);
-}
 
 /// <summary>
 /// RN-VAR-035: os valores de uma coluna e a conferência deles, sem ir ao banco: a recusa pelo catálogo, o texto de cada banco (o da sonda S-VAR-2), a busca
@@ -51,7 +19,10 @@ internal static partial class ColumnValuesSql
     /// <summary>RN-VAR-035: a descrição de um valor chega cortada nisto.</summary>
     public const int MaxDescriptionLength = 200;
 
-    public const string NotAvailableMessage = "Os valores de uma coluna só se listam no PostgreSQL, no Db2 e no Informix.";
+    /// <summary>Os textos, no idioma do pedido: <c>ColumnValuesSql.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ColumnValuesSql));
+
+    public static string NotAvailableMessage => Texts.Get("NotAvailable");
 
     /// <summary>RN-VAR-035: o caractere de escape do `LIKE`. Não quer dizer nada num texto de nenhum dos três bancos; a barra quereria no PostgreSQL com `standard_conforming_strings` desligado.</summary>
     private const char LikeEscape = '!';
@@ -78,24 +49,24 @@ internal static partial class ColumnValuesSql
     public static DatabaseFailure? Refusal(IReadOnlyList<ColumnInfo> columns, EDatabaseEngine engine, string column, string? description)
     {
         if (columns.Count == 0)
-            return new DatabaseFailure(EDatabaseFailure.ValuesTableNotFound, "A tabela ou a visão não está no catálogo da sessão.");
+            return new DatabaseFailure(EDatabaseFailure.ValuesTableNotFound, Texts.Get("TableNotInCatalog"));
 
         if (Find(columns, column) is not { } found)
-            return Invalid("column", "A coluna não é da tabela.");
+            return Invalid("column", Texts.Get("ColumnNotInTable"));
 
         if (IsBinaryOrLarge(found.Type, engine))
-            return Invalid("column", "A coluna é binária ou de objeto grande, e os valores dela não se listam.");
+            return Invalid("column", Texts.Get("ColumnBinary"));
 
         if (description is null)
             return null;
 
         if (string.Equals(description, column, StringComparison.Ordinal))
-            return Invalid("description", "A descrição é outra coluna da tabela, e não a própria coluna dos valores.");
+            return Invalid("description", Texts.Get("DescriptionIsColumn"));
 
         if (Find(columns, description) is not { } described)
-            return Invalid("description", "A coluna da descrição não é da tabela.");
+            return Invalid("description", Texts.Get("DescriptionNotInTable"));
 
-        return IsBinaryOrLarge(described.Type, engine) ? Invalid("description", "A coluna da descrição é binária ou de objeto grande.") : null;
+        return IsBinaryOrLarge(described.Type, engine) ? Invalid("description", Texts.Get("DescriptionBinary")) : null;
     }
 
     /// <summary>A coluna do catálogo pelo nome, como o catálogo o guarda.</summary>
@@ -450,4 +421,38 @@ internal static partial class ColumnValuesSql
 
     private static string Instant((DateTime Wall, TimeSpan? Offset) instant)
         => $"{(instant.Wall - instant.Offset!.Value).ToString(TimestampFormat, CultureInfo.InvariantCulture)}Z";
+}
+
+/// <summary>
+/// RN-VAR-035: como a coluna de um valor é comparada na conferência (`values/check`), pelo tipo do catálogo. O inteiro tem a faixa do tamanho dele, para o
+/// valor que não cabe não chegar ao banco (o PostgreSQL recusaria o comando inteiro).
+/// </summary>
+internal enum EColumnValueClass
+{
+    SmallInteger,
+    Integer,
+    BigInteger,
+    Decimal,
+    Float,
+
+    /// <summary>O texto de tamanho fixo (`CHAR`), comparado sem os espaços do fim.</summary>
+    FixedText,
+    Text,
+    Date,
+    Timestamp,
+
+    /// <summary>O instante com fuso do PostgreSQL (`timestamptz`).</summary>
+    TimestampWithZone,
+    Boolean
+}
+
+/// <summary>
+/// RN-VAR-035: a conferência montada. `Keys` tem a chave de cada valor pedido, na ordem, nula no que não converte para o tipo da coluna; `Sql` e `Parameters` são o
+/// `IN` com os valores que convertem, um por chave, como vão ao banco (nulo quando nenhum converte, e nada vai ao banco). Leva valores: o `ToString()` escreve só
+/// o nome do tipo (RN-VAR-036).
+/// </summary>
+internal sealed record ColumnValuesCheck(EColumnValueClass Class, IReadOnlyList<string?> Keys, string? Sql, IReadOnlyList<QueryParameter> Parameters)
+{
+    public override string ToString()
+        => nameof(ColumnValuesCheck);
 }
