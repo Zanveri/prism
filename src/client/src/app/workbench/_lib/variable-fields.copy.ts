@@ -31,6 +31,9 @@ export const variableFieldsCopy = {
   chooseDate: "Escolha uma data.",
   chooseTime: "Escolha a hora.",
   badItem: (item: string, message: string) => `${item}: ${message}`,
+  /** RN-VAR-004 e 027: o campo de uma interface, de um type de objeto ou da lista deles, escrito como no script. */
+  objectHint: (type: string) => `Escreva o valor como no script, na forma de ${type}: { campo: valor }.`,
+  objectOnlyLiterals: "Escreva só valores: números, textos, true, false, null, new Date('…'), listas e objetos.",
 
   yes: "Sim",
   no: "Não",

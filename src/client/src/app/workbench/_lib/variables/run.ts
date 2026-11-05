@@ -4,10 +4,11 @@ import { unclosedConstruct, visitCode } from "../sql-statements";
 import { childrenOf, type ColumnRef, type Node, type ParsedItem, type TypeAnnotation } from "./ast";
 import { bindCommand, type BoundCommand } from "./bind";
 import { reportInternalError } from "./boundary";
-import { columnAnnotationType, type ColumnTypes } from "./column-types";
+import type { ColumnTypes } from "./column-types";
 import { makeLocator, VariableError } from "./errors";
 import { Evaluator, isDeterministic } from "./evaluate";
 import { Meter, RunMeter, type Clock, type Environment, type Now } from "./meter";
+import { conform, hasShape, needsCatalog, TypeResolver } from "./named-types";
 import { Random } from "./random";
 import { staticDiagnostics, variablesUsedBy, type ItemDiagnostic, type ModelItem, type ScriptModel } from "./script";
 import {
@@ -69,7 +70,10 @@ export type RunConfig = { engine?: Engine; random: Random; clock: Clock; now: No
 export type AssignmentResult = { ok: true; stored: StoredValue; steps: number } | { ok: false; error: ItemDiagnostic };
 export type BindResult = { ok: true; command: BoundCommand } | { ok: false; error: ItemDiagnostic };
 
-/** O tipo de uma anotação (RN-VAR-004). O tipo de coluna ainda não existe: a conferência já o recusou. */
+/**
+ * O tipo de uma anotação dos tipos da linguagem (RN-VAR-004): `number`, `string[]`, `Date | null`. A de uma coluna, a de um tipo com nome (`Cliente`) e a do objeto
+ * escrito (`{ cidade: string }`) só se resolvem com o script e o catálogo: `resolveAnnotation` (`named-types.ts`) resolve todas, e `ScriptRun.annotationOf` também.
+ */
 export function annotationType(annotation: TypeAnnotation): Type {
   let type: Type;
   switch (annotation.base) {
@@ -126,6 +130,8 @@ export class ScriptRun {
   private readonly values = new Map<string, Value>();
   private readonly stored = new Map<string, StoredValue>();
   private readonly declaredTypes = new Map<string, Type>();
+  /** Os tipos com nome do script, montados na primeira anotação que os usa (RN-VAR-004). */
+  private types: TypeResolver | null = null;
   /** A posição de cada atribuição entre as do mesmo nome (`assignmentRanks`), calculada na primeira reatribuição. */
   private ranks: Map<number, number> | null = null;
   /** O tamanho de cada valor guardado e a soma deles, para o limite da aba conferir sem percorrer tudo a cada avaliação (RN-VAR-013). */
@@ -175,10 +181,14 @@ export class ScriptRun {
     return { message, offset: at, ...this.locate(at), itemIndex: item.index };
   }
 
-  /** O que o tipo de uma coluna ou do `sql` faz com o valor (RN-VAR-004). Lança a frase. */
-  private coerce(item: ModelItem, parsed: ParsedItem, raw: Value): { value: Value; declared: Type } {
+  /**
+   * O que o tipo de uma coluna, do `sql` ou de um objeto anotado faz com o valor (RN-VAR-004): o objeto anotado põe o valor na forma do tipo (`conform`), e a linha
+   * de uma consulta (`origin` "consulta") casa as colunas com os campos (RN-VAR-011). Lança a frase.
+   */
+  private coerce(item: ModelItem, parsed: ParsedItem, raw: Value, origin: Origin): { value: Value; declared: Type } {
     const name = parsed.name;
     const valueStart = parsed.value?.start ?? parsed.start;
+    const source = { literal: parsed.value, query: origin === "consulta", at: valueStart };
 
     if (parsed.kind === "reassignment") {
       const declared = this.declaredTypes.get(name);
@@ -186,6 +196,7 @@ export class ScriptRun {
       if (declared === undefined) throw new VariableError(phrase.notDeclared(name), parsed.nameStart);
       if (first !== undefined && !first.mutable) throw new VariableError(phrase.constReassigned(name, first.line), parsed.nameStart);
       if (declared.tag === "sql") throw new VariableError(phrase.sqlMustBeConst(name), parsed.nameStart);
+      if (hasShape(declared)) return { value: conform(raw, declared, name, source), declared };
       if (!fits(typeOfValue(raw), declared)) throw new VariableError(declared.tag === "null" ? phrase.nullOnlyNullable(name) : phrase.notFit(name, typeLabel(declared), displayValue(raw)), valueStart);
       return { value: raw, declared };
     }
@@ -207,6 +218,7 @@ export class ScriptRun {
       return { value: sqlValue(raw.value), declared };
     }
 
+    if (hasShape(declared)) return { value: conform(raw, declared, name, source), declared };
     if (!fits(typeOfValue(raw), declared)) throw new VariableError(phrase.notFit(name, typeLabel(declared), displayValue(raw)), valueStart);
     return { value: raw, declared };
   }
@@ -241,7 +253,7 @@ export class ScriptRun {
       if (parsed.value === null) throw new VariableError(phrase.answerMissing(name), parsed.nameStart);
       if (parsed.value.t === "query") throw new VariableError(phrase.queryNotEvaluatedHere(name), parsed.value.start);
       if (parsed.value.t === "sample") throw new VariableError(phrase.sampleNotEvaluatedHere(name), parsed.value.start);
-      const raw = new Evaluator(this.env, meter, this.values, this.model.source).evaluate(parsed.value);
+      const raw = new Evaluator(this.env, meter, this.values, this.model.source, this.declaredTypes).evaluate(parsed.value);
       const stored = this.store(index, raw, originOf(parsed.value), this.config.clock() - started);
       return { ok: true, stored, steps: meter.steps };
     } catch (error) {
@@ -292,7 +304,7 @@ export class ScriptRun {
       // ponytail: o `quantos` se avalia fora do Worker, com o mesmo medidor (os passos e os 250 ms); quase sempre é um número escrito ou um nome.
       const meter = new Meter(this.runMeter, parsed.name);
       meter.checkStart();
-      const count = new Evaluator(this.env, meter, this.values, this.model.source).evaluate(node.count);
+      const count = new Evaluator(this.env, meter, this.values, this.model.source, this.declaredTypes).evaluate(node.count);
       if (count.kind !== "number" || !Number.isInteger(count.value) || count.value < 1 || count.value > 100) throw new VariableError(phrase.sampleCountInvalid(displayValue(count)), node.count.start);
       return { ok: true, column: node.column, count: count.value, written };
     } catch (error) {
@@ -308,12 +320,11 @@ export class ScriptRun {
     return parsed.annotation === null ? null : this.annotated(parsed.annotation);
   }
 
-  /** O tipo de uma anotação, com o tipo de coluna lido no catálogo (RN-VAR-004). */
+  /** O tipo de uma anotação, com os tipos com nome do script e o tipo de coluna lido no catálogo (RN-VAR-004). Lança a frase. */
   private annotated(annotation: TypeAnnotation): Type {
-    if (annotation.base !== "column") return annotationType(annotation);
-    const type = columnAnnotationType(annotation, this.config.columns);
-    if ("error" in type) throw new VariableError(type.error, annotation.start);
-    return type;
+    if (annotation.base !== "column" && annotation.base !== "named" && annotation.base !== "object") return annotationType(annotation);
+    this.types ??= new TypeResolver(this.model, this.config.columns);
+    return this.types.annotation(annotation);
   }
 
   /** Confere o valor contra a anotação e o guarda na aba (RN-VAR-004 e 023). Lança a frase. */
@@ -321,7 +332,7 @@ export class ScriptRun {
     const item = this.model.items[index];
     const parsed = item.parsed as ParsedItem;
     const name = parsed.name;
-    const { value, declared } = this.coerce(item, parsed, raw);
+    const { value, declared } = this.coerce(item, parsed, raw, origin);
 
     const earlier = this.earlierOf(index, name);
     const stored: StoredValue = {
@@ -434,9 +445,9 @@ export function checkScript(model: ScriptModel, clock: Clock = () => performance
         run.forget(parsed.name);
         continue;
       }
-      // O tipo de coluna só se sabe pelo catálogo, na execução (RN-VAR-004); e a reatribuição de um nome cujo tipo a conferência não sabe (o de uma consulta, de um
+      // O tipo de coluna (também o de um campo de interface) só se sabe pelo catálogo, na execução (RN-VAR-004); e a reatribuição de um nome cujo tipo a conferência não sabe (o de uma consulta, de um
       // `random`) é conferida lá também.
-      if ((parsed.kind === "declaration" && parsed.annotation?.base === "column") || (parsed.kind === "reassignment" && !run.knows(parsed.name))) {
+      if ((parsed.kind === "declaration" && parsed.annotation !== null && needsCatalog(model, parsed.annotation)) || (parsed.kind === "reassignment" && !run.knows(parsed.name))) {
         run.forget(parsed.name);
         continue;
       }

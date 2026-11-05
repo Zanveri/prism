@@ -8,9 +8,11 @@ import { canonicalNumberText } from "./variables/numbers";
 import type { Node } from "./variables/ast";
 import { Random } from "./variables/random";
 import { annotationType, ScriptRun, type TabValues } from "./variables/run";
+import { resolveAnnotation } from "./variables/named-types";
 import type { RunValueEntry } from "./scripts.schema";
-import type { ModelItem, ScriptModel } from "./variables/script";
-import { booleanValue, dateValue, displayValue, listValue, nullValue, numberValue, sqlValue, stringValue, typeLabel, withoutNull, type Type, type Value } from "./variables/values";
+import { readScript, staticDiagnostics, type ModelItem, type ScriptModel } from "./variables/script";
+import { booleanValue, dateValue, displayValue, listValue, nullValue, numberValue, quoted, sqlValue, stringValue, typeLabel, withoutNull, type Type, type Value } from "./variables/values";
+import type { TypeAnnotation } from "./variables/ast";
 
 /*
  * Os campos da pergunta dos valores (RN-VAR-021) e do "Executar com valores…" (RN-VAR-027), na parte pura: um campo por declaração, pelo tipo dela, com a ajuda do
@@ -18,8 +20,11 @@ import { booleanValue, dateValue, displayValue, listValue, nullValue, numberValu
  * "pergunta"), no Worker.
  */
 
-/** O campo pelo tipo (RN-VAR-027): `date` é o `Date` sem precisão, em que a hora é opcional (sem ela, a data é de dia). */
-export type FieldKind = "number" | "string" | "boolean" | "day" | "instant" | "date" | "sql";
+/**
+ * O campo pelo tipo (RN-VAR-027): `date` é o `Date` sem precisão, em que a hora é opcional (sem ela, a data é de dia). `object` é o da interface, do `type` de objeto e
+ * da lista deles (`Cliente`, `{ de: number }`, `Cliente[]`): um campo só, em que se escreve o valor como no script, `{ id: 7, nome: 'Ana' }` (RN-VAR-004).
+ */
+export type FieldKind = "number" | "string" | "boolean" | "day" | "instant" | "date" | "sql" | "object";
 
 export type VariableField = {
   /** O índice da declaração no script. */
@@ -89,6 +94,8 @@ function kindOf(type: Type): FieldKind {
   const base = withoutNull(type);
   const item = base.tag === "list" ? withoutNull(base.item) : base;
   switch (item.tag) {
+    case "object":
+      return "object";
     case "number":
     case "string":
     case "boolean":
@@ -110,7 +117,7 @@ export function fieldsOf(model: ScriptModel, indices: readonly number[], columns
     const parsed = item.parsed;
     if (parsed?.kind !== "declaration" || parsed.annotation === null) continue;
     const annotation = parsed.annotation;
-    const declared = annotation.base === "column" ? columnAnnotationType(annotation, columns) : annotationType(annotation);
+    const declared = declaredOf(model, annotation, columns);
     if ("error" in declared) {
       errors.push({ ...locate(model.source, annotation.start), message: declared.error, offset: annotation.start });
       continue;
@@ -120,9 +127,18 @@ export function fieldsOf(model: ScriptModel, indices: readonly number[], columns
   return { fields, errors };
 }
 
+/** O tipo de uma anotação: a de coluna pelo catálogo, e a do tipo com nome e do objeto escrito pelos tipos do script (RN-VAR-004). */
+function declaredOf(model: ScriptModel, annotation: TypeAnnotation, columns: ColumnTypes | undefined): Type | { error: string } {
+  if (annotation.base === "column") return columnAnnotationType(annotation, columns);
+  if (annotation.base === "named" || annotation.base === "object") return resolveAnnotation(model, annotation, columns);
+  return annotationType(annotation);
+}
+
 function fieldOf(model: ScriptModel, item: ModelItem, name: string, typeText: string, declared: Type, column: string | null, fallback: FieldDefault, below: boolean): VariableField {
   const base = withoutNull(declared);
-  return { index: item.index, name, typeText, declared, kind: kindOf(declared), list: base.tag === "list", nullable: declared.tag === "nullable", help: helpOf(model.source, item), column, fallback, below };
+  const kind = kindOf(declared);
+  // O campo de objeto é um texto só, também o da lista de objetos: os itens se escrevem nele, entre [ ].
+  return { index: item.index, name, typeText, declared, kind, list: base.tag === "list" && kind !== "object", nullable: declared.tag === "nullable", help: helpOf(model.source, item), column, fallback, below };
 }
 
 /** O literal do script (RN-VAR-027): o número, o texto, o booleano, o `null` e a lista deles; o que vem preenchido no campo. */
@@ -139,13 +155,19 @@ function isLiteral(node: Node): boolean {
       return node.exprs.length === 0;
     case "list":
       return node.items.every((item) => !item.spread && isLiteral(item.node));
+    case "object":
+      return node.pairs.every((pair) => isLiteral(pair.value));
+    case "newDate":
+      return node.args.length === 1 && !node.args[0].spread && isLiteral(node.args[0].node);
     default:
       return false;
   }
 }
 
-/** Se o primeiro item do texto é uma declaração (RN-VAR-026): só então há "Executar com valores…". */
-export const declaresAtTop = (model: ScriptModel) => model.items[0]?.parsed?.kind === "declaration";
+/**
+ * Se o primeiro item do texto, depois das `interface` e dos `type` (que não têm valor), é uma declaração (RN-VAR-026): só então há "Executar com valores…".
+ */
+export const declaresAtTop = (model: ScriptModel) => model.items.find((item) => item.kind !== "type")?.parsed?.kind === "declaration";
 
 /**
  * RN-VAR-027: os campos do "Executar com valores…": um por declaração do topo do script (antes do primeiro comando), na ordem do texto, e depois os das declarações
@@ -177,12 +199,12 @@ export function fullFieldsOf(model: ScriptModel, engine: Engine | undefined, col
     // ponytail: a avaliação em seco roda aqui, fora do Worker, com o medidor de sempre (os passos e os 250 ms), como a conferência de antes de executar.
     const dry = run.evaluate(item.index);
     const annotation = parsed.annotation;
-    const declared = annotation === null ? (dry.ok ? dry.stored.declared : null) : annotation.base === "column" ? columnAnnotationType(annotation, columns) : annotationType(annotation);
+    const declared = annotation === null ? (dry.ok ? dry.stored.declared : null) : declaredOf(model, annotation, columns);
     if (declared === null || "error" in declared) {
       calculated.push(parsed.name);
       continue;
     }
-    const fallback: FieldDefault = isLiteral(value) && dry.ok ? { kind: "literal", input: inputOf(dry.stored.value) } : { kind: "expression", text: model.source.slice(value.start, value.end) };
+    const fallback: FieldDefault = isLiteral(value) && dry.ok ? { kind: "literal", input: inputOf(dry.stored.value, kindOf(declared)) } : { kind: "expression", text: model.source.slice(value.start, value.end) };
     fields.push(fieldOf(model, item, parsed.name, annotation?.text ?? typeLabel(declared), declared, annotation?.column?.text ?? null, fallback, false));
   }
   return { fields, errors, calculated };
@@ -209,10 +231,40 @@ function scalarInput(value: Value): Pick<FieldInput, "text" | "time" | "checked"
   }
 }
 
+const plainKey = /^[\p{ID_Start}_$][\p{ID_Continue}$]*$/u;
+
+/**
+ * O valor escrito como no script, para o campo de objeto (RN-VAR-004 e 027): `{ id: 7, nome: 'Ana', criado: new Date('2026-10-20') }`, inteiro, sem o corte de
+ * `displayValue`. A volta é `objectOf`, que lê o texto com o leitor da linguagem.
+ */
+export function literalText(value: Value): string {
+  switch (value.kind) {
+    case "null":
+      return "null";
+    case "number":
+      return value.exact ?? String(value.value);
+    case "boolean":
+      return value.value ? "true" : "false";
+    case "string":
+      return quoted(value.value);
+    case "sql":
+      return quoted(value.text);
+    case "date": {
+      const { text, time } = scalarInput(value);
+      return `new Date(${quoted(value.precision === "day" ? text : `${text} ${time}`)})`;
+    }
+    case "list":
+      return `[${value.items.map(literalText).join(", ")}]`;
+    case "object":
+      return value.fields.size === 0 ? "{}" : `{ ${[...value.fields].map(([key, field]) => `${plainKey.test(key) ? key : quoted(key)}: ${literalText(field)}`).join(", ")} }`;
+  }
+}
+
 /** O campo preenchido com um valor (o da vez anterior nesta aba, RN-VAR-021); sem ele, vazio. */
-export function inputOf(value: Value | undefined): FieldInput {
+export function inputOf(value: Value | undefined, kind?: FieldKind): FieldInput {
   if (value === undefined) return emptyInput;
   if (value.kind === "null") return { ...emptyInput, isNull: true };
+  if (kind === "object" || value.kind === "object" || (value.kind === "list" && value.items.some((item) => item.kind === "object"))) return { ...emptyInput, text: literalText(value) };
   if (value.kind === "list") return { ...emptyInput, items: value.items.map((item) => scalarInput(item).text) };
   return { ...emptyInput, ...scalarInput(value) };
 }
@@ -257,6 +309,7 @@ function scalarOf(field: VariableField, text: string, time: string, checked: boo
  */
 export function valueOf(field: VariableField, input: FieldInput): { ok: true; value: Value } | { ok: false; message: string } {
   if (field.nullable && input.isNull) return { ok: true, value: nullValue };
+  if (field.kind === "object") return objectOf(field, input.text);
   if (!field.list) return scalarOf(field, input.text, input.time, input.checked, field.name);
   const items: Value[] = [];
   for (const item of input.items) {
@@ -265,6 +318,26 @@ export function valueOf(field: VariableField, input: FieldInput): { ok: true; va
     items.push(read.value);
   }
   return { ok: true, value: listValue(items) };
+}
+
+/**
+ * O valor do campo de objeto (RN-VAR-004 e 027): o texto se lê como o valor de uma declaração, com o leitor da linguagem, e só vale o escrito, como no script: o
+ * número, o texto, o booleano, o `null`, o `new Date('…')`, a lista e o objeto deles. A forma (o campo que falta, o campo a mais, o tipo de cada um) quem confere é o
+ * `ScriptRun`, na pergunta, com a frase da linguagem: "c não tem o campo nome, que Cliente pede.".
+ */
+function objectOf(field: VariableField, text: string): { ok: true; value: Value } | { ok: false; message: string } {
+  if (text.trim() === "") return { ok: false, message: copy.required(field.name) };
+  const prefix = "let v = ";
+  const model = readScript(`${prefix}${text}`);
+  const item = model.items[0];
+  const value = item?.parsed?.kind === "declaration" ? item.parsed.value : null;
+  if (model.items.length !== 1 || item.error !== null || value === null) return { ok: false, message: item?.error?.message ?? copy.objectHint(typeLabel(field.declared)) };
+  const problem = staticDiagnostics(model)[0];
+  if (problem !== undefined) return { ok: false, message: problem.message };
+  if (!isLiteral(value)) return { ok: false, message: copy.objectOnlyLiterals };
+  const run = new ScriptRun(model, { random: new Random([1, 2, 3, 4]), clock: () => performance.now(), now: () => Date.now() }, new Map());
+  const read = run.evaluate(0);
+  return read.ok ? { ok: true, value: read.stored.value } : { ok: false, message: read.error.message };
 }
 
 /**
@@ -288,8 +361,10 @@ export function entryOf(value: Value): RunValueEntry {
   switch (value.kind) {
     case "null":
       return { type: "null", value: null };
+    case "object":
+      return { type: "object", value: literalText(value) };
     case "list":
-      return { type: "list", items: value.items.map(entryOf) };
+      return value.items.some((item) => item.kind === "object") ? { type: "object", value: literalText(value) } : { type: "list", items: value.items.map(entryOf) };
     case "number":
       return { type: "number", value: value.exact ?? String(value.value) };
     case "boolean":

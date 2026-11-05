@@ -20,6 +20,7 @@ import {
   unify,
   forbiddenMembers,
   nullType,
+  withoutNull,
   type Type,
   type Value,
 } from "./values";
@@ -59,14 +60,17 @@ export class Evaluator {
   private readonly meter: Meter;
   private readonly scope: Scope;
   private readonly source: string;
+  private readonly types: ReadonlyMap<string, Type>;
   /** Avaliando o lado que não vai, só para saber o tipo dele (`probe`): lá dentro não se mede de novo. */
   private probing = false;
 
-  constructor(env: Environment, meter: Meter, scope: Scope, source: string) {
+  /** `types` são os tipos declarados das variáveis, só para a frase do campo que não existe (`missingField`). */
+  constructor(env: Environment, meter: Meter, scope: Scope, source: string, types: ReadonlyMap<string, Type> = new Map()) {
     this.env = env;
     this.meter = meter;
     this.scope = scope;
     this.source = source;
+    this.types = types;
   }
 
   /** O valor da expressão. Lança `VariableError` com a posição do nó que falhou. */
@@ -278,11 +282,31 @@ export class Evaluator {
     }
     if (object.kind === "object") {
       const field = object.fields.get(node.name);
-      if (field === undefined) throw new VariableError(phrase.objectNoField(this.label(node.object), node.name, [...object.fields.keys()]), node.nameStart);
+      if (field === undefined) throw new VariableError(this.missingField(node.object, node.name, [...object.fields.keys()]), node.nameStart);
       return field;
     }
     if (node.name === "length" && (object.kind === "string" || object.kind === "list")) return numberValue(object.kind === "string" ? object.value.length : object.items.length);
     throw new VariableError(phrase.memberNotInType(node.name, typeLabel(typeOfValue(object))), node.nameStart);
+  }
+
+  /**
+   * A frase do campo que o objeto não tem: o erro de tipo do TypeScript quando o objeto é de uma variável anotada com um objeto (`c.extra`, `c.endereco.x`: "O campo
+   * extra não existe em Cliente.", RN-VAR-004), e a lista dos campos no objeto sem anotação.
+   */
+  private missingField(owner: Node, field: string, fields: string[]): string {
+    const shape = this.declaredType(owner);
+    return shape?.tag === "object" && shape.name !== undefined ? phrase.excessField(field, shape.name) : phrase.objectNoField(this.label(owner), field, fields);
+  }
+
+  /** O tipo declarado do que a expressão lê, quando o texto o diz: a variável e os campos dela (`c`, `c.endereco`), sem o `| null`. */
+  private declaredType(node: Node): Type | undefined {
+    let type: Type | undefined;
+    if (node.t === "name") type = this.types.get(node.name);
+    else if (node.t === "member") {
+      const owner = this.declaredType(node.object);
+      type = owner?.tag === "object" ? owner.fields.get(node.name) : undefined;
+    }
+    return type === undefined ? undefined : withoutNull(type);
   }
 
   private index(node: Extract<Node, { t: "index" }>): Evaluated {
@@ -298,7 +322,7 @@ export class Evaluator {
       if (key.kind !== "string") throw refuse(phrase.indexKind());
       if (forbiddenMembers.has(key.value)) throw refuse(phrase.memberForbidden(key.value));
       const field = object.fields.get(key.value);
-      if (field === undefined) throw refuse(phrase.objectNoField(this.label(node.object), key.value, [...object.fields.keys()]));
+      if (field === undefined) throw refuse(this.missingField(node.object, key.value, [...object.fields.keys()]));
       return field;
     }
     if (object.kind === "list" || object.kind === "string") {

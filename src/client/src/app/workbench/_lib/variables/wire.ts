@@ -25,7 +25,8 @@ export type WireType =
   | { t: "number" | "string" | "boolean" | "sql" | "null" | "never" }
   | { t: "date"; p?: DatePrecision }
   | { t: "list"; i: WireType }
-  | { t: "object"; f: [string, WireType][] }
+  /** `n` é o nome do objeto anotado (`Cliente`) e `q` os campos opcionais (RN-VAR-004). */
+  | { t: "object"; f: [string, WireType][]; n?: string; q?: string[] }
   | { t: "nullable"; o: WireType };
 
 export type WireStored = { name: string; value: WireValue; type: WireType; declared: WireType; origin: Origin; at: number; ms: number; text: string; order: number; earlier?: { text: string; order: number }[] };
@@ -100,7 +101,12 @@ export function typeToWire(type: Type): WireType {
     case "list":
       return { t: "list", i: typeToWire(type.item) };
     case "object":
-      return { t: "object", f: [...type.fields].map(([key, field]) => [key, typeToWire(field)]) };
+      return {
+        t: "object",
+        f: [...type.fields].map(([key, field]) => [key, typeToWire(field)]),
+        ...(type.name === undefined ? {} : { n: type.name }),
+        ...(type.optional === undefined || type.optional.size === 0 ? {} : { q: [...type.optional] }),
+      };
     case "nullable":
       return { t: "nullable", o: typeToWire(type.of) };
     default:
@@ -122,12 +128,16 @@ export function typeFromWire(data: unknown): Type {
       return data.p === "day" || data.p === "instant" ? { tag: "date", precision: data.p } : { tag: "date" };
     case "list":
       return { tag: "list", item: typeFromWire(data.i) };
-    case "object":
-      if (!Array.isArray(data.f)) break;
-      return { tag: "object", fields: new Map(data.f.map((pair: unknown) => {
+    case "object": {
+      if (!Array.isArray(data.f) || (data.n !== undefined && typeof data.n !== "string")) break;
+      const fields = new Map(data.f.map((pair: unknown) => {
         if (!Array.isArray(pair) || pair.length !== 2 || typeof pair[0] !== "string") throw new TypeError("Campo malformado.");
         return [pair[0], typeFromWire(pair[1])] as const;
-      })) };
+      }));
+      const optional = data.q === undefined ? [] : Array.isArray(data.q) ? data.q : null;
+      if (optional === null || !optional.every((key): key is string => typeof key === "string" && fields.has(key))) break;
+      return { tag: "object", fields, ...(data.n === undefined ? {} : { name: data.n }), ...(optional.length === 0 ? {} : { optional: new Set(optional) }) };
+    }
     case "nullable":
       return { tag: "nullable", of: typeFromWire(data.o) };
   }

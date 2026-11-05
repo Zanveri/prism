@@ -49,7 +49,7 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
   // No "Executar com valores…" o campo vem com o padrão do script (o literal preenchido, a expressão vazia); na pergunta, com o valor da vez anterior nesta aba.
   // RN-VAR-029: no "Mudar os valores…" da aba de execução, os valores dela vêm no lugar dos lembrados, e vão como escritos.
   const prefill = full ? (question.prefill ?? null) : null;
-  const [inputs, setInputs] = useState(() => new Map([...fields.map((field) => [field.index, full ? (field.fallback.kind === "literal" ? field.fallback.input : emptyInput) : inputOf(question.tab.get(field.name)?.value)] as const), ...(prefill === null ? [] : inputsFrom(fields, prefill))]));
+  const [inputs, setInputs] = useState(() => new Map([...fields.map((field) => [field.index, full ? (field.fallback.kind === "literal" ? field.fallback.input : emptyInput) : inputOf(question.tab.get(field.name)?.value, field.kind)] as const), ...(prefill === null ? [] : inputsFrom(fields, prefill))]));
   const [touched, setTouched] = useState<ReadonlySet<number>>(() => new Set(prefill === null ? [] : inputsFrom(fields, prefill).map(([index]) => index)));
   // RN-VAR-028: os campos que vieram dos valores lembrados ("da última vez"), até a pessoa mexer neles ou voltar ao valor do script.
   const [remembered, setRemembered] = useState<ReadonlySet<number>>(new Set());
@@ -293,7 +293,7 @@ type FieldControlProps = {
 /** O campo pelo tipo (RN-VAR-027). */
 function FieldControl({ hint, ...props }: FieldControlProps) {
   const control = <TypedControl {...props} hint={hint} />;
-  const textual = props.choice === null && !props.field.list && (props.field.kind === "number" || props.field.kind === "string" || props.field.kind === "sql");
+  const textual = props.choice === null && !props.field.list && (props.field.kind === "number" || props.field.kind === "string" || props.field.kind === "sql" || props.field.kind === "object");
   return hint === null || textual ? control : (
     <>
       {control}
@@ -365,6 +365,19 @@ function TypedControl({ id, field, input, choice, scope, invalid, describedBy, a
             {copy.sqlWarning}
           </p>
         </>
+      );
+    case "object":
+      // RN-VAR-004 e 027: a interface e o type de objeto se escrevem como no script, `{ id: 7, nome: 'Ana' }`, numa caixa que cresce com as linhas.
+      return (
+        <textarea
+          {...common}
+          rows={Math.min(8, Math.max(2, input.text.split("\n").length))}
+          placeholder={hint ?? copy.objectHint(field.typeText)}
+          value={input.text}
+          onChange={(event) => onChange({ text: event.target.value })}
+          className={cn(controlClassName, "h-auto py-2 font-editor")}
+          spellCheck={false}
+        />
       );
     case "number":
       return <input {...common} inputMode="decimal" placeholder={hint ?? copy.decimalHint} value={input.text} onChange={(event) => onChange({ text: event.target.value })} className={controlClassName} />;

@@ -124,7 +124,7 @@ public sealed class ScriptRunValuesTests
         var id = await CreateAsync(host, "Relatório");
 
         var badType = await AssertProblemAsync(await PutAsync(host, id, """{"values":{"x":{"type":"integer","value":"7"}}}"""), HttpStatusCode.UnprocessableEntity, "SCRIPT_RUN_VALUES_INVALID");
-        Assert.That(badType.GetProperty("errors").GetProperty("values.x.type")[0].GetString(), Is.EqualTo("O tipo é number, text, boolean, date, timestamp, sql, null ou list."));
+        Assert.That(badType.GetProperty("errors").GetProperty("values.x.type")[0].GetString(), Is.EqualTo("O tipo é number, text, boolean, date, timestamp, sql, object, null ou list."));
         Assert.That(badType.GetProperty("errorCodes").GetProperty("values.x.type")[0].GetString(), Is.EqualTo("SCRIPT_RUN_VALUES_INVALID"));
 
         var proto = await AssertProblemAsync(await PutAsync(host, id, """{"values":{"__proto__":{"type":"text","value":"a"},"constructor":{"type":"text","value":"b"}}}"""), HttpStatusCode.UnprocessableEntity, "SCRIPT_RUN_VALUES_INVALID");

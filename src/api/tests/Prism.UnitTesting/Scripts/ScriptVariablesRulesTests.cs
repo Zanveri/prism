@@ -119,6 +119,7 @@ public sealed class ScriptVariablesRulesTests
               "inicio": { "type": "date", "value": "2026-10-01" },
               "quando": { "type": "timestamp", "value": "2026-10-01T12:00:00Z" },
               "ordem": { "type": "sql", "value": "nome DESC" },
+              "cliente": { "type": "object", "value": "{ id: 7, nome: 'Ana' }" },
               "nada": { "type": "null", "value": null },
               "status": { "type": "list", "items": [{ "type": "text", "value": "aberta" }, { "type": "null", "value": null }] },
               "vazia": { "type": "list", "items": [] },

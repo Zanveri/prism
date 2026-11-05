@@ -1,6 +1,7 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
 import type { ColumnRef, TypeAnnotation } from "./ast";
+import { annotationColumns } from "./named-types";
 import type { ScriptModel } from "./script";
 import { booleanType, nullable, numberType, stringType, type Type } from "./values";
 import { phrase } from "./variables.copy";
@@ -57,13 +58,16 @@ export function columnAnnotationType(annotation: TypeAnnotation, columns: Column
   return annotation.nullable ? nullable(type) : type;
 }
 
-/** As colunas que as atribuições `indices` citam, no tipo (a anotação) e no `random.of`, uma vez cada, pelo texto. */
+/**
+ * As colunas que as atribuições `indices` citam, no tipo (a anotação, também nos campos das interfaces e dos `type` que ela usa: `id: estoque.cliente.id`) e no
+ * `random.of`, uma vez cada, pelo texto.
+ */
 export function columnRefsOf(model: ScriptModel, indices: readonly number[]): ColumnRef[] {
   const found = new Map<string, ColumnRef>();
   for (const index of indices) {
     const parsed = model.items[index]?.parsed;
     if (parsed === null || parsed === undefined) continue;
-    if (parsed.kind === "declaration" && parsed.annotation?.column != null) found.set(parsed.annotation.column.text, parsed.annotation.column);
+    if (parsed.kind === "declaration" && parsed.annotation !== null) for (const column of annotationColumns(model, parsed.annotation)) found.set(column.text, column);
     if (parsed.value?.t === "sample") found.set(parsed.value.column.text, parsed.value.column);
   }
   return [...found.values()];

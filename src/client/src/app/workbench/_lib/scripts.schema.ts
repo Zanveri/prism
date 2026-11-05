@@ -36,9 +36,9 @@ export const runValuesSchema = z.object({ values: z.record(z.string(), z.unknown
 
 export type RunValues = z.infer<typeof runValuesSchema>;
 
-/** Uma entrada dos valores lembrados, como a API a guarda: o tipo e o texto, o `null` ou a lista (RN-VAR-028). */
+/** Uma entrada dos valores lembrados, como a API a guarda: o tipo e o texto, o `null` ou a lista (RN-VAR-028); o `object` leva o texto escrito como no script (RN-VAR-004). */
 export type RunValueEntry =
-  | { type: "number" | "text" | "boolean" | "date" | "timestamp" | "sql"; value: string }
+  | { type: "number" | "text" | "boolean" | "date" | "timestamp" | "sql" | "object"; value: string }
   | { type: "null"; value: null }
   | { type: "list"; items: RunValueEntry[] };
 

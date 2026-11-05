@@ -281,7 +281,7 @@ function cteNames(sql: string, tokens: readonly SqlToken[], closes: readonly num
 function resolveColumn(parts: readonly string[], scope: Scope, ctes: ReadonlySet<string>): Omit<Place, "kind"> | null {
   const real = (reference: Reference | undefined) => (reference === undefined || (reference.schema === null && ctes.has(reference.name)) ? null : reference);
   const column = parts[parts.length - 1];
-  let table: Reference | null = null;
+  let table: Reference | null;
   if (parts.length === 1) table = scope.tables === 1 ? real(scope.references[0]) : null;
   else if (parts.length === 2) {
     const [qualifier] = parts;
