@@ -76,6 +76,11 @@ body:
         before attaching it: it may contain paths from your machine and unexpected error messages.
     validations:
       required: true
+  - type: input
+    id: documentacao
+    attributes:
+      label: Documentation page
+      description: If the documentation (https://zanveri.com/docs/prism) says Prism should work another way, or the mistake is in the documentation itself, the link to the page.
   - type: checkboxes
     id: conferido
     attributes:

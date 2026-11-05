@@ -25,6 +25,10 @@ The flow is the one in RN-GITHUB-003, decided by the project owner:
 5. **From `develop` to `main`, only the release pull request** (`release: vX.Y.Z`), opened by the maintainers
    ([docs/versionamento.md](docs/versionamento.md), in Portuguese).
 6. Answer the review with new commits on the same branch.
+7. **The user documentation lives on the Zanveri website** (<https://zanveri.com/docs/prism>), in the website's repository, not here, and
+   only the maintainers change it. A pull request that changes what the person sees or does in Prism says, in its
+   **Documentation** section, which page changes and what it should say; after the merge, the maintainers update the site. A
+   mistake in the documentation is reported here, with the defect form and the link to the page.
 
 **No pull request runs the pipeline** (RN-ABERTO-005): it only runs after the merge, on `develop` and `main`. Reviewers run the
 checks on their own machine, with the commands in [What reviewers run](#what-reviewers-run), and the pipeline confirms after the
@@ -99,7 +103,6 @@ without touching anyone's data). The main process log carries the line `[prism] 
 | `src/api/` | The C# API (.NET 10) and the tests. Guidance in [src/api/AGENTS.md](src/api/AGENTS.md). |
 | `docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md` | Specification of the first delivery: `RN-*` rules, routes, error codes and acceptance criteria. |
 | `docs/design/canvas/` | The approved design canvas: the measure of colors, spacing and texts. |
-| `site/` | The documentation site (static HTML and CSS, in English, Portuguese and Spanish), published on GitHub Pages by the pipeline at <https://zanveri.github.io/prism/>. |
 | `docs/versionamento.md` | How Prism is versioned and how a version is released (the release pull request from `develop` to `main`). |
 | `docs/ci.md` | The pipeline: what each workflow and job does, what each merge publishes, how to run it locally, the runners, the repository's GitHub checklist and the rehearsal with the private repository. |
 | `.github/workflows/`, `.github/actions/`, `scripts/ci/` | The pipeline (GitHub Actions: the entry workflow, the reusable ones and the composite actions) and the scripts it calls, one per step, with their tests. |
@@ -129,8 +132,9 @@ Portuguese.
 - **Locked packages:** if you changed a `PackageReference`, run `dotnet restore src/api/Prism.slnx --force-evaluate` and include
   the `packages.lock.json` files in the same commit. In the interface, `pnpm-lock.yaml` goes in together with the change to
   `package.json`.
-- **Documentation** updated when the change alters a command, a folder or a rule. The public texts (README, CONTRIBUTING,
-  SECURITY, CODE_OF_CONDUCT and the site) exist in English, Portuguese and Spanish: change all three.
+- **Documentation** updated when the change alters a command, a folder or a rule. The public texts of the repository (README,
+  CONTRIBUTING, SECURITY and CODE_OF_CONDUCT) exist in English, Portuguese and Spanish: change all three. What changes in the
+  user documentation goes in the **Documentation** section of the pull request (step 7 of the [flow](#flow)).
 - **Pull request title** in the commit format (see below).
 
 ## What reviewers run
