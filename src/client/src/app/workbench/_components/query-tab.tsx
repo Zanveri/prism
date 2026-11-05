@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { Button, Dialog, HostProvider, type Engine } from "@/components/ui";
+import { Button, Dialog, HostProvider, useToast, type Engine } from "@/components/ui";
 import { focusedHost, hostFocus, mainHost } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
@@ -27,7 +27,9 @@ import { commandWillRun, initialLayout, layoutReducer, paneFlex, scriptWillRun }
 import { f6Action, isF6, placeMenu } from "../_lib/result-place";
 import { resultActivity, resultFocus, resultSlots } from "../_lib/result-slots";
 import { saveShortcut } from "../_lib/saved-scripts";
-import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScriptTab, statisticsSummary, type ScriptTab } from "../_lib/script-run";
+import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScriptTab, statisticsSummary, valuesShortcut, valuesShortcutLabel, type ScriptTab } from "../_lib/script-run";
+import { declaresAtTop } from "../_lib/variable-fields";
+import { variableFieldsCopy } from "../_lib/variable-fields.copy";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { tabEntries } from "../_lib/tab-focus";
@@ -182,6 +184,7 @@ function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onA
 export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, environmentColor, active, place = "panel", editorShown = active, resultShown = active, moving = false, onPlace, onToggleEntry, onBackToPanel, onFocusWindow, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase, onOpenQuery }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const queryClient = useQueryClient();
+  const toast = useToast();
   const script = useScriptRun(runner);
   // RN-PROT-001: o aviso antes de executar, pelas proteções da conexão da aba.
   const confirmation = useCommandConfirmation(tab.connectionId, tab.database);
@@ -546,6 +549,17 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     },
     [runner, guard, confirm, inPanel, variableRange, runHooks],
   );
+  /**
+   * RN-VAR-026: o "Executar com valores…" pela barra do editor (e o Shift+Alt+X): o Alt+X do texto inteiro, com o diálogo (RN-VAR-027) no lugar da pergunta dos
+   * valores, na própria aba. O texto que não declara variáveis no topo não tem o que perguntar.
+   */
+  const handleRunWithValues = useCallback(() => {
+    const live = liveEditors.snapshot(tab.id);
+    if (live === null) return;
+    if (!declaresAtTop(readScript(live.sql, engine, { blankLines }))) return void toast.warning(variableFieldsCopy.noTopDeclarations);
+    const range: DocRange = { doc: { text: live.sql, blankLines }, engine, from: 0, to: live.sql.length };
+    guard(() => void runner.runScriptDoc(range, { ...runHooks(), withValues: true }));
+  }, [tab.id, engine, blankLines, runner, guard, runHooks, toast]);
   // RN-SQL-020: "Executar este comando", numa aba guardada do script: como o Ctrl+Enter nele. O que o executor recusaria (a aba ocupada) não pergunta, não
   // limpa o filtro nem mexe na área.
   const handleRunAlone = useCallback(
@@ -698,6 +712,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     // RN-SQL-019: Alt+X (Cmd+Option+X no macOS), como no DBeaver, com o foco em qualquer ponto da aba; o campo da célula não deixa a tecla subir. Segurar as
     // teclas repete o evento (`repeat`): o script começa uma vez só, no primeiro, e a repetição não o começa de novo (com a pergunta de erro esperando, ela a
     // responderia "Parar" e começaria outro).
+    // RN-VAR-026: Shift+Alt+X, o "Executar com valores…", também com o foco em qualquer ponto da aba.
+    if (!event.defaultPrevented && valuesShortcut(event, platform)) {
+      event.preventDefault();
+      if (!event.repeat) handleRunWithValues();
+      return;
+    }
     if (!event.defaultPrevented && scriptShortcut(event, platform)) {
       event.preventDefault();
       if (!event.repeat) editor.current?.runScript();
@@ -765,6 +785,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           onRunScript={() => editor.current?.runScript()}
           scriptShortcut={scriptShortcutLabel(platform)}
           onCancel={handleCancel}
+          {...(declaresAtTop(variables.model) ? { onRunWithValues: handleRunWithValues, valuesShortcut: valuesShortcutLabel(platform) } : {})}
           connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
           database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
           transaction={connectionId === null ? null : <TransactionControl transaction={runner.transaction} engine={engine} busy={busy} />}
@@ -940,7 +961,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           />
         )}
         {/* RN-PROT-001: o aviso antes de executar; no Salvar, com o "Ver SQL", que abre os comandos por cima dele. */}
-        {valuesQuestion.open === null ? null : <ValuesDialog {...valuesQuestion.open} scope={choiceScope} />}
+        {valuesQuestion.open === null ? null : <ValuesDialog {...valuesQuestion.open} title={tab.title} script={tab.script === undefined ? null : { id: tab.script.id, generic: tab.script.generic === true }} scope={choiceScope} />}
         {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" || confirmation.open.question.kind === "wholeColumn" ? edits.banner.onViewSql : undefined} />}
       </ActiveHostProvider>
     </>

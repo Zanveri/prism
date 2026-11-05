@@ -1128,3 +1128,23 @@ describe("A pergunta dos valores que faltam (RN-VAR-021)", () => {
     expect(errorsOf(runner.getState())).toEqual([{ line: 1, column: 1, offset: 0, message: "x é number, mas recebeu 'a'." }]);
   });
 });
+
+describe("O Executar com valores pela barra do editor (RN-VAR-026 e 027)", () => {
+  it("o diálogo vem com os campos do topo; o campo escrito vale no lugar da expressão, com a origem diálogo, e o que não veio se avalia na vez dela", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page());
+    let asked: { mode: string; names: string[]; calculated: string[] } | null = null;
+    await runner.runScriptDoc(range("let a = 1\nlet b = a + 1\nlet t = (select 1)\nselect @a, @b;"), {
+      withValues: true,
+      ask: async (question) => {
+        asked = { mode: question.mode, names: question.fields.map((field) => field.name), calculated: question.calculated };
+        return new Map([[0, { kind: "number" as const, value: 5 }]]);
+      },
+    });
+
+    expect(asked).toEqual({ mode: "full", names: ["a", "b"], calculated: ["t"] });
+    expect(runner.values.snapshot().values.get("a")).toMatchObject({ origin: "diálogo", value: { kind: "number", value: 5 } });
+    expect(runner.values.snapshot().values.get("b")).toMatchObject({ value: { kind: "number", value: 6 } });
+  });
+});

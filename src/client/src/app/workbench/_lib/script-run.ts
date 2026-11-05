@@ -24,6 +24,16 @@ export function scriptShortcut(event: { key: string; code?: string; ctrlKey: boo
   return event.key.toLowerCase() === "x" || event.code === "KeyX";
 }
 
+/** RN-VAR-026: o "Executar com valores…", Shift+Alt+X (no macOS, Shift+Cmd+Option+X), o atalho do script com Shift. */
+export function valuesShortcut(event: { key: string; code?: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }, platform: string): boolean {
+  if (!event.altKey || event.ctrlKey || !event.shiftKey || event.metaKey !== isMacPlatform(platform)) return false;
+  return event.key.toLowerCase() === "x" || event.code === "KeyX";
+}
+
+export function valuesShortcutLabel(platform: string): { label: string; aria: string } {
+  return isMacPlatform(platform) ? { label: copy.editor.withValuesShortcutMac, aria: "Shift+Meta+Alt+X" } : { label: copy.editor.withValuesShortcut, aria: "Shift+Alt+X" };
+}
+
 /** O atalho como a plataforma o escreve, no botão e para o leitor de tela (`aria-keyshortcuts`). */
 export function scriptShortcutLabel(platform: string): { label: string; aria: string } {
   return isMacPlatform(platform) ? { label: copy.editor.shortcutMac, aria: "Meta+Alt+X" } : { label: copy.editor.shortcut, aria: "Alt+X" };

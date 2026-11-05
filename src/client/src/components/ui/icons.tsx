@@ -394,6 +394,17 @@ export function PlayScriptIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** "Executar com valores…" (RN-VAR-026): o executar com `{x}`, da família do "Executar script" (o triângulo que se move no hover). */
+export function PlayValuesIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon data-icon="play-script" {...props}>
+      <path d="M3.5 3.5C2.5 3.5 2.5 4 2.5 5v1.5L1.5 8l1 1.5V11c0 1 0 1.5 1 1.5" />
+      <path d="M4.5 6.5l2 3M6.5 6.5l-2 3" />
+      <path className="icon-part-right" d="M9.5 4.5v7l5-3.5z" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
 /** Cancelar o comando em execução. */
 export function StopIcon(props: ComponentProps<"svg">) {
   return (

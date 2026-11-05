@@ -24,7 +24,7 @@ import { sqlErrorDetails, type FilterApplied, type QueryColumn, type QueryPage, 
 import { cancelQuery, countQueryTotal, executeQuery, executeVariableQuery, fetchNextPage, getColumnValues, type ColumnValuesRequest, type ExecuteQueryJournal, type QueryOrigin, type QueryParam } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
 import { bindItem, databaseDependent, isUnvalued, knownConfirmed, planItem, planScript, queryTextOf, scopeBefore, usesVariables, type Plan, type ScriptDoc } from "./variable-execution";
-import { fieldsOf, type ValuesQuestion } from "./variable-fields";
+import { fieldsOf, fullFieldsOf, type ValuesQuestion } from "./variable-fields";
 import { closedTransaction, createTransactionStore, fromWire, transactionOf, withUncommitted, type IsolationLevel, type TabTransaction, type TransactionMode, type TransactionStore } from "./transaction";
 import { transactionCopy } from "./transaction.copy";
 import { variableRunCopy } from "./variable-run.copy";
@@ -309,6 +309,11 @@ export type RunHooks = {
    * o valor de cada campo, pelo índice da declaração, ou nulo (o Esc): nada roda.
    */
   ask?: (question: ValuesQuestion) => Promise<ReadonlyMap<number, Value> | null>;
+  /**
+   * RN-VAR-026 e 027: o "Executar com valores…" pela barra do editor: a pergunta é o diálogo inteiro (`ask`, no modo `full`), com um campo por declaração do topo, e o
+   * valor escrito num campo vale no lugar da expressão (a origem "diálogo").
+   */
+  withValues?: boolean;
 };
 
 /**
@@ -1152,13 +1157,17 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       if (reads === null) return null;
       let read: Plan = reads.size === 0 ? plan : { ...plan, columns: columnTypesOf(reads), reads };
       // RN-VAR-021: as declarações sem valor do que vai são perguntadas num diálogo só, antes de avaliar; o tipo de coluna que não se resolveu é erro antes da pergunta.
+      // RN-VAR-027: no "Executar com valores…", a pergunta é o diálogo inteiro, com os campos do topo.
+      const full = hooks?.withValues === true;
       const missing = all.filter((index) => isUnvalued(read.model, index));
-      if (missing.length > 0 && hooks?.ask !== undefined && started === epoch) {
-        const { fields, errors } = fieldsOf(read.model, missing, read.columns);
-        if (errors.length > 0) return { plan: read, evaluated: { ok: false, errors } };
-        const answers = await hooks.ask({ model: read.model, engine, fields, tab: values.snapshot().values, ...(read.reads === undefined ? {} : { reads: read.reads }) });
+      if ((full || missing.length > 0) && hooks?.ask !== undefined && started === epoch) {
+        const asked = full ? fullFieldsOf(read.model, engine, read.columns, databaseDependent(read.model)) : { ...fieldsOf(read.model, missing, read.columns), calculated: [] };
+        if (asked.errors.length > 0) return { plan: read, evaluated: { ok: false, errors: asked.errors } };
+        const tab = values.snapshot().values;
+        const answers = await hooks.ask({ mode: full ? "full" : "ask", model: read.model, engine, fields: asked.fields, calculated: asked.calculated, tab, ...(read.reads === undefined ? {} : { reads: read.reads }) });
         if (answers === null || started !== epoch) return null;
-        read = { ...read, answers: new Map([...answers].map(([index, value]) => [index, { value, origin: "pergunta" as const }])) };
+        const origin = full ? ("diálogo" as const) : ("pergunta" as const);
+        read = { ...read, answers: new Map([...answers].map(([index, value]) => [index, { value, origin }])) };
       }
       const evaluated: Evaluated = indices.length === 0 || started !== epoch ? { ok: true, results: new Map() } : await evaluateIndices(read, doc, engine, indices);
       return { plan: read, evaluated };

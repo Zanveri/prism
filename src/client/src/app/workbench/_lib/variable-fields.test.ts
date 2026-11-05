@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { emptyInput, fieldsOf, helpOf, inputOf, pastedItems, valueOf, type VariableField } from "./variable-fields";
+import { answersOf, declaresAtTop, emptyInput, entryOf, fieldsOf, fullFieldsOf, helpOf, inputOf, inputOfEntry, pastedItems, rememberedLimit, rememberedOf, valueOf, type VariableField } from "./variable-fields";
 import { readScript } from "./variables/script";
 import { displayValue, nullValue, numberType, stringValue, type Type } from "./variables/values";
 
@@ -109,5 +109,63 @@ describe("colar num campo de itens", () => {
   it("uma linha por item; as vazias do meio saem no número e ficam no texto; a do fim sai", () => {
     expect(pastedItems({ kind: "number" }, "1\r\n\n2\r3\n")).toEqual(["1", "2", "3"]);
     expect(pastedItems({ kind: "string" }, "a\n\n b \n")).toEqual(["a", "", " b "]);
+  });
+});
+
+describe("os campos do Executar com valores (RN-VAR-027)", () => {
+  const full = (text: string, dependent: number[] = []) => fullFieldsOf(read(text), 1, undefined, new Set(dependent));
+
+  it("um por declaração do topo: o literal preenchido, a expressão como dica, a sem valor obrigatória; a consulta e o random.of são calculados", () => {
+    const { fields, calculated } = full("let n = 10\nconst d = date.addDays(date.today(), -30)\nlet x: number\nlet t = (select 1)\nlet r = random.of(pedido.id)\nselect @n, @d, @x;");
+    expect(fields.map((field) => [field.name, field.typeText, field.fallback.kind])).toEqual([
+      ["n", "number", "literal"],
+      ["d", "Date (dia)", "expression"],
+      ["x", "number", "none"],
+    ]);
+    expect(fields[0].fallback).toEqual({ kind: "literal", input: { ...emptyInput, text: "10" } });
+    expect(fields[1].fallback).toEqual({ kind: "expression", text: "date.addDays(date.today(), -30)" });
+    expect(calculated).toEqual(["t", "r"]);
+  });
+
+  it("depois do primeiro comando, só as sem valor, sob \"Mais abaixo no script\"; a que depende de uma sem valor é calculada", () => {
+    const { fields, calculated } = full("let x: number\nconst y = x * 2\nselect @y;\nlet z: string\nlet w = 1\nselect @z, @w;");
+    expect(fields.map((field) => [field.name, field.below])).toEqual([
+      ["x", false],
+      ["z", true],
+    ]);
+    expect(calculated).toEqual(["y"]);
+  });
+
+  it("o campo com padrão que a pessoa não mexeu não vai; o mexido vai no lugar da expressão", () => {
+    const { fields } = full("let n = 10\nconst d = random.int(1, 6)\nlet x: number\nselect @n, @d, @x;");
+    const inputs = new Map([[0, { ...emptyInput, text: "10" }], [1, { ...emptyInput, text: "4" }], [2, { ...emptyInput, text: "7" }]]);
+    expect([...answersOf(fields, inputs, new Set([1])).answers.keys()]).toEqual([1, 2]);
+    expect(answersOf(fields, new Map(), new Set()).problems).toEqual(new Map([[2, "Escreva um valor para x."]]));
+  });
+
+  it("o script declara variáveis no topo só quando o primeiro item é uma declaração", () => {
+    expect(declaresAtTop(read("-- topo\nlet x = 1\nselect @x;"))).toBe(true);
+    expect(declaresAtTop(read("select 1;\nlet x = 1"))).toBe(false);
+  });
+});
+
+describe("os valores lembrados (RN-VAR-028)", () => {
+  it("cada valor vira a entrada da API, e a entrada volta ao campo", () => {
+    const instant = { kind: "date" as const, precision: "instant" as const, fields: { year: 2026, month: 9, day: 20, hour: 14, minute: 5, second: 0, millisecond: 0 } };
+    expect(entryOf(instant)).toEqual({ type: "timestamp", value: "2026-09-20 14:05:00" });
+    expect(inputOfEntry(entryOf(instant))).toEqual({ ...emptyInput, text: "2026-09-20", time: "14:05:00" });
+    expect(entryOf({ kind: "list", items: [{ kind: "number", value: 1 }] })).toEqual({ type: "list", items: [{ type: "number", value: "1" }] });
+    expect(inputOfEntry({ type: "list", items: [{ type: "number", value: "1" }] })).toEqual({ ...emptyInput, items: ["1"] });
+    expect(inputOfEntry({ type: "boolean", value: "true" })).toEqual({ ...emptyInput, checked: true });
+    expect(inputOfEntry({ type: "null", value: null })).toEqual({ ...emptyInput, isNull: true });
+    expect(inputOfEntry("lixo")).toBeNull();
+    expect(inputOfEntry({ type: "number", value: 7 })).toBeNull();
+  });
+
+  it("lembra na ordem dos campos, e o que passaria de 64 KiB fica de fora", () => {
+    const { fields } = fieldOf("let a: string\nlet b: string\nselect @a, @b;");
+    const big = "x".repeat(rememberedLimit);
+    const remembered = rememberedOf(fields, new Map([[0, stringValue("curto")], [1, stringValue(big)]]));
+    expect(remembered).toEqual({ values: { a: { type: "text", value: "curto" } }, tooLarge: ["b"] });
   });
 });

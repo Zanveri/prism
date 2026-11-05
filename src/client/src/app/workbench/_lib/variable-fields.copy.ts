@@ -3,6 +3,23 @@ import { formatCount } from "@/lib/utils/format";
 /** Os textos da pergunta dos valores (RN-VAR-021) e dos campos do "Executar com valores…" (RN-VAR-027), com a escolha pela chave (RN-VAR-031). */
 export const variableFieldsCopy = {
   title: "Valores para executar",
+  /** RN-VAR-027: o diálogo do "Executar com valores…". */
+  fullTitle: (name: string) => `Executar com valores · ${name}`,
+  where: "Onde",
+  connection: "Conexão",
+  database: "Banco de dados",
+  defaultDatabase: "o padrão da conexão",
+  values: "Valores",
+  below: "Mais abaixo no script",
+  calculated: (count: number) => `Mais ${count === 1 ? "1 variável é calculada" : `${count.toLocaleString("pt-BR")} variáveis são calculadas`} durante o script.`,
+  computed: (text: string) => `calculado: ${text}`,
+  noTopDeclarations: "Este script não declara variáveis.",
+  /** RN-VAR-028: os valores lembrados. */
+  lastTime: "da última vez",
+  resetToScript: "Voltar ao valor do script",
+  forget: "Esquecer os valores deste script",
+  rememberFailed: (reason: string) => `Não foi possível lembrar os valores: ${reason}.`,
+  tooLargeToRemember: (names: readonly string[]) => (names.length === 1 ? `O valor de ${names[0]} é grande demais para ser lembrado.` : `Os valores de ${names.join(", ")} são grandes demais para serem lembrados.`),
   summary: (count: number) => `O script declara ${formatCount(count, "variável", "variáveis")} sem valor. Escreva os valores para continuar.`,
   run: "Executar",
   cancel: "Cancelar",

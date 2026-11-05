@@ -79,6 +79,7 @@ export {
   PencilIcon,
   PlayIcon,
   PlayScriptIcon,
+  PlayValuesIcon,
   PlugIcon,
   PlusIcon,
   PowerIcon,

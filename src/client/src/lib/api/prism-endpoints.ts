@@ -60,6 +60,8 @@ export const prismEndpoints = {
   userDatabaseSessionResultCells: (id: string, resultId: string) => `api/user/database-sessions/${encodeURIComponent(id)}/results/${encodeURIComponent(resultId)}/cells`,
   userScripts: "api/user/scripts",
   userScript: (id: string) => `api/user/scripts/${encodeURIComponent(id)}`,
+  // RN-VAR-028: os valores lembrados do "Executar com valores…".
+  userScriptRunValues: (id: string) => `api/user/scripts/${encodeURIComponent(id)}/run-values`,
   // RN-SCRIPT-007: as pastas da seção Scripts, à parte das pastas de conexões.
   userScriptFolders: "api/user/script-folders",
   userScriptFolder: (id: string) => `api/user/script-folders/${encodeURIComponent(id)}`,

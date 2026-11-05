@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Button, HistoryIcon, PlayIcon, PlayScriptIcon, StopIcon } from "@/components/ui";
+import { Button, HistoryIcon, PlayIcon, PlayScriptIcon, PlayValuesIcon, StopIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { historyCopy } from "../_lib/history.copy";
@@ -21,6 +21,9 @@ type EditorToolbarProps = {
   /** O atalho do script como a plataforma o escreve (`scriptShortcutLabel`): Alt+X, ou Cmd+Option+X no macOS. */
   scriptShortcut: { label: string; aria: string };
   onCancel: () => void;
+  /** RN-VAR-026: o "Executar com valores…", só quando o texto do editor declara variáveis no topo; sem ele, o botão não aparece. */
+  onRunWithValues?: () => void;
+  valuesShortcut?: { label: string; aria: string };
   /** RN-HIST-001: abre e fecha o painel do Histórico (`Ctrl+Shift+H`), depois de "Executar script". */
   historyOpen?: boolean;
   onToggleHistory?: () => void;
@@ -45,6 +48,8 @@ export function EditorToolbar({
   onRunScript,
   scriptShortcut,
   onCancel,
+  onRunWithValues,
+  valuesShortcut,
   historyOpen = false,
   onToggleHistory,
   connection,
@@ -70,6 +75,19 @@ export function EditorToolbar({
             <span>{scriptRunCopy.editor.run}</span>
             <kbd className="font-mono text-[11px] font-medium text-muted">{scriptShortcut.label}</kbd>
           </Button>
+          {onRunWithValues === undefined || valuesShortcut === undefined ? null : (
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              onClick={onRunWithValues}
+              aria-label={scriptRunCopy.editor.withValues}
+              title={scriptRunCopy.editor.withValuesTitle(valuesShortcut.label)}
+              aria-keyshortcuts={valuesShortcut.aria}
+            >
+              <PlayValuesIcon />
+            </Button>
+          )}
         </>
       )}
       {onToggleHistory !== undefined && (
