@@ -343,6 +343,7 @@ let api: Promise<ApiProcess> | null = null;
 
 function launchApi() {
   const launched = startApi({
+    locale: appLocale,
     // Empacotada, a API vai ao lado do app. Em desenvolvimento ela é compilada e iniciada pelo
     // `dotnet run`; `__dirname` é `out/main`, de onde `src/api` fica três níveis acima.
     // `--artifacts-path` leva `bin` e `obj` desta execução para `src/client/.api-dev`: sem ele a API
@@ -453,6 +454,7 @@ function dialogParent(windowId: number, resultWindow: string | undefined): Brows
  * destino. Nenhum canal recebe um caminho da tela nem devolve um a ela; o arquivo pronto é achado só pelo identificador do trabalho.
  */
 const transferDesk = createTransferDesk({
+  locale: appLocale,
   dataDir: app.getPath("userData"),
   downloadsDir: () => app.getPath("downloads"),
   platform: process.platform,
@@ -475,6 +477,7 @@ const transferDesk = createTransferDesk({
  * lê a cópia pelo identificador. Nenhum canal recebe um caminho da tela nem devolve um a ela.
  */
 const transferSource = createTransferSource({
+  locale: appLocale,
   dataDir: app.getPath("userData"),
   downloadsDir: () => app.getPath("downloads"),
   async showOpenDialog(windowId, options, resultWindow) {
@@ -496,6 +499,7 @@ const transferSource = createTransferSource({
  * identificador da cópia, e a API lê e decifra. Nenhum canal recebe um caminho da tela nem devolve um a ela.
  */
 const dbeaverSource = createDbeaverSource({
+  locale: appLocale,
   dataDir: app.getPath("userData"),
   platform: process.platform,
   env: process.env,
@@ -583,6 +587,7 @@ function startUpdater() {
   const linux = process.platform === "linux";
   const nsisInstalled = process.platform === "win32" && existsSync(join(dirname(process.execPath), `Uninstall ${basename(process.execPath)}`));
   updater = createUpdater({
+    locale: appLocale,
     origin,
     blocked,
     currentVersion: app.getVersion(),
@@ -1061,7 +1066,7 @@ if (!app.requestSingleInstanceLock()) {
   // das abas de SQL, que nesta fatia não é salvo, se perderia. No macOS fica só o mínimo do sistema
   // (`platform.ts`). Em desenvolvimento o menu padrão fica.
   if (app.isPackaged) {
-    const template = applicationMenuTemplate(process.platform);
+    const template = applicationMenuTemplate(process.platform, appLocale);
     Menu.setApplicationMenu(template === null ? null : Menu.buildFromTemplate(template));
   }
 

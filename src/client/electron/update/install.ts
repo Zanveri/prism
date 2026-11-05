@@ -2,6 +2,8 @@ import { constants } from "node:fs";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 
+import { updateMessagesCopy } from "./update-messages.copy";
+
 /**
  * Os argumentos do instalador NSIS que este projeto gera (RN-ATUALIZA-006 e RN-INSTALA-003). Desde a 0.3.0 é o instalador
  * assistido do electron-builder (`oneClick: false` no `electron-builder.yml`), com os dois modos (só do usuário ou para todos) e
@@ -54,9 +56,10 @@ export function runInstaller(spawn: SpawnInstaller, path: string): Promise<void>
 /**
  * Linux e macOS (RN-ATUALIZA-006): instalar pede senha de administrador ou assinatura, então o pacote conferido vai para a
  * pasta de downloads do usuário, e é ele quem instala. Copia sem gravar por cima do que já estiver lá (`COPYFILE_EXCL`; se o
- * nome existe, tenta `nome (1).ext`, `nome (2).ext`…) e apaga o original. Devolve onde o arquivo ficou.
+ * nome existe, tenta `nome (1).ext`, `nome (2).ext`…) e apaga o original. Devolve onde o arquivo ficou. `noFreeName`: a falha, no idioma da
+ * abertura (`update-messages.copy.ts`), que vai à tela como causa.
  */
-export async function deliverToDownloads(source: string, downloadsDir: string): Promise<string> {
+export async function deliverToDownloads(source: string, downloadsDir: string, noFreeName: string = updateMessagesCopy().install.noFreeName): Promise<string> {
   await mkdir(downloadsDir, { recursive: true });
 
   const name = basename(source);
@@ -76,5 +79,5 @@ export async function deliverToDownloads(source: string, downloadsDir: string): 
     return target;
   }
 
-  throw new Error("A pasta de downloads já tem cem arquivos com o nome do pacote.");
+  throw new Error(noFreeName);
 }
