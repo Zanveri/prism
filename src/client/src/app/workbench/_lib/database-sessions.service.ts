@@ -1,4 +1,4 @@
-import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type Query, type QueryClient } from "@tanstack/react-query";
 
 import { driverIdOf } from "@/app/drivers/_lib/drivers.model";
 import { apiRequest, ApiRequestError, unwrap, type ApiResult } from "@/lib/api/prism-api";
@@ -170,6 +170,20 @@ export async function openSessionForSearch(queryClient: QueryClient, connectionI
   } catch {
     return false;
   }
+}
+
+/**
+ * RN-REDE-006: o segredo do túnel ou do proxy acaba de entrar na memória da API, e as sessões da conexão que a recusa deixou com erro e sem sessão abrem de novo.
+ * As observadas (o nó aberto, outro banco aberto) buscam de novo; a do banco da conexão abre também pelo caminho da busca, porque a que o "Buscar nelas também"
+ * pediu não tem nó aberto, e o observador desabilitado da árvore faz o `refetchQueries` pulá-la. A sessão que tem dado nunca é refeita (abriria outra).
+ */
+export async function reopenAfterSecret(queryClient: QueryClient, connectionId: string): Promise<void> {
+  const refused = (query: Query) => query.state.status === "error" && query.state.data === undefined;
+  const treeSession = queryClient.getQueryCache().find({ queryKey: databaseSessionKey(connectionId), exact: true });
+  await Promise.all([
+    queryClient.refetchQueries({ queryKey: ["database-session", connectionId], type: "active", predicate: refused }),
+    ...(treeSession !== undefined && refused(treeSession) ? [openSessionForSearch(queryClient, connectionId)] : []),
+  ]);
 }
 
 /** As sessões da árvore abertas de todos os bancos da conexão (RN-ARVORE-006): é o que "Desconectar" fecha, além das abas. */

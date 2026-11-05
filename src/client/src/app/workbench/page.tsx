@@ -22,6 +22,7 @@ import { ScriptsSection } from "./_components/scripts-section";
 import { connectionReveal } from "./_lib/connection-intent";
 import { keepsDialog, type ConnectionDialogOpen } from "./_lib/connection-dialog-state";
 import { credentialsRequests, isNetworkSecretField, watchCredentialsMissing, type NetworkSecretField } from "./_lib/credentials-missing";
+import { reopenAfterSecret } from "./_lib/database-sessions.service";
 import { dbeaverEntry, inviteStep, startHerePhaseOf, type StartHerePhase } from "./_lib/dbeaver-entry";
 import { hideFocusTarget, navigatorShortcut, navigatorShortcutLabels } from "./_lib/navigator-layout";
 import { importedReveal, keepsTransfer, transferRequests, type TransferDialogOpen, type TransferRequest } from "./_lib/transfer-requests";
@@ -367,9 +368,8 @@ export function WorkbenchPage() {
           field={secret.field}
           onConnected={() => {
             setSecret(null);
-            // A árvore que pediu conecta de novo, agora com o segredo na memória da API, e a busca também ("Buscar nelas também" abre a sessão sem nó na tela: a recusada
-            // fica em erro, sem sessão). A aba e a barra do editor repetem quando a pessoa pedir.
-            void queryClient.refetchQueries({ queryKey: ["database-session", secret.connectionId], predicate: (query) => query.isActive() || (query.state.status === "error" && query.state.data === undefined) });
+            // A árvore que pediu conecta de novo, agora com o segredo na memória da API, e a busca também. A aba e a barra do editor repetem quando a pessoa pedir.
+            void reopenAfterSecret(queryClient, secret.connectionId);
           }}
           onMissing={(field) => setSecret({ ...secret, field })}
           onClose={() => setSecret(null)}
