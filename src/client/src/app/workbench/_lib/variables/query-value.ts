@@ -88,7 +88,9 @@ export function queryValue(name: string, result: VariableQueryResult, declared: 
 
   const base = declared === null ? null : withoutNull(declared);
   const wantsList = base?.tag === "list";
-  const single = columns.length === 1;
+  // Anotada com um objeto (`let alvo: Cliente`, `let todos: Cliente[]`), a linha é sempre um objeto, também com uma coluna só: quem a põe na forma do tipo é o `conform`.
+  const row = base?.tag === "list" ? withoutNull(base.item) : base;
+  const single = columns.length === 1 && row?.tag !== "object";
 
   if (!single) {
     const seen = new Set<string>();

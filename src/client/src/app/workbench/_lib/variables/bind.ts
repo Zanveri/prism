@@ -6,7 +6,7 @@ import { dateText, offsetText } from "./dates";
 import { VariableError } from "./errors";
 import { scanMarkers } from "./markers";
 import { significantDigits } from "./numbers";
-import { dateValueText, numberText, typeLabel, typeOfValue, type Type, type Value } from "./values";
+import { dateValueText, numberText, typeLabel, typeOfValue, withoutNull, type Type, type Value } from "./values";
 import { limits, phrase } from "./variables.copy";
 
 /*
@@ -159,7 +159,11 @@ type Resolved =
   | { kind: "sql"; ref: AtReference; text: string; end: number }
   | { kind: "values"; ref: AtReference; values: readonly Value[]; list: boolean; end: number; label: string; declared: Type | undefined };
 
-/** O que o `@nome` vira, pelo valor da variável (RN-VAR-016 e 017): o texto do `sql`, o campo de um objeto, o valor ou a lista de valores. Lança a frase do erro do comando. */
+/**
+ * O que o `@nome` vira, pelo valor da variável (RN-VAR-016 e 017): o texto do `sql`, o campo de um objeto, o valor ou a lista de valores. O caminho (`@c.endereco.cidade`)
+ * desce enquanto o valor é objeto e para no primeiro que não é: o resto fica SQL, como `@p.endereco.cidade` com `endereco` um texto. O objeto nunca vai inteiro ao banco
+ * (`@c`, `@c.endereco`), nem a lista de objetos (`@todos`). Lança a frase do erro do comando.
+ */
 function resolve(ref: AtReference, value: Value, declared: Type | undefined): Resolved {
   const fail = (message: string) => new VariableError(message, ref.start);
 
@@ -167,26 +171,32 @@ function resolve(ref: AtReference, value: Value, declared: Type | undefined): Re
 
   let target: Value = value;
   let end = ref.end;
-  let label = `@${ref.name}`;
+  let path = ref.name;
   let targetType = declared;
 
   if (value.kind === "object") {
-    if (ref.field === null) throw fail(phrase.objectWithoutField(ref.name, value.fields.keys().next().value ?? "campo"));
-    const field = value.fields.get(ref.field.name);
-    if (field === undefined) throw fail(phrase.objectNoField(ref.name, ref.field.name, [...value.fields.keys()]));
-    target = field;
-    end = ref.field.end;
-    label = `@${ref.name}.${ref.field.name}`;
-    targetType = declared?.tag === "object" ? declared.fields.get(ref.field.name) : undefined;
+    for (const segment of ref.path) {
+      if (target.kind === "null") throw fail(phrase.fieldOfNullPlain(path, segment.name));
+      if (target.kind !== "object") break;
+      const shape = targetType === undefined ? undefined : withoutNull(targetType);
+      const field = target.fields.get(segment.name);
+      // O campo que o tipo anotado não tem é o erro de tipo do TypeScript ("O campo extra não existe em Cliente."); no objeto sem anotação, a lista dos campos.
+      if (field === undefined) throw fail(shape?.tag === "object" && shape.name !== undefined ? phrase.excessField(segment.name, shape.name) : phrase.objectNoField(path, segment.name, [...target.fields.keys()]));
+      target = field;
+      end = segment.end;
+      path = `${path}.${segment.name}`;
+      targetType = shape?.tag === "object" ? shape.fields.get(segment.name) : undefined;
+    }
   } else if (ref.field !== null) {
     throw fail(value.kind === "null" ? phrase.fieldOfNullPlain(ref.name, ref.field.name) : phrase.fieldOfNonObject(ref.name, typeLabel(typeOfValue(value))));
   }
 
+  const label = `@${path}`;
   if (target.kind === "list") {
-    if (target.items.some((item) => item.kind === "object")) throw fail(phrase.listOfObjects(ref.name));
+    if (target.items.some((item) => item.kind === "object")) throw fail(phrase.listOfObjects(path));
     return { kind: "values", ref, values: target.items, list: true, end, label, declared: targetType };
   }
-  if (target.kind === "object") throw fail(phrase.objectWithoutField(ref.name, target.fields.keys().next().value ?? "campo"));
+  if (target.kind === "object") throw fail(phrase.objectWithoutField(path, target.fields.keys().next().value ?? "campo"));
   if (target.kind === "sql") throw fail(phrase.valueNotInText(label, "sql"));
   return { kind: "values", ref, values: [target], list: false, end, label, declared: targetType };
 }

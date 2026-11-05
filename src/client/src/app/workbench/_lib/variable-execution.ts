@@ -67,25 +67,42 @@ function trimmedItem(model: ScriptModel, item: ModelItem, start: number, text: s
   return { ...item, start, text, atScan: findAtReferences(text, engine, model.declaredNames) };
 }
 
-function finish(model: ScriptModel, items: ModelItem[], tab: TabValues): Plan {
+/** `checked` são os itens que não vão mas cujos erros contam: os tipos com nome do que vai (RN-VAR-002). */
+function finish(model: ScriptModel, items: ModelItem[], tab: TabValues, checked: readonly number[] = []): Plan {
   const byIndex = new Map(items.map((item) => [item.index, item] as const));
   const patched: ScriptModel = { ...model, items: model.items.map((item) => byIndex.get(item.index) ?? item) };
 
   const outer = dependencyPlan(patched, [...byIndex.keys()], tab).filter((index) => !byIndex.has(index));
-  const relevant = new Set([...byIndex.keys(), ...dependenciesOf(patched, [...byIndex.keys()])]);
+  const relevant = new Set([...byIndex.keys(), ...dependenciesOf(patched, [...byIndex.keys()]), ...checked]);
   const errors = checkScript(patched).filter((error) => relevant.has(error.itemIndex));
   return { model: patched, items: items.map((item) => ({ index: item.index, kind: kindOf(item), text: item.text, offset: item.start })), outer, errors };
 }
 
 /**
+ * O Ctrl+Enter numa `interface` ou num `type` (RN-VAR-002): ele só confere. Com erro, o plano traz o item e os erros dele (a execução para na conferência, antes de
+ * avaliar qualquer coisa); sem erro, não há nada a enviar.
+ */
+function checkTypeItem(model: ScriptModel, item: ModelItem): PlanResult {
+  const errors = checkScript(model).filter((error) => error.itemIndex === item.index);
+  if (errors.length === 0) return { ok: false, reason: "nothing" };
+  return { ok: true, plan: { model, items: [{ index: item.index, kind: "declaration", text: item.text, offset: item.start }], outer: [], errors } };
+}
+
+/**
  * O Alt+X (RN-VAR-019): os itens do que vai, a seleção (`from` a `to`) ou o texto inteiro, lidos com o texto de cima (as declarações de fora da seleção valem). A
- * seleção que começa no meio de um comando manda só o trecho dela, como o "Executar script" sempre fez.
+ * seleção que começa no meio de um comando manda só o trecho dela, como o "Executar script" sempre fez. A `interface` e o `type` do que vai não vão ao banco nem
+ * entram nas Estatísticas: só os erros deles contam.
  */
 export function planScript(doc: ScriptDoc, engine: Engine | undefined, from: number, to: number, tab: TabValues): PlanResult {
   const model = readScript(doc.text.slice(0, to), engine, { blankLines: doc.blankLines });
   const items: ModelItem[] = [];
+  const types: number[] = [];
   for (const item of model.items) {
     if (item.end <= from) continue;
+    if (item.kind === "type") {
+      types.push(item.index);
+      continue;
+    }
     if (item.start >= from || item.kind !== "statement") {
       items.push(item);
       continue;
@@ -96,7 +113,7 @@ export function planScript(doc: ScriptDoc, engine: Engine | undefined, from: num
     items.push(trimmedItem(model, item, from + (slice.length - slice.trimStart().length), text, engine));
   }
   if (items.length === 0) return { ok: false, reason: "nothing" };
-  return { ok: true, plan: finish(model, items, tab) };
+  return { ok: true, plan: finish(model, items, tab, types) };
 }
 
 /**
@@ -111,6 +128,7 @@ export function planItem(doc: ScriptDoc, engine: Engine | undefined, from: numbe
     const found = scriptItemAt(doc.text, from, engine, { blankLines: doc.blankLines });
     const at = found === null ? null : (model.items.find((item) => item.start === found.start) ?? null);
     if (at === null) return { ok: false, reason: "nothing" };
+    if (at.kind === "type") return checkTypeItem(model, at);
     return { ok: true, plan: finish(model, [at], tab) };
   }
 
@@ -122,6 +140,7 @@ export function planItem(doc: ScriptDoc, engine: Engine | undefined, from: numbe
   const start = from + (slice.length - slice.trimStart().length);
   const item = model.items.find((candidate) => candidate.start <= start && start < candidate.end) ?? model.items.find((candidate) => candidate.start >= start);
   if (item === undefined) return { ok: false, reason: "nothing" };
+  if (item.kind === "type") return checkTypeItem(model, item);
   const same = item.start === start && item.text === text;
   return { ok: true, plan: finish(model, [same || item.kind !== "statement" ? item : trimmedItem(model, item, start, text, engine)], tab) };
 }
