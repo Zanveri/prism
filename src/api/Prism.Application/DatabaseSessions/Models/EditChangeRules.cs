@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using FluentValidation;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 
@@ -9,6 +11,9 @@ namespace Prism.Application.DatabaseSessions.Models;
 /// </summary>
 internal static class EditChangeRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>EditChangeRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(EditChangeRules));
+
     public const string ErrorCode = "EDIT_INVALID";
 
     /// <summary>RN-GRADE-020: o pedido do `edit-target` para o "Gerar SQL" e o "Copiar como" do SQL e do DbUnit.</summary>
@@ -19,15 +24,15 @@ internal static class EditChangeRules
     private static readonly string[] Purposes = ["edit", SqlPurpose];
 
     public static void MustNameTheResult<T>(this IRuleBuilder<T, Guid> rule)
-        => rule.NotEqual(Guid.Empty).WithMessage("Informe o resultado (resultID) da página que está sendo editada.").WithErrorCode(ErrorCode);
+        => rule.NotEqual(Guid.Empty).WithMessage(_ => Texts.Get("ResultRequired")).WithErrorCode(ErrorCode);
 
     /// <summary>RN-GRADE-020: o `purpose` do `edit-target`, ausente ou nulo (o padrão, `edit`), `edit` ou `sql`.</summary>
     public static void MustBeAPurpose<T>(this IRuleBuilder<T, string?> rule)
-        => rule.Must(purpose => purpose is null || Purposes.Contains(purpose, StringComparer.Ordinal)).WithMessage("O pedido (purpose) deve ser edit ou sql.").WithErrorCode(ErrorCode);
+        => rule.Must(purpose => purpose is null || Purposes.Contains(purpose, StringComparer.Ordinal)).WithMessage(_ => Texts.Get("PurposeInvalid")).WithErrorCode(ErrorCode);
 
     public static void MustBeChanges<T>(this IRuleBuilder<T, IReadOnlyList<EditChangeDto>?> rule)
     {
-        rule.Must(changes => changes is { Count: > 0 }).WithMessage("Informe ao menos uma alteração.").WithErrorCode(ErrorCode);
-        rule.ForEach(change => change.ChildRules(item => item.RuleFor(dto => dto.Kind).Must(kind => Kinds.Contains(kind, StringComparer.Ordinal)).WithMessage("O tipo da alteração deve ser update, delete, insert ou updateAll.").WithErrorCode(ErrorCode)));
+        rule.Must(changes => changes is { Count: > 0 }).WithMessage(_ => Texts.Get("ChangesRequired")).WithErrorCode(ErrorCode);
+        rule.ForEach(change => change.ChildRules(item => item.RuleFor(dto => dto.Kind).Must(kind => Kinds.Contains(kind, StringComparer.Ordinal)).WithMessage(_ => Texts.Get("ChangeKindInvalid")).WithErrorCode(ErrorCode)));
     }
 }

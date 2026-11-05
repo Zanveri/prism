@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="EditsRefusal" xml:space="preserve">
+    <value>La conexión es de solo lectura: no se escribe nada en ella, y la edición de registros no vale. No se envió nada a la base de datos.</value>
+  </data>
+  <data name="ResultReason" xml:space="preserve">
+    <value>la conexión es de solo lectura</value>
+  </data>
+  <data name="WithoutAReadMessage" xml:space="preserve">
+    <value>la sentencia no empieza por SELECT, WITH o VALUES</value>
+  </data>
+  <data name="IntoMessage" xml:space="preserve">
+    <value>el SELECT ... INTO escribe el resultado en una tabla</value>
+  </data>
+  <data name="LockMessage" xml:space="preserve">
+    <value>el bloqueo de fila (FOR UPDATE, FOR SHARE) es para modificar las filas</value>
+  </data>
+  <data name="SequenceMessage" xml:space="preserve">
+    <value>avanzar una secuencia (NEXT VALUE FOR, NEXTVAL) no se puede deshacer</value>
+  </data>
+  <data name="Db2TableFunctionMessage" xml:space="preserve">
+    <value>en Db2, una función de tabla (TABLE (...)) puede escribir sin que la sentencia lo muestre</value>
+  </data>
+  <data name="Db2ExplainMessage" xml:space="preserve">
+    <value>en Db2, el EXPLAIN escribe en las tablas de explicación</value>
+  </data>
+  <data name="ExplainAnalyzeMessage" xml:space="preserve">
+    <value>el EXPLAIN ANALYZE ejecuta la sentencia</value>
+  </data>
+  <data name="SeveralStatementsMessage" xml:space="preserve">
+    <value>el texto tiene más de una sentencia</value>
+  </data>
+  <data name="RefusalMessage" xml:space="preserve">
+    <value>La conexión es de solo lectura, y en ella solo se ejecutan lecturas: {0}. No se envió nada a la base de datos.</value>
+  </data>
+  <data name="NotARead" xml:space="preserve">
+    <value>{0} no es una lectura</value>
+  </data>
+  <data name="HasWriteWord" xml:space="preserve">
+    <value>la sentencia contiene {0}, que escribe</value>
+  </data>
+</root>

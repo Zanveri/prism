@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExportLimitsMessage" xml:space="preserve">
+    <value>O arquivo passaria dos limites da importação: até 2.000 conexões, 2.000 pastas, 5 MiB e 32 níveis de pastas a partir da raiz. Exporte em partes; o que está a mais de 32 níveis da raiz só sai se for movido para mais perto dela.</value>
+  </data>
+  <data name="ImportLimitsMessage" xml:space="preserve">
+    <value>Este arquivo passa dos limites da importação: até 5 MiB, 2.000 conexões, 2.000 pastas e 32 níveis de pastas.</value>
+  </data>
+  <data name="ExportEmptyMessage" xml:space="preserve">
+    <value>Marque ao menos uma conexão ou pasta para exportar.</value>
+  </data>
+  <data name="ImportEmptyMessage" xml:space="preserve">
+    <value>Marque ao menos uma conexão ou pasta para importar.</value>
+  </data>
+  <data name="ExportCredentialsInvalidMessage" xml:space="preserve">
+    <value>Escolha o que vai de cada conexão: sem usuário e senha, só o usuário, ou usuário e senha.</value>
+  </data>
+  <data name="ExportDuplicateMessage" xml:space="preserve">
+    <value>A mesma conexão foi marcada duas vezes.</value>
+  </data>
+  <data name="ImportItemsLimitMessage" xml:space="preserve">
+    <value>Marque até 4.000 itens por importação.</value>
+  </data>
+  <data name="ImportItemsDuplicateMessage" xml:space="preserve">
+    <value>Cada item é marcado uma vez só.</value>
+  </data>
+  <data name="ImportConflictInvalidMessage" xml:space="preserve">
+    <value>Escolha importar com outro nome ou não importar.</value>
+  </data>
+  <data name="ExportLimitsExceededTitle" xml:space="preserve">
+    <value>Exportação além dos limites.</value>
+  </data>
+  <data name="UserPasswordRequiredTitle" xml:space="preserve">
+    <value>Senha do usuário necessária.</value>
+  </data>
+  <data name="UserPasswordRequiredDetail" xml:space="preserve">
+    <value>Para exportar senhas de banco, informe a sua senha do Prism.</value>
+  </data>
+  <data name="PassphraseInvalidTitle" xml:space="preserve">
+    <value>Senha de exportação inválida.</value>
+  </data>
+  <data name="PassphraseEqualsUserPasswordDetail" xml:space="preserve">
+    <value>Use uma senha de exportação diferente da sua senha do Prism.</value>
+  </data>
+  <data name="FileNewerTitle" xml:space="preserve">
+    <value>Arquivo de uma versão mais nova do Prism.</value>
+  </data>
+  <data name="FileNewerDetail" xml:space="preserve">
+    <value>Este arquivo foi exportado por uma versão mais nova do Prism. Atualize o Prism para importá-lo.</value>
+  </data>
+  <data name="PassphraseWrongTitle" xml:space="preserve">
+    <value>Senha de exportação incorreta.</value>
+  </data>
+  <data name="PassphraseWrongDetail" xml:space="preserve">
+    <value>A senha de exportação não confere, ou o arquivo foi alterado.</value>
+  </data>
+  <data name="FileInvalidTitle" xml:space="preserve">
+    <value>Arquivo inválido.</value>
+  </data>
+  <data name="FileInvalidDetail" xml:space="preserve">
+    <value>Este arquivo não é uma exportação de conexões do Prism, ou está danificado.</value>
+  </data>
+  <data name="ImportLimitsExceededTitle" xml:space="preserve">
+    <value>Arquivo além dos limites.</value>
+  </data>
+  <data name="InvalidTitle" xml:space="preserve">
+    <value>Erro ao enviar dados para a API.</value>
+  </data>
+  <data name="UnknownItemDetail" xml:space="preserve">
+    <value>Uma chave marcada não está no arquivo.</value>
+  </data>
+</root>

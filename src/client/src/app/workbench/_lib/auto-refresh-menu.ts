@@ -20,7 +20,7 @@ export function intervalOf(action: AutoRefreshAction): number | null {
 }
 
 /** O que fica embaixo do rótulo do que não se aplica (o molde do "Filtrar"). */
-export const unavailable = (blocker: AutoRefreshBlocker) => `Não se aplica: ${autoRefreshCopy.reasons[blocker]}.`;
+export const unavailable = (blocker: AutoRefreshBlocker) => autoRefreshCopy.menu.notApplicable(autoRefreshCopy.reasons[blocker]);
 
 /**
  * Os itens do submenu (RN-GRADE-014): os intervalos (1 s, 5 s, 10 s, 30 s, 1 min e 5 min) e o "Personalizado…", com o que está em uso marcado (`checked`: um

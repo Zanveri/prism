@@ -3,6 +3,11 @@ import { formatCount } from "@/lib/utils/format";
 
 import type { Irreversible } from "./irreversible";
 
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { commandConfirmationCopyEn } from "./command-confirmation.copy.en";
+import { commandConfirmationCopyEs } from "./command-confirmation.copy.es";
+
 /** O nome da proteção como a seção Proteções a escreve (RN-PROT-001). */
 const levelName: Record<Confirmation, string> = { irreversible: "Só comandos irreversíveis", all: "Todos os comandos" };
 
@@ -10,7 +15,7 @@ const levelName: Record<Confirmation, string> = { irreversible: "Só comandos ir
 const ofTarget = (target: string | null, fallback: string) => (target === null ? fallback : target);
 
 /** Os textos do aviso de confirmação antes de executar (RN-PROT-001, o `ConfirmarComando` do canvas). */
-export const commandConfirmationCopy = {
+const pt = {
   environment: (name: string) => `Ambiente: ${name}`,
   place: (connection: string, database: string) => `${connection} / ${database}`,
 
@@ -69,3 +74,6 @@ export const commandConfirmationCopy = {
   confirm: { command: "Executar mesmo assim", script: "Executar script", save: "Salvar mesmo assim", autoRefresh: "Ligar mesmo assim" },
   cancel: "Cancelar",
 } as const;
+
+export type CommandConfirmationCopy = Localized<typeof pt>;
+export const commandConfirmationCopy = pickCopy({ "pt-BR": pt, en: commandConfirmationCopyEn, es: commandConfirmationCopyEs });

@@ -1,11 +1,15 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { gridFilterCopyEn } from "./grid-filter.copy.en";
+import { gridFilterCopyEs } from "./grid-filter.copy.es";
 
 /**
  * Os textos do "Filtrar" da grade (RN-GRADE-013), do campo de filtro no resultado da aba de consulta
  * (RN-GRADE-011) e do autocompletar do campo (RN-TABELA-011), num lugar só. Os rótulos das condições não estão aqui: eles são a própria
  * condição, como ela entra no campo.
  */
-export const gridFilterCopy = {
+const pt = {
   menu: {
     /** O item do menu da célula que abre o submenu (F11). */
     filter: "Filtrar",
@@ -91,3 +95,6 @@ export const gridFilterCopy = {
     keyword: "palavra do filtro",
   },
 };
+
+export type GridFilterCopy = Localized<typeof pt>;
+export const gridFilterCopy = pickCopy({ "pt-BR": pt, en: gridFilterCopyEn, es: gridFilterCopyEs });

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LimitsMessage" xml:space="preserve">
+    <value>DBeaver has more than Prism imports at once: up to 2,000 connections, 2,000 folders and 32 folder levels.</value>
+  </data>
+  <data name="LimitsMessageManyProjects" xml:space="preserve">
+    <value>DBeaver has more than Prism imports at once: up to 2,000 connections, 2,000 folders and 32 folder levels. Choose a single project.</value>
+  </data>
+  <data name="SourceMissingTitle" xml:space="preserve">
+    <value>DBeaver copy not found.</value>
+  </data>
+  <data name="SourceMissingDetail" xml:space="preserve">
+    <value>The DBeaver copy no longer exists. Search for DBeaver again.</value>
+  </data>
+  <data name="SourceInvalidTitle" xml:space="preserve">
+    <value>Unreadable DBeaver copy.</value>
+  </data>
+  <data name="SourceInvalidDetail" xml:space="preserve">
+    <value>Prism could not read the connections of this DBeaver.</value>
+  </data>
+  <data name="ProjectNotFoundTitle" xml:space="preserve">
+    <value>DBeaver project not found.</value>
+  </data>
+  <data name="ProjectNotFoundDetail" xml:space="preserve">
+    <value>This project is not in the DBeaver copy, or it is protected by a project password.</value>
+  </data>
+  <data name="LimitsExceededTitle" xml:space="preserve">
+    <value>DBeaver over the limits.</value>
+  </data>
+  <data name="InvalidTitle" xml:space="preserve">
+    <value>Error sending data to the API.</value>
+  </data>
+  <data name="SourceIdInvalidMessage" xml:space="preserve">
+    <value>The DBeaver copy identifier is not valid.</value>
+  </data>
+  <data name="UnknownItemDetail" xml:space="preserve">
+    <value>A selected key is not in the DBeaver copy.</value>
+  </data>
+  <data name="UnknownOverwriteDetail" xml:space="preserve">
+    <value>Only a selected connection can be overwritten.</value>
+  </data>
+  <data name="WithPasswordsInvalidMessage" xml:space="preserve">
+    <value>“Bring the passwords” is true or false.</value>
+  </data>
+  <data name="DrdaPortsInvalidMessage" xml:space="preserve">
+    <value>Each DRDA port is from 1 to 65535, for a DBeaver server that is not repeated, and there are up to 2,000.</value>
+  </data>
+  <data name="OverwriteInvalidMessage" xml:space="preserve">
+    <value>Each connection to overwrite is selected only once, up to 2,000.</value>
+  </data>
+</root>

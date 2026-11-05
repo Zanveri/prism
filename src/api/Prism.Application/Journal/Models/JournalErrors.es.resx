@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="UnavailableTitle" xml:space="preserve">
+    <value>Diario no disponible.</value>
+  </data>
+  <data name="UnavailableDetail" xml:space="preserve">
+    <value>El diario de auditoría no está disponible en esta sesión.</value>
+  </data>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Registro no encontrado.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>El registro no existe en el diario.</value>
+  </data>
+  <data name="NotFoundDetailWithID" xml:space="preserve">
+    <value>El registro #{0} no existe en el diario.</value>
+  </data>
+  <data name="FilterInvalidTitle" xml:space="preserve">
+    <value>Filtro del diario no válido.</value>
+  </data>
+  <data name="SettingsInvalidTitle" xml:space="preserve">
+    <value>Configuración del diario no válida.</value>
+  </data>
+</root>

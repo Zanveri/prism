@@ -3,9 +3,11 @@ using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Models.Dtos;
 using Prism.Application.ConnectionTransfers.Models;
 using Prism.Application.Folders.Models;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Vault.Models;
 using System.Globalization;
+using System.Resources;
 using System.Text.Json;
 
 namespace Prism.Application.DbeaverImports.Models;
@@ -18,11 +20,14 @@ namespace Prism.Application.DbeaverImports.Models;
 /// </summary>
 internal static class DbeaverConnections
 {
+    /// <summary>Os textos, no idioma do pedido: <c>DbeaverConnections.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DbeaverConnections));
+
     /// <summary>O corte do nome do banco que o Prism não tem e do modelo de autenticação, quando aparecem na frase ou na prévia.</summary>
     private const int ShownNameLength = 60;
 
     /// <summary>RN-DBEAVER-018: o ID do DBeaver é gravado na origem da conexão (até 128 caracteres); o vazio, o maior e o com caractere de controle ou de direção do texto não são gravados.</summary>
-    public const string IDInvalidMessage = "O ID desta conexão no DBeaver não serve para o Prism.";
+    public static string IDInvalidMessage => Texts.Get("IDInvalid");
 
     private static readonly FileValue True = new(JsonValueKind.True, null);
     private static readonly FileValue False = new(JsonValueKind.False, null);
@@ -67,7 +72,7 @@ internal static class DbeaverConnections
         var refusal = IDIsInvalid(id)
             ? IDInvalidMessage
             : engine is null
-                ? $"O Prism ainda não tem este banco ({UnknownEngineName(provider, driver)})."
+                ? Texts.Get("UnknownEngine", UnknownEngineName(provider, driver))
                 : resolved.Refusal ?? VariableRefusal(user);
 
         var model = new DbeaverConnectionModel(
@@ -168,7 +173,7 @@ internal static class DbeaverConnections
             {
                 var beginning = DbeaverJdbcUrl.Beginning(url!);
 
-                return Unresolved() with { Refusal = beginning.Length == 0 ? "Não foi possível ler a URL JDBC desta conexão." : $"Não foi possível ler a URL JDBC desta conexão ({beginning})." };
+                return Unresolved() with { Refusal = beginning.Length == 0 ? Texts.Get("JdbcUrlUnreadable") : Texts.Get("JdbcUrlUnreadableAt", beginning) };
             }
 
             host = parsed.Host;
@@ -182,13 +187,13 @@ internal static class DbeaverConnections
             return Unresolved() with { Refusal = VariablesMessage };
 
         if (host is null)
-            return Unresolved() with { Refusal = "A conexão não tem host." };
+            return Unresolved() with { Refusal = Texts.Get("NoHost") };
 
         FileValue port;
         if (portText is not null)
             port = DbeaverJdbcUrl.PortNumber(portText) is not null ? new FileValue(JsonValueKind.Number, portText) : Of(portText);
         else if (engine == EDatabaseEngine.Informix)
-            return Unresolved() with { Host = host, Refusal = "A conexão não tem porta." };
+            return Unresolved() with { Host = host, Refusal = Texts.Get("NoPort") };
         else
         {
             portText = engine == EDatabaseEngine.PostgreSql ? "5432" : "50000";
@@ -198,7 +203,7 @@ internal static class DbeaverConnections
         if (database is null)
         {
             if (engine != EDatabaseEngine.PostgreSql)
-                return Unresolved() with { Host = host, Refusal = "A conexão não tem banco de dados: o Prism precisa de um." };
+                return Unresolved() with { Host = host, Refusal = Texts.Get("NoDatabase") };
 
             database = "postgres";
         }
@@ -206,7 +211,7 @@ internal static class DbeaverConnections
         return new ResolvedServer(host, portText, port, database, engine == EDatabaseEngine.Informix ? server : null, null);
     }
 
-    private const string VariablesMessage = "A conexão usa variáveis do DBeaver (${…}), que o Prism não tem.";
+    private static string VariablesMessage => Texts.Get("Variables");
 
     /// <summary>O usuário com uma variável do DBeaver também deixa a conexão não importável (RN-DBEAVER-010).</summary>
     private static string? VariableRefusal(string? user)

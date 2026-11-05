@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FileIdInvalid" xml:space="preserve">
+    <value>O identificador do arquivo tem 36 caracteres em minúsculas, com os hifens.</value>
+  </data>
+  <data name="FormatInvalid" xml:space="preserve">
+    <value>O formato deve ser csv, tsv, json ou xlsx.</value>
+  </data>
+  <data name="DecimalInvalid" xml:space="preserve">
+    <value>O separador decimal deve ser point ou comma.</value>
+  </data>
+  <data name="ThousandsDotInvalid" xml:space="preserve">
+    <value>O ponto de milhar só vale com a vírgula decimal.</value>
+  </data>
+  <data name="DatesInvalid" xml:space="preserve">
+    <value>O formato das datas deve ser iso ou dayMonthYear.</value>
+  </data>
+  <data name="TargetRequired" xml:space="preserve">
+    <value>Informe a tabela de destino.</value>
+  </data>
+  <data name="TargetConnectionRequired" xml:space="preserve">
+    <value>Informe a conexão de destino.</value>
+  </data>
+  <data name="SchemaNameLength" xml:space="preserve">
+    <value>O esquema tem de 1 a {0} caracteres, sem U+0000.</value>
+  </data>
+  <data name="TableNameLength" xml:space="preserve">
+    <value>A tabela tem de 1 a {0} caracteres, sem U+0000.</value>
+  </data>
+  <data name="MappingRequired" xml:space="preserve">
+    <value>Escolha ao menos uma coluna da tabela para receber valores.</value>
+  </data>
+  <data name="MappingCount" xml:space="preserve">
+    <value>O mapeamento tem de 1 a 16.384 colunas.</value>
+  </data>
+  <data name="MappingEntryShape" xml:space="preserve">
+    <value>Cada entrada do mapeamento tem a coluna do arquivo e a da tabela.</value>
+  </data>
+  <data name="MappingSourceNegative" xml:space="preserve">
+    <value>A posição da coluna do arquivo começa em 0.</value>
+  </data>
+  <data name="MappingSourceDuplicate" xml:space="preserve">
+    <value>A coluna do arquivo já está no mapeamento.</value>
+  </data>
+  <data name="MappingTargetNameLength" xml:space="preserve">
+    <value>O nome da coluna da tabela tem de 1 a {0} caracteres, sem U+0000.</value>
+  </data>
+  <data name="MappingTargetDuplicate" xml:space="preserve">
+    <value>A coluna da tabela já recebe outra coluna do arquivo.</value>
+  </data>
+  <data name="LoadRequired" xml:space="preserve">
+    <value>Informe a carga.</value>
+  </data>
+  <data name="LoadEmptyInvalid" xml:space="preserve">
+    <value>O esvaziamento deve ser true ou false.</value>
+  </data>
+  <data name="LoadCommitEvery" xml:space="preserve">
+    <value>Use de 1 a 1.000.000 linhas.</value>
+  </data>
+  <data name="LoadCheckCopy" xml:space="preserve">
+    <value>A cópia não confere um arquivo antes de gravar.</value>
+  </data>
+  <data name="LoadCheckInvalid" xml:space="preserve">
+    <value>A conferência do arquivo deve ser true ou false.</value>
+  </data>
+  <data name="WindowInvalid" xml:space="preserve">
+    <value>O número da janela é um inteiro positivo.</value>
+  </data>
+  <data name="SourceColumnMissingOne" xml:space="preserve">
+    <value>A coluna {0} da origem não existe: foram pedidas {1} coluna.</value>
+  </data>
+  <data name="SourceColumnMissingMany" xml:space="preserve">
+    <value>A coluna {0} da origem não existe: foram pedidas {1} colunas.</value>
+  </data>
+</root>

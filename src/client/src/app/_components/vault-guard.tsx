@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate } from "react-router";
 
+import { gateCopy } from "@/app/_lib/gate.copy";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { Button, FormMessage } from "@/components/ui";
 import { pathsConfig } from "@/config/paths.config";
@@ -50,9 +51,9 @@ export function VaultGuard() {
   return (
     <div className="flex h-full flex-col items-center justify-center-safe gap-4 overflow-y-auto p-8">
       <div aria-hidden="true" className="window-drag" />
-      <FormMessage tone="error">Não foi possível consultar o cofre.</FormMessage>
+      <FormMessage tone="error">{gateCopy.vault.checkFailed}</FormMessage>
       <Button type="button" variant="secondary" onClick={() => void session.refetch()}>
-        Tentar de novo
+        {gateCopy.vault.retry}
       </Button>
     </div>
   );

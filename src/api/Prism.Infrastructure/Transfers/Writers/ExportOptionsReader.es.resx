@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="OptionsObject" xml:space="preserve">
+    <value>Las opciones del formato vienen en un objeto.</value>
+  </data>
+  <data name="DelimiterChoice" xml:space="preserve">
+    <value>El separador debe ser ;, la coma, el tabulador o |.</value>
+  </data>
+  <data name="QuotingChoice" xml:space="preserve">
+    <value>Las comillas deben ser auto, text o all.</value>
+  </data>
+  <data name="PhpChoice" xml:space="preserve">
+    <value>La versión de PHP debe ser legacy o short.</value>
+  </data>
+  <data name="QuoteChoice" xml:space="preserve">
+    <value>Las comillas deben ser double o single.</value>
+  </data>
+  <data name="RowsPerStatement" xml:space="preserve">
+    <value>Las filas por sentencia deben ser un número entero de 1 a 1.000.</value>
+  </data>
+  <data name="SqlBinaryChoice" xml:space="preserve">
+    <value>El binario debe ser literal o null.</value>
+  </data>
+  <data name="NullsChoice" xml:space="preserve">
+    <value>El nulo debe ser omit o mark.</value>
+  </data>
+  <data name="MinWidth" xml:space="preserve">
+    <value>El ancho mínimo debe ser un número entero de 1 a 1.000.</value>
+  </data>
+  <data name="MaxWidth" xml:space="preserve">
+    <value>El ancho máximo debe ser un número entero de 0 (sin límite) a 100.000.</value>
+  </data>
+  <data name="MaxWidthLess" xml:space="preserve">
+    <value>El ancho máximo no puede ser menor que el mínimo.</value>
+  </data>
+  <data name="LineBreakChoice" xml:space="preserve">
+    <value>El salto de línea debe ser crlf o lf.</value>
+  </data>
+  <data name="BinaryChoice" xml:space="preserve">
+    <value>El binario debe ser hex o null.</value>
+  </data>
+  <data name="NullTextMax" xml:space="preserve">
+    <value>El texto del nulo puede tener hasta {0} caracteres.</value>
+  </data>
+  <data name="NullTextControl" xml:space="preserve">
+    <value>El texto del nulo no puede tener un carácter de control.</value>
+  </data>
+  <data name="TableRequired" xml:space="preserve">
+    <value>Indica la tabla de destino.</value>
+  </data>
+  <data name="OptionBool" xml:space="preserve">
+    <value>La opción {0} debe ser true o false.</value>
+  </data>
+  <data name="OptionText" xml:space="preserve">
+    <value>La opción {0} debe ser un texto.</value>
+  </data>
+  <data name="NameMax" xml:space="preserve">
+    <value>El nombre puede tener hasta {0} caracteres.</value>
+  </data>
+  <data name="NameControl" xml:space="preserve">
+    <value>El nombre no puede tener un carácter de control.</value>
+  </data>
+</root>

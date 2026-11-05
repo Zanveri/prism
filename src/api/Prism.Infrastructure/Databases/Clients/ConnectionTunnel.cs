@@ -1,9 +1,11 @@
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using Renci.SshNet;
 using Renci.SshNet.Common;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using System.Resources;
 using System.Text;
 
 namespace Prism.Infrastructure.Databases.Clients;
@@ -14,6 +16,9 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal sealed class ConnectionTunnel : IAsyncDisposable
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ConnectionTunnel.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ConnectionTunnel));
+
     private readonly SshClient? _sshClient;
     private readonly ForwardedPortLocal? _forwardedPort;
     private readonly TcpListener? _socksListener;
@@ -80,7 +85,7 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
         {
             client.Dispose();
             if (refusedKey is not null)
-                throw new InvalidOperationException($"A chave do servidor SSH ({refusedKey}) não confere com a impressão digital gravada na conexão ({ssh.HostKeyFingerprint}). Pode haver outro servidor no caminho: confirme com quem administra o servidor (ssh-keygen -lf). Se a chave mudou mesmo, informe a nova em \"Impressão digital do host\", em Editar conexão.");
+                throw new InvalidOperationException(Texts.Get("HostKeyMismatch", refusedKey, ssh.HostKeyFingerprint));
 
             await connecting;
         }
@@ -130,22 +135,19 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
             _ => null
         };
 
-    internal const string EncryptedKeyWithoutPassphrase = "A chave privada do túnel SSH é cifrada, e esta conexão não tem a frase secreta dela. Informe-a para conectar.";
+    internal static string EncryptedKeyWithoutPassphrase => Texts.Get(nameof(EncryptedKeyWithoutPassphrase));
 
-    internal const string WrongPassphrase = "A frase secreta não abre a chave privada do túnel SSH. Confira a frase e tente de novo.";
-
-    private static string MissingSecret(string what)
-        => $"{what} não está gravada nesta conexão. Conecte-se a ela e informe-a quando o Prism pedir: sem \"Salvar credenciais\", ela fica só na memória até a conexão ser desconectada.";
+    internal static string WrongPassphrase => Texts.Get(nameof(WrongPassphrase));
 
     private static string ProxyPasswordOf(ConnectionProxySettings proxy)
-        => proxy.UserName is not null && string.IsNullOrEmpty(proxy.Password) ? throw new InvalidOperationException(MissingSecret("A senha do proxy")) : proxy.Password ?? string.Empty;
+        => proxy.UserName is not null && string.IsNullOrEmpty(proxy.Password) ? throw new InvalidOperationException(Texts.Get("ProxyPasswordMissing")) : proxy.Password ?? string.Empty;
 
     private static AuthenticationMethod CreateAuthMethod(ConnectionSshSettings ssh)
     {
         if (string.Equals(ssh.AuthMethod, "privateKey", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(ssh.PrivateKeyPath))
-                throw new InvalidOperationException("Informe o caminho da chave privada SSH.");
+                throw new InvalidOperationException(Texts.Get("PrivateKeyPathRequired"));
 
             var keyFile = string.IsNullOrEmpty(ssh.Secret)
                 ? new PrivateKeyFile(ssh.PrivateKeyPath)
@@ -156,7 +158,7 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
 
         // RN-REDE-003: sem a senha o SSH.NET responderia "Value cannot be null. (Parameter 's')": a conexão gravada sem "Salvar credenciais", sem a senha digitada desde que o cofre abriu.
         if (string.IsNullOrEmpty(ssh.Secret))
-            throw new InvalidOperationException(MissingSecret("A senha do túnel SSH"));
+            throw new InvalidOperationException(Texts.Get("SshPasswordMissing"));
 
         return new PasswordAuthenticationMethod(ssh.UserName, ssh.Secret);
     }
@@ -244,7 +246,7 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
         await stream.ReadExactlyAsync(greetingReply, cancellationToken);
 
         if (greetingReply[0] != 0x05)
-            throw new InvalidOperationException("Resposta inválida do servidor proxy SOCKS5.");
+            throw new InvalidOperationException(Texts.Get("SocksInvalidResponse"));
 
         if (greetingReply[1] == 0x02)
         {
@@ -262,11 +264,11 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
             var authReply = new byte[2];
             await stream.ReadExactlyAsync(authReply, cancellationToken);
             if (authReply[1] != 0x00)
-                throw new InvalidOperationException("O proxy SOCKS5 recusou o usuário ou a senha.");
+                throw new InvalidOperationException(Texts.Get("SocksCredentialsRefused"));
         }
         else if (greetingReply[1] != 0x00)
         {
-            throw new InvalidOperationException("O proxy SOCKS5 não aceitou o método de autenticação.");
+            throw new InvalidOperationException(Texts.Get("SocksMethodRefused"));
         }
 
         var connectPacket = BuildSocks5ConnectPacket(targetHost, targetPort);
@@ -275,14 +277,14 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
         var replyHeader = new byte[4];
         await stream.ReadExactlyAsync(replyHeader, cancellationToken);
         if (replyHeader[1] != 0x00)
-            throw new InvalidOperationException($"O proxy SOCKS5 não conseguiu conectar ao destino (código {replyHeader[1]}).");
+            throw new InvalidOperationException(Texts.Get("SocksConnectFailed", replyHeader[1]));
 
         var remainingBytes = replyHeader[3] switch
         {
             0x01 => 4 + 2,
             0x04 => 16 + 2,
             0x03 => await ReadDomainLengthAsync(stream, cancellationToken) + 2,
-            _ => throw new InvalidOperationException("Tipo de endereço inválido na resposta do proxy SOCKS5.")
+            _ => throw new InvalidOperationException(Texts.Get("SocksAddressTypeInvalid"))
         };
 
         var discard = new byte[remainingBytes];

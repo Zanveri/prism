@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExportLimitsMessage" xml:space="preserve">
+    <value>El archivo superaría los límites de la importación: hasta 2.000 conexiones, 2.000 carpetas, 5 MiB y 32 niveles de carpetas desde la raíz. Exporta en partes; lo que está a más de 32 niveles de la raíz solo sale si se mueve más cerca de ella.</value>
+  </data>
+  <data name="ImportLimitsMessage" xml:space="preserve">
+    <value>Este archivo supera los límites de la importación: hasta 5 MiB, 2.000 conexiones, 2.000 carpetas y 32 niveles de carpetas.</value>
+  </data>
+  <data name="ExportEmptyMessage" xml:space="preserve">
+    <value>Marca al menos una conexión o carpeta para exportar.</value>
+  </data>
+  <data name="ImportEmptyMessage" xml:space="preserve">
+    <value>Marca al menos una conexión o carpeta para importar.</value>
+  </data>
+  <data name="ExportCredentialsInvalidMessage" xml:space="preserve">
+    <value>Elige qué va con cada conexión: sin usuario ni contraseña, solo el usuario, o usuario y contraseña.</value>
+  </data>
+  <data name="ExportDuplicateMessage" xml:space="preserve">
+    <value>La misma conexión se marcó dos veces.</value>
+  </data>
+  <data name="ImportItemsLimitMessage" xml:space="preserve">
+    <value>Marca hasta 4.000 elementos por importación.</value>
+  </data>
+  <data name="ImportItemsDuplicateMessage" xml:space="preserve">
+    <value>Cada elemento se marca una sola vez.</value>
+  </data>
+  <data name="ImportConflictInvalidMessage" xml:space="preserve">
+    <value>Elige importar con otro nombre o no importar.</value>
+  </data>
+  <data name="ExportLimitsExceededTitle" xml:space="preserve">
+    <value>Exportación por encima de los límites.</value>
+  </data>
+  <data name="UserPasswordRequiredTitle" xml:space="preserve">
+    <value>Se necesita la contraseña del usuario.</value>
+  </data>
+  <data name="UserPasswordRequiredDetail" xml:space="preserve">
+    <value>Para exportar contraseñas de bases de datos, indica tu contraseña de Prism.</value>
+  </data>
+  <data name="PassphraseInvalidTitle" xml:space="preserve">
+    <value>Contraseña de exportación no válida.</value>
+  </data>
+  <data name="PassphraseEqualsUserPasswordDetail" xml:space="preserve">
+    <value>Usa una contraseña de exportación distinta de tu contraseña de Prism.</value>
+  </data>
+  <data name="FileNewerTitle" xml:space="preserve">
+    <value>Archivo de una versión más nueva de Prism.</value>
+  </data>
+  <data name="FileNewerDetail" xml:space="preserve">
+    <value>Este archivo fue exportado por una versión más nueva de Prism. Actualiza Prism para importarlo.</value>
+  </data>
+  <data name="PassphraseWrongTitle" xml:space="preserve">
+    <value>Contraseña de exportación incorrecta.</value>
+  </data>
+  <data name="PassphraseWrongDetail" xml:space="preserve">
+    <value>La contraseña de exportación no coincide, o el archivo fue modificado.</value>
+  </data>
+  <data name="FileInvalidTitle" xml:space="preserve">
+    <value>Archivo no válido.</value>
+  </data>
+  <data name="FileInvalidDetail" xml:space="preserve">
+    <value>Este archivo no es una exportación de conexiones de Prism, o está dañado.</value>
+  </data>
+  <data name="ImportLimitsExceededTitle" xml:space="preserve">
+    <value>Archivo por encima de los límites.</value>
+  </data>
+  <data name="InvalidTitle" xml:space="preserve">
+    <value>Error al enviar datos a la API.</value>
+  </data>
+  <data name="UnknownItemDetail" xml:space="preserve">
+    <value>Una clave marcada no está en el archivo.</value>
+  </data>
+</root>

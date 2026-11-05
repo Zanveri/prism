@@ -55,16 +55,20 @@ public static class ImportMapping
     /// A primeira recusa do mapeamento pedido, com o caminho do campo (`mapping[3].source`, `mapping[3].target`): a posição além das colunas do arquivo, a
     /// coluna que a tabela não tem, a calculada pelo banco e a de um tipo que não se importa. Nula quando ele serve.
     /// </summary>
+    /// <summary>A posição do mapeamento além das colunas do arquivo (`source` a partir de 0), na frase da prévia e do trabalho.</summary>
+    public static string SourceMissing(int source, int fileColumns)
+        => ImportText.Say(fileColumns == 1 ? "MappingSourceMissingOne" : "MappingSourceMissingMany", source + 1, ImportText.Thousands(fileColumns));
+
     public static (string Field, string Message)? Refusal(IReadOnlyList<ImportMappingEntry> mapping, int fileColumns, IReadOnlyList<ImportTargetColumn> table)
     {
         for (var index = 0; index < mapping.Count; index++)
         {
             var entry = mapping[index];
             if (entry.Source >= fileColumns)
-                return ($"mapping[{index}].source", $"A coluna {entry.Source + 1} do arquivo não existe: o arquivo tem {ImportText.Thousands(fileColumns)} {(fileColumns == 1 ? "coluna" : "colunas")}.");
+                return ($"mapping[{index}].source", SourceMissing(entry.Source, fileColumns));
 
             if (table.FirstOrDefault(column => column.Name == entry.Target) is not { } target)
-                return ($"mapping[{index}].target", $"A tabela não tem a coluna {entry.Target}.");
+                return ($"mapping[{index}].target", ImportText.Say("MappingTargetMissing", entry.Target));
 
             if (!target.Importable)
                 return ($"mapping[{index}].target", target.Reason!);

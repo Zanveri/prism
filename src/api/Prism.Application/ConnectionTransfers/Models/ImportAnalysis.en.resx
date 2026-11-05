@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Blocked" xml:space="preserve">
+    <value>The folder {0} cannot be imported.</value>
+  </data>
+  <data name="Missing" xml:space="preserve">
+    <value>{0} is missing from the file.</value>
+  </data>
+  <data name="WrongType" xml:space="preserve">
+    <value>{0} is not in the format this Prism reads.</value>
+  </data>
+  <data name="PasswordWithoutUser" xml:space="preserve">
+    <value>The database password came without the user.</value>
+  </data>
+  <data name="EngineUnknown" xml:space="preserve">
+    <value>This Prism does not know the database engine {0}.</value>
+  </data>
+  <data name="ConfirmationInvalid" xml:space="preserve">
+    <value>Choose not to confirm, irreversible statements only, or all statements.</value>
+  </data>
+  <data name="LabelFolderName" xml:space="preserve">
+    <value>the folder name</value>
+  </data>
+  <data name="LabelFolderColor" xml:space="preserve">
+    <value>the folder color</value>
+  </data>
+  <data name="LabelFolderConfirmation" xml:space="preserve">
+    <value>the folder confirmation</value>
+  </data>
+  <data name="LabelFolderReadOnly" xml:space="preserve">
+    <value>the folder read-only setting</value>
+  </data>
+  <data name="LabelFolderEffective" xml:space="preserve">
+    <value>what applied to the folder</value>
+  </data>
+  <data name="LabelConnectionName" xml:space="preserve">
+    <value>the connection name</value>
+  </data>
+  <data name="LabelEngine" xml:space="preserve">
+    <value>the connection database engine</value>
+  </data>
+  <data name="LabelHost" xml:space="preserve">
+    <value>the host</value>
+  </data>
+  <data name="LabelPort" xml:space="preserve">
+    <value>the port</value>
+  </data>
+  <data name="LabelDatabase" xml:space="preserve">
+    <value>the database</value>
+  </data>
+  <data name="LabelUserName" xml:space="preserve">
+    <value>the database user</value>
+  </data>
+  <data name="LabelPassword" xml:space="preserve">
+    <value>the database password</value>
+  </data>
+  <data name="LabelConnectionConfirmation" xml:space="preserve">
+    <value>the connection confirmation</value>
+  </data>
+  <data name="LabelConnectionReadOnly" xml:space="preserve">
+    <value>the connection read-only setting</value>
+  </data>
+  <data name="LabelVerificationEnabled" xml:space="preserve">
+    <value>the connection verification</value>
+  </data>
+  <data name="LabelVerificationQuery" xml:space="preserve">
+    <value>the verification query</value>
+  </data>
+  <data name="LabelConnectionEffective" xml:space="preserve">
+    <value>what applied to the connection</value>
+  </data>
+  <data name="LabelEnvironmentFolder" xml:space="preserve">
+    <value>the folder environment</value>
+  </data>
+  <data name="LabelEnvironmentColorFolder" xml:space="preserve">
+    <value>the folder environment color</value>
+  </data>
+  <data name="LabelEnvironmentConnection" xml:space="preserve">
+    <value>the connection environment</value>
+  </data>
+  <data name="LabelEnvironmentColorConnection" xml:space="preserve">
+    <value>the connection environment color</value>
+  </data>
+  <data name="LabelEnvironmentEffective" xml:space="preserve">
+    <value>the environment that applied to the connection</value>
+  </data>
+  <data name="LabelEnvironmentColorEffective" xml:space="preserve">
+    <value>the color of the environment that applied to the connection</value>
+  </data>
+  <data name="LabelSsh" xml:space="preserve">
+    <value>the SSH tunnel</value>
+  </data>
+  <data name="LabelSshHost" xml:space="preserve">
+    <value>the SSH tunnel host</value>
+  </data>
+  <data name="LabelSshPort" xml:space="preserve">
+    <value>the SSH tunnel port</value>
+  </data>
+  <data name="LabelSshUserName" xml:space="preserve">
+    <value>the SSH tunnel user</value>
+  </data>
+  <data name="LabelSshAuthMethod" xml:space="preserve">
+    <value>the SSH authentication method</value>
+  </data>
+  <data name="LabelSshPrivateKeyPath" xml:space="preserve">
+    <value>the SSH private key path</value>
+  </data>
+  <data name="LabelSshSecret" xml:space="preserve">
+    <value>the SSH tunnel password</value>
+  </data>
+  <data name="LabelSshSaveCredentials" xml:space="preserve">
+    <value>the SSH tunnel “Save credentials”</value>
+  </data>
+  <data name="LabelSshIgnoreHostVerification" xml:space="preserve">
+    <value>the SSH tunnel “Ignore host verification”</value>
+  </data>
+  <data name="LabelSshKeepAliveInterval" xml:space="preserve">
+    <value>the SSH keep-alive interval</value>
+  </data>
+  <data name="LabelSshTunnelTimeout" xml:space="preserve">
+    <value>the SSH tunnel timeout</value>
+  </data>
+  <data name="LabelSshLocalHost" xml:space="preserve">
+    <value>the SSH tunnel local host</value>
+  </data>
+  <data name="LabelSshLocalPort" xml:space="preserve">
+    <value>the SSH tunnel local port</value>
+  </data>
+  <data name="LabelSshRemoteHost" xml:space="preserve">
+    <value>the SSH tunnel remote host</value>
+  </data>
+  <data name="LabelSshRemotePort" xml:space="preserve">
+    <value>the SSH tunnel remote port</value>
+  </data>
+  <data name="LabelSshHostKeyFingerprint" xml:space="preserve">
+    <value>the SSH server key fingerprint</value>
+  </data>
+  <data name="LabelSsl" xml:space="preserve">
+    <value>the SSL configuration</value>
+  </data>
+  <data name="LabelSslCaCertificate" xml:space="preserve">
+    <value>the CA certificate</value>
+  </data>
+  <data name="LabelSslClientCertificate" xml:space="preserve">
+    <value>the client certificate</value>
+  </data>
+  <data name="LabelSslClientKey" xml:space="preserve">
+    <value>the client private key</value>
+  </data>
+  <data name="LabelSslMode" xml:space="preserve">
+    <value>the SSL mode</value>
+  </data>
+  <data name="LabelProxy" xml:space="preserve">
+    <value>the SOCKS proxy</value>
+  </data>
+  <data name="LabelProxyHost" xml:space="preserve">
+    <value>the SOCKS proxy host</value>
+  </data>
+  <data name="LabelProxyPort" xml:space="preserve">
+    <value>the SOCKS proxy port</value>
+  </data>
+  <data name="LabelProxyUserName" xml:space="preserve">
+    <value>the SOCKS proxy user</value>
+  </data>
+  <data name="LabelProxyPassword" xml:space="preserve">
+    <value>the SOCKS proxy password</value>
+  </data>
+  <data name="LabelProxySaveCredentials" xml:space="preserve">
+    <value>the SOCKS proxy “Save credentials”</value>
+  </data>
+</root>

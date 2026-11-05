@@ -106,7 +106,7 @@ internal sealed class CsvImportReader(Stream stream, CsvImportOptions options, b
 
         ImportProblem? problem = null;
         if (raw.Fields.Count > _width && raw.Fields.Skip(_width).Any(field => field.Text.Length > 0))
-            problem = new ImportProblem($"A linha {ImportText.Thousands(raw.Line)} tem {ImportText.Thousands(raw.Fields.Count)} valores, e {(_header ? "o cabeçalho" : "a primeira linha")} tem {ImportText.Thousands(_width)}.");
+            problem = new ImportProblem(ImportText.Say(_header ? "CsvRowWiderHeader" : "CsvRowWiderFirst", ImportText.Thousands(raw.Line), ImportText.Thousands(raw.Fields.Count), ImportText.Thousands(_width)));
 
         return new ImportRecord(raw.Line, values, problem, raw.Fields.Count < _width);
     }
@@ -153,7 +153,7 @@ internal sealed class CsvImportReader(Stream stream, CsvImportOptions options, b
             if (read == TextSource.End)
             {
                 if (inQuotes)
-                    throw new ImportReadException(new ImportReadFailure(EImportReadReason.Format, $"A aspa aberta na linha {ImportText.Thousands(quoteLine)} não fecha até o fim do arquivo.", quoteLine));
+                    throw new ImportReadException(new ImportReadFailure(EImportReadReason.Format, ImportText.Say("CsvQuoteOpen", ImportText.Thousands(quoteLine)), quoteLine));
 
                 break;
             }
@@ -240,10 +240,10 @@ internal sealed class CsvImportReader(Stream stream, CsvImportOptions options, b
         fieldBytes += bytes;
         rowBytes += bytes;
         if (fieldBytes > MaxValueBytes)
-            throw ValueTooLarge($"da linha {ImportText.Thousands(line)} do arquivo", line, field < Columns.Count ? Columns[field] : ImportText.DefaultColumnName(field));
+            throw ValueTooLarge("ValueTooLargeFile", line, field < Columns.Count ? Columns[field] : ImportText.DefaultColumnName(field));
 
         if (rowBytes > MaxRowBytes)
-            throw RowTooLarge($"A linha {ImportText.Thousands(line)} do arquivo", feminine: true, line);
+            throw RowTooLarge("RowTooLargeFile", line);
 
         text.Append(character);
     }
@@ -252,7 +252,7 @@ internal sealed class CsvImportReader(Stream stream, CsvImportOptions options, b
     {
         var label = _encoding.StartsWith("utf-16", StringComparison.Ordinal) ? "UTF-16" : "UTF-8";
 
-        return new ImportReadException(new ImportReadFailure(EImportReadReason.Encoding, $"O arquivo não é {label} válido na linha {ImportText.Thousands(_line)}. Escolha a codificação dele.", _line));
+        return new ImportReadException(new ImportReadFailure(EImportReadReason.Encoding, ImportText.Say("CsvEncoding", label, ImportText.Thousands(_line)), _line));
     }
 
     /// <summary>

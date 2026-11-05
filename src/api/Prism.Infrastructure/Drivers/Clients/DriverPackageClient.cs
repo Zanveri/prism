@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Drivers.Models;
 using System.Collections.Concurrent;
@@ -13,6 +15,9 @@ namespace Prism.Infrastructure.Drivers.Clients;
 
 internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
 {
+    /// <summary>Os textos, no idioma do pedido: <c>DriverPackageClient.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DriverPackageClient));
+
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(15);
 
     /// <summary>Até os cabeçalhos da resposta chegarem (o corpo é lido depois, em fluxo).</summary>
@@ -108,7 +113,7 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
     public async Task<UnitResult<DriverInstallFailure>> InstallAsync(string driverID, DateTimeOffset acceptedAt, Action<long> onProgress, CancellationToken cancellationToken)
     {
         if (Resolve(driverID) is not var (driver, package))
-            return new DriverInstallFailure(EDriverInstallFailure.DownloadFailed, "Este driver não pode ser baixado nesta plataforma.");
+            return new DriverInstallFailure(EDriverInstallFailure.DownloadFailed, Texts.Get("PlatformUnsupported"));
 
         string? temporaryDirectory = null;
 
@@ -188,13 +193,13 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
 
         var status = (int)response.StatusCode;
         if (status is >= 300 and < 400)
-            return new DriverInstallFailure(EDriverInstallFailure.DownloadFailed, "O servidor redirecionou o download para outro endereço, e o Prism não segue redirecionamentos.");
+            return new DriverInstallFailure(EDriverInstallFailure.DownloadFailed, Texts.Get("Redirected"));
 
         if (status != 200)
-            return new DriverInstallFailure(EDriverInstallFailure.DownloadFailed, $"O nuget.org respondeu {status} ao pedido do pacote.");
+            return new DriverInstallFailure(EDriverInstallFailure.DownloadFailed, Texts.Get("NugetStatus", status));
 
         if (response.Content.Headers.ContentLength is { } announced && announced != package.SizeBytes)
-            return new DriverInstallFailure(EDriverInstallFailure.IntegrityFailed, "O arquivo oferecido pelo servidor não tem o tamanho do pacote do catálogo. Nada foi instalado.");
+            return new DriverInstallFailure(EDriverInstallFailure.IntegrityFailed, Texts.Get("SizeMismatch"));
 
         await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
@@ -206,7 +211,7 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
         {
             received += read;
             if (received > package.SizeBytes)
-                return new DriverInstallFailure(EDriverInstallFailure.IntegrityFailed, "O servidor enviou mais dados do que o pacote do catálogo tem. Nada foi instalado.");
+                return new DriverInstallFailure(EDriverInstallFailure.IntegrityFailed, Texts.Get("TooMuchData"));
 
             hash.AppendData(buffer, 0, read);
             await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
@@ -214,11 +219,11 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
         }
 
         if (received < package.SizeBytes)
-            return new DriverInstallFailure(EDriverInstallFailure.DownloadFailed, "O download terminou antes do fim do arquivo.");
+            return new DriverInstallFailure(EDriverInstallFailure.DownloadFailed, Texts.Get("EarlyEnd"));
 
         // RN-DRIVER-003: o SHA-512 é conferido antes de o arquivo ser aberto como zip.
         if (!hash.GetHashAndReset().AsSpan().SequenceEqual(Convert.FromBase64String(package.Sha512)))
-            return new DriverInstallFailure(EDriverInstallFailure.IntegrityFailed, "O arquivo baixado não confere com o SHA-512 do catálogo. Nada foi instalado.");
+            return new DriverInstallFailure(EDriverInstallFailure.IntegrityFailed, Texts.Get("HashMismatch"));
 
         await file.FlushAsync(cancellationToken);
 
@@ -232,17 +237,17 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
     private static DriverInstallFailure Classify(Exception exception)
         => exception switch
         {
-            OperationCanceledException => Download("O download não terminou no prazo."),
-            HttpRequestException { HttpRequestError: HttpRequestError.NameResolutionError } => Download("Não foi possível achar o endereço do nuget.org. Confira a conexão com a internet."),
-            HttpRequestException { HttpRequestError: HttpRequestError.SecureConnectionError } => Download("A conexão segura com o nuget.org não foi aceita: o certificado apresentado não é válido neste computador. Numa rede que intercepta HTTPS o driver não é baixado."),
-            HttpRequestException { HttpRequestError: HttpRequestError.ProxyTunnelError or HttpRequestError.UserAuthenticationError } => Download("O proxy da rede recusou a conexão com o nuget.org."),
-            HttpRequestException { HttpRequestError: HttpRequestError.ConnectionError } => Download("Não foi possível conectar no nuget.org."),
+            OperationCanceledException => Download(Texts.Get("Timeout")),
+            HttpRequestException { HttpRequestError: HttpRequestError.NameResolutionError } => Download(Texts.Get("NameResolution")),
+            HttpRequestException { HttpRequestError: HttpRequestError.SecureConnectionError } => Download(Texts.Get("SecureConnection")),
+            HttpRequestException { HttpRequestError: HttpRequestError.ProxyTunnelError or HttpRequestError.UserAuthenticationError } => Download(Texts.Get("Proxy")),
+            HttpRequestException { HttpRequestError: HttpRequestError.ConnectionError } => Download(Texts.Get("ConnectionError")),
 
             // A conexão que cai chega de dois jeitos, conforme o instante: antes de os cabeçalhos serem lidos, é a requisição que falha; depois, a leitura do corpo.
-            HttpRequestException or HttpIOException or IOException { InnerException: SocketException } => Download("A conexão caiu durante o download."),
-            InvalidDataException => new DriverInstallFailure(EDriverInstallFailure.IntegrityFailed, "O pacote baixado não pôde ser lido. Nada foi instalado."),
-            IOException or UnauthorizedAccessException => Download("Não foi possível gravar o driver na pasta de dados do Prism (disco cheio ou sem permissão)."),
-            _ => Download("A instalação falhou por um erro inesperado. O detalhe está no log do Prism.")
+            HttpRequestException or HttpIOException or IOException { InnerException: SocketException } => Download(Texts.Get("ConnectionDropped")),
+            InvalidDataException => new DriverInstallFailure(EDriverInstallFailure.IntegrityFailed, Texts.Get("PackageUnreadable")),
+            IOException or UnauthorizedAccessException => Download(Texts.Get("DiskError")),
+            _ => Download(Texts.Get("Unexpected"))
         };
 
     private static DriverInstallFailure Download(string detail)
@@ -275,7 +280,7 @@ internal sealed class DriverPackageClient : IDriverPackageClient, IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return new DriverInstallFailure(EDriverInstallFailure.Canceled, "A instalação foi cancelada.");
+            return new DriverInstallFailure(EDriverInstallFailure.Canceled, Texts.Get("Canceled"));
         }
         catch (Exception exception)
         {

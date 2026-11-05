@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="InUseTitle" xml:space="preserve">
+    <value>Driver em uso.</value>
+  </data>
+  <data name="InUseDetail" xml:space="preserve">
+    <value>Há conexão aberta com um banco que este driver atende. Feche as conexões desse banco antes de remover o driver.</value>
+  </data>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Driver não localizado.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>O catálogo do Prism não tem um driver com esse identificador.</value>
+  </data>
+  <data name="UnavailableTitle" xml:space="preserve">
+    <value>Driver indisponível.</value>
+  </data>
+  <data name="UnavailableDetail" xml:space="preserve">
+    <value>Este driver não pode ser instalado aqui: o fabricante não o publica para esta plataforma, ou o Prism ainda não conecta nesse banco.</value>
+  </data>
+  <data name="AlreadyInstalledTitle" xml:space="preserve">
+    <value>Driver já instalado.</value>
+  </data>
+  <data name="AlreadyInstalledDetail" xml:space="preserve">
+    <value>O driver já está instalado. Se ele acabou de ser removido, a remoção só acontece quando o Prism reiniciar: reinicie e instale de novo.</value>
+  </data>
+  <data name="InstallInProgressTitle" xml:space="preserve">
+    <value>Instalação em andamento.</value>
+  </data>
+  <data name="InstallInProgressDetail" xml:space="preserve">
+    <value>Já há uma instalação deste driver em andamento.</value>
+  </data>
+  <data name="LicenseNotAcceptedTitle" xml:space="preserve">
+    <value>Licença não aceita.</value>
+  </data>
+  <data name="LicenseNotAcceptedDetail" xml:space="preserve">
+    <value>Para instalar o driver é preciso aceitar a licença do fabricante.</value>
+  </data>
+  <data name="NotInstallingTitle" xml:space="preserve">
+    <value>Não há instalação em andamento.</value>
+  </data>
+  <data name="NotInstallingDetail" xml:space="preserve">
+    <value>Não há instalação deste driver em andamento: ela já terminou ou não começou.</value>
+  </data>
+  <data name="NotInstalledTitle" xml:space="preserve">
+    <value>Driver não instalado.</value>
+  </data>
+  <data name="NotInstalledDetail" xml:space="preserve">
+    <value>O driver não está instalado.</value>
+  </data>
+  <data name="StoreUnavailable" xml:space="preserve">
+    <value>Não foi possível gravar na pasta de drivers. Tente de novo em instantes.</value>
+  </data>
+</root>

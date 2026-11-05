@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using static Prism.Infrastructure.Databases.Clients.EditableSql;
 
 namespace Prism.Infrastructure.Databases.Clients;
@@ -17,6 +19,9 @@ internal readonly record struct ParameterMarker(int Start, int End, int Number, 
 /// </summary>
 internal static class ParameterMarkers
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ParameterMarkers.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ParameterMarkers));
+
     /// <summary>O maior número de marcador que se lê: acima disso o número é lido como o teto, e o PostgreSQL recusa o comando (o limite dele é 65.535).</summary>
     private const int NumberCap = 1_000_000;
 
@@ -81,11 +86,11 @@ internal static class ParameterMarkers
 
         var numbers = markers.Select(marker => marker.Number).ToHashSet();
         if (numbers.Contains(0))
-            return new ParameterMismatch(numbers.Count, values, "O marcador $0 não existe: os do PostgreSQL começam em $1.");
+            return new ParameterMismatch(numbers.Count, values, Texts.Get("MarkerZero"));
 
         var highest = numbers.Count == 0 ? 0 : numbers.Max();
         if (Enumerable.Range(1, highest).FirstOrDefault(number => !numbers.Contains(number)) is var hole and > 0)
-            return new ParameterMismatch(numbers.Count, values, $"Os marcadores do comando têm de ir de $1 ao último sem pular nenhum, e falta o ${hole}.");
+            return new ParameterMismatch(numbers.Count, values, Texts.Get("MarkerHole", hole));
 
         return highest == values ? null : new ParameterMismatch(highest, values, Sentence(highest, values));
     }
@@ -141,7 +146,7 @@ internal static class ParameterMarkers
     }
 
     private static string Sentence(int markers, int values)
-        => $"O comando tem {markers} {(markers == 1 ? "marcador" : "marcadores")}, e {(values == 1 ? "veio 1 valor" : $"vieram {values} valores")}.";
+        => Texts.Get(markers == 1 ? (values == 1 ? "MismatchOneOne" : "MismatchOneMany") : (values == 1 ? "MismatchManyOne" : "MismatchManyMany"), markers, values);
 }
 
 /// <summary>RN-VAR-032: os marcadores do comando não batem com os valores. `Markers` e `Values` vão na resposta (`QUERY_PARAMETERS_MISMATCH`).</summary>

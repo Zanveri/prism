@@ -1,0 +1,160 @@
+import type { AuditCopy } from "./audit.copy";
+
+export const auditCopyEn: AuditCopy = {
+  title: "Audit",
+  subtitle: (userName: string) =>
+    `Everything that was run and the account's actions, encrypted in ${userName}'s journal. Only whoever signs in with this account sees it.`,
+  subtitleAnonymous: "Everything that was run and the account's actions, encrypted in this account's journal. Only whoever signs in with this account sees it.",
+
+  stats: {
+    entries: "records",
+    oldest: "oldest",
+    noOldest: "—",
+    retentionAndSize: (sizeLabel: string) => `kept · ${sizeLabel}`,
+  },
+
+  filters: {
+    regionLabel: "Audit filters",
+    searchLabel: "Search",
+    searchPlaceholder: "Search the statement, the message, the connection…",
+    clearFilters: "Clear filters",
+    activePrefix: "Active:",
+    totalFound: (total: number) =>
+      total === 1 ? "1 record found" : `${total.toLocaleString("en")} records found`,
+    all: "All",
+    allFeminine: "All",
+    periodLabel: "Period",
+    connectionsLabel: "Connections",
+    connectionSearchPlaceholder: "Filter connections…",
+    deletedConnectionSuffix: "(deleted)",
+    environmentsLabel: "Environments",
+    noEnvironment: "No environment",
+    levelsLabel: "Level",
+    highAndCriticalShortcut: "High and Critical",
+    kindsLabel: "Type",
+    outcomesLabel: "Outcome",
+    customFrom: "From",
+    customTo: "To",
+    scriptFilterChip: "Selected script",
+    removeFilter: (label: string) => `Remove the ${label} filter`,
+  },
+
+  periods: {
+    "1h": "Last hour",
+    today: "Today",
+    "7d": "7 days",
+    "30d": "30 days",
+    all: "All",
+    custom: "Custom",
+  },
+
+  levels: {
+    info: { mark: "•", label: "Informational" },
+    warning: { mark: "●", label: "Warning" },
+    high: { mark: "▲", label: "High" },
+    critical: { mark: "◆", label: "Critical" },
+  },
+
+  kinds: {
+    sql: "SQL",
+    edits: "Edit",
+    transaction: "Transaction",
+    transfer: "Data",
+    security: "Security",
+    connection: "Connections",
+  },
+
+  outcomes: {
+    inProgress: "In progress",
+    ok: "Completed",
+    error: "Error",
+    refused: "Refused",
+    cancelled: "Cancelled",
+    interrupted: "Interrupted",
+  },
+
+  origins: {
+    editor: "Editor (Ctrl+Enter)",
+    script: "Script (Alt+X)",
+    values: "Run with values…",
+    statement: "Run this statement",
+    rerun: "Run again (F5)",
+    filter: "Grid filter and order",
+    "auto-refresh": "Auto-refresh",
+    other: "Other origin",
+  },
+
+  table: {
+    dateTime: "Date and time",
+    level: "Level",
+    event: "Event",
+    connection: "Connection",
+    environment: "Environment",
+    outcome: "Outcome",
+    duration: "Duration",
+    loadMore: "Load more",
+    loadingMore: "Loading…",
+    loading: "Loading the audit records…",
+    empty: "No records in the journal yet.",
+    emptyFiltered: "No records found with these filters.",
+    unavailable: "History and audit are off: the journal could not be opened.",
+    loadError: "Could not load the audit records.",
+  },
+
+  detail: {
+    ariaLabel: "Record detail",
+    closeLabel: "Close the detail",
+    numberLabel: (id: number) => `No. ${id.toLocaleString("en")}`,
+    when: "When",
+    connection: "Connection",
+    folder: "Folder",
+    environment: "Environment",
+    origin: "Origin",
+    protections: "Protections",
+    confirmation: "Confirmation",
+    confirmedYes: "Went through confirmation",
+    confirmedNo: "Did not need confirmation",
+    outcome: "Outcome",
+    session: "Session",
+    script: "Script",
+    filterByScript: "See all from this script",
+    error: "Error",
+    sqlSent: "Statement sent",
+    copy: "Copy",
+    copied: "Statement copied to the clipboard.",
+    openInEditor: "Open in editor",
+    openedInEditor: "Statement opened in a new query tab.",
+  },
+
+  retention: {
+    label: "Keep the records for",
+    hint: "The choice is kept inside the encrypted journal: nobody without the account can shorten it.",
+    options: [
+      { value: 30, label: "30 days" },
+      { value: 90, label: "90 days" },
+      { value: 180, label: "180 days" },
+      { value: 365, label: "1 year" },
+      { value: 0, label: "Forever" },
+    ] as const,
+    savedToast: "Journal retention updated.",
+    saveErrorToast: "Could not update the journal retention.",
+    purgeButton: "Delete records…",
+  },
+
+  purge: {
+    title: "Delete audit records",
+    description:
+      "Permanently deletes the records older than the chosen date. A Critical record will note this cleanup in the journal.",
+    beforeLabel: "Delete everything before",
+    beforeRequired: "Choose the cutoff date.",
+    passwordLabel: "Prism password",
+    passwordRequired: "Enter this account's password.",
+    invalidPassword: "Incorrect password.",
+    cancel: "Cancel",
+    confirm: "Delete records",
+    confirming: "Deleting…",
+    successToast: (deleted: number) =>
+      deleted === 1 ? "1 record deleted from the journal." : `${deleted.toLocaleString("en")} records deleted from the journal.`,
+    errorToast: "Could not delete the journal records.",
+  },
+};

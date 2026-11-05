@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ListShape" xml:space="preserve">
+    <value>Informa los valores como una lista de { type, value }.</value>
+  </data>
+  <data name="TooManyValues" xml:space="preserve">
+    <value>La sentencia lleva hasta 10.000 valores.</value>
+  </data>
+  <data name="EntryShape" xml:space="preserve">
+    <value>Cada valor es un objeto con type y value.</value>
+  </data>
+  <data name="TypeInvalid" xml:space="preserve">
+    <value>El tipo es text, number, boolean, date o timestamp.</value>
+  </data>
+  <data name="ValueNotText" xml:space="preserve">
+    <value>El valor es un texto, o nulo.</value>
+  </data>
+  <data name="TextBrokenEncoding" xml:space="preserve">
+    <value>El texto tiene la mitad de un par UTF-16 o UTF-8 inválido, que la base de datos no guarda.</value>
+  </data>
+  <data name="ValuesTooBig" xml:space="preserve">
+    <value>Los valores de la sentencia pasan de 4 MiB.</value>
+  </data>
+  <data name="TimestampZoneOnlyPostgres" xml:space="preserve">
+    <value>El instante con zona horaria solo vale en PostgreSQL; {0} guarda el instante sin zona horaria.</value>
+  </data>
+  <data name="NumberDigits" xml:space="preserve">
+    <value>El número tiene {0} dígitos, y {1} guarda hasta {2}.</value>
+  </data>
+  <data name="NumberDigitsDriver" xml:space="preserve">
+    <value>El número tiene {0} dígitos, y {1} guarda hasta {2} por el driver.</value>
+  </data>
+  <data name="NumberDouble" xml:space="preserve">
+    <value>El número pasa de lo que {0} guarda en un DOUBLE.</value>
+  </data>
+  <data name="FilterMarker" xml:space="preserve">
+    <value>El filtro no puede tener un marcador de parámetro ($1 o ?).</value>
+  </data>
+  <data name="NumberForm" xml:space="preserve">
+    <value>El número se escribe como 12, -3.5 o 1e10, con hasta 100 caracteres.</value>
+  </data>
+  <data name="BooleanForm" xml:space="preserve">
+    <value>El booleano es true o false.</value>
+  </data>
+  <data name="DateForm" xml:space="preserve">
+    <value>La fecha es aaaa-mm-dd, y tiene que existir.</value>
+  </data>
+  <data name="TimestampForm" xml:space="preserve">
+    <value>El instante es aaaa-mm-dd hh:mm:ss, con hasta 6 dígitos después de un punto y, en PostgreSQL, la zona horaria al final.</value>
+  </data>
+  <data name="TextTooLong" xml:space="preserve">
+    <value>El texto puede tener hasta 1.000.000 de caracteres.</value>
+  </data>
+  <data name="TextHasNul" xml:space="preserve">
+    <value>El texto no puede tener el carácter U+0000.</value>
+  </data>
+  <data name="TextHalfPair" xml:space="preserve">
+    <value>El texto tiene la mitad de un par UTF-16, que la base de datos no guarda.</value>
+  </data>
+</root>

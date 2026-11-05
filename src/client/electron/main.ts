@@ -39,6 +39,8 @@ import { createWorkspaceHub, saveWorkspaceThroughApi } from "./workspace-hub";
 import type { SavedWorkspace } from "./workspace-messages";
 import { isAppZoom, nextAppZoom, zoomFactor, zoomShortcut, type AppZoom } from "./zoom";
 import { readAppZoom, writeAppZoom, zoomFileName } from "./zoom-file";
+import { isLocale, localeArgument } from "./locale";
+import { localeFileName, readAppLocale, writeAppLocale } from "./locale-file";
 
 // A pasta de dados tem de ser fixada antes de qualquer leitura de `userData`, do `requestSingleInstanceLock` (que
 // a usa) e do `whenReady`: `%APPDATA%\Zanveri\Prism` empacotado e `%APPDATA%\Zanveri\Prism-dev` em desenvolvimento (`data-dir.ts`).
@@ -84,6 +86,10 @@ const closeApproved = new Set<number>();
  */
 const zoomFile = join(app.getPath("userData"), zoomFileName);
 let appZoom: AppZoom = readAppZoom(zoomFile);
+
+/** O idioma do programa (`locale.ts`), lido ao abrir e o mesmo em todas as janelas até fechar: trocar em Configurações grava o da próxima abertura. */
+const localeFile = join(app.getPath("userData"), localeFileName);
+const appLocale = readAppLocale(localeFile);
 
 /** Aplica o zoom em todas as janelas, avisa as telas (a de Configurações mostra o valor) e grava. Gravar que falha só vai para o log: vale até fechar. */
 function changeZoom(next: AppZoom): AppZoom {
@@ -533,6 +539,14 @@ ipcMain.handle("prism:data-folder", (event) => {
   return app.getPath("userData");
 });
 
+/** O idioma da próxima abertura: só um dos de `locale.ts`. A resposta é o que ficou gravado. */
+ipcMain.handle("prism:locale-set", (event, locale: unknown) => {
+  assertFromApp(event);
+  if (!isLocale(locale)) throw new Error("Idioma desconhecido.");
+  writeAppLocale(localeFile, locale);
+  return locale;
+});
+
 /** O zoom do programa (RN-ZOOM-001): o de agora, e o pedido de outro, que só vale se for um dos passos. A resposta é o que ficou. */
 ipcMain.handle("prism:zoom-get", (event) => {
   assertFromApp(event);
@@ -754,7 +768,7 @@ function createAppWindow(bounds?: Rect) {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
-      additionalArguments: [versionArgument(app.getVersion()), windowArgument(id)],
+      additionalArguments: [versionArgument(app.getVersion()), windowArgument(id), localeArgument(appLocale)],
       zoomFactor: zoomFactor(appZoom),
     },
   });
@@ -1100,7 +1114,7 @@ if (!app.requestSingleInstanceLock()) {
     // mostra o motivo com "Reiniciar"; um erro de outra parte da abertura vai para o log também.
     return startUp({
       // RN-ZOOM-001: o splash já aparece no zoom do programa, do tamanho que couber na tela.
-      showSplash: () => createSplash({ iconPath, version: app.getVersion(), geometry: splashGeometry(zoomFactor(appZoom), screen.getPrimaryDisplay().workAreaSize) }),
+      showSplash: () => createSplash({ iconPath, version: app.getVersion(), locale: appLocale, geometry: splashGeometry(zoomFactor(appZoom), screen.getPrimaryDisplay().workAreaSize) }),
       startApi: launchApi,
       createMainWindow,
     });

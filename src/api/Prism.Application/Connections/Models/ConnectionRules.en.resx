@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="VerificationIntervalMessage" xml:space="preserve">
+    <value>The check must run every 5 to 3,600 seconds.</value>
+  </data>
+  <data name="NameLength" xml:space="preserve">
+    <value>The connection name must be 1 to 80 characters long.</value>
+  </data>
+  <data name="NameControl" xml:space="preserve">
+    <value>The connection name cannot contain control or text direction characters.</value>
+  </data>
+  <data name="HostRequired" xml:space="preserve">
+    <value>Enter the host.</value>
+  </data>
+  <data name="HostLength" xml:space="preserve">
+    <value>The host can have up to 255 characters.</value>
+  </data>
+  <data name="HostControl" xml:space="preserve">
+    <value>The host cannot contain control or text direction characters.</value>
+  </data>
+  <data name="PortRange" xml:space="preserve">
+    <value>Enter a port from 1 to 65535.</value>
+  </data>
+  <data name="DatabaseRequired" xml:space="preserve">
+    <value>Enter the database.</value>
+  </data>
+  <data name="DatabaseLength" xml:space="preserve">
+    <value>The database can have up to 128 characters.</value>
+  </data>
+  <data name="DatabaseControl" xml:space="preserve">
+    <value>The database cannot contain control or text direction characters.</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Enter the database user.</value>
+  </data>
+  <data name="UserNameLength" xml:space="preserve">
+    <value>The database user can have up to 128 characters.</value>
+  </data>
+  <data name="UserNameControl" xml:space="preserve">
+    <value>The database user cannot contain control or text direction characters.</value>
+  </data>
+  <data name="PasswordLength" xml:space="preserve">
+    <value>The database password can have up to 1,024 characters.</value>
+  </data>
+  <data name="VerificationQueryLength" xml:space="preserve">
+    <value>The check query can have at most 1,000 characters.</value>
+  </data>
+  <data name="VerificationQueryControl" xml:space="preserve">
+    <value>The check query cannot contain control or text direction characters.</value>
+  </data>
+  <data name="VerificationQueryNotReadOnly" xml:space="preserve">
+    <value>The check query must be a single read: {0}.</value>
+  </data>
+  <data name="SshHostLength" xml:space="preserve">
+    <value>The SSH tunnel host can have up to 255 characters.</value>
+  </data>
+  <data name="SshHostControl" xml:space="preserve">
+    <value>The SSH tunnel host cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SshUserNameLength" xml:space="preserve">
+    <value>The SSH tunnel user can have up to 128 characters.</value>
+  </data>
+  <data name="SshUserNameControl" xml:space="preserve">
+    <value>The SSH tunnel user cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SshPrivateKeyPathLength" xml:space="preserve">
+    <value>The SSH private key path can have up to 1,024 characters.</value>
+  </data>
+  <data name="SshPrivateKeyPathControl" xml:space="preserve">
+    <value>The SSH private key path cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SshLocalHostLength" xml:space="preserve">
+    <value>The SSH tunnel local host can have up to 255 characters.</value>
+  </data>
+  <data name="SshLocalHostControl" xml:space="preserve">
+    <value>The SSH tunnel local host cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SshRemoteHostLength" xml:space="preserve">
+    <value>The SSH tunnel remote host can have up to 255 characters.</value>
+  </data>
+  <data name="SshRemoteHostControl" xml:space="preserve">
+    <value>The SSH tunnel remote host cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SshHostKeyFingerprintLength" xml:space="preserve">
+    <value>The SSH server key fingerprint can have up to 255 characters.</value>
+  </data>
+  <data name="SshHostKeyFingerprintControl" xml:space="preserve">
+    <value>The SSH server key fingerprint cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SslCaCertificatePathLength" xml:space="preserve">
+    <value>The CA certificate path can have up to 1,024 characters.</value>
+  </data>
+  <data name="SslCaCertificatePathControl" xml:space="preserve">
+    <value>The CA certificate path cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SslClientCertificatePathLength" xml:space="preserve">
+    <value>The client certificate path can have up to 1,024 characters.</value>
+  </data>
+  <data name="SslClientCertificatePathControl" xml:space="preserve">
+    <value>The client certificate path cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SslClientKeyPathLength" xml:space="preserve">
+    <value>The client private key path can have up to 1,024 characters.</value>
+  </data>
+  <data name="SslClientKeyPathControl" xml:space="preserve">
+    <value>The client private key path cannot contain control or text direction characters.</value>
+  </data>
+  <data name="ProxyHostLength" xml:space="preserve">
+    <value>The SOCKS proxy host can have up to 255 characters.</value>
+  </data>
+  <data name="ProxyHostControl" xml:space="preserve">
+    <value>The SOCKS proxy host cannot contain control or text direction characters.</value>
+  </data>
+  <data name="ProxyUserNameLength" xml:space="preserve">
+    <value>The SOCKS proxy user can have up to 128 characters.</value>
+  </data>
+  <data name="ProxyUserNameControl" xml:space="preserve">
+    <value>The SOCKS proxy user cannot contain control or text direction characters.</value>
+  </data>
+  <data name="SshHostRequired" xml:space="preserve">
+    <value>Enter the SSH tunnel host.</value>
+  </data>
+  <data name="SshPortRange" xml:space="preserve">
+    <value>Enter an SSH port from 1 to 65535.</value>
+  </data>
+  <data name="SshUserNameRequired" xml:space="preserve">
+    <value>Enter the SSH tunnel user.</value>
+  </data>
+  <data name="SshAuthMethodInvalid" xml:space="preserve">
+    <value>Choose the SSH authentication method: password or private key.</value>
+  </data>
+  <data name="SshPrivateKeyPathRequired" xml:space="preserve">
+    <value>Enter the SSH private key path.</value>
+  </data>
+  <data name="SshSecretLength" xml:space="preserve">
+    <value>The SSH password or passphrase can have up to 1,024 characters.</value>
+  </data>
+  <data name="SshKeepAliveRange" xml:space="preserve">
+    <value>The SSH keep-alive interval must be from 0 to 3,600,000 ms.</value>
+  </data>
+  <data name="SshTimeoutRange" xml:space="preserve">
+    <value>The SSH tunnel connection timeout must be from 0 to 600,000 ms.</value>
+  </data>
+  <data name="SshLocalPortRange" xml:space="preserve">
+    <value>Enter a local port from 0 to 65535.</value>
+  </data>
+  <data name="SshRemotePortRange" xml:space="preserve">
+    <value>Enter a remote port from 0 to 65535.</value>
+  </data>
+  <data name="SslModeInvalid" xml:space="preserve">
+    <value>Choose a valid SSL mode.</value>
+  </data>
+  <data name="ProxyHostRequired" xml:space="preserve">
+    <value>Enter the SOCKS proxy host.</value>
+  </data>
+  <data name="ProxyPortRange" xml:space="preserve">
+    <value>Enter a SOCKS proxy port from 1 to 65535.</value>
+  </data>
+  <data name="ProxyPasswordLength" xml:space="preserve">
+    <value>The SOCKS proxy password can have up to 1,024 characters.</value>
+  </data>
+</root>

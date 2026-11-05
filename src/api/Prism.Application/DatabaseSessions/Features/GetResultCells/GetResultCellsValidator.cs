@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using FluentValidation;
 using Prism.Infrastructure.Databases.Models;
 
@@ -9,11 +11,14 @@ namespace Prism.Application.DatabaseSessions.Features.GetResultCells;
 /// </summary>
 public sealed class GetResultCellsValidator : AbstractValidator<GetResultCellsCommand>
 {
+    /// <summary>Os textos, no idioma do pedido: <c>GetResultCellsValidator.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(GetResultCellsValidator));
+
     private const string ErrorCode = "CELLS_INVALID";
 
     public GetResultCellsValidator()
     {
-        RuleFor(request => request.Cells).Must(cells => cells is { Count: > 0 and <= QueryPaging.MaxCellsPerRequest }).WithMessage($"Peça de 1 a {QueryPaging.MaxCellsPerRequest} células.").WithErrorCode(ErrorCode);
-        RuleForEach(request => request.Cells).Must(cell => cell is { Row: >= 0, Column: >= 0 }).WithMessage("A linha e a coluna de cada célula contam de zero.").WithErrorCode(ErrorCode);
+        RuleFor(request => request.Cells).Must(cells => cells is { Count: > 0 and <= QueryPaging.MaxCellsPerRequest }).WithMessage(_ => Texts.Get("CellsCountInvalid", QueryPaging.MaxCellsPerRequest)).WithErrorCode(ErrorCode);
+        RuleForEach(request => request.Cells).Must(cell => cell is { Row: >= 0, Column: >= 0 }).WithMessage(_ => Texts.Get("CellPositionInvalid")).WithErrorCode(ErrorCode);
     }
 }

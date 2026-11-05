@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExportEmpty" xml:space="preserve">
+    <value>Crie uma senha de exportação.</value>
+  </data>
+  <data name="ExportTooShort" xml:space="preserve">
+    <value>A senha de exportação precisa ter pelo menos 12 caracteres.</value>
+  </data>
+  <data name="ExportTooLong" xml:space="preserve">
+    <value>A senha de exportação pode ter até 128 caracteres.</value>
+  </data>
+  <data name="ExportEdgeSpace" xml:space="preserve">
+    <value>A senha de exportação não pode começar nem terminar com espaço.</value>
+  </data>
+  <data name="ExportControl" xml:space="preserve">
+    <value>A senha de exportação não pode ter caractere de controle.</value>
+  </data>
+  <data name="ImportEmpty" xml:space="preserve">
+    <value>Informe a senha de exportação.</value>
+  </data>
+  <data name="ImportTooLong" xml:space="preserve">
+    <value>A senha de exportação tem até 128 caracteres.</value>
+  </data>
+</root>

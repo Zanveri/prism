@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Localization;
 using Prism.Api.Filters;
 using Prism.Api.Hosting;
 using Prism.Core.Api.Models.Dtos;
@@ -5,11 +6,17 @@ using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Drivers.Services;
 using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Transfers.Services;
+using System.Globalization;
+using Prism.Core.Extensions;
+using System.Resources;
 
 namespace Prism.Api;
 
 public static class DependencyInjection
 {
+    /// <summary>Os textos, no idioma do pedido: <c>DependencyInjection.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DependencyInjection));
+
     /// <summary>Nome da política de CORS; só existe uma, com a origem da tela.</summary>
     private const string CorsPolicy = "PrismShell";
 
@@ -41,7 +48,7 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// A ordem importa: a exceção que ninguém tratou vira o 500 fixo, o host é filtrado antes de
+    /// A ordem importa: o idioma do pedido vem primeiro, a exceção que ninguém tratou vira o 500 fixo, o host é filtrado antes de
     /// qualquer roteamento, o CORS responde o preflight antes do token (o navegador não manda o
     /// token no preflight), o token vale para tudo o que chega aos endpoints, e a barreira do cofre
     /// vem depois dele: sem token a resposta é `AUTHENTICATION_REQUIRED`, e só quem o leva fica
@@ -63,6 +70,7 @@ public static class DependencyInjection
         // RN-DIARIO-001 a 003: o serviço do diário assina a abertura e o fechamento do cofre; precisa existir desde a subida.
         app.ApplicationServices.GetRequiredService<IJournalService>();
 
+        UseLanguages(app);
         app.UseExceptionHandler(handler => handler.Run(WriteUnexpectedError));
 
         // O host do ASP.NET já põe este filtro no início do pipeline; a chamada explícita deixa a
@@ -78,10 +86,34 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// O idioma dos textos que chegam à tela vem do <c>Accept-Language</c>, que a tela manda em todo pedido: pt-BR (o padrão, também para um idioma
+    /// que não está na lista), en e es, com en-US valendo en (<c>FallBackToParentUICultures</c>, o padrão). <b>Só a UICulture muda</b>: a
+    /// CurrentCulture é a do processo em todo pedido, como antes desta escolha, porque a exportação, a importação e as conversões formatam número e
+    /// data com ela, e as fixtures comparam a saída; a lista de culturas aceitas é só ela, então nenhum cabeçalho a troca. Fica antes do tratamento de
+    /// exceção, para o 500 e as recusas da porta de entrada saírem no idioma. Fora de um pedido (a partida, um temporizador criado nela) o idioma
+    /// é o português em qualquer máquina, e não o do sistema.
+    /// </summary>
+    private static void UseLanguages(IApplicationBuilder app)
+    {
+        var portuguese = CultureInfo.GetCultureInfo("pt-BR");
+        var processCulture = CultureInfo.CurrentCulture;
+
+        CultureInfo.DefaultThreadCurrentUICulture = portuguese;
+
+        app.UseRequestLocalization(new RequestLocalizationOptions
+        {
+            DefaultRequestCulture = new RequestCulture(processCulture, portuguese),
+            SupportedCultures = [processCulture],
+            SupportedUICultures = [portuguese, CultureInfo.GetCultureInfo("en"), CultureInfo.GetCultureInfo("es")],
+            RequestCultureProviders = [new AcceptLanguageHeaderRequestCultureProvider()]
+        });
+    }
+
+    /// <summary>
     /// A exceção que nenhum handler tratou vira o 500 no formato da API, sem mensagem, tipo nem pilha,
     /// que diriam ao cliente como a aplicação é por dentro. A exceção inteira fica no log: o
     /// `ExceptionHandlerMiddleware` a escreve como erro antes de chamar este método.
     /// </summary>
     private static Task WriteUnexpectedError(HttpContext context)
-        => HostErrors.WriteAsync(context, ApiErrorDto.CreateInternalServerError("Algo deu errado do nosso lado. Tente de novo em instantes."));
+        => HostErrors.WriteAsync(context, ApiErrorDto.CreateInternalServerError(Texts.Get("UnexpectedErrorDetail")));
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { locale } from "@/lib/i18n";
 import { transferExits, useTransfersAhead } from "@/app/workbench/_lib/data-import/data-imports";
 import { canceledAheadNote } from "@/app/workbench/_lib/data-import/transfer-exits";
 import { Button, Dialog, FormMessage, RefreshIcon, StatusBadge, useToast } from "@/components/ui";
@@ -22,7 +23,7 @@ function formatDay(date: string): string {
 
 /** 1 MB = 1.048.576 bytes, a conta do Windows, como na tela de Drivers. */
 function formatMegabytes(bytes: number): string {
-  return `${(bytes / 1_048_576).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
+  return `${(bytes / 1_048_576).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 
 /**

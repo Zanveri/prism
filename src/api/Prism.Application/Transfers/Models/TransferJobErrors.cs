@@ -1,7 +1,9 @@
 using Prism.Application.Connections.Models;
 using Prism.Core.Api.Models.Dtos;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 
 namespace Prism.Application.Transfers.Models;
 
@@ -12,20 +14,23 @@ namespace Prism.Application.Transfers.Models;
 /// </summary>
 internal static class TransferJobErrors
 {
+    /// <summary>Os textos, no idioma do pedido: <c>TransferJobErrors.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(TransferJobErrors));
+
     public const string OptionsInvalidCode = "EXPORT_OPTIONS_INVALID";
 
     public static ApiErrorDto NotFound(Guid id)
-        => ApiErrorDto.CreateNotFound("Transferência não localizada.", "TRANSFER_NOT_FOUND", $"Não existe uma transferência com o ID {id}: ela terminou e foi esquecida, foi abandonada, ou é de outro cofre.");
+        => ApiErrorDto.CreateNotFound(Texts.Get("NotFoundTitle"), "TRANSFER_NOT_FOUND", Texts.Get("NotFoundDetail", id));
 
     /// <summary>RN-EXPORT-016: o limite é de todas as transferências (seção 36), e a recusa diz isso.</summary>
     public static ApiErrorDto LimitReached()
-        => ApiErrorDto.CreateConflict("Limite de transferências.", "TRANSFER_LIMIT_REACHED", "Já há 3 transferências em andamento (exportações, importações ou cópias para outro banco). Espere uma terminar, ou cancele uma na barra de status.");
+        => ApiErrorDto.CreateConflict(Texts.Get("LimitReachedTitle"), "TRANSFER_LIMIT_REACHED", Texts.Get("LimitReachedDetail"));
 
     /// <summary>RN-EXPORT-015: a conexão sem usuário ou sem senha, no campo que falta, com a frase do assistente.</summary>
     public static ApiErrorDto CredentialsMissing(bool userNameMissing)
         => userNameMissing
-            ? ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", "userName", "Esta conexão não tem usuário gravado. Preencha-o em Editar conexão e exporte de novo.")
-            : ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", "password", "Esta conexão não tem senha gravada. Preencha-a em Editar conexão e exporte de novo.");
+            ? ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("CredentialsMissingTitle"), "CONNECTION_CREDENTIALS_MISSING", "userName", Texts.Get("UserNameMissingDetail"))
+            : ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("CredentialsMissingTitle"), "CONNECTION_CREDENTIALS_MISSING", "password", Texts.Get("PasswordMissingDetail"));
 
     /// <summary>
     /// RN-REDE-003 e 006 e RN-EXPORT-015: o túnel SSH ou o proxy sem o segredo que a conexão não grava (<see cref="ConnectionRules.MissingNetworkSecret"/>), no campo
@@ -33,7 +38,7 @@ internal static class TransferJobErrors
     /// </summary>
     public static ApiErrorDto NetworkSecretMissing(string field, Guid connectionID)
     {
-        var error = ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", char.ToLowerInvariant(field[0]) + field[1..], $"{(field == "SshSecret" ? "A senha (ou frase secreta da chave) do túnel SSH" : "A senha do proxy")} não está gravada nesta conexão. Informe-a quando o Prism pedir e tente de novo: sem \"Salvar credenciais\", ela fica só na memória até a conexão ser desconectada ou o Prism ser bloqueado.");
+        var error = ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("CredentialsMissingTitle"), "CONNECTION_CREDENTIALS_MISSING", char.ToLowerInvariant(field[0]) + field[1..], Texts.Get(field == "SshSecret" ? "SshSecretMissingDetail" : "ProxyPasswordMissingDetail"));
         error.Extensions["connectionID"] = connectionID;
 
         return error;
@@ -41,11 +46,11 @@ internal static class TransferJobErrors
 
     /// <summary>RN-ARVORE-006: o banco de dados pedido fora da regra da abertura de uma sessão.</summary>
     public static ApiErrorDto DatabaseNameInvalid()
-        => ApiErrorDto.CreateUnprocessableEntity("Nome de banco inválido.", "DATABASE_NAME_INVALID", "O nome do banco deve ter de 1 a 128 caracteres, sem caractere de controle.");
+        => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("DatabaseNameInvalidTitle"), "DATABASE_NAME_INVALID", Texts.Get("DatabaseNameInvalidDetail"));
 
     /// <summary>RN-EXPORT-011: o Informix não aceita várias linhas num `INSERT … VALUES`.</summary>
     public static ApiErrorDto InformixRowsPerStatement()
-        => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", OptionsInvalidCode, "options.rowsPerStatement", "O Informix não aceita várias linhas num INSERT.");
+        => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("OptionsInvalidTitle"), OptionsInvalidCode, "options.rowsPerStatement", Texts.Get("InformixRowsDetail"));
 
     /// <summary>
     /// RN-VAR-032: os `source.params` que não servem ao comando montado, antes do trabalho: os marcadores do texto não batem com os valores (422
@@ -54,16 +59,16 @@ internal static class TransferJobErrors
     /// </summary>
     public static ApiErrorDto From(DatabaseFailure failure, string invalidCode)
         => failure.Kind == EDatabaseFailure.ParametersMismatch
-            ? ApiErrorDto.CreateUnprocessableEntity("Os marcadores não batem com os valores.", "QUERY_PARAMETERS_MISMATCH", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["markers"] = failure.Markers, ["values"] = failure.Values })
-            : ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", invalidCode, failure.Field ?? "source.params", failure.Message);
+            ? ApiErrorDto.CreateUnprocessableEntity(Texts.Get("MarkersMismatchTitle"), "QUERY_PARAMETERS_MISMATCH", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["markers"] = failure.Markers, ["values"] = failure.Values })
+            : ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("OptionsInvalidTitle"), invalidCode, failure.Field ?? "source.params", failure.Message);
 
     /// <summary>RN-EXPORT-002 e 016: o comando recusado pelo texto, antes do trabalho: mais de um comando, o filtro, o que não é leitura.</summary>
     public static ApiErrorDto From(ExportSqlRefusal refusal)
         => refusal.Kind switch
         {
-            EExportSqlRefusal.MultipleStatements => ApiErrorDto.CreateUnprocessableEntity("Só um comando por exportação.", "MULTIPLE_STATEMENTS_NOT_SUPPORTED", refusal.Reason),
-            EExportSqlRefusal.FilterInvalid => ApiErrorDto.CreateUnprocessableEntity("Filtro inválido.", "FILTER_INVALID", refusal.Reason),
-            EExportSqlRefusal.NotRead => ApiErrorDto.CreateUnprocessableEntity("O comando não é só de leitura.", "EXPORT_SOURCE_NOT_READ", $"Exportar executa o comando de novo, e só se exporta uma leitura: {refusal.Reason}. Nada foi enviado ao banco.", new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = refusal.Reason }),
+            EExportSqlRefusal.MultipleStatements => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("MultipleStatementsTitle"), "MULTIPLE_STATEMENTS_NOT_SUPPORTED", refusal.Reason),
+            EExportSqlRefusal.FilterInvalid => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("FilterInvalidTitle"), "FILTER_INVALID", refusal.Reason),
+            EExportSqlRefusal.NotRead => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("NotReadTitle"), "EXPORT_SOURCE_NOT_READ", Texts.Get("NotReadDetail", refusal.Reason), new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = refusal.Reason }),
             _ => throw new NotImplementedException("O enum informado não foi mapeado pela aplicação")
         };
 }

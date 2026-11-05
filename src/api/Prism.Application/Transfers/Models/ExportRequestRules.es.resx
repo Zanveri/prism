@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FormatInvalid" xml:space="preserve">
+    <value>El formato debe ser uno de estos: {0}.</value>
+  </data>
+  <data name="XlsxBom" xml:space="preserve">
+    <value>El XLSX no es texto: no lleva BOM.</value>
+  </data>
+  <data name="XlsxZip" xml:space="preserve">
+    <value>El XLSX ya es un archivo comprimido.</value>
+  </data>
+  <data name="XlsxClipboard" xml:space="preserve">
+    <value>El XLSX no es texto: no va al portapapeles.</value>
+  </data>
+  <data name="ClipboardBom" xml:space="preserve">
+    <value>Con el portapapeles, el texto no lleva BOM.</value>
+  </data>
+  <data name="ClipboardZip" xml:space="preserve">
+    <value>Con el portapapeles, el texto no va en un .zip.</value>
+  </data>
+  <data name="EntryNameInvalid" xml:space="preserve">
+    <value>El nombre del archivo dentro del .zip debe tener de 1 a {0} caracteres, sin / ni \, sin caracteres de control ni marcas de dirección, y no puede ser . ni ...</value>
+  </data>
+  <data name="EntryNameWithoutZip" xml:space="preserve">
+    <value>El nombre del archivo dentro del .zip solo vale con el .zip.</value>
+  </data>
+  <data name="WindowInvalid" xml:space="preserve">
+    <value>El número de la ventana es un entero positivo.</value>
+  </data>
+  <data name="SourceRequired" xml:space="preserve">
+    <value>Indica el origen de la exportación.</value>
+  </data>
+  <data name="SchemaNameLength" xml:space="preserve">
+    <value>El esquema debe tener de 1 a {0} caracteres, sin U+0000.</value>
+  </data>
+  <data name="TableNameLength" xml:space="preserve">
+    <value>La tabla debe tener de 1 a {0} caracteres, sin U+0000.</value>
+  </data>
+  <data name="SourceNameLength" xml:space="preserve">
+    <value>El nombre del origen debe tener de 1 a {0} caracteres, sin U+0000.</value>
+  </data>
+  <data name="ColumnNameLength" xml:space="preserve">
+    <value>El nombre de cada columna debe tener de 1 a {0} caracteres, sin U+0000.</value>
+  </data>
+  <data name="ParamsOnlyQuery" xml:space="preserve">
+    <value>Los valores de los marcadores solo valen en el origen query.</value>
+  </data>
+  <data name="SqlRequired" xml:space="preserve">
+    <value>Indica la sentencia del origen.</value>
+  </data>
+  <data name="SqlTooLarge" xml:space="preserve">
+    <value>La sentencia puede tener hasta 1 MB.</value>
+  </data>
+  <data name="KindInvalid" xml:space="preserve">
+    <value>El origen debe ser table o query.</value>
+  </data>
+  <data name="ColumnsCount" xml:space="preserve">
+    <value>Marca de 1 a 32.767 columnas.</value>
+  </data>
+  <data name="ColumnsPosition" xml:space="preserve">
+    <value>Cada columna tiene una posición a partir de 0, sin repetir.</value>
+  </data>
+  <data name="DuplicateColumn" xml:space="preserve">
+    <value>El resultado tiene dos columnas llamadas {0}: deja una fuera en la Extracción.</value>
+  </data>
+  <data name="XlsxColumns" xml:space="preserve">
+    <value>Una hoja de cálculo de Excel tiene como máximo 16.384 columnas: deja {0} fuera en la Extracción, o elige otro formato.</value>
+  </data>
+</root>

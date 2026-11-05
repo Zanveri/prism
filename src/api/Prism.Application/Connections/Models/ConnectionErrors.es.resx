@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Conexión no encontrada.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>No existe una conexión con el ID {0}.</value>
+  </data>
+  <data name="AlreadyExistsTitle" xml:space="preserve">
+    <value>La conexión ya existe.</value>
+  </data>
+  <data name="AlreadyExistsDetail" xml:space="preserve">
+    <value>Ya existe una conexión llamada {0} en este lugar. El nombre no se puede repetir en la misma carpeta, ni siquiera con otras mayúsculas y minúsculas.</value>
+  </data>
+  <data name="InvalidPasswordTitle" xml:space="preserve">
+    <value>Contraseña incorrecta.</value>
+  </data>
+  <data name="InvalidPasswordDetail" xml:space="preserve">
+    <value>La contraseña introducida no es la de tu usuario de Prism.</value>
+  </data>
+  <data name="PasswordRequiredToChangeServer" xml:space="preserve">
+    <value>Al cambiar el host o el puerto, indica de nuevo la contraseña de la conexión.</value>
+  </data>
+  <data name="PasswordRequiredToTestOtherServer" xml:space="preserve">
+    <value>Para probar con otro host u otro puerto, indica la contraseña de la conexión.</value>
+  </data>
+  <data name="RequestInvalidTitle" xml:space="preserve">
+    <value>Error al enviar datos a la API.</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Indica el usuario de la base de datos.</value>
+  </data>
+  <data name="UserNameMissingToConnect" xml:space="preserve">
+    <value>La conexión no tiene usuario guardado. Rellena el usuario y la contraseña en "Editar conexión" para conectar.</value>
+  </data>
+  <data name="PasswordMissingToConnect" xml:space="preserve">
+    <value>La conexión no tiene contraseña guardada. Rellena la contraseña en "Editar conexión" para conectar.</value>
+  </data>
+  <data name="PasswordMissingToTest" xml:space="preserve">
+    <value>Esta conexión no tiene contraseña guardada. Indica la contraseña de la base de datos para probar.</value>
+  </data>
+  <data name="CredentialsMissingTitle" xml:space="preserve">
+    <value>Conexión sin usuario o sin contraseña.</value>
+  </data>
+  <data name="SshSecretRequiredForOtherServer" xml:space="preserve">
+    <value>Al cambiar el host o el puerto del túnel SSH, indica de nuevo la contraseña o la frase de contraseña.</value>
+  </data>
+  <data name="ProxyPasswordRequiredForOtherServer" xml:space="preserve">
+    <value>Al cambiar el host o el puerto del proxy, indica de nuevo su contraseña.</value>
+  </data>
+  <data name="SshSecretMissingToConnect" xml:space="preserve">
+    <value>La contraseña (o frase de contraseña de la clave) del túnel SSH no está guardada en esta conexión. Indícala para conectar: sin "Guardar credenciales", solo queda en la memoria hasta que la conexión se desconecte o Prism se bloquee.</value>
+  </data>
+  <data name="ProxyPasswordMissingToConnect" xml:space="preserve">
+    <value>La contraseña del proxy no está guardada en esta conexión. Indícala para conectar: sin "Guardar credenciales", solo queda en la memoria hasta que la conexión se desconecte o Prism se bloquee.</value>
+  </data>
+  <data name="SshSecretMissingToTest" xml:space="preserve">
+    <value>Indica la contraseña (o frase de contraseña de la clave) del túnel SSH para probar.</value>
+  </data>
+  <data name="ProxyPasswordMissingToTest" xml:space="preserve">
+    <value>Indica la contraseña del proxy para probar.</value>
+  </data>
+</root>

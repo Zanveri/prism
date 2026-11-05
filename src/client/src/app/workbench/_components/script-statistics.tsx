@@ -1,5 +1,6 @@
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils/cn";
 
 import { commandHead, commandHint, entriesOf, scriptResultCap, scriptTotals, statisticsRange, type ScriptEntry, type ScriptEntryStatus, type ScriptRun } from "../_lib/script-run";
@@ -41,7 +42,7 @@ const StatisticsRow = memo(function StatisticsRow({ entry, number, current, onVi
   return (
     <Fragment>
       <tr aria-current={current ? "step" : undefined} className={cn(current && "bg-selected")}>
-        <td className={cn(cell, "text-right text-muted tabular-nums")}>{number.toLocaleString("pt-BR")}</td>
+        <td className={cn(cell, "text-right text-muted tabular-nums")}>{number.toLocaleString(locale)}</td>
         <td className={cn(cell, "max-w-0 font-editor text-ink")} title={commandHint(entry.target.sql)}>
           <span className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">{commandHead(entry.target, 96)}</span>

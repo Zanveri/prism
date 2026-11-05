@@ -4,6 +4,7 @@ using Prism.Core.Extensions;
 using Prism.Infrastructure.DbeaverSources.Models;
 using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Vault.Models;
+using System.Resources;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -16,12 +17,15 @@ namespace Prism.Application.DbeaverImports.Models;
 /// </summary>
 internal static class DbeaverProjects
 {
+    /// <summary>Os textos, no idioma do pedido: <c>DbeaverProjects.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DbeaverProjects));
+
     private const string DefaultStorage = "data-sources.json";
     private const string StoragePrefix = "data-sources";
     private const string CredentialsPrefix = "credentials-config";
     private const string Extension = ".json";
 
-    public const string DuplicatedIDMessage = "O ID desta conexão se repete no projeto.";
+    public static string DuplicatedIDMessage => Texts.Get("DuplicatedID");
 
     /// <summary>
     /// O mais que um caminho de pastas pode ter para ser aberto em seus pais: bem acima dos 32 níveis (RN-TRANSF-010) e do tamanho de qualquer nome de pasta. O que passa disso
@@ -31,7 +35,7 @@ internal static class DbeaverProjects
 
     public const int MaxPathLength = 4096;
 
-    public const string PathTooDeepMessage = "A pasta desta conexão tem níveis demais.";
+    public static string PathTooDeepMessage => Texts.Get("PathTooDeep");
 
     /// <summary>
     /// RN-DBEAVER-006: o nome do projeto que o Prism não aceita: vazio, com mais de 255 caracteres (a origem guarda o nome inteiro, RN-DBEAVER-018) ou com
@@ -47,7 +51,7 @@ internal static class DbeaverProjects
     public static DbeaverProjectModel Read(IDbeaverSourceService source, DbeaverProjectFiles project)
     {
         var invalidName = NameIsInvalid(project.Name);
-        var display = invalidName ? $"Projeto {project.Position}" : project.Name;
+        var display = invalidName ? Texts.Get("ProjectPosition", project.Position) : project.Name;
         var files = project.Files.ToDictionary(file => file.Name, StringComparer.Ordinal);
 
         // O nome que não serve deixa as conexões de fora: nem o arquivo é aberto.

@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type MouseEvent } from "react";
 
+import { locale } from "@/lib/i18n";
 import { Button, CloseIcon, ContextMenu, Dialog, TextField, TimerIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
@@ -15,7 +16,7 @@ const copy = autoRefreshCopy;
 const iconButton = "flex cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-selected hover:text-ink aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted";
 
 /** A hora da última atualização, como a barra a escreve ("14:32:05"). */
-export const lastTime = (at: number) => new Date(at).toLocaleTimeString("pt-BR");
+export const lastTime = (at: number) => new Date(at).toLocaleTimeString(locale);
 
 /** O que a barra diz com ela ligada: o intervalo e, depois, a execução em andamento, a pausa da edição ou a hora da última atualização. */
 export function onText(state: Extract<AutoRefreshState, { status: "on" }>): string {

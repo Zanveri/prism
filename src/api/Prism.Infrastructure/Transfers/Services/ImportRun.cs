@@ -22,7 +22,6 @@ internal sealed class ImportRun(Guid id, ImportJob job, Func<ConnectionSettings,
     /// <summary>De quantos em quantos bytes lidos o progresso da leitura é contado ao registro.</summary>
     private const long ProgressStep = 64 * 1024;
 
-    private const string What = "a importação";
 
     /// <summary>RN-LOG-001: as linhas lidas do arquivo na carga (não na conferência), para o log do fim.</summary>
     public long ReadRows { get; private set; }
@@ -55,7 +54,7 @@ internal sealed class ImportRun(Guid id, ImportJob job, Func<ConnectionSettings,
         if (begun.IsFailure)
             return LoadEnd.Of(LoadSteps.Database(begun.Error, ETransferSide.Target, token));
 
-        var first = await LoadSteps.DescribeAsync(connection, engine, job.Schema, job.Table, job.Mapping, null, What, token);
+        var first = await LoadSteps.DescribeAsync(connection, engine, job.Schema, job.Table, job.Mapping, null, "TableChangedImport", token);
         if (first.IsFailure)
             return LoadEnd.Of(first.Error);
 
@@ -73,7 +72,7 @@ internal sealed class ImportRun(Guid id, ImportJob job, Func<ConnectionSettings,
 
             var count = reader.Value.Columns.Count;
 
-            return LoadEnd.Of(LoadSteps.Prism(ETransferError.ImportMappingInvalid, $"A coluna {job.Mapping[index].Source + 1} do arquivo não existe: o arquivo tem {ImportText.Thousands(count)} {(count == 1 ? "coluna" : "colunas")}."));
+            return LoadEnd.Of(LoadSteps.Prism(ETransferError.ImportMappingInvalid, ImportMapping.SourceMissing(job.Mapping[index].Source, count)));
         }
 
         // RN-IMPORT-012: a conferência lê o arquivo inteiro com os tipos da leitura do catálogo ao conectar, sem transação e sem gravar; a carga lê de novo.
@@ -95,7 +94,7 @@ internal sealed class ImportRun(Guid id, ImportJob job, Func<ConnectionSettings,
             return LoadEnd.Of(notBegun);
 
         // RN-IMPORT-015: na primeira transação, antes de gravar, o catálogo de novo; as conversões usam os tipos desta leitura.
-        var second = await LoadSteps.DescribeAsync(connection, engine, job.Schema, job.Table, job.Mapping, first.Value.Columns, What, token);
+        var second = await LoadSteps.DescribeAsync(connection, engine, job.Schema, job.Table, job.Mapping, first.Value.Columns, "TableChangedImport", token);
         if (second.IsFailure)
             return LoadEnd.Of(second.Error);
 
@@ -190,7 +189,7 @@ internal sealed class ImportRun(Guid id, ImportJob job, Func<ConnectionSettings,
         slot.Set(null);
         var file = files.Open(id);
         if (file.IsFailure)
-            return LoadSteps.Prism(ETransferError.ImportFileUnreadable, file.Error.Kind == EImportFileRefusal.TooLarge ? ImportText.TooLarge(file.Error.Size) : file.Error.Reason ?? "O arquivo da importação não está mais na pasta do Prism.");
+            return LoadSteps.Prism(ETransferError.ImportFileUnreadable, file.Error.Kind == EImportFileRefusal.TooLarge ? ImportText.TooLarge(file.Error.Size) : file.Error.Reason ?? TransferMessages.Say("ImportFileGone"));
 
         var opened = ImportReader.Open(job.Format, job.Options, file.Value, logger, token);
         if (opened.IsFailure)

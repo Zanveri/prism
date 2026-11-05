@@ -1,6 +1,7 @@
 import type { BuildModel, BuildModelDto } from "@/app/build/_lib/build-model.schema";
 import type { ApiResult } from "@/lib/api/prism-api";
 import { workspaceFlushTimeoutMs } from "@/lib/api/workspace-sync";
+import { buildUiCopy } from "./build-ui.copy";
 
 export type SaveState = {
   status: "saved" | "pending" | "saving" | "failed" | "conflict";
@@ -120,7 +121,7 @@ export function createSaveScheduler(deps: {
         updateState({
           status: "failed",
           savedAt: currentState.savedAt,
-          message: err instanceof Error ? err.message : "Falha ao salvar modelo.",
+          message: err instanceof Error ? err.message : buildUiCopy.page.saveFailed,
         });
         break;
       }

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Computed" xml:space="preserve">
+    <value>coluna calculada</value>
+  </data>
+  <data name="GeneratedByTheDatabase" xml:space="preserve">
+    <value>gerada pelo banco</value>
+  </data>
+  <data name="UnsupportedType" xml:space="preserve">
+    <value>o Prism ainda não edita este tipo neste banco</value>
+  </data>
+  <data name="KeyInAJoin" xml:space="preserve">
+    <value>coluna da chave numa junção</value>
+  </data>
+  <data name="Ambiguous" xml:space="preserve">
+    <value>a coluna sem tabela pode ser de mais de uma tabela do comando</value>
+  </data>
+  <data name="ViewReason" xml:space="preserve">
+    <value>{0} é uma visão</value>
+  </data>
+  <data name="MaterializedViewReason" xml:space="preserve">
+    <value>{0} é uma visão materializada</value>
+  </data>
+  <data name="ForeignTableReason" xml:space="preserve">
+    <value>{0} é uma tabela estrangeira</value>
+  </data>
+  <data name="ElsewhereReason" xml:space="preserve">
+    <value>{0}, escrita sem esquema, leva agora a outra tabela na sessão</value>
+  </data>
+  <data name="NotATableReason" xml:space="preserve">
+    <value>{0} não é uma tabela</value>
+  </data>
+  <data name="AppearsManyTimesReason" xml:space="preserve">
+    <value>{0} aparece mais de uma vez no comando</value>
+  </data>
+  <data name="NoKeyReason" xml:space="preserve">
+    <value>{0} não tem chave primária nem chave única de colunas não nulas</value>
+  </data>
+  <data name="KeyIncompleteReason" xml:space="preserve">
+    <value>a chave de {0} não está inteira no resultado: faltam {1}</value>
+  </data>
+  <data name="KeyUnsupportedTypeReason" xml:space="preserve">
+    <value>a chave de {0} tem coluna de um tipo que o Prism ainda não edita neste banco</value>
+  </data>
+  <data name="ReadOnlyDetail" xml:space="preserve">
+    <value>Somente leitura: {0}.</value>
+  </data>
+</root>

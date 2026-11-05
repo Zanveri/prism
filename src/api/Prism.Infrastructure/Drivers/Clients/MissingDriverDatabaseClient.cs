@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
@@ -12,9 +14,12 @@ namespace Prism.Infrastructure.Drivers.Clients;
 /// </summary>
 internal sealed class MissingDriverDatabaseClient(EDatabaseEngine engine, IDriverService driverService) : IDatabaseClient
 {
+    /// <summary>Os textos, no idioma do pedido: <c>MissingDriverDatabaseClient.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(MissingDriverDatabaseClient));
+
     public EDatabaseEngine Engine => engine;
 
     /// <summary>A recusa é perguntada a cada chamada: a mensagem muda quando o driver é instalado e passa a esperar o reinício.</summary>
     public Task<Result<IDatabaseConnection, DatabaseFailure>> OpenAsync(ConnectionSettings settings, CancellationToken cancellationToken)
-        => Task.FromResult(Result.Failure<IDatabaseConnection, DatabaseFailure>(driverService.RefusalFor(engine) ?? new DatabaseFailure(EDatabaseFailure.DriverNotInstalled, "O driver deste banco não está em uso nesta execução do Prism. Reinicie o Prism.")));
+        => Task.FromResult(Result.Failure<IDatabaseConnection, DatabaseFailure>(driverService.RefusalFor(engine) ?? new DatabaseFailure(EDatabaseFailure.DriverNotInstalled, Texts.Get("NotInUse"))));
 }

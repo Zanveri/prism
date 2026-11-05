@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { locale } from "@/lib/i18n";
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
@@ -476,7 +477,7 @@ export function ScriptsSection() {
       >
         <ChevronIcon className={cn("flex-none transition-transform", !expanded && "-rotate-90")} />
         <span>{copy.section.title}</span>
-        {scripts.data === undefined || scripts.data.length === 0 ? null : <span className="font-normal tracking-normal normal-case">({scripts.data.length.toLocaleString("pt-BR")})</span>}
+        {scripts.data === undefined || scripts.data.length === 0 ? null : <span className="font-normal tracking-normal normal-case">({scripts.data.length.toLocaleString(locale)})</span>}
       </button>
       <div
         hidden={!expanded}

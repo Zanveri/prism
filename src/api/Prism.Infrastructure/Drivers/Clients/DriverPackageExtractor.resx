@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="TooManyFiles" xml:space="preserve">
+    <value>O pacote tem mais arquivos do que um driver pode ter.</value>
+  </data>
+  <data name="PathEscapes" xml:space="preserve">
+    <value>O pacote tem um arquivo com caminho que sai da pasta do driver. Nada foi instalado.</value>
+  </data>
+  <data name="DuplicateTarget" xml:space="preserve">
+    <value>O pacote tem dois arquivos para o mesmo lugar. Nada foi instalado.</value>
+  </data>
+  <data name="TooBig" xml:space="preserve">
+    <value>O pacote é maior, depois de extraído, do que um driver pode ser. Nada foi instalado.</value>
+  </data>
+  <data name="MissingFiles" xml:space="preserve">
+    <value>O pacote não tem os arquivos que o driver precisa. Nada foi instalado.</value>
+  </data>
+</root>

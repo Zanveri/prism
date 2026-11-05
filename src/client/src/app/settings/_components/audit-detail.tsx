@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { locale } from "@/lib/i18n";
 import { HighlightedSql } from "@/app/workbench/_components/highlighted-sql";
 import {
   AlertCircleIcon,
@@ -56,7 +57,7 @@ export function AuditLevelBadge({ level }: { level: AuditLevelCode }) {
 export function formatAuditDuration(durationMs: number | null): string {
   if (durationMs === null || durationMs === undefined) return "—";
   if (durationMs < 1000) return `${durationMs} ms`;
-  return `${(durationMs / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`;
+  return `${(durationMs / 1000).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`;
 }
 
 export function formatAuditDateTime(iso: string): string {

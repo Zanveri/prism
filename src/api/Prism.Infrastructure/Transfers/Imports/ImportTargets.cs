@@ -16,10 +16,10 @@ public static class ImportTargets
         => kind switch
         {
             "table" => null,
-            "view" => "é uma visão",
-            "materializedView" => "é uma visão materializada",
-            "foreign" when engine == EDatabaseEngine.PostgreSql => "é uma tabela estrangeira",
-            _ => "não é uma tabela comum"
+            "view" => ImportText.Say("TargetView"),
+            "materializedView" => ImportText.Say("TargetMaterializedView"),
+            "foreign" when engine == EDatabaseEngine.PostgreSql => ImportText.Say("TargetForeign"),
+            _ => ImportText.Say("TargetNotPlain")
         };
 
     /// <summary>RN-IMPORT-009 e 012: a tabela como a prévia a mostra e a carga a usa: as colunas na ordem do catálogo e as chaves de outras tabelas que apontam para ela.</summary>

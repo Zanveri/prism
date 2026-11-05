@@ -74,8 +74,9 @@ public sealed record ImportTargetColumn(string Name, string Type, bool Nullable,
 /// </summary>
 public static partial class ImportColumns
 {
-    public const string GeneratedReason = "O banco calcula esta coluna e não aceita valor.";
-    public const string UnsupportedReason = "O Prism ainda não importa este tipo neste banco.";
+    public static string GeneratedReason => ImportText.Say("GeneratedReason");
+
+    public static string UnsupportedReason => ImportText.Say("UnsupportedReason");
 
     /// <param name="baseType">No PostgreSQL, o tipo-base do domínio (o catálogo da prévia o lê junto); nulo na coluna que não é de um domínio.</param>
     public static ImportTargetColumn Of(EDatabaseEngine engine, ColumnInfo column, string? baseType = null)

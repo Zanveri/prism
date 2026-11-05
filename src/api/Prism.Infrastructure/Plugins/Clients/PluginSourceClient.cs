@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Plugins.Models;
 using System.ComponentModel;
@@ -11,6 +13,9 @@ namespace Prism.Infrastructure.Plugins.Clients;
 
 internal sealed partial class PluginSourceClient(PluginSettings settings, ILogger logger) : IPluginSourceClient
 {
+    /// <summary>Os textos, no idioma do pedido: <c>PluginSourceClient.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(PluginSourceClient));
+
     private const long MaxManifestBytes = 64 * 1024;
     private const long MaxBundleBytes = 2 * 1024 * 1024;
     private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(60);
@@ -22,7 +27,7 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
         => Send(nameof(InspectLocal), () =>
         {
             if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
-                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.SourceInvalid, "A pasta local informada não existe ou não está acessível."));
+                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.SourceInvalid, Texts.Get("LocalFolderMissing")));
 
             return ReadAndValidatePluginDirectory(Path.GetFullPath(folderPath)).Map(inspected => inspected.Manifest);
         });
@@ -31,7 +36,7 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
     {
         var trimmed = gitUrl.Trim();
         if (!IsAllowedGitUrl(trimmed))
-            return new PluginFailure(EPluginFailure.SourceInvalid, "Informe uma URL de repositório Git válida (https://, http://, ssh:// ou git@).");
+            return new PluginFailure(EPluginFailure.SourceInvalid, Texts.Get("GitUrlInvalid"));
 
         string? stagingDirectory = null;
 
@@ -50,7 +55,7 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
 
             var manifest = inspected.Value.Manifest;
             if (isAlreadyInstalled(manifest.ID))
-                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.AlreadyInstalled, $"O plugin '{manifest.Name}' ({manifest.ID}) já está instalado."));
+                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.AlreadyInstalled, Texts.Get("AlreadyInstalled", manifest.Name, manifest.ID)));
 
             var targetDirectory = Path.Combine(settings.Directory, manifest.ID);
             if (Directory.Exists(targetDirectory))
@@ -72,11 +77,11 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
         => SendAsync(nameof(PullGitAsync), cancellationToken, async () =>
         {
             if (!IsValidPluginID(pluginID))
-                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.ManifestInvalid, "O identificador do plugin é inválido."));
+                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("IdInvalid")));
 
             var pluginDirectory = Path.Combine(settings.Directory, pluginID);
             if (!Directory.Exists(pluginDirectory))
-                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.SourceInvalid, "A pasta do plugin instalado não foi encontrada na máquina."));
+                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.SourceInvalid, Texts.Get("InstalledFolderMissing")));
 
             var gitResult = await RunGitAsync(["-C", pluginDirectory, "pull", "--ff-only"], pluginDirectory, cancellationToken);
             if (gitResult.IsFailure)
@@ -87,7 +92,7 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
                 return Result.Failure<PluginManifest, PluginFailure>(inspected.Error);
 
             if (!string.Equals(inspected.Value.Manifest.ID, pluginID, StringComparison.Ordinal))
-                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.ManifestInvalid, "O manifesto atualizado mudou o identificador do plugin, o que não é permitido."));
+                return Result.Failure<PluginManifest, PluginFailure>(new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("IdChanged")));
 
             return Result.Success<PluginManifest, PluginFailure>(inspected.Value.Manifest);
         });
@@ -96,11 +101,11 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
         => Send(nameof(ReadBundle), () =>
         {
             if (!IsValidPluginID(pluginID))
-                return Result.Failure<string, PluginFailure>(new PluginFailure(EPluginFailure.ManifestInvalid, "O identificador do plugin é inválido."));
+                return Result.Failure<string, PluginFailure>(new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("IdInvalid")));
 
             var directory = string.Equals(sourceKind, "local", StringComparison.Ordinal) ? source : Path.Combine(settings.Directory, pluginID);
             if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
-                return Result.Failure<string, PluginFailure>(new PluginFailure(EPluginFailure.BundleUnavailable, $"A pasta do plugin '{pluginID}' não foi encontrada."));
+                return Result.Failure<string, PluginFailure>(new PluginFailure(EPluginFailure.BundleUnavailable, Texts.Get("PluginFolderMissing", pluginID)));
 
             var inspected = ReadAndValidatePluginDirectory(Path.GetFullPath(directory));
             if (inspected.IsFailure)
@@ -147,46 +152,46 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
     {
         var manifestPath = Path.Combine(fullDirectoryPath, "manifest.json");
         if (!File.Exists(manifestPath))
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O arquivo manifest.json não foi encontrado na raiz do plugin.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("ManifestMissing"));
 
         var manifestInfo = new FileInfo(manifestPath);
         if (manifestInfo.Length is <= 0 or > MaxManifestBytes)
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O arquivo manifest.json está vazio ou excede o tamanho máximo permitido (64 KB).");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("ManifestEmpty"));
 
         var rawManifest = JsonSerializer.Deserialize<RawManifest>(File.ReadAllText(manifestPath, Encoding.UTF8), JsonOptions);
         if (rawManifest is null)
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O arquivo manifest.json está inválido.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("ManifestBad"));
 
         var id = rawManifest.Id?.Trim() ?? string.Empty;
         if (!IsValidPluginID(id))
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O campo 'id' do manifest.json deve conter apenas letras minúsculas, números, ponto, hífen ou sublinhado (2 a 64 caracteres).");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("ManifestId"));
 
         var name = rawManifest.Name?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(name) || name.Length > 120)
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O campo 'name' do manifest.json é obrigatório e deve ter até 120 caracteres.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("ManifestName"));
 
         var version = rawManifest.Version?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(version) || version.Length > 40)
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O campo 'version' do manifest.json é obrigatório e deve ter até 40 caracteres.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("ManifestVersion"));
 
         var mainRelative = string.IsNullOrWhiteSpace(rawManifest.Main) ? "main.js" : rawManifest.Main.Trim();
         if (Path.IsPathRooted(mainRelative))
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O campo 'main' do manifest.json deve ser um caminho relativo dentro da pasta do plugin.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("ManifestMain"));
 
         var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(fullDirectoryPath)) + Path.DirectorySeparatorChar;
         var resolvedBundlePath = Path.GetFullPath(Path.Combine(fullDirectoryPath, mainRelative));
         if (!resolvedBundlePath.StartsWith(normalizedRoot, StringComparison.Ordinal))
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O arquivo principal do plugin não pode sair da pasta do plugin.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("MainEscapes"));
 
         if (!File.Exists(resolvedBundlePath))
-            return new PluginFailure(EPluginFailure.ManifestInvalid, $"O arquivo principal '{mainRelative}' apontado pelo manifest.json não foi encontrado.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("MainMissing", mainRelative));
 
         var bundleInfo = new FileInfo(resolvedBundlePath);
         if (bundleInfo.Length <= 0)
-            return new PluginFailure(EPluginFailure.ManifestInvalid, $"O arquivo principal '{mainRelative}' do plugin está vazio.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("MainEmpty", mainRelative));
 
         if (bundleInfo.Length > MaxBundleBytes)
-            return new PluginFailure(EPluginFailure.ManifestInvalid, $"O arquivo principal '{mainRelative}' excede o limite de 2 MB.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("MainTooBig", mainRelative));
 
         var engines = (rawManifest.Engines ?? []).Where(engine => !string.IsNullOrWhiteSpace(engine)).Select(engine => engine.Trim().ToLowerInvariant()).Distinct(StringComparer.Ordinal).ToArray();
         var description = string.IsNullOrWhiteSpace(rawManifest.Description) ? null : rawManifest.Description.Trim();
@@ -218,7 +223,7 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
 
         using var process = Process.Start(startInfo);
         if (process is null)
-            return new PluginFailure(EPluginFailure.GitFailed, "Não foi possível iniciar o comando 'git'. Verifique se o Git está instalado na máquina.");
+            return new PluginFailure(EPluginFailure.GitFailed, Texts.Get("GitStartFailed"));
 
         process.StandardInput.Close();
 
@@ -235,13 +240,13 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
         if (process.ExitCode == 0)
             return UnitResult.Success<PluginFailure>();
 
-        var detail = string.IsNullOrWhiteSpace(stdErr) ? $"O comando git encerrou com código {process.ExitCode}." : FirstMeaningfulGitLine(stdErr);
-        return new PluginFailure(EPluginFailure.GitFailed, $"Não foi possível acessar o repositório Git. Confira a URL e suas credenciais SSH/HTTPS na máquina ({detail})");
+        var detail = string.IsNullOrWhiteSpace(stdErr) ? Texts.Get("GitExitCode", process.ExitCode) : FirstMeaningfulGitLine(stdErr);
+        return new PluginFailure(EPluginFailure.GitFailed, Texts.Get("GitAccessFailed", detail));
     }
 
     private static string FirstMeaningfulGitLine(string stdErr)
     {
-        var line = stdErr.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ?? "falha ao executar git";
+        var line = stdErr.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ?? Texts.Get("GitFailedFallback");
         return line.Length > 200 ? $"{line[..200]}…" : line;
     }
 
@@ -272,22 +277,22 @@ internal sealed partial class PluginSourceClient(PluginSettings settings, ILogge
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.Warning("A operação de plugin {Operation} excedeu o tempo limite.", operation);
-            return new PluginFailure(EPluginFailure.GitFailed, "A operação no repositório Git excedeu o tempo limite de 60 segundos.");
+            return new PluginFailure(EPluginFailure.GitFailed, Texts.Get("GitTimeout"));
         }
         catch (Win32Exception exception)
         {
             _logger.Warning("O executável do Git não pôde ser iniciado em {Operation} ({ExceptionType}, HResult {HResult}).", operation, exception.GetType().Name, exception.HResult);
-            return new PluginFailure(EPluginFailure.GitFailed, "O comando 'git' não foi encontrado no sistema. Instale o Git e verifique se ele está no PATH.");
+            return new PluginFailure(EPluginFailure.GitFailed, Texts.Get("GitNotFound"));
         }
         catch (JsonException exception)
         {
             _logger.Warning("O manifesto do plugin não é um JSON válido em {Operation} ({ExceptionType}).", operation, exception.GetType().Name);
-            return new PluginFailure(EPluginFailure.ManifestInvalid, "O arquivo manifest.json do plugin não contém um JSON válido.");
+            return new PluginFailure(EPluginFailure.ManifestInvalid, Texts.Get("ManifestNotJson"));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             _logger.Warning("A operação de plugin {Operation} falhou no acesso ao disco ({ExceptionType}, HResult {HResult}).", operation, exception.GetType().Name, exception.HResult);
-            return new PluginFailure(EPluginFailure.SourceInvalid, "Não foi possível ler ou gravar os arquivos do plugin no disco (verifique o caminho e as permissões).");
+            return new PluginFailure(EPluginFailure.SourceInvalid, Texts.Get("DiskFailed"));
         }
     }
 

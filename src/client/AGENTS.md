@@ -359,6 +359,58 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `aria-describedby` (o erro tem o id `<id>-error`). Os quatro formulários (login, criar usuário,
   conexão e pasta) usam as duas peças; `apiFieldErrors` leva o `errors` de um 422 ao mesmo lugar.
 
+## Idiomas
+
+Fora da especificação (não há `RN-*` para isto): português (padrão), inglês e espanhol.
+
+- **Onde mora**: `electron/locale.ts` (a lista `locales`, os nomes, `Localized`, `pickCopy`; puro, a tela também o importa) e `locale-file.ts`
+  (`locale.json` na pasta de dados, como o `zoom.json`: desta instalação, e não do usuário, porque a entrada já abre nele). O processo principal o
+  lê ao abrir e o põe em `additionalArguments`; o preload o expõe em `window.prism.locale`; `src/lib/i18n.ts` dá o `locale` desta janela. Trocar em
+  Configurações › Aparência grava o da **próxima abertura**: os textos são escolhidos uma vez, ao carregar o módulo, e por isso
+  `const copy = xCopy.y` no topo de um componente continua valendo.
+- **Cada `x.copy.ts`** tem o objeto em português (`const pt = { ... } as const`), o tipo `export type XCopy = Localized<typeof pt>` e
+  `export const xCopy = pickCopy({ "pt-BR": pt, en: xCopyEn, es: xCopyEs })`; as traduções ficam ao lado, em `x.copy.en.ts` e `x.copy.es.ts`, tipadas
+  com `XCopy`. Uma chave a mais ou a menos não compila: o `pnpm typecheck` é a conferência. Os comentários ficam só no português.
+- **Texto de tela nunca fica solto num componente**: vai para o `*.copy.ts` da pasta, com as três línguas. A exceção é o que é contrato e não frase:
+  o que a API, uma fixture de `src/test-fixtures` ou um analisador compara (o que a pessoa escreve e o programa lê, como as palavras da linguagem das
+  variáveis), nomes de produto (Prism, DBeaver, Informix, Db2, PostgreSQL), SQL e códigos. Isso é igual nas três.
+- **Números e datas** de frase usam a etiqueta do idioma do texto: o `formatCount` e o `formatElapsed` já seguem o `locale`; nas traduções,
+  `toLocaleString("en")` e `toLocaleString("es")`. Ordenar e comparar nomes (`Intl.Collator`, `toLocaleLowerCase`) continua em `pt-BR`.
+- **Os testes rodam em português** (não há `window.prism`), e as fixtures continuam o contrato em português.
+- **Um idioma novo**: entra em `locales` e em `localeNames`; o `pnpm typecheck` aponta cada `*.copy.ts` sem ele; cada um ganha o `x.copy.<id>.ts`.
+  O plural é o de `formatCount` (1 é singular): um idioma com outras regras de plural pede `Intl.PluralRules`.
+- **A API escreve no idioma da tela**: o `apiRequest` manda `Accept-Language` com o `locale` (sem ele, o Electron mandaria o do sistema), e a API
+  responde títulos, detalhes e validação nele (seção `## Idiomas` de `src/api/AGENTS.md`). Por isso a tela nunca compara o texto de uma recusa: decide
+  pelo código. O texto gravado no diário é histórico e fica em português.
+- **O que ainda está só em português**: as mensagens do processo principal que vão à tela (atualização, cópia de arquivo, DBeaver). O splash tem os textos dele em `splash.ts`, por idioma. Ficam em português de propósito, por
+  serem contrato: o conteúdo dos arquivos exportados e do SQL/DDL gerado (comentários, "Resultado"), os nomes de tipo da linguagem das variáveis
+  (`Date (dia)`) e as variáveis do nome de arquivo (`${tabela}`).
+
+O glossário, para os idiomas não divergirem de um módulo para outro (inglês e espanhol, em sentença: só a primeira letra maiúscula, como no
+português; espanhol com "tú"):
+
+| Português | English | Español |
+| --- | --- | --- |
+| cofre | vault | caja fuerte |
+| diário / auditoria | journal / audit | diario / auditoría |
+| área de trabalho | workspace | área de trabajo |
+| Construir (modo) | Build | Construir |
+| conexão / pasta / ambiente | connection / folder / environment | conexión / carpeta / entorno |
+| sessão / aba / janela | session / tab / window | sesión / pestaña / ventana |
+| navegador / árvore | navigator / tree | navegador / árbol |
+| banco (de dados) / esquema / tabela / visão | database / schema / table / view | base de datos / esquema / tabla / vista |
+| coluna / linha / registro / célula / grade | column / row / record / cell / grid | columna / fila / registro / celda / cuadrícula |
+| executar / consulta / comando / script | run / query / statement / script | ejecutar / consulta / sentencia / script |
+| transação / confirmar (commit) / desfazer (rollback) | transaction / commit / roll back | transacción / confirmar / revertir |
+| variável / marcador / parâmetro | variable / marker / parameter | variable / marcador / parámetro |
+| somente leitura | read-only | solo lectura |
+| exportar / importar / copiar como | export / import / copy as | exportar / importar / copiar como |
+| Configurações / Aparência / Sobre | Settings / Appearance / About | Configuración / Apariencia / Acerca de |
+| entrar / sair / bloquear | sign in / sign out / lock | iniciar sesión / cerrar sesión / bloquear |
+| usuário / senha | user / password | usuario / contraseña |
+| driver / plugin / atualização | driver / plugin / update | driver / plugin / actualización |
+| salvar / cancelar / fechar / excluir | save / cancel / close / delete | guardar / cancelar / cerrar / eliminar |
+
 ## Avisos e mensagens
 
 - `useToast()` devolve `{ success, warning, error }` (RN-AVISO-001 a 006). A regra da fila está em

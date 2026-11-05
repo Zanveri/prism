@@ -1,4 +1,6 @@
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 using static Prism.Infrastructure.Databases.Clients.EditableSql;
 
 namespace Prism.Infrastructure.Databases.Clients;
@@ -20,20 +22,23 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 public static class ReadOnlySql
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ReadOnlySql.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ReadOnlySql));
+
     /// <summary>RN-PROT-002: a recusa das rotas da edição de registros numa conexão somente leitura.</summary>
-    public const string EditsRefusal = "A conexão é somente leitura: nada se grava nela, e a edição de registros não vale. Nada foi enviado ao banco.";
+    public static string EditsRefusal => Texts.Get(nameof(EditsRefusal));
 
     /// <summary>RN-EDIT-002: o motivo do resultado inteiro só leitura de uma conexão somente leitura, que a grade mostra.</summary>
-    public const string ResultReason = "a conexão é somente leitura";
+    public static string ResultReason => Texts.Get(nameof(ResultReason));
 
-    private const string WithoutAReadMessage = "o comando não começa por SELECT, WITH ou VALUES";
-    private const string IntoMessage = "o SELECT ... INTO grava o resultado numa tabela";
-    private const string LockMessage = "a trava de linha (FOR UPDATE, FOR SHARE) é para alterar as linhas";
-    private const string SequenceMessage = "avançar uma sequência (NEXT VALUE FOR, NEXTVAL) não volta atrás";
-    private const string Db2TableFunctionMessage = "no Db2, uma função de tabela (TABLE (...)) pode gravar sem que o comando mostre";
-    private const string Db2ExplainMessage = "no Db2, o EXPLAIN grava nas tabelas de explicação";
-    private const string ExplainAnalyzeMessage = "o EXPLAIN ANALYZE executa o comando";
-    private const string SeveralStatementsMessage = "o texto tem mais de um comando";
+    private static string WithoutAReadMessage => Texts.Get(nameof(WithoutAReadMessage));
+    private static string IntoMessage => Texts.Get(nameof(IntoMessage));
+    private static string LockMessage => Texts.Get(nameof(LockMessage));
+    private static string SequenceMessage => Texts.Get(nameof(SequenceMessage));
+    private static string Db2TableFunctionMessage => Texts.Get(nameof(Db2TableFunctionMessage));
+    private static string Db2ExplainMessage => Texts.Get(nameof(Db2ExplainMessage));
+    private static string ExplainAnalyzeMessage => Texts.Get(nameof(ExplainAnalyzeMessage));
+    private static string SeveralStatementsMessage => Texts.Get(nameof(SeveralStatementsMessage));
 
     /// <summary>As palavras que gravam, em qualquer lugar do comando: o `WITH` que grava do PostgreSQL e o `FROM FINAL TABLE (UPDATE ...)` do Db2 também.</summary>
     private static readonly HashSet<string> WriteWords = ["INSERT", "UPDATE", "DELETE", "MERGE"];
@@ -55,7 +60,7 @@ public static class ReadOnlySql
 
     /// <summary>RN-PROT-002: a recusa de `CONNECTION_READ_ONLY`, com o motivo da <see cref="Refusal(string, EDatabaseEngine)"/>.</summary>
     public static string Message(string reason)
-        => $"A conexão é somente leitura, e só leituras são executadas nela: {reason}. Nada foi enviado ao banco.";
+        => Texts.Get("RefusalMessage", reason);
 
     /// <summary>
     /// RN-EXPORT-002: por que o comando não se exporta, ou nulo quando se exporta. Exportar executa o comando de novo, numa conexão à parte, e só vale para
@@ -138,7 +143,7 @@ public static class ReadOnlySql
             return null;
 
         if (first is not ("SELECT" or "WITH" or "VALUES") && !(postgres && first == "TABLE"))
-            return $"um {first} não é leitura";
+            return Texts.Get("NotARead", first);
 
         var words = tokens.Skip(start + 1).Where(token => token.Kind == ETokenKind.Word).Select(token => token.Upper).ToList();
 
@@ -151,7 +156,7 @@ public static class ReadOnlySql
                 return LockMessage;
 
             if (WriteWords.Contains(word))
-                return $"o comando tem um {word}, que grava";
+                return Texts.Get("HasWriteWord", word);
 
             if (word == "INTO")
                 return IntoMessage;

@@ -1,10 +1,9 @@
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Transfers.Models;
+using System.Resources;
 using System.Text.Json;
 
 namespace Prism.Infrastructure.Transfers.Writers;
-
-/// <summary>Uma opção recusada, com o caminho do campo como a tela o lê (`options.rowsPerStatement`) e o motivo.</summary>
-public sealed record ExportOptionError(string Field, string Message);
 
 /// <summary>
 /// RN-EXPORT-006 a 013 e as notas da seção 6: lê as opções do formato do corpo do pedido (`options`, um objeto JSON), com o padrão do Prism no que não
@@ -14,6 +13,9 @@ public sealed record ExportOptionError(string Field, string Message);
 /// </summary>
 public static class ExportOptionsReader
 {
+    /// <summary>Os textos das recusas, no idioma do pedido: <c>ExportOptionsReader.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ExportOptionsReader));
+
     /// <summary>RN-EXPORT-007 e 009: o texto do "Nulo como" tem até 100 caracteres.</summary>
     public const int MaxNullText = 100;
 
@@ -31,20 +33,20 @@ public static class ExportOptionsReader
     {
         var errors = new List<ExportOptionError>();
         if (options is { ValueKind: not (JsonValueKind.Object or JsonValueKind.Null or JsonValueKind.Undefined) })
-            return (null, [new ExportOptionError("options", "As opções do formato vêm num objeto.")]);
+            return (null, [new ExportOptionError("options", Texts.Get("OptionsObject"))]);
 
         var reader = new Reader(options, errors);
         ExportFormatOptions? read = format switch
         {
-            ExportFormats.Csv => new CsvExportOptions(reader.Choice("delimiter", Delimiters, ";", "O separador deve ser ;, a vírgula, a tabulação ou |."), reader.Bool("header", true), Quoting(reader.Choice("quoting", Quotings, "auto", "As aspas devem ser auto, text ou all.")), reader.Bool("formulaGuard", true), LineBreak(reader), NullText(reader), Binary(reader)),
+            ExportFormats.Csv => new CsvExportOptions(reader.Choice("delimiter", Delimiters, ";", Texts.Get("DelimiterChoice")), reader.Bool("header", true), Quoting(reader.Choice("quoting", Quotings, "auto", Texts.Get("QuotingChoice"))), reader.Bool("formulaGuard", true), LineBreak(reader), NullText(reader), Binary(reader)),
             ExportFormats.Txt => Txt(reader),
             ExportFormats.Html => new HtmlExportOptions(reader.Bool("title", true), reader.Bool("columnNames", true), Binary(reader)),
             ExportFormats.Markdown => new MarkdownExportOptions(reader.Bool("alignmentLine", true), NullText(reader), Binary(reader)),
             ExportFormats.Json => new JsonExportOptions(reader.Bool("wrap", true), reader.Bool("isoDates", true), Binary(reader)),
-            ExportFormats.SourceCode => new SourceCodeExportOptions(reader.Choice("php", ["legacy", "short"], "legacy", "A versão do PHP deve ser legacy ou short.") == "short", reader.Choice("quote", ["double", "single"], "double", "As aspas devem ser double ou single.") == "single", reader.Bool("isoDates", true), Binary(reader)),
-            ExportFormats.Sql => new SqlExportOptions(reader.Name("schema"), Table(reader, defaultTable), reader.Bool("omitSchema", false), reader.Int("rowsPerStatement", 1, 1000, 10, "As linhas por comando devem ser um número inteiro de 1 a 1.000."), reader.Choice("binary", SqlBinaries, "literal", "O binário deve ser literal ou null.") == "null" ? EExportBinary.Null : EExportBinary.Literal),
+            ExportFormats.SourceCode => new SourceCodeExportOptions(reader.Choice("php", ["legacy", "short"], "legacy", Texts.Get("PhpChoice")) == "short", reader.Choice("quote", ["double", "single"], "double", Texts.Get("QuoteChoice")) == "single", reader.Bool("isoDates", true), Binary(reader)),
+            ExportFormats.Sql => new SqlExportOptions(reader.Name("schema"), Table(reader, defaultTable), reader.Bool("omitSchema", false), reader.Int("rowsPerStatement", 1, 1000, 10, Texts.Get("RowsPerStatement")), reader.Choice("binary", SqlBinaries, "literal", Texts.Get("SqlBinaryChoice")) == "null" ? EExportBinary.Null : EExportBinary.Literal),
             ExportFormats.Xml => new XmlExportOptions(reader.Bool("doctype", false), Binary(reader)),
-            ExportFormats.DbUnit => new DbUnitExportOptions(Table(reader, defaultTable), reader.Bool("upperCase", true), reader.Choice("nulls", ["omit", "mark"], "omit", "O nulo deve ser omit ou mark.") == "mark", Binary(reader)),
+            ExportFormats.DbUnit => new DbUnitExportOptions(Table(reader, defaultTable), reader.Bool("upperCase", true), reader.Choice("nulls", ["omit", "mark"], "omit", Texts.Get("NullsChoice")) == "mark", Binary(reader)),
             ExportFormats.Xlsx => new XlsxExportOptions(Binary(reader)),
             _ => null
         };
@@ -54,10 +56,10 @@ public static class ExportOptionsReader
 
     private static TxtExportOptions Txt(Reader reader)
     {
-        var minWidth = reader.Int("minWidth", 1, 1000, 3, "A largura mínima deve ser um número inteiro de 1 a 1.000.");
-        var maxWidth = reader.Int("maxWidth", 0, 100000, 0, "A largura máxima deve ser um número inteiro de 0 (sem limite) a 100.000.");
+        var minWidth = reader.Int("minWidth", 1, 1000, 3, Texts.Get("MinWidth"));
+        var maxWidth = reader.Int("maxWidth", 0, 100000, 0, Texts.Get("MaxWidth"));
         if (maxWidth > 0 && maxWidth < minWidth)
-            reader.Refuse("maxWidth", "A largura máxima não pode ser menor que a mínima.");
+            reader.Refuse("maxWidth", Texts.Get("MaxWidthLess"));
 
         return new TxtExportOptions(reader.Bool("header", true), reader.Bool("headerLine", true), reader.Bool("edgeDelimiters", true), minWidth, maxWidth, reader.Bool("showNull", false), LineBreak(reader), Binary(reader));
     }
@@ -71,18 +73,18 @@ public static class ExportOptionsReader
         };
 
     private static string LineBreak(Reader reader)
-        => reader.Choice("lineBreak", LineBreaks, "crlf", "A quebra de linha deve ser crlf ou lf.") == "lf" ? "\n" : "\r\n";
+        => reader.Choice("lineBreak", LineBreaks, "crlf", Texts.Get("LineBreakChoice")) == "lf" ? "\n" : "\r\n";
 
     private static EExportBinary Binary(Reader reader)
-        => reader.Choice("binary", Binaries, "hex", "O binário deve ser hex ou null.") == "null" ? EExportBinary.Null : EExportBinary.Hex;
+        => reader.Choice("binary", Binaries, "hex", Texts.Get("BinaryChoice")) == "null" ? EExportBinary.Null : EExportBinary.Hex;
 
     private static string NullText(Reader reader)
     {
         var text = reader.Text("nullText", string.Empty);
         if (text.Length > MaxNullText)
-            reader.Refuse("nullText", $"O texto do nulo pode ter até {MaxNullText} caracteres.");
+            reader.Refuse("nullText", Texts.Get("NullTextMax", MaxNullText));
         else if (text.Any(char.IsControl))
-            reader.Refuse("nullText", "O texto do nulo não pode ter caractere de controle.");
+            reader.Refuse("nullText", Texts.Get("NullTextControl"));
 
         return text;
     }
@@ -97,7 +99,7 @@ public static class ExportOptionsReader
         if (!string.IsNullOrEmpty(defaultTable))
             return defaultTable;
 
-        reader.Refuse("table", "Informe a tabela de destino.");
+        reader.Refuse("table", Texts.Get("TableRequired"));
 
         return string.Empty;
     }
@@ -116,7 +118,7 @@ public static class ExportOptionsReader
             if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
                 return value.GetBoolean();
 
-            Refuse(name, $"A opção {name} deve ser true ou false.");
+            Refuse(name, Texts.Get("OptionBool", name));
 
             return fallback;
         }
@@ -155,7 +157,7 @@ public static class ExportOptionsReader
             if (value.ValueKind == JsonValueKind.String)
                 return value.GetString()!;
 
-            Refuse(name, $"A opção {name} deve ser um texto.");
+            Refuse(name, Texts.Get("OptionText", name));
 
             return fallback;
         }
@@ -165,9 +167,9 @@ public static class ExportOptionsReader
         {
             var text = Text(name, string.Empty);
             if (text.Length > MaxTableName)
-                Refuse(name, $"O nome pode ter até {MaxTableName} caracteres.");
+                Refuse(name, Texts.Get("NameMax", MaxTableName));
             else if (text.Any(char.IsControl))
-                Refuse(name, "O nome não pode ter caractere de controle.");
+                Refuse(name, Texts.Get("NameControl"));
 
             return text.Length == 0 ? null : text;
         }
@@ -176,3 +178,7 @@ public static class ExportOptionsReader
             => options is { ValueKind: JsonValueKind.Object } element && element.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null ? value : null;
     }
 }
+
+// Depois da classe do leitor, e não antes: o SDK dá ao recurso o nome da primeira classe do arquivo (ExportOptionsReader.resx).
+/// <summary>Uma opção recusada, com o caminho do campo como a tela o lê (`options.rowsPerStatement`) e o motivo.</summary>
+public sealed record ExportOptionError(string Field, string Message);
