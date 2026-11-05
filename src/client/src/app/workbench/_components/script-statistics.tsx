@@ -23,8 +23,8 @@ const statusTone: Record<ScriptEntryStatus, string> = {
 
 /** As linhas do comando, como a coluna as diz: as lidas (com mais a ler, as primeiras), as devolvidas pelo comando que grava, as afetadas. */
 function rowsOf(entry: ScriptEntry): string {
-  // RN-VAR-022: a declaração não lê linhas do banco ("—" quando ela não tem consulta).
-  if (entry.kind === "declaration") return entry.status === "ok" ? "—" : "";
+  // RN-VAR-022: a declaração com consulta diz as linhas que a consulta leu; "—" quando ela não tem consulta.
+  if (entry.kind === "declaration") return entry.status !== "ok" ? "" : entry.rows === null ? "—" : copy.read(entry.rows.read, false);
   if (entry.rows !== null) {
     const rows = entry.rows.total === null ? copy.read(entry.rows.read, entry.rows.more) : copy.returned(entry.rows.total);
     return entry.kept === false ? `${rows} · ${copy.notKept}` : rows;

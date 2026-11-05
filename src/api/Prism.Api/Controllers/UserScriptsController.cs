@@ -3,6 +3,7 @@ using Prism.Application.Scripts.Features.CreateScript;
 using Prism.Application.Scripts.Features.DeleteScript;
 using Prism.Application.Scripts.Features.GetScript;
 using Prism.Application.Scripts.Features.GetScripts;
+using Prism.Application.Scripts.Features.SaveScriptRunValues;
 using Prism.Application.Scripts.Features.UpdateScript;
 using Prism.Core.Extensions;
 using Prism.Core.Mediator;
@@ -60,6 +61,20 @@ public sealed class UserScriptsController(IMediator mediator) : ControllerBase
             return result.ToIActionResult();
 
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-VAR-028: os valores lembrados do "Executar com valores…" (`{ values, connectionID?, database? }`), no lugar dos de antes; o `values` vazio sem conexão
+    /// os esquece. Não muda a data de alteração do script.
+    /// </summary>
+    [HttpPut("{id:guid}/run-values")]
+    public async Task<IActionResult> SaveScriptRunValues(Guid id, [FromBody] SaveScriptRunValuesCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { ID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return NoContent();
     }
 
     [HttpDelete("{id:guid}")]

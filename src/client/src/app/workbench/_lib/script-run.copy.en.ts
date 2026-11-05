@@ -10,6 +10,10 @@ export const scriptRunCopyEn: ScriptRunCopy = {
     shortcut: "Alt+X",
     shortcutMac: "Cmd+Option+X",
     title: (shortcut: string) => `Runs the statements of the selection or, with no selection, of the whole text, one after the other (${shortcut})`,
+    withValues: "Run with values…",
+    withValuesTitle: (shortcut: string) => `Run with values… (${shortcut})`,
+    withValuesShortcut: "Shift+Alt+X",
+    withValuesShortcutMac: "Shift+Cmd+Option+X",
   },
 
   tabs: {

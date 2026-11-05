@@ -4,12 +4,15 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Prism.Application.DatabaseSessions.Features.ApplyEdits;
 using Prism.Application.DatabaseSessions.Features.CancelQuery;
 using Prism.Application.DatabaseSessions.Features.ChangeTransactionMode;
+using Prism.Application.DatabaseSessions.Features.CheckColumnValues;
 using Prism.Application.DatabaseSessions.Features.CloseDatabaseSession;
 using Prism.Application.DatabaseSessions.Features.CountQuery;
 using Prism.Application.DatabaseSessions.Features.CountWholeColumn;
 using Prism.Application.DatabaseSessions.Features.EndTransaction;
 using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
+using Prism.Application.DatabaseSessions.Features.ExecuteVariableQuery;
 using Prism.Application.DatabaseSessions.Features.FetchNextPage;
+using Prism.Application.DatabaseSessions.Features.GetColumnValues;
 using Prism.Application.DatabaseSessions.Features.GetDatabases;
 using Prism.Application.DatabaseSessions.Features.GetEditTarget;
 using Prism.Application.DatabaseSessions.Features.GetObjectNames;
@@ -167,6 +170,31 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// RN-VAR-035: os valores diferentes de uma coluna, para a escolha de uma variável. O corpo leva `column` e, se quiser, `description`, `search`,
+    /// `offset`, `limit` e `total`; a resposta é `{ kind, values, hasMore, total }`. Espera a vez como o catálogo (RN-ARVORE-006).
+    /// </summary>
+    [HttpPost("{id:guid}/schemas/{schema}/tables/{table}/values")]
+    public async Task<IActionResult> GetColumnValues(Guid id, [FromBody] GetColumnValuesCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id, Schema = PathName(4), Table = PathName(2) }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-VAR-035: quais dos `values` (de 1 a 1.000, na forma dos `params`) não existem na coluna `column`; a resposta é `{ missing }`, com as posições.</summary>
+    [HttpPost("{id:guid}/schemas/{schema}/tables/{table}/values/check")]
+    public async Task<IActionResult> CheckColumnValues(Guid id, [FromBody] CheckColumnValuesCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id, Schema = PathName(5), Table = PathName(3) }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
     /// <summary>RN-CAT-006: `{ definition }`, nulo quando o banco não devolve nada.</summary>
     [HttpGet("{id:guid}/schemas/{schema}/views/{view}/definition")]
     public async Task<IActionResult> GetViewDefinition(Guid id, CancellationToken cancellationToken)
@@ -225,6 +253,20 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
     public async Task<IActionResult> CountQuery(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new CountQueryCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-VAR-034: a consulta de uma variável. O corpo leva `sql` e, se quiser, `params` e `maxRows`; a resposta é `{ columns, rows, elapsedMs }`, com
+    /// todas as linhas, e o resultado da tela, os resultados guardados e o último comando da contagem ficam como estavam.
+    /// </summary>
+    [HttpPost("{id:guid}/queries/variable")]
+    public async Task<IActionResult> ExecuteVariableQuery(Guid id, [FromBody] ExecuteVariableQueryCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
         if (result.IsFailure)
             return result.ToIActionResult();
 
@@ -362,7 +404,7 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
     /// nome com `encodeURIComponent`, e o valor de rota que o ASP.NET Core entrega já foi decodificado pelo Kestrel, menos o `%2F`: a barra
     /// do nome (`a%2Fb`) e o texto literal `%2F` dele (`a%252Fb`) chegam iguais (`a%2Fb`), e decodificar o valor de novo desfaria um nome
     /// com `%41` no meio. O alvo cru ainda distingue os dois. Conta-se a partir do fim do caminho, que é fixo (`.../schemas/{schema}/objects`
-    /// e `.../schemas/{schema}/tables/{table}/{rota}`, `.../schemas/{schema}/views/{view}/definition` e `.../schemas/{schema}/diagram`),
+    /// e `.../schemas/{schema}/tables/{table}/{rota}`, `.../schemas/{schema}/tables/{table}/values/check`, `.../schemas/{schema}/views/{view}/definition` e `.../schemas/{schema}/diagram`),
     /// para não depender do que vem antes dele.
     /// </summary>
     private string PathName(int segmentsFromEnd)

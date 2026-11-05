@@ -20,6 +20,7 @@ import { inDatabase, parseNavKey } from "./navigator-model";
 import { isScriptDirty, withEditedSql, withSavedPlace, type SavedPlace, type ScriptRef } from "./saved-scripts";
 import { createWorkspaceSource, restoreWorkspace, type LiveSql } from "./saved-workspace";
 import type { Script } from "./scripts.schema";
+import { executionTitle, reusableExecution } from "./execution-tab";
 import { getScript, scriptsQuery } from "./scripts.service";
 import { cancelQuery } from "./query.service";
 import { focusedElement, tabFocus } from "./tab-focus";
@@ -35,7 +36,7 @@ import { createQueryRunner, isPersonBusy, type QueryRunner } from "./use-query-r
 import { connectExports, exportTracker } from "./data-export/data-exports";
 import { connectLoads, loadTracker } from "./data-import/data-imports";
 import { createLockHandles } from "./workbench-lock";
-import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type DatabaseView, type QueryTab, type ResultPlace, type SchemaView, type TableView } from "./workbench-model";
+import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type DatabaseView, type ExecutionTarget, type ExecutionValues, type QueryTab, type ResultPlace, type SchemaView, type TableView } from "./workbench-model";
 import { resultPlaceCopy } from "./result-place.copy";
 import { workbenchCopy } from "./workbench.copy";
 import { getWorkspace } from "./workspace.service";
@@ -89,6 +90,14 @@ type WorkbenchState = {
   releaseWindow: () => Promise<void>;
   /** O editor grava aqui o texto da aba, com atraso (não a cada tecla); a sessão, quem grava é o que a aba executa. */
   updateTab: (tabId: string, patch: Partial<Pick<QueryTab, "sessionId" | "sql">>) => void;
+  /**
+   * RN-VAR-029: o "Executar com valores…" do navegador (e o "Executar numa aba nova"). A aba de execução mais recente do script nesta janela, na mesma conexão
+   * e no mesmo banco, recebe o pedido e fica ativa; não havendo, ou com `newTab`, abre uma logo depois da ativa. Com `values`, ela executa com eles; sem,
+   * abre o diálogo (RN-VAR-027).
+   */
+  requestExecution: (script: { id: string; name: string; sql: string; generic: boolean }, place: { connectionId: string | null; database?: string }, values: ExecutionValues | null, newTab?: boolean) => void;
+  /** RN-VAR-029: muda o que a aba de execução guarda (os valores, a hora, o pedido), sobre o estado deste instante. */
+  updateExecution: (tabId: string, patch: Partial<ExecutionTarget>) => void;
   /**
    * RN-SCRIPT-003: abre o script numa aba de consulta, na conexão e no banco dados (`connectionId` nulo: a conexão dele não existe mais, ou o script é genérico
    * e não há uma só conectada, e a aba pede uma), com o lugar salvo que a aba guarda (`saved`, `scriptPlace`). O script que já tem aba volta para ela: uma aba
@@ -307,6 +316,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const updateExecution = useCallback(
+    (tabId: string, patch: Partial<ExecutionTarget>) => setTabs((current) => current.map((tab) => (tab.id === tabId && tab.execution !== undefined ? { ...tab, execution: { ...tab.execution, ...patch } } : tab))),
+    [],
+  );
+
   // A cada tecla, e sem atraso: só a primeira depois de salvar muda a lista de abas. As outras devolvem a MESMA lista, e o React não redesenha nada. A tecla
   // também avisa o relato das abas (RN-ABAS-006): o texto da aba chega com atraso, e digitar sem parar não pode adiar a gravação.
   const markScriptEdited = useCallback(
@@ -342,7 +356,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const renameScript = useCallback((scriptId: string, name: string) => setTabs((current) => (current.some((tab) => tab.script?.id === scriptId) ? current.map((tab) => (tab.script?.id === scriptId ? { ...tab, title: name, script: { ...tab.script, name } } : tab)) : current)), []);
+  // RN-VAR-029: a aba de execução do script também muda de nome, com o número que tinha ("Pedidos (2)").
+  const renameScript = useCallback(
+    (scriptId: string, name: string) =>
+      setTabs((current) =>
+        current.some((tab) => tab.script?.id === scriptId || tab.execution?.scriptId === scriptId)
+          ? current.map((tab) => (tab.script?.id === scriptId ? { ...tab, title: name, script: { ...tab.script, name } } : tab.execution?.scriptId === scriptId ? { ...tab, title: name + tab.title.slice(tab.execution.name.length), execution: { ...tab.execution, name } } : tab))
+          : current,
+      ),
+    [],
+  );
 
   const forgetScript = useCallback(
     (scriptId: string) =>
@@ -438,6 +461,33 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: ref, resultPlace: newTabPlace(resultPlacePreference(queryClient)) }, askedFrom);
     },
     [tabs, addTab, askFocus, queryClient],
+  );
+
+  const requestExecution = useCallback(
+    (script: { id: string; name: string; sql: string; generic: boolean }, place: { connectionId: string | null; database?: string }, values: ExecutionValues | null, newTab = false) => {
+      const reuse = newTab ? undefined : reusableExecution(tabs, script.id, place);
+      if (reuse !== undefined) {
+        setTabs((current) => current.map((tab) => (tab.id === reuse.id && tab.execution !== undefined ? { ...tab, sql: script.sql, execution: { ...tab.execution, name: script.name, generic: script.generic, pending: { values, fresh: false } } } : tab)));
+        setActiveTabId(reuse.id);
+        return;
+      }
+      const tab: QueryTab = {
+        id: crypto.randomUUID(),
+        title: executionTitle(tabs, script.id, script.name),
+        connectionId: place.connectionId,
+        ...inDatabase(place.database),
+        sessionId: null,
+        sql: script.sql,
+        execution: { scriptId: script.id, name: script.name, generic: script.generic, values: null, ranAt: null, pending: { values, fresh: true } },
+      };
+      runners.set(tab.id, createRunner(tab));
+      setTabs((current) => {
+        const at = current.findIndex((candidate) => candidate.id === activeTabId);
+        return at < 0 ? [...current, tab] : [...current.slice(0, at + 1), tab, ...current.slice(at + 1)];
+      });
+      setActiveTabId(tab.id);
+    },
+    [tabs, activeTabId, runners, createRunner],
   );
 
   // O que uma aba soltou fecha na API em segundo plano (cancela o que rodava e fecha a sessão, RN-SESSAO-004), pelo cache de mutações sem ficar nele; a falha
@@ -755,8 +805,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const { mutate: disconnect } = disconnectMutation;
 
   const value = useMemo<WorkbenchState>(
-    () => ({ tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openSchemaTab, openDatabaseTab, openScriptTab, setTableView, setSchemaView, setDatabaseView, closeTab, setActiveTab, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose }),
-    [tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openSchemaTab, openDatabaseTab, openScriptTab, setTableView, setSchemaView, setDatabaseView, closeTab, setActiveTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose],
+    () => ({ tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openSchemaTab, openDatabaseTab, openScriptTab, setTableView, setSchemaView, setDatabaseView, closeTab, setActiveTab, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, requestExecution, updateExecution, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose }),
+    [tabs, activeTabId, resultActive, showEntry, setResultPlace, openQueryTab, openTableTab, openSchemaTab, openDatabaseTab, openScriptTab, setTableView, setSchemaView, setDatabaseView, closeTab, setActiveTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, requestExecution, updateExecution, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, disconnectLog, holdForWindowClose, releaseWindowClose],
   );
 
   return (

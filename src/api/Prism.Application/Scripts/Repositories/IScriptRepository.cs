@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Prism.Application.Scripts.Domain;
 using Prism.Core.Api.Models.Dtos;
+using Prism.Infrastructure.Vault.Models;
 
 namespace Prism.Application.Scripts.Repositories;
 
@@ -20,6 +21,12 @@ internal interface IScriptRepository
     /// </summary>
     Task<Result<Script, ApiErrorDto>> Update(Guid id, Func<Script, bool> change, CancellationToken cancellationToken);
 
-    /// <summary>Falha com 404 `SCRIPT_NOT_FOUND` quando o script não existe.</summary>
+    /// <summary>
+    /// RN-VAR-028: troca os valores lembrados do script (nulo os esquece), dentro da gravação, sem mexer no resto do registro nem na data de alteração: lembrar
+    /// valores não é editar o script. As falhas do `Insert`, mais 404 `SCRIPT_NOT_FOUND`.
+    /// </summary>
+    Task<UnitResult<ApiErrorDto>> SaveRunValues(Guid id, VaultScriptRunValuesRecord? runValues, CancellationToken cancellationToken);
+
+    /// <summary>Falha com 404 `SCRIPT_NOT_FOUND` quando o script não existe. Os valores lembrados (RN-VAR-028) estão no registro, e saem com ele.</summary>
     Task<UnitResult<ApiErrorDto>> Delete(Guid id, CancellationToken cancellationToken);
 }

@@ -112,10 +112,10 @@ describe("os erros (RN-VAR-012 e 025)", () => {
     expect(errorsOf(source, read(source)).map(([, message]) => message)).toEqual(["@ids é uma lista e só entra numa lista entre parênteses, como IN (@ids)."]);
   });
 
-  it("a recusa provisória das partes que ainda não entraram aparece como erro (a frase da conferência)", () => {
+  it("a variável de consulta não é erro: o valor dela só se sabe na execução (RN-VAR-011)", () => {
     const source = "let x = (SELECT 1)\nSELECT @x";
 
-    expect(errorsOf(source, read(source)).map(([, message]) => message)).toContain("A variável de consulta chega numa próxima versão.");
+    expect(errorsOf(source, read(source))).toEqual([]);
   });
 
   it("o orçamento da execução em seco: passado o tempo, o que só ela acha vai para a execução, e os erros da leitura ficam", () => {

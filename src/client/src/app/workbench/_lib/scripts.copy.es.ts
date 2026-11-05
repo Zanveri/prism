@@ -116,6 +116,7 @@ export const scriptsCopyEs: ScriptsCopy = {
   },
   menu: {
     open: "Abrir",
+    runWithValues: "Ejecutar con valores…",
     rename: "Renombrar",
     edit: "Editar script…",
     copySql: "Copiar SQL",

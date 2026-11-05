@@ -1,0 +1,565 @@
+{
+  "rule": "RN-VAR-001, 002, 004, 011 e 016 com as interfaces e o type: onde o tipo com nome é item, o valor na forma do tipo (a semântica do TypeScript) e o @c.endereco.cidade. check \"itens\" são os itens do script, [espécie, texto]; check \"troca\" é a troca do último comando, { sql, params: [[tipo, valor, variável]] }, e sent, o SQL enviado; sem check, value e type são os da última variável atribuída.",
+  "cases": [
+    {
+      "name": "a interface é um item, e o comando de baixo é outro",
+      "check": "itens",
+      "engine": null,
+      "input": "interface Cliente { id: number; nome: string }\nSELECT 1",
+      "seed": null,
+      "value": [["type", "interface Cliente { id: number; nome: string }"], ["statement", "SELECT 1"]]
+    },
+    {
+      "name": "a interface em várias linhas é um item só",
+      "check": "itens",
+      "engine": null,
+      "input": "interface Cliente {\n  id: number\n  nome?: string\n}\nSELECT 1",
+      "seed": null,
+      "value": [["type", "interface Cliente {\n  id: number\n  nome?: string\n}"], ["statement", "SELECT 1"]]
+    },
+    {
+      "name": "a linha que começa por interface termina o comando de cima",
+      "check": "itens",
+      "engine": null,
+      "input": "SELECT 1\ninterface Cliente { id: number }\nSELECT 2",
+      "seed": null,
+      "value": [["statement", "SELECT 1"], ["type", "interface Cliente { id: number }"], ["statement", "SELECT 2"]]
+    },
+    {
+      "name": "a interface com ; leva o ; com ela",
+      "check": "itens",
+      "engine": null,
+      "input": "interface A { a: number }; SELECT 1",
+      "seed": null,
+      "value": [["type", "interface A { a: number };"], ["statement", "SELECT 1"]]
+    },
+    {
+      "name": "interface no meio da linha é SQL",
+      "check": "itens",
+      "engine": null,
+      "input": "SELECT interface FROM t",
+      "seed": null,
+      "value": [["statement", "SELECT interface FROM t"]]
+    },
+    {
+      "name": "a coluna interface sozinha no começo da linha é SQL",
+      "check": "itens",
+      "engine": null,
+      "input": "SELECT\ninterface\nFROM t",
+      "seed": null,
+      "value": [["statement", "SELECT\ninterface\nFROM t"]]
+    },
+    {
+      "name": "o type Nome = no começo do texto é um item",
+      "check": "itens",
+      "engine": null,
+      "input": "type Filtro = { cidade: string }\nSELECT 1",
+      "seed": null,
+      "value": [["type", "type Filtro = { cidade: string }"], ["statement", "SELECT 1"]]
+    },
+    {
+      "name": "o type Nome = depois da linha em branco, com o comando de cima fechado",
+      "check": "itens",
+      "engine": null,
+      "input": "SELECT 1\n\ntype Id = number\nSELECT 2",
+      "seed": null,
+      "value": [["statement", "SELECT 1"], ["type", "type Id = number"], ["statement", "SELECT 2"]]
+    },
+    {
+      "name": "o type Nome = logo abaixo de um comando, sem linha em branco, fica no comando",
+      "check": "itens",
+      "engine": null,
+      "input": "SELECT 1\ntype Id = number",
+      "seed": null,
+      "value": [["statement", "SELECT 1\ntype Id = number"]]
+    },
+    {
+      "name": "type = 'x' depois de uma declaração é a reatribuição da variável type",
+      "check": "itens",
+      "engine": null,
+      "input": "let type = 'a'\ntype = 'x'\nSELECT @type",
+      "seed": null,
+      "value": [["declaration", "let type = 'a'"], ["reassignment", "type = 'x'"], ["statement", "SELECT @type"]]
+    },
+    {
+      "name": "type = 'x' na linha de baixo do UPDATE t SET é SQL",
+      "check": "itens",
+      "engine": null,
+      "input": "UPDATE t SET\ntype = 'x'",
+      "seed": null,
+      "value": [["statement", "UPDATE t SET\ntype = 'x'"]]
+    },
+    {
+      "name": "let type = 1 vale: type não é palavra da linguagem",
+      "engine": null,
+      "input": "let type = 1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "a reatribuição da variável type",
+      "engine": null,
+      "input": "let type = 'a'\ntype = 'x'",
+      "seed": null,
+      "value": "x",
+      "type": "string"
+    },
+    {
+      "name": "a interface anota a declaração, e o tipo aparece pelo nome",
+      "engine": null,
+      "input": "interface Cliente { id: number; nome: string }\nconst c: Cliente = { id: 7, nome: 'Ana' }",
+      "seed": null,
+      "value": { "id": 7, "nome": "Ana" },
+      "type": "Cliente"
+    },
+    {
+      "name": "os campos separados por , e pela quebra de linha",
+      "engine": null,
+      "input": "interface Cliente {\n  id: number,\n  nome: string\n  ativo: boolean\n}\nconst c: Cliente = { id: 7, nome: 'Ana', ativo: true }",
+      "seed": null,
+      "value": { "id": 7, "nome": "Ana", "ativo": true },
+      "type": "Cliente"
+    },
+    {
+      "name": "o campo opcional que falta fica null",
+      "engine": null,
+      "input": "interface Endereco { cidade: string; uf?: string }\nconst e: Endereco = { cidade: 'Lages' }",
+      "seed": null,
+      "value": { "cidade": "Lages", "uf": null },
+      "type": "Endereco"
+    },
+    {
+      "name": "o campo opcional que falta se lê como null",
+      "engine": null,
+      "input": "interface Endereco { cidade: string; uf?: string }\nconst e: Endereco = { cidade: 'Lages' }\nconst uf = e.uf",
+      "seed": null,
+      "value": null,
+      "type": "null"
+    },
+    {
+      "name": "o campo | null aceita null",
+      "engine": null,
+      "input": "interface Cliente { id: number; email: string | null }\nconst c: Cliente = { id: 1, email: null }",
+      "seed": null,
+      "value": { "id": 1, "email": null },
+      "type": "Cliente"
+    },
+    {
+      "name": "o campo | null não pode faltar: só o opcional pode",
+      "engine": null,
+      "input": "interface Cliente { id: number; email: string | null }\nconst c: Cliente = { id: 1 }",
+      "seed": null,
+      "error": { "line": 2, "column": 20, "message": "c não tem o campo email, que Cliente pede." }
+    },
+    {
+      "name": "faltam dois campos",
+      "engine": null,
+      "input": "interface Cliente { id: number; nome: string; ativo: boolean }\nconst c: Cliente = { ativo: true }",
+      "seed": null,
+      "error": { "line": 2, "column": 20, "message": "c não tem os campos id e nome, que Cliente pede." }
+    },
+    {
+      "name": "o campo a mais no objeto escrito é erro, na chave dele",
+      "engine": null,
+      "input": "interface Cliente { id: number }\nconst c: Cliente = { id: 1, extra: 2 }",
+      "seed": null,
+      "error": { "line": 2, "column": 29, "message": "O campo extra não existe em Cliente." }
+    },
+    {
+      "name": "o campo com outro tipo",
+      "engine": null,
+      "input": "interface Cliente { id: number }\nconst c: Cliente = { id: 'x' }",
+      "seed": null,
+      "error": { "line": 2, "column": 26, "message": "c.id é number, mas recebeu 'x'." }
+    },
+    {
+      "name": "o valor que não é objeto",
+      "engine": null,
+      "input": "interface Cliente { id: number }\nconst c: Cliente = 5",
+      "seed": null,
+      "error": { "line": 2, "column": 20, "message": "c é Cliente, mas recebeu 5." }
+    },
+    {
+      "name": "a interface aninhada",
+      "engine": null,
+      "input": "interface Endereco { cidade: string }\ninterface Cliente { nome: string; endereco: Endereco }\nconst c: Cliente = { nome: 'Ana', endereco: { cidade: 'Lages' } }",
+      "seed": null,
+      "value": { "nome": "Ana", "endereco": { "cidade": "Lages" } },
+      "type": "Cliente"
+    },
+    {
+      "name": "o objeto escrito no campo",
+      "engine": null,
+      "input": "type Filtro = { faixa: { de: number; ate: number } }\nconst f: Filtro = { faixa: { de: 1, ate: 9 } }",
+      "seed": null,
+      "value": { "faixa": { "de": 1, "ate": 9 } },
+      "type": "Filtro"
+    },
+    {
+      "name": "o campo a mais no objeto aninhado diz o objeto escrito no tipo",
+      "engine": null,
+      "input": "type Filtro = { faixa: { de: number } }\nconst f: Filtro = { faixa: { de: 1, ate: 9 } }",
+      "seed": null,
+      "error": { "line": 2, "column": 37, "message": "O campo ate não existe em { de: number }." }
+    },
+    {
+      "name": "o objeto escrito na anotação aparece pela forma",
+      "engine": null,
+      "input": "const e: { cidade: string; uf?: string } = { cidade: 'Lages' }",
+      "seed": null,
+      "value": { "cidade": "Lages", "uf": null },
+      "type": "{ cidade: string; uf?: string }"
+    },
+    {
+      "name": "a lista de interface",
+      "engine": null,
+      "input": "interface Item { id: number }\nconst l: Item[] = [{ id: 1 }, { id: 2 }]",
+      "seed": null,
+      "value": [{ "id": 1 }, { "id": 2 }],
+      "type": "Item[]"
+    },
+    {
+      "name": "Cliente | null aceita null",
+      "engine": null,
+      "input": "interface Cliente { id: number }\nlet c: Cliente | null = null",
+      "seed": null,
+      "value": null,
+      "type": "Cliente | null"
+    },
+    {
+      "name": "o tipo pode ser usado antes de declarado",
+      "engine": null,
+      "input": "const c: Cliente = { id: 1 }\ninterface Cliente { id: number }",
+      "seed": null,
+      "value": { "id": 1 },
+      "type": "Cliente"
+    },
+    {
+      "name": "o nome do tipo e o da variável são de espaços à parte",
+      "engine": null,
+      "input": "type c = { a: number }\nconst c: c = { a: 1 }",
+      "seed": null,
+      "value": { "a": 1 },
+      "type": "c"
+    },
+    {
+      "name": "duas interfaces com a mesma forma se trocam",
+      "engine": null,
+      "input": "interface A { id: number }\ninterface B { id: number }\nconst a: A = { id: 1 }\nconst b: B = a",
+      "seed": null,
+      "value": { "id": 1 },
+      "type": "B"
+    },
+    {
+      "name": "os campos a mais de outra variável ficam fora do valor",
+      "engine": null,
+      "input": "interface Cliente { id: number }\nconst todo = { id: 1, nome: 'Ana' }\nconst c: Cliente = todo",
+      "seed": null,
+      "value": { "id": 1 },
+      "type": "Cliente"
+    },
+    {
+      "name": "ler o campo que o tipo não tem",
+      "engine": null,
+      "input": "interface Cliente { id: number }\nconst c: Cliente = { id: 1 }\nconst x = c.extra",
+      "seed": null,
+      "error": { "line": 3, "column": 13, "message": "O campo extra não existe em Cliente." }
+    },
+    {
+      "name": "a reatribuição confere a forma",
+      "engine": null,
+      "input": "interface Cliente { id: number }\nlet c: Cliente = { id: 1 }\nc = { id: 2, extra: 3 }",
+      "seed": null,
+      "error": { "line": 3, "column": 14, "message": "O campo extra não existe em Cliente." }
+    },
+    {
+      "name": "extends junta os campos, os herdados primeiro",
+      "engine": null,
+      "input": "interface Base { id: number }\ninterface Cliente extends Base { nome: string }\nconst c: Cliente = { nome: 'Ana', id: 1 }",
+      "seed": null,
+      "value": { "id": 1, "nome": "Ana" },
+      "type": "Cliente"
+    },
+    {
+      "name": "extends de duas interfaces",
+      "engine": null,
+      "input": "interface A { a: number }\ninterface B { b: string }\ninterface C extends A, B { c: boolean }\nconst x: C = { a: 1, b: 'b', c: true }",
+      "seed": null,
+      "value": { "a": 1, "b": "b", "c": true },
+      "type": "C"
+    },
+    {
+      "name": "extends de um type de objeto",
+      "engine": null,
+      "input": "type Base = { id: number }\ninterface Cliente extends Base { nome: string }\nconst c: Cliente = { id: 1, nome: 'Ana' }",
+      "seed": null,
+      "value": { "id": 1, "nome": "Ana" },
+      "type": "Cliente"
+    },
+    {
+      "name": "o campo herdado pode deixar de ser | null",
+      "engine": null,
+      "input": "interface A { id: number | null }\ninterface B extends A { id: number }\nconst b: B = { id: 1 }",
+      "seed": null,
+      "value": { "id": 1 },
+      "type": "B"
+    },
+    {
+      "name": "o campo herdado com outro tipo",
+      "engine": null,
+      "input": "interface A { id: number }\ninterface B extends A { id: string }\nconst b: B = { id: 'x' }",
+      "seed": null,
+      "error": { "line": 2, "column": 25, "message": "B não pode estender A: o campo id tem outro tipo em A." }
+    },
+    {
+      "name": "duas bases com o mesmo campo de tipos diferentes",
+      "engine": null,
+      "input": "interface A { id: number }\ninterface B { id: string }\ninterface C extends A, B { }\nconst c: C = { id: 1 }",
+      "seed": null,
+      "error": { "line": 3, "column": 24, "message": "C não pode estender B: o campo id tem outro tipo em B." }
+    },
+    {
+      "name": "a interface só estende um objeto",
+      "engine": null,
+      "input": "type Ids = number[]\ninterface X extends Ids { a: number }\nconst x: X = { a: 1 }",
+      "seed": null,
+      "error": { "line": 2, "column": 21, "message": "Uma interface só estende uma interface ou um type de objeto, e Ids é number[]." }
+    },
+    {
+      "name": "a base do extends que não existe",
+      "engine": null,
+      "input": "interface B extends A { }",
+      "seed": null,
+      "error": { "line": 1, "column": 21, "message": "O tipo A não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null, o de uma coluna (tabela.coluna) e os do script (interface e type)." }
+    },
+    {
+      "name": "o type de um tipo simples é o próprio tipo",
+      "engine": null,
+      "input": "type Id = number\nconst id: Id = 5",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "o type de um objeto escrito leva o nome do type",
+      "engine": null,
+      "input": "type Filtro = { cidade: string; uf?: string }\nconst f: Filtro = { cidade: 'Lages' }",
+      "seed": null,
+      "value": { "cidade": "Lages", "uf": null },
+      "type": "Filtro"
+    },
+    {
+      "name": "o type de uma interface é a interface",
+      "engine": null,
+      "input": "interface Cliente { id: number }\ntype Pessoa = Cliente\nconst p: Pessoa = { id: 1 }",
+      "seed": null,
+      "value": { "id": 1 },
+      "type": "Cliente"
+    },
+    {
+      "name": "o type com | null",
+      "engine": null,
+      "input": "interface Cliente { id: number }\ntype Talvez = Cliente | null\nlet t: Talvez = null",
+      "seed": null,
+      "value": null,
+      "type": "Cliente | null"
+    },
+    {
+      "name": "o campo de tipo de coluna, com o tipo lido do catálogo",
+      "engine": null,
+      "input": "interface Pedido { cliente: pedido.cliente_id; obs?: string }\nconst p: Pedido = { cliente: 5 }",
+      "seed": null,
+      "columns": [{ "text": "pedido.cliente_id", "type": { "t": "number" } }],
+      "value": { "cliente": 5, "obs": null },
+      "type": "Pedido"
+    },
+    {
+      "name": "o campo de tipo de coluna recusa o valor que não cabe",
+      "engine": null,
+      "input": "interface Pedido { cliente: pedido.cliente_id }\nconst p: Pedido = { cliente: 'abc' }",
+      "seed": null,
+      "columns": [{ "text": "pedido.cliente_id", "type": { "t": "number" } }],
+      "error": { "line": 2, "column": 30, "message": "p.cliente é number, mas recebeu 'abc'." }
+    },
+    {
+      "name": "o tipo que não existe",
+      "engine": null,
+      "input": "const c: Cliente = { id: 1 }",
+      "seed": null,
+      "error": { "line": 1, "column": 10, "message": "O tipo Cliente não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null, o de uma coluna (tabela.coluna) e os do script (interface e type)." }
+    },
+    {
+      "name": "o campo de um tipo que não existe",
+      "engine": null,
+      "input": "interface Cliente { endereco: Endereco }",
+      "seed": null,
+      "error": { "line": 1, "column": 31, "message": "O tipo Endereco não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null, o de uma coluna (tabela.coluna) e os do script (interface e type)." }
+    },
+    {
+      "name": "a declaração que usa um tipo com erro",
+      "engine": null,
+      "input": "const c: Cliente = { id: 1 }\ninterface Cliente { id: Codigo }",
+      "seed": null,
+      "error": { "line": 1, "column": 10, "message": "O tipo Cliente tem um erro (linha 2)." }
+    },
+    {
+      "name": "o tipo que se refere a si mesmo",
+      "engine": null,
+      "input": "interface A { b: B }\ninterface B { a: A }",
+      "seed": null,
+      "error": { "line": 1, "column": 11, "message": "O tipo A se refere a si mesmo: A → B → A." }
+    },
+    {
+      "name": "o tipo declarado duas vezes",
+      "engine": null,
+      "input": "interface A { a: number }\ntype A = { b: number }",
+      "seed": null,
+      "error": { "line": 2, "column": 6, "message": "O tipo A já foi declarado na linha 1." }
+    },
+    {
+      "name": "o campo que aparece duas vezes",
+      "engine": null,
+      "input": "interface A { a: number; a: string }",
+      "seed": null,
+      "error": { "line": 1, "column": 26, "message": "O campo a aparece duas vezes." }
+    },
+    {
+      "name": "number não pode ser nome de tipo",
+      "engine": null,
+      "input": "interface number { a: number }",
+      "seed": null,
+      "error": { "line": 1, "column": 11, "message": "number não pode ser nome de tipo: escolha outro." }
+    },
+    {
+      "name": "o sql não é campo",
+      "engine": null,
+      "input": "interface A { q: sql }",
+      "seed": null,
+      "error": { "line": 1, "column": 18, "message": "O tipo sql não entra numa interface nem num type: declare const nome: sql." }
+    },
+    {
+      "name": "o type do sql",
+      "engine": null,
+      "input": "type Q = sql",
+      "seed": null,
+      "error": { "line": 1, "column": 10, "message": "O tipo sql não entra numa interface nem num type: declare const nome: sql." }
+    },
+    {
+      "name": "a chave proibida no campo",
+      "engine": null,
+      "input": "interface A { __proto__: number }",
+      "seed": null,
+      "error": { "line": 1, "column": 15, "message": "__proto__ não pode ser chave de objeto." }
+    },
+    {
+      "name": "o campo sem :",
+      "engine": null,
+      "input": "interface A { a number }",
+      "seed": null,
+      "error": { "line": 1, "column": 17, "message": "Esperava : depois do campo a, como a: string." }
+    },
+    {
+      "name": "dois campos na mesma linha sem separador",
+      "engine": null,
+      "input": "interface A { a: number b: string }",
+      "seed": null,
+      "error": { "line": 1, "column": 25, "message": "Esperava } para fechar o { da linha 1." }
+    },
+    {
+      "name": "a interface sem }",
+      "engine": null,
+      "input": "interface A {\n  a: number",
+      "seed": null,
+      "error": { "line": 2, "column": 12, "message": "Esperava } para fechar o { da linha 1." }
+    },
+    {
+      "name": "a interface sem { no começo do texto",
+      "engine": null,
+      "input": "interface A\nconst x = 1",
+      "seed": null,
+      "error": { "line": 1, "column": 12, "message": "Esperava { depois de A: interface A { campo: tipo }." }
+    },
+    {
+      "name": "a interface com genérico",
+      "engine": null,
+      "input": "interface C<T> { id: T }",
+      "seed": null,
+      "error": { "line": 1, "column": 12, "message": "C<…> não existe: os tipos não levam parâmetros, e a lista se anota number[]." }
+    },
+    {
+      "name": "@c.endereco.cidade troca a folha",
+      "check": "troca",
+      "engine": 1,
+      "input": "interface Endereco { cidade: string }\ninterface Cliente { id: number; endereco: Endereco }\nconst c: Cliente = { id: 7, endereco: { cidade: 'Lages' } }\nSELECT * FROM t WHERE id = @c.id AND cidade = @c.endereco.cidade",
+      "seed": null,
+      "value": { "sql": "SELECT * FROM t WHERE id = $1 AND cidade = $2", "params": [["number", "7", "@c.id"], ["text", "Lages", "@c.endereco.cidade"]] },
+      "sent": "SELECT * FROM t WHERE id = 7 AND cidade = 'Lages'"
+    },
+    {
+      "name": "o campo opcional ausente vai nulo",
+      "check": "troca",
+      "engine": 1,
+      "input": "interface Cliente { id: number; uf?: string }\nconst c: Cliente = { id: 7 }\nSELECT @c.uf",
+      "seed": null,
+      "value": { "sql": "SELECT $1", "params": [["text", null, "@c.uf"]] },
+      "sent": "SELECT NULL"
+    },
+    {
+      "name": "o campo lista vai no IN",
+      "check": "troca",
+      "engine": 1,
+      "input": "interface Cliente { tags: string[] }\nconst c: Cliente = { tags: ['a', 'b'] }\nSELECT 1 WHERE tag IN (@c.tags)",
+      "seed": null,
+      "value": { "sql": "SELECT 1 WHERE tag IN ($1, $2)", "params": [["text", "a", "@c.tags[0]"], ["text", "b", "@c.tags[1]"]] }
+    },
+    {
+      "name": "o caminho para no valor que não é objeto, e o resto é SQL",
+      "check": "troca",
+      "engine": 1,
+      "input": "let p = { e: 'a' }\nSELECT @p.e.x",
+      "seed": null,
+      "value": { "sql": "SELECT $1.x", "params": [["text", "a", "@p.e"]] }
+    },
+    {
+      "name": "@c inteiro não vai ao banco",
+      "check": "troca",
+      "engine": 1,
+      "input": "interface Cliente { id: number }\nconst c: Cliente = { id: 7 }\nSELECT @c",
+      "seed": null,
+      "error": { "line": 3, "column": 8, "message": "c é uma linha (objeto): use um campo, como @c.id." }
+    },
+    {
+      "name": "@c.endereco, um objeto, não vai ao banco",
+      "check": "troca",
+      "engine": 1,
+      "input": "interface Endereco { cidade: string }\ninterface Cliente { endereco: Endereco }\nconst c: Cliente = { endereco: { cidade: 'Lages' } }\nSELECT @c.endereco",
+      "seed": null,
+      "error": { "line": 4, "column": 8, "message": "c.endereco é uma linha (objeto): use um campo, como @c.endereco.cidade." }
+    },
+    {
+      "name": "@c.extra é o erro de campo do tipo",
+      "check": "troca",
+      "engine": 1,
+      "input": "interface Cliente { id: number }\nconst c: Cliente = { id: 7 }\nSELECT @c.extra",
+      "seed": null,
+      "error": { "line": 3, "column": 8, "message": "O campo extra não existe em Cliente." }
+    },
+    {
+      "name": "o campo de um objeto null",
+      "check": "troca",
+      "engine": 1,
+      "input": "interface Endereco { cidade: string }\ninterface Cliente { endereco: Endereco | null }\nconst c: Cliente = { endereco: null }\nSELECT @c.endereco.cidade",
+      "seed": null,
+      "error": { "line": 4, "column": 8, "message": "c.endereco é null, e não tem o campo cidade." }
+    },
+    {
+      "name": "a lista de interfaces não vai ao banco",
+      "check": "troca",
+      "engine": 1,
+      "input": "interface Item { id: number }\nconst todos: Item[] = [{ id: 1 }]\nSELECT @todos",
+      "seed": null,
+      "error": { "line": 3, "column": 8, "message": "todos é uma lista de linhas, que não vai para o SQL: faça a consulta com uma coluna só." }
+    }
+  ]
+}

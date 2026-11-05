@@ -2,6 +2,7 @@ import type { Engine } from "@/components/ui/engine-tag";
 
 import type { DateFields, DatePrecision } from "./dates";
 import { dateValue, listValue, nullValue, numberValue, objectValue, sqlValue, stringValue, booleanValue, type Type, type Value } from "./values";
+import type { ColumnTypes } from "./column-types";
 import type { EvaluatedAssignment, Origin, StoredValue } from "./run";
 
 /*
@@ -24,7 +25,8 @@ export type WireType =
   | { t: "number" | "string" | "boolean" | "sql" | "null" | "never" }
   | { t: "date"; p?: DatePrecision }
   | { t: "list"; i: WireType }
-  | { t: "object"; f: [string, WireType][] }
+  /** `n` é o nome do objeto anotado (`Cliente`) e `q` os campos opcionais (RN-VAR-004). */
+  | { t: "object"; f: [string, WireType][]; n?: string; q?: string[] }
   | { t: "nullable"; o: WireType };
 
 export type WireStored = { name: string; value: WireValue; type: WireType; declared: WireType; origin: Origin; at: number; ms: number; text: string; order: number; earlier?: { text: string; order: number }[] };
@@ -99,7 +101,12 @@ export function typeToWire(type: Type): WireType {
     case "list":
       return { t: "list", i: typeToWire(type.item) };
     case "object":
-      return { t: "object", f: [...type.fields].map(([key, field]) => [key, typeToWire(field)]) };
+      return {
+        t: "object",
+        f: [...type.fields].map(([key, field]) => [key, typeToWire(field)]),
+        ...(type.name === undefined ? {} : { n: type.name }),
+        ...(type.optional === undefined || type.optional.size === 0 ? {} : { q: [...type.optional] }),
+      };
     case "nullable":
       return { t: "nullable", o: typeToWire(type.of) };
     default:
@@ -121,12 +128,16 @@ export function typeFromWire(data: unknown): Type {
       return data.p === "day" || data.p === "instant" ? { tag: "date", precision: data.p } : { tag: "date" };
     case "list":
       return { tag: "list", item: typeFromWire(data.i) };
-    case "object":
-      if (!Array.isArray(data.f)) break;
-      return { tag: "object", fields: new Map(data.f.map((pair: unknown) => {
+    case "object": {
+      if (!Array.isArray(data.f) || (data.n !== undefined && typeof data.n !== "string")) break;
+      const fields = new Map(data.f.map((pair: unknown) => {
         if (!Array.isArray(pair) || pair.length !== 2 || typeof pair[0] !== "string") throw new TypeError("Campo malformado.");
         return [pair[0], typeFromWire(pair[1])] as const;
-      })) };
+      }));
+      const optional = data.q === undefined ? [] : Array.isArray(data.q) ? data.q : null;
+      if (optional === null || !optional.every((key): key is string => typeof key === "string" && fields.has(key))) break;
+      return { tag: "object", fields, ...(data.n === undefined ? {} : { name: data.n }), ...(optional.length === 0 ? {} : { optional: new Set(optional) }) };
+    }
     case "nullable":
       return { tag: "nullable", of: typeFromWire(data.o) };
   }
@@ -170,7 +181,32 @@ export type EvaluateRequest = {
   counter: number;
   seed: [number, number, number, number];
   now: number;
+  /** O tipo de cada coluna que o script cita (RN-VAR-004), pelo texto dela: o tipo, ou a frase do erro. Sem ele, nenhuma foi lida. */
+  columns?: WireColumn[];
+  /**
+   * Os valores que vieram de fora do script (RN-VAR-021 e 027): a resposta da pergunta (`pergunta`) e o campo do diálogo (`diálogo`). O item com resposta não se
+   * avalia: o valor é dele, conferido contra a anotação como a avaliação confere.
+   */
+  answers?: WireAnswer[];
 };
+
+export type WireAnswer = { index: number; value: WireValue; origin: "pergunta" | "diálogo" };
+
+export type WireColumn = { text: string; type: WireType } | { text: string; error: string };
+
+export const columnsToWire = (columns: ColumnTypes): WireColumn[] => [...columns].map(([text, read]) => ("error" in read ? { text, error: read.error } : { text, type: typeToWire(read.type) }));
+
+/** Reconstrói os tipos de coluna de um dado de fora. Lança `TypeError` na forma errada. */
+export function columnsFromWire(data: unknown): ColumnTypes {
+  if (!Array.isArray(data)) throw new TypeError("Colunas malformadas.");
+  return new Map(
+    data.map((entry: unknown): [string, { type: Type } | { error: string }] => {
+      if (!isRecord(entry) || typeof entry.text !== "string") throw new TypeError("Coluna malformada.");
+      if (typeof entry.error === "string") return [entry.text, { error: entry.error }];
+      return [entry.text, { type: typeFromWire(entry.type) }];
+    }),
+  );
+}
 
 export type WireDiagnostic = { message: string; offset: number; line: number; column: number; itemIndex: number };
 

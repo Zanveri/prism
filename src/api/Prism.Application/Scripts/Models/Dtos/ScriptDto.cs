@@ -15,6 +15,10 @@ public sealed record ScriptDto
     public string? Icon { get; init; }
     public string? Color { get; init; }
     public string Sql { get; init; } = string.Empty;
+
+    /// <summary>RN-VAR-028: os valores lembrados do "Executar com valores…", ou nulo no script que não os tem.</summary>
+    public ScriptRunValuesDto? RunValues { get; init; }
+
     public DateTime UpdatedAt { get; init; }
 
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprimiria o texto do SQL.</summary>

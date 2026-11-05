@@ -1,12 +1,14 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
 import { unclosedConstruct, visitCode } from "../sql-statements";
-import { childrenOf, type Node, type ParsedItem, type TypeAnnotation } from "./ast";
+import { childrenOf, type ColumnRef, type Node, type ParsedItem, type TypeAnnotation } from "./ast";
 import { bindCommand, type BoundCommand } from "./bind";
 import { reportInternalError } from "./boundary";
+import type { ColumnTypes } from "./column-types";
 import { makeLocator, VariableError } from "./errors";
 import { Evaluator, isDeterministic } from "./evaluate";
 import { Meter, RunMeter, type Clock, type Environment, type Now } from "./meter";
+import { conform, hasShape, needsCatalog, TypeResolver } from "./named-types";
 import { Random } from "./random";
 import { staticDiagnostics, variablesUsedBy, type ItemDiagnostic, type ModelItem, type ScriptModel } from "./script";
 import {
@@ -62,12 +64,16 @@ export type EvaluatedAssignment = { text: string; order: number };
 
 export type TabValues = ReadonlyMap<string, StoredValue>;
 
-export type RunConfig = { engine?: Engine; random: Random; clock: Clock; now: Now };
+/** `columns`: o tipo de cada coluna que o script cita (RN-VAR-004), que o executor da aba leu no catálogo antes de avaliar; sem ele, o tipo de coluna é desconhecido. */
+export type RunConfig = { engine?: Engine; random: Random; clock: Clock; now: Now; columns?: ColumnTypes };
 
 export type AssignmentResult = { ok: true; stored: StoredValue; steps: number } | { ok: false; error: ItemDiagnostic };
 export type BindResult = { ok: true; command: BoundCommand } | { ok: false; error: ItemDiagnostic };
 
-/** O tipo de uma anotação (RN-VAR-004). O tipo de coluna ainda não existe: a conferência já o recusou. */
+/**
+ * O tipo de uma anotação dos tipos da linguagem (RN-VAR-004): `number`, `string[]`, `Date | null`. A de uma coluna, a de um tipo com nome (`Cliente`) e a do objeto
+ * escrito (`{ cidade: string }`) só se resolvem com o script e o catálogo: `resolveAnnotation` (`named-types.ts`) resolve todas, e `ScriptRun.annotationOf` também.
+ */
 export function annotationType(annotation: TypeAnnotation): Type {
   let type: Type;
   switch (annotation.base) {
@@ -122,6 +128,8 @@ export class ScriptRun {
   private readonly values = new Map<string, Value>();
   private readonly stored = new Map<string, StoredValue>();
   private readonly declaredTypes = new Map<string, Type>();
+  /** Os tipos com nome do script, montados na primeira anotação que os usa (RN-VAR-004). */
+  private types: TypeResolver | null = null;
   /** A posição de cada atribuição entre as do mesmo nome (`assignmentRanks`), calculada na primeira reatribuição. */
   private ranks: Map<number, number> | null = null;
   /** O tamanho de cada valor guardado e a soma deles, para o limite da aba conferir sem percorrer tudo a cada avaliação (RN-VAR-013). */
@@ -161,15 +169,24 @@ export class ScriptRun {
     return this.values.get(name);
   }
 
+  /** Se o tipo da variável se sabe neste ponto (a reatribuição confere o valor contra ele). */
+  knows(name: string): boolean {
+    return this.declaredTypes.has(name);
+  }
+
   private diagnostic(item: ModelItem, message: string, offset: number): ItemDiagnostic {
     const at = offset < 0 ? item.start : offset;
     return { message, offset: at, ...this.locate(at), itemIndex: item.index };
   }
 
-  /** O que o tipo de uma coluna ou do `sql` faz com o valor (RN-VAR-004). Lança a frase. */
-  private coerce(item: ModelItem, parsed: ParsedItem, raw: Value): { value: Value; declared: Type } {
+  /**
+   * O que o tipo de uma coluna, do `sql` ou de um objeto anotado faz com o valor (RN-VAR-004): o objeto anotado põe o valor na forma do tipo (`conform`), e a linha
+   * de uma consulta (`origin` "consulta") casa as colunas com os campos (RN-VAR-011). Lança a frase.
+   */
+  private coerce(item: ModelItem, parsed: ParsedItem, raw: Value, origin: Origin): { value: Value; declared: Type } {
     const name = parsed.name;
     const valueStart = parsed.value?.start ?? parsed.start;
+    const source = { literal: parsed.value, query: origin === "consulta", at: valueStart };
 
     if (parsed.kind === "reassignment") {
       const declared = this.declaredTypes.get(name);
@@ -177,6 +194,7 @@ export class ScriptRun {
       if (declared === undefined) throw new VariableError(phrase.notDeclared(name), parsed.nameStart);
       if (first !== undefined && !first.mutable) throw new VariableError(phrase.constReassigned(name, first.line), parsed.nameStart);
       if (declared.tag === "sql") throw new VariableError(phrase.sqlMustBeConst(name), parsed.nameStart);
+      if (hasShape(declared)) return { value: conform(raw, declared, name, source), declared };
       if (!fits(typeOfValue(raw), declared)) throw new VariableError(declared.tag === "null" ? phrase.nullOnlyNullable(name) : phrase.notFit(name, typeLabel(declared), displayValue(raw)), valueStart);
       return { value: raw, declared };
     }
@@ -188,8 +206,7 @@ export class ScriptRun {
       return { value: raw, declared: inferred };
     }
 
-    if (annotation.base === "column") throw new VariableError(phrase.provisionalColumnType(), annotation.start);
-    const declared = annotationType(annotation);
+    const declared = this.annotated(annotation);
 
     if (annotation.base === "sql") {
       if (parsed.mutable) throw new VariableError(phrase.sqlMustBeConst(name), parsed.nameStart);
@@ -199,6 +216,7 @@ export class ScriptRun {
       return { value: sqlValue(raw.value), declared };
     }
 
+    if (hasShape(declared)) return { value: conform(raw, declared, name, source), declared };
     if (!fits(typeOfValue(raw), declared)) throw new VariableError(phrase.notFit(name, typeLabel(declared), displayValue(raw)), valueStart);
     return { value: raw, declared };
   }
@@ -229,33 +247,111 @@ export class ScriptRun {
     const started = this.config.clock();
     try {
       meter.checkStart();
-      if (parsed.value === null) throw new VariableError(phrase.provisionalNoValue(name), parsed.nameStart);
-      const raw = new Evaluator(this.env, meter, this.values, this.model.source).evaluate(parsed.value);
-      const { value, declared } = this.coerce(item, parsed, raw);
-
-      const earlier = this.earlierOf(index, name);
-      const stored: StoredValue = {
-        name,
-        value,
-        type: shownType(declared, value),
-        declared,
-        origin: originOf(parsed.value),
-        at: this.env.now(),
-        ms: this.config.clock() - started,
-        text: item.text,
-        order: ++this.evaluations,
-        ...(earlier.length > 0 ? { earlier } : {}),
-      };
-      const bytes = valueBytes(value);
-      this.checkTabSize(name, bytes, parsed.nameStart);
-      this.remember(name, bytes);
-      this.values.set(name, value);
-      this.stored.set(name, stored);
-      this.declaredTypes.set(name, declared);
+      // A declaração sem valor tem o valor que a pessoa deu na pergunta (RN-VAR-021), e a consulta roda no banco, na vez dela (RN-VAR-011): nenhuma das duas se avalia aqui.
+      if (parsed.value === null) throw new VariableError(phrase.answerMissing(name), parsed.nameStart);
+      if (parsed.value.t === "query") throw new VariableError(phrase.queryNotEvaluatedHere(name), parsed.value.start);
+      if (parsed.value.t === "sample") throw new VariableError(phrase.sampleNotEvaluatedHere(name), parsed.value.start);
+      const raw = new Evaluator(this.env, meter, this.values, this.model.source, this.declaredTypes).evaluate(parsed.value);
+      const stored = this.store(index, raw, originOf(parsed.value), this.config.clock() - started);
       return { ok: true, stored, steps: meter.steps };
     } catch (error) {
       return { ok: false, error: this.failure(item, name, error) };
     }
+  }
+
+  /**
+   * Dá à atribuição do item um valor que veio de fora do avaliador (RN-VAR-011 e 021): o resultado de uma consulta (`origin` "consulta"), a resposta da pergunta ou do
+   * diálogo. Confere a anotação como a avaliação confere, e guarda o valor como ela guarda. `ms` é o tempo da consulta.
+   */
+  assign(index: number, raw: Value, origin: Origin, ms = 0): AssignmentResult {
+    const item = this.model.items[index];
+    const parsed = item.parsed;
+    if (parsed === null) return { ok: false, error: this.diagnostic(item, item.error?.message ?? phrase.expectedName(), item.error?.offset ?? item.start) };
+    try {
+      return { ok: true, stored: this.store(index, raw, origin, ms), steps: 0 };
+    } catch (error) {
+      return { ok: false, error: this.failure(item, parsed.name, error) };
+    }
+  }
+
+  /** A consulta da atribuição do item (RN-VAR-011) com os `@nome` trocados pelos marcadores, com os valores deste ponto (RN-VAR-015 e 017). */
+  bindQuery(index: number): BindResult {
+    const item = this.model.items[index];
+    const node = item.parsed?.value;
+    if (node?.t !== "query") return { ok: false, error: this.diagnostic(item, phrase.expectedValue(), item.start) };
+    try {
+      return { ok: true, command: bindCommand(node.sql, this.env.engine, this.model.declaredNames, this.values, this.declaredTypes) };
+    } catch (error) {
+      if (error instanceof VariableError) return { ok: false, error: this.diagnostic(item, error.message, error.offset < 0 ? node.sqlStart : node.sqlStart + error.offset) };
+      return { ok: false, error: this.diagnostic(item, reportInternalError(item.parsed?.name ?? "a consulta", error), item.start) };
+    }
+  }
+
+  /**
+   * O `random.of` da atribuição do item (RN-VAR-010): a coluna, a chamada como está no texto (para as frases) e o `quantos`, avaliado com os valores deste ponto
+   * (nulo sem ele). O `quantos` é um inteiro de 1 a 100.
+   */
+  sampleOf(index: number): { ok: true; column: ColumnRef; count: number | null; written: string } | { ok: false; error: ItemDiagnostic } {
+    const item = this.model.items[index];
+    const parsed = item.parsed;
+    const node = parsed?.value;
+    if (parsed === null || node?.t !== "sample") return { ok: false, error: this.diagnostic(item, phrase.expectedValue(), item.start) };
+    const written = this.model.source.slice(node.start, node.end);
+    if (node.count === null) return { ok: true, column: node.column, count: null, written };
+    try {
+      // ponytail: o `quantos` se avalia fora do Worker, com o mesmo medidor (os passos e os 250 ms); quase sempre é um número escrito ou um nome.
+      const meter = new Meter(this.runMeter, parsed.name);
+      meter.checkStart();
+      const count = new Evaluator(this.env, meter, this.values, this.model.source, this.declaredTypes).evaluate(node.count);
+      if (count.kind !== "number" || !Number.isInteger(count.value) || count.value < 1 || count.value > 100) throw new VariableError(phrase.sampleCountInvalid(displayValue(count)), node.count.start);
+      return { ok: true, column: node.column, count: count.value, written };
+    } catch (error) {
+      return { ok: false, error: this.failure(item, parsed.name, error) };
+    }
+  }
+
+  /** O tipo que a anotação da declaração do item pede, para a forma do valor da consulta (RN-VAR-011); nulo sem anotação. */
+  annotationOf(index: number): Type | null {
+    const parsed = this.model.items[index]?.parsed;
+    if (parsed === null || parsed === undefined) return null;
+    if (parsed.kind === "reassignment") return this.declaredTypes.get(parsed.name) ?? null;
+    return parsed.annotation === null ? null : this.annotated(parsed.annotation);
+  }
+
+  /** O tipo de uma anotação, com os tipos com nome do script e o tipo de coluna lido no catálogo (RN-VAR-004). Lança a frase. */
+  private annotated(annotation: TypeAnnotation): Type {
+    if (annotation.base !== "column" && annotation.base !== "named" && annotation.base !== "object") return annotationType(annotation);
+    this.types ??= new TypeResolver(this.model, this.config.columns);
+    return this.types.annotation(annotation);
+  }
+
+  /** Confere o valor contra a anotação e o guarda na aba (RN-VAR-004 e 023). Lança a frase. */
+  private store(index: number, raw: Value, origin: Origin, ms: number): StoredValue {
+    const item = this.model.items[index];
+    const parsed = item.parsed as ParsedItem;
+    const name = parsed.name;
+    const { value, declared } = this.coerce(item, parsed, raw, origin);
+
+    const earlier = this.earlierOf(index, name);
+    const stored: StoredValue = {
+      name,
+      value,
+      type: shownType(declared, value),
+      declared,
+      origin,
+      at: this.env.now(),
+      ms,
+      text: item.text,
+      order: ++this.evaluations,
+      ...(earlier.length > 0 ? { earlier } : {}),
+    };
+    const bytes = valueBytes(value);
+    this.checkTabSize(name, bytes, parsed.nameStart);
+    this.remember(name, bytes);
+    this.values.set(name, value);
+    this.stored.set(name, stored);
+    this.declaredTypes.set(name, declared);
+    return stored;
   }
 
   /** As atribuições do mesmo nome acima deste item que a aba tem avaliadas, para o valor novo guardar de onde veio (`StoredValue.earlier`). */
@@ -344,6 +440,12 @@ export function checkScript(model: ScriptModel, clock: Clock = () => performance
         continue;
       }
       if (parsed.value === null || !isDeterministic(parsed.value, (name) => run.valueOf(name) !== undefined)) {
+        run.forget(parsed.name);
+        continue;
+      }
+      // O tipo de coluna (também o de um campo de interface) só se sabe pelo catálogo, na execução (RN-VAR-004); e a reatribuição de um nome cujo tipo a conferência não sabe (o de uma consulta, de um
+      // `random`) é conferida lá também.
+      if ((parsed.kind === "declaration" && parsed.annotation !== null && needsCatalog(model, parsed.annotation)) || (parsed.kind === "reassignment" && !run.knows(parsed.name))) {
         run.forget(parsed.name);
         continue;
       }

@@ -1,5 +1,11 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
+import type { ConfirmedTarget } from "./command-confirmation";
+import { confirmedOf } from "./command-wire";
+import { irreversibleOfCommand } from "./irreversible";
+import { bindCommand } from "./variables/bind";
+import type { ColumnRead, ColumnTypes } from "./variables/column-types";
+import type { Value } from "./variables/values";
 import { scriptItemAt, scriptItemCount } from "./variables/script-items";
 import type { ScriptEntryKind } from "./script-run";
 import { findAtReferences } from "./variables/at-names";
@@ -27,6 +33,12 @@ export type Plan = {
   outer: number[];
   /** Os erros que a conferência (RN-VAR-012) acha para os itens que vão e para as atribuições de que eles dependem. */
   errors: ItemDiagnostic[];
+  /** O tipo de cada coluna que as atribuições citam (RN-VAR-004), lido no catálogo antes de avaliar. Sem ele, nenhuma foi lida. */
+  columns?: ColumnTypes;
+  /** As mesmas leituras, com o esquema, a tabela e a coluna de cada uma: o `random.of` (RN-VAR-010) as usa para pedir os valores. */
+  reads?: ReadonlyMap<string, ColumnRead>;
+  /** Os valores que vieram de fora do script, pelo índice da atribuição (RN-VAR-021 e 027): a atribuição com resposta não se avalia, toma o valor. */
+  answers?: ReadonlyMap<number, { value: Value; origin: "pergunta" | "diálogo" }>;
 };
 
 export type PlanResult = { ok: true; plan: Plan } | { ok: false; reason: "nothing" } | { ok: false; reason: "tooMany"; count: number };
@@ -55,25 +67,42 @@ function trimmedItem(model: ScriptModel, item: ModelItem, start: number, text: s
   return { ...item, start, text, atScan: findAtReferences(text, engine, model.declaredNames) };
 }
 
-function finish(model: ScriptModel, items: ModelItem[], tab: TabValues): Plan {
+/** `checked` são os itens que não vão mas cujos erros contam: os tipos com nome do que vai (RN-VAR-002). */
+function finish(model: ScriptModel, items: ModelItem[], tab: TabValues, checked: readonly number[] = []): Plan {
   const byIndex = new Map(items.map((item) => [item.index, item] as const));
   const patched: ScriptModel = { ...model, items: model.items.map((item) => byIndex.get(item.index) ?? item) };
 
   const outer = dependencyPlan(patched, [...byIndex.keys()], tab).filter((index) => !byIndex.has(index));
-  const relevant = new Set([...byIndex.keys(), ...dependenciesOf(patched, [...byIndex.keys()])]);
+  const relevant = new Set([...byIndex.keys(), ...dependenciesOf(patched, [...byIndex.keys()]), ...checked]);
   const errors = checkScript(patched).filter((error) => relevant.has(error.itemIndex));
   return { model: patched, items: items.map((item) => ({ index: item.index, kind: kindOf(item), text: item.text, offset: item.start })), outer, errors };
 }
 
 /**
+ * O Ctrl+Enter numa `interface` ou num `type` (RN-VAR-002): ele só confere. Com erro, o plano traz o item e os erros dele (a execução para na conferência, antes de
+ * avaliar qualquer coisa); sem erro, não há nada a enviar.
+ */
+function checkTypeItem(model: ScriptModel, item: ModelItem): PlanResult {
+  const errors = checkScript(model).filter((error) => error.itemIndex === item.index);
+  if (errors.length === 0) return { ok: false, reason: "nothing" };
+  return { ok: true, plan: { model, items: [{ index: item.index, kind: "declaration", text: item.text, offset: item.start }], outer: [], errors } };
+}
+
+/**
  * O Alt+X (RN-VAR-019): os itens do que vai, a seleção (`from` a `to`) ou o texto inteiro, lidos com o texto de cima (as declarações de fora da seleção valem). A
- * seleção que começa no meio de um comando manda só o trecho dela, como o "Executar script" sempre fez.
+ * seleção que começa no meio de um comando manda só o trecho dela, como o "Executar script" sempre fez. A `interface` e o `type` do que vai não vão ao banco nem
+ * entram nas Estatísticas: só os erros deles contam.
  */
 export function planScript(doc: ScriptDoc, engine: Engine | undefined, from: number, to: number, tab: TabValues): PlanResult {
   const model = readScript(doc.text.slice(0, to), engine, { blankLines: doc.blankLines });
   const items: ModelItem[] = [];
+  const types: number[] = [];
   for (const item of model.items) {
     if (item.end <= from) continue;
+    if (item.kind === "type") {
+      types.push(item.index);
+      continue;
+    }
     if (item.start >= from || item.kind !== "statement") {
       items.push(item);
       continue;
@@ -84,7 +113,7 @@ export function planScript(doc: ScriptDoc, engine: Engine | undefined, from: num
     items.push(trimmedItem(model, item, from + (slice.length - slice.trimStart().length), text, engine));
   }
   if (items.length === 0) return { ok: false, reason: "nothing" };
-  return { ok: true, plan: finish(model, items, tab) };
+  return { ok: true, plan: finish(model, items, tab, types) };
 }
 
 /**
@@ -99,6 +128,7 @@ export function planItem(doc: ScriptDoc, engine: Engine | undefined, from: numbe
     const found = scriptItemAt(doc.text, from, engine, { blankLines: doc.blankLines });
     const at = found === null ? null : (model.items.find((item) => item.start === found.start) ?? null);
     if (at === null) return { ok: false, reason: "nothing" };
+    if (at.kind === "type") return checkTypeItem(model, at);
     return { ok: true, plan: finish(model, [at], tab) };
   }
 
@@ -110,6 +140,7 @@ export function planItem(doc: ScriptDoc, engine: Engine | undefined, from: numbe
   const start = from + (slice.length - slice.trimStart().length);
   const item = model.items.find((candidate) => candidate.start <= start && start < candidate.end) ?? model.items.find((candidate) => candidate.start >= start);
   if (item === undefined) return { ok: false, reason: "nothing" };
+  if (item.kind === "type") return checkTypeItem(model, item);
   const same = item.start === start && item.text === text;
   return { ok: true, plan: finish(model, [same || item.kind !== "statement" ? item : trimmedItem(model, item, start, text, engine)], tab) };
 }
@@ -134,6 +165,78 @@ export function scopeBefore(model: ScriptModel, index: number, results: Readonly
 export function bindItem(model: ScriptModel, index: number, scope: TabValues, engine: Engine | undefined): BindResult {
   const run = new ScriptRun(model, { engine, random: new Random([1, 2, 3, 4]), clock: () => 0, now: () => Date.now() }, scope);
   return run.bind(index);
+}
+
+/** A declaração sem valor (`let x: number`), que a pergunta dos valores pede (RN-VAR-021). */
+export function isUnvalued(model: ScriptModel, index: number): boolean {
+  const parsed = model.items[index]?.parsed;
+  return parsed?.kind === "declaration" && parsed.value === null;
+}
+
+/**
+ * Os itens que dependem do banco (RN-VAR-012): a atribuição cujo valor é uma consulta ou um `random.of`, a que usa o valor de uma delas (direta ou indiretamente,
+ * pela última atribuição acima de cada nome), a reatribuição de um nome que veio de uma delas (o tipo dele só se sabe depois) e o comando que usa uma delas. Esses só
+ * se avaliam, ou se trocam pelos marcadores, na vez deles na execução.
+ */
+export function databaseDependent(model: ScriptModel): Set<number> {
+  const lastAbove = lastAssignmentAbove(model);
+  const found = new Set<number>();
+  for (const item of model.items) {
+    const value = item.parsed?.value;
+    if (value?.t === "query" || value?.t === "sample") {
+      found.add(item.index);
+      continue;
+    }
+    const own = item.parsed?.kind === "reassignment" ? lastAbove(item.parsed.name, item.index) : null;
+    if (own !== null && found.has(own)) {
+      found.add(item.index);
+      continue;
+    }
+    for (const used of variablesUsedBy(item)) {
+      const at = lastAbove(used, item.index);
+      if (at !== null && found.has(at)) {
+        found.add(item.index);
+        break;
+      }
+    }
+  }
+  return found;
+}
+
+/** A declaração sem valor (`let x: number`), que a pergunta dos valores responde (RN-VAR-021). */
+export const isAsked = (item: Pick<ModelItem, "parsed">): boolean => item.parsed?.kind === "declaration" && item.parsed.value === null;
+
+/**
+ * A leitura do banco da atribuição, como a pergunta da proteção a mostra (RN-PROT-001 e RN-VAR-019): o texto da consulta, ou a chamada do `random.of` como está no
+ * script (`random.of(estoque.cliente.id)`); nulo quando o valor não lê o banco.
+ */
+export function queryTextOf(item: Pick<ModelItem, "parsed" | "text" | "start">): string | null {
+  const value = item.parsed?.value;
+  if (value?.t === "query") return value.sql;
+  return value?.t === "sample" ? item.text.slice(value.start - item.start, value.end - item.start) : null;
+}
+
+/**
+ * O comando que só se troca pelos marcadores na vez dele (RN-VAR-019), na pergunta da proteção, "com os valores que já se sabem" (RN-VAR-018): os `@nome` cujo valor
+ * não depende do banco entram como literais, e os que dependem ficam como estão. Irreversível na dúvida quando usa uma variável `sql` (o tipo dela é o da anotação:
+ * o `sql` só se declara anotado, e nunca vem do banco, RN-VAR-004).
+ */
+export function knownConfirmed(model: ScriptModel, index: number, dependent: ReadonlySet<number>, results: ReadonlyMap<number, StoredValue>, tab: TabValues, engine: Engine | undefined): ConfirmedTarget {
+  const item = model.items[index];
+  const lastAbove = lastAssignmentAbove(model);
+  const known = [...scopeBefore(model, index, results, tab)].filter(([name]) => {
+    const at = lastAbove(name, index);
+    return at !== null && !dependent.has(at);
+  });
+  const engineField = engine === undefined ? {} : { engine };
+  try {
+    const sent = bindCommand(item.text, engine, new Set(known.map(([name]) => name)), new Map(known.map(([name, stored]) => [name, stored.value])), new Map(known.map(([name, stored]) => [name, stored.declared])));
+    if (sent.params.length > 0 || sent.replacements.length > 0) return confirmedOf({ sql: item.text, offset: item.start, ...engineField, sent });
+  } catch {
+    // O valor que já se sabe e não se monta é o erro do comando na vez dele; a pergunta o mostra como está.
+  }
+  const sqlNames = (item.atScan?.references ?? []).map((reference) => reference.name).filter((name) => model.declarations.get(name)?.annotation?.base === "sql");
+  return { sql: item.text, ...engineField, irreversible: irreversibleOfCommand(item.text, engine, sqlNames) };
 }
 
 /** Se o texto do item tem algum `@nome` que o script declara: o comando que a execução troca pelos marcadores. */

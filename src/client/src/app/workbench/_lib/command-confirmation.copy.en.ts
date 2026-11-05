@@ -50,6 +50,7 @@ export const commandConfirmationCopyEn: CommandConfirmationCopy = {
   },
 
   filter: (filter: string) => `With the result filter: ${filter}`,
+  queries: (count: number) => (count === 1 ? "First, the variable's query runs:" : "First, the variables' queries run:"),
 
   save: {
     description: (count: number) => `${formatCount(count, "change goes", "changes go")} to the database, in a transaction. Before saving, you can view the statements.`,

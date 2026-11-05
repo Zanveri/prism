@@ -2,7 +2,7 @@ import { Random } from "./random";
 import { ScriptRun, checkScript } from "./run";
 import { readScript } from "./script";
 import { reportInternalError } from "./boundary";
-import { storedFromWire, storedToWire, type EvaluateMessage, type EvaluateRequest } from "./wire";
+import { columnsFromWire, fromWire, storedFromWire, storedToWire, type EvaluateMessage, type EvaluateRequest } from "./wire";
 
 /*
  * O serviço da avaliação (RN-VAR-014): lê o script, confere e avalia os itens pedidos, na ordem, e conta o que cada um fez. É o corpo do Worker, e fica fora dele para
@@ -13,8 +13,10 @@ export function handleEvaluateRequest(request: EvaluateRequest, post: (message: 
   const { id } = request;
   try {
     const model = readScript(request.source, request.engine ?? undefined, { blankLines: request.blankLines });
-    const config = { engine: request.engine ?? undefined, random: new Random(request.seed), clock, now: () => request.now };
+    const columns = request.columns === undefined ? undefined : columnsFromWire(request.columns);
+    const config = { engine: request.engine ?? undefined, random: new Random(request.seed), clock, now: () => request.now, ...(columns === undefined ? {} : { columns }) };
     const tab = new Map(request.tab.map((entry) => [entry.name, storedFromWire(entry)] as const));
+    const answers = new Map((request.answers ?? []).map((answer) => [answer.index, { value: fromWire(answer.value), origin: answer.origin }] as const));
 
     // A conferência de antes de executar vale só para o que vai ser avaliado (RN-VAR-020): os itens pedidos e as atribuições de que dependem já estão neles.
     const wanted = new Set(request.indices);
@@ -30,7 +32,8 @@ export function handleEvaluateRequest(request: EvaluateRequest, post: (message: 
       const item = model.items[index];
       if (item?.parsed === undefined || item.parsed === null) continue;
       post({ id, kind: "start", index, name: item.parsed.name });
-      const result = run.evaluate(index);
+      const answer = answers.get(index);
+      const result = answer === undefined ? run.evaluate(index) : run.assign(index, answer.value, answer.origin);
       if (result.ok) post({ id, kind: "item", index, result: { ok: true, stored: storedToWire(result.stored), steps: result.steps } });
       else {
         post({ id, kind: "item", index, result });

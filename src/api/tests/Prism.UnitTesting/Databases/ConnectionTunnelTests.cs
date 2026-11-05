@@ -31,6 +31,25 @@ public sealed class ConnectionTunnelTests
         Assert.Equal(expected, trusted);
     }
 
+    /// <summary>O destino do encaminhamento é também o nome que o `verify-full` confere no certificado, no lugar do loopback do túnel.</summary>
+    [Trait("ConnectionTunnel", "RemoteHostOf")]
+    [Theory(DisplayName = "OK o túnel SSH leva ao host remoto das configurações avançadas ou, sem ele, ao host da conexão")]
+    [InlineData(null, "db.interno")]
+    [InlineData("   ", "db.interno")]
+    [InlineData(" replica.interno ", "replica.interno")]
+    public void RemoteHostOf_ShouldBeOK_PrefersTheAdvancedRemoteHost(string? remoteHost, string expected)
+    {
+        //Arrange
+        var ssh = new ConnectionSshSettings("bastion", 22, "ops", RemoteHost: remoteHost);
+        var settings = new ConnectionSettings(EDatabaseEngine.PostgreSql, "db.interno", 5432, "loja", "operador", "senha", Ssh: ssh);
+
+        //Act
+        var host = ConnectionTunnel.RemoteHostOf(settings, ssh);
+
+        //Assert
+        Assert.Equal(expected, host);
+    }
+
     /// <summary>RN-REDE-007: as recusas do SSH.NET ao abrir a chave privada chegam em português; a chave cifrada sem a frase é o segredo que falta.</summary>
     [Trait("ConnectionTunnel", "KeyRefusal")]
     [Theory(DisplayName = "OK a recusa da chave privada vira a frase que falta ou a frase errada, em português")]

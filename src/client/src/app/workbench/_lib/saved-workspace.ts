@@ -15,7 +15,8 @@ import { isDatabaseTab, isSchemaTab, isTableTab, type QueryTab } from "./workben
 /** O texto do editor da aba agora, se ela tem editor montado (`liveEditors`): a cópia da aba chega com atraso. */
 export type LiveSql = (tabId: string) => string | null;
 
-const isPersistableTab = (tab: QueryTab): boolean => !isSchemaTab(tab) && !isDatabaseTab(tab);
+// RN-VAR-029: a aba de execução não volta: o que ela tem é resultado, e os valores ficam lembrados no script (RN-VAR-028).
+const isPersistableTab = (tab: QueryTab): boolean => !isSchemaTab(tab) && !isDatabaseTab(tab) && tab.execution === undefined;
 
 /**
  * Uma aba como vai para o cofre. A vista da tabela é a enumeração da tela (`TableView`) e a do schema (`workspace-messages.ts`) ao mesmo tempo: a ida (aqui)

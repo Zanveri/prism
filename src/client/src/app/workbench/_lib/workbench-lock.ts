@@ -15,7 +15,8 @@ import type { QueryTab } from "./workbench-model";
  * painel com o executor velho, que o provedor já tinha largado.
  */
 export function withoutSessions(tabs: QueryTab[]): QueryTab[] {
-  return tabs.map((tab) => ({ ...tab, sessionId: null }));
+  // RN-VAR-029: a aba de execução perde os valores e a hora; o "Executar de novo" abre então o diálogo, com os valores lembrados no cofre.
+  return tabs.map((tab) => ({ ...tab, sessionId: null, ...(tab.execution === undefined ? {} : { execution: { ...tab.execution, values: null, ranAt: null, pending: null } }) }));
 }
 
 /**

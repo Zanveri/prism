@@ -1,0 +1,145 @@
+{
+  "rule": "RN-VAR-030: os lugares que contam, a coluna de cada um e quando a leitura desiste. Escritos à mão; nunca se regeram a partir do código. `places` é, por variável, a lista dos lugares (schema nulo quando não foi escrito) ou null quando um comando em que ela aparece não pôde ser lido; a variável sem lugar fica de fora.",
+  "cases": [
+    {
+      "name": "a igualdade com a coluna da tabela só",
+      "engine": 1,
+      "input": "let c = 7\nselect * from pedido where cliente_id = @c;",
+      "places": { "c": [{ "schema": null, "table": "pedido", "column": "cliente_id", "kind": "compare" }] }
+    },
+    {
+      "name": "a variável à esquerda, e a diferença com <> e !=",
+      "engine": 1,
+      "input": "let a = 1\nlet b = 2\nselect * from pedido p where @a = p.cliente_id and p.status <> @b and p.loja_id != @a;",
+      "places": {
+        "a": [
+          { "schema": null, "table": "pedido", "column": "cliente_id", "kind": "compare" },
+          { "schema": null, "table": "pedido", "column": "loja_id", "kind": "compare" }
+        ],
+        "b": [{ "schema": null, "table": "pedido", "column": "status", "kind": "compare" }]
+      }
+    },
+    {
+      "name": "o apelido primeiro, depois o nome da tabela",
+      "engine": 1,
+      "input": "let c = 1\nselect * from pedido p join cliente on cliente.id = p.cliente_id where cliente.id = @c;",
+      "places": { "c": [{ "schema": null, "table": "cliente", "column": "id", "kind": "compare" }] }
+    },
+    {
+      "name": "o esquema escrito",
+      "engine": 1,
+      "input": "let c = 1\nselect * from estoque.cliente where estoque.cliente.id = @c;",
+      "places": { "c": [{ "schema": "estoque", "table": "cliente", "column": "id", "kind": "compare" }] }
+    },
+    {
+      "name": "a coluna sem qualificador num bloco de duas tabelas não conta",
+      "engine": 1,
+      "input": "let c = 1\nselect * from pedido p join cliente k on k.id = p.cliente_id where cliente_id = @c;",
+      "places": {}
+    },
+    {
+      "name": "com uma conta, uma função ou uma conversão de um dos lados, o lugar não conta",
+      "engine": 1,
+      "input": "let c = 1\nselect * from pedido where cliente_id = @c + 1 or lower(nome) = @c or cliente_id = @c::int or cliente_id + 1 = @c or cliente_id = cast(@c as int);",
+      "places": {}
+    },
+    {
+      "name": "<= e >= não são igualdade",
+      "engine": 1,
+      "input": "let c = 1\nselect * from pedido where total <= @c and total >= @c;",
+      "places": {}
+    },
+    {
+      "name": "o IN, também entre outros itens, e o NOT IN",
+      "engine": 1,
+      "input": "let a = [1, 2]\nlet b = 3\nselect * from pedido where cliente_id in (@a, @b, 4) and loja_id not in (@b);",
+      "places": {
+        "a": [{ "schema": null, "table": "pedido", "column": "cliente_id", "kind": "compare" }],
+        "b": [
+          { "schema": null, "table": "pedido", "column": "cliente_id", "kind": "compare" },
+          { "schema": null, "table": "pedido", "column": "loja_id", "kind": "compare" }
+        ]
+      }
+    },
+    {
+      "name": "o item do IN que não é só a variável não conta",
+      "engine": 1,
+      "input": "let a = 1\nselect * from pedido where cliente_id in (@a + 1);",
+      "places": {}
+    },
+    {
+      "name": "o INSERT … VALUES, em cada linha",
+      "engine": 1,
+      "input": "let c = 1\nlet n = 'Ana'\ninsert into pedido (cliente_id, nome, total) values (@c, @n, 10), (@c, 'x', 2);",
+      "places": {
+        "c": [
+          { "schema": null, "table": "pedido", "column": "cliente_id", "kind": "insert" },
+          { "schema": null, "table": "pedido", "column": "cliente_id", "kind": "insert" }
+        ],
+        "n": [{ "schema": null, "table": "pedido", "column": "nome", "kind": "insert" }]
+      }
+    },
+    {
+      "name": "o INSERT sem a lista de colunas não conta",
+      "engine": 1,
+      "input": "let c = 1\ninsert into pedido values (@c, 2);",
+      "places": {}
+    },
+    {
+      "name": "o UPDATE … SET, e o WHERE dele como comparação",
+      "engine": 1,
+      "input": "let c = 1\nlet id = 9\nupdate pedido as p set cliente_id = @c, total = 0 where p.id = @id;",
+      "places": {
+        "c": [{ "schema": null, "table": "pedido", "column": "cliente_id", "kind": "set" }],
+        "id": [{ "schema": null, "table": "pedido", "column": "id", "kind": "compare" }]
+      }
+    },
+    {
+      "name": "o UPDATE com FROM: a coluna do SET é da tabela do UPDATE",
+      "engine": 1,
+      "input": "let c = 1\nupdate pedido set cliente_id = @c from cliente k where k.id = pedido.cliente_id;",
+      "places": { "c": [{ "schema": null, "table": "pedido", "column": "cliente_id", "kind": "set" }] }
+    },
+    {
+      "name": "na subconsulta, o bloco mais de dentro; a coluna de fora (correlacionada) não conta",
+      "engine": 1,
+      "input": "let c = 1\nlet i = 2\nselect * from pedido p where exists (select 1 from item i where i.pedido_id = p.id and p.cliente_id = @c and i.produto_id = @i);",
+      "places": { "i": [{ "schema": null, "table": "item", "column": "produto_id", "kind": "compare" }] }
+    },
+    {
+      "name": "o apelido de uma tabela derivada e o nome de um WITH não contam",
+      "engine": 1,
+      "input": "let c = 1\nwith ativos as (select * from cliente) select * from ativos a join (select * from pedido) d on true where a.id = @c and d.cliente_id = @c;",
+      "places": {}
+    },
+    {
+      "name": "na consulta de uma variável também",
+      "engine": 1,
+      "input": "let c = 1\nlet total = (select count(*) from pedido where cliente_id = @c)",
+      "places": { "c": [{ "schema": null, "table": "pedido", "column": "cliente_id", "kind": "compare" }] }
+    },
+    {
+      "name": "dentro de um texto ou de um comentário não é variável",
+      "engine": 1,
+      "input": "let c = 1\nselect * from pedido where nome = '@c' -- and cliente_id = @c\n;",
+      "places": {}
+    },
+    {
+      "name": "o comando que o leitor não entende deixa livres as variáveis dele",
+      "engine": 1,
+      "input": "let c = 1\nlet d = 2\nselect * from pedido where cliente_id = @d;\nselect * from pedido where (cliente_id = @c and loja_id = @d;",
+      "places": { "c": null, "d": null }
+    },
+    {
+      "name": "os nomes entre aspas, como o banco os lê, e o Db2 em maiúsculas",
+      "engine": 2,
+      "input": "let c = 1\nselect * from \"Pedido\" p where p.\"ClienteId\" = @c and p.loja = @c;",
+      "places": {
+        "c": [
+          { "schema": null, "table": "Pedido", "column": "ClienteId", "kind": "compare" },
+          { "schema": null, "table": "Pedido", "column": "LOJA", "kind": "compare" }
+        ]
+      }
+    }
+  ]
+}

@@ -14,6 +14,11 @@ const pt = {
     shortcut: "Alt+X",
     shortcutMac: "Cmd+Option+X",
     title: (shortcut: string) => `Executa os comandos da seleção ou, sem seleção, do texto inteiro, um depois do outro (${shortcut})`,
+    // RN-VAR-026: o "Executar com valores…", ao lado do "Executar script"; o atalho é o do script com Shift.
+    withValues: "Executar com valores…",
+    withValuesTitle: (shortcut: string) => `Executar com valores… (${shortcut})`,
+    withValuesShortcut: "Shift+Alt+X",
+    withValuesShortcutMac: "Shift+Cmd+Option+X",
   },
 
   tabs: {

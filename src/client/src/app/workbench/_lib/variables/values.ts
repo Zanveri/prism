@@ -120,12 +120,16 @@ export function sqlValue(text: string): SqlValue {
 /**
  * O tipo de uma variável ou de um valor. `nullable` é o `T | null`; `never` é o tipo da lista vazia (cabe em qualquer lista). A `Date` carrega a precisão do valor de
  * que veio (`Date (dia)`), e a anotada não (`Date` serve às duas).
+ *
+ * O objeto ANOTADO (uma `interface`, um `type` ou o objeto escrito no tipo, `{ cidade: string }`) tem `name`, o nome que a tela mostra (`Cliente`, ou o objeto
+ * escrito por extenso), e `optional`, os campos que podem faltar (o tipo deles já tem o `| null`: o que falta vale `null`). O objeto sem `name` é o de um valor (a
+ * linha de uma consulta, o objeto escrito sem anotação), e só ele se mostra "objeto". A forma é estrutural, como no TypeScript: o nome não entra em `fits`.
  */
 export type Type =
   | { tag: "number" | "string" | "boolean" | "sql" | "null" | "never" }
   | { tag: "date"; precision?: DatePrecision }
   | { tag: "list"; item: Type }
-  | { tag: "object"; fields: ReadonlyMap<string, Type> }
+  | { tag: "object"; fields: ReadonlyMap<string, Type>; name?: string; optional?: ReadonlySet<string> }
   | { tag: "nullable"; of: Type };
 
 export const numberType: Type = { tag: "number" };
@@ -175,20 +179,27 @@ export function unify(left: Type, right: Type): Type | null {
     return item === null ? null : { tag: "list", item };
   }
   if (left.tag === "object" && right.tag === "object") {
-    if (left.fields.size !== right.fields.size) return null;
+    // Como no TypeScript (`[{ id: 1 }, {}]` é `{ id?: number }[]`): o campo que falta num dos lados fica opcional, e quem confere o tipo anotado é o `conform`.
     const fields = new Map<string, Type>();
-    for (const [key, type] of left.fields) {
+    const optional = new Set([...(left.optional ?? []), ...(right.optional ?? [])]);
+    for (const key of new Set([...left.fields.keys(), ...right.fields.keys()])) {
+      const mine = left.fields.get(key);
       const other = right.fields.get(key);
-      const joined = other === undefined ? null : unify(type, other);
+      const joined = mine === undefined ? nullable(other!) : other === undefined ? nullable(mine) : unify(mine, other);
       if (joined === null) return null;
+      if (mine === undefined || other === undefined) optional.add(key);
       fields.set(key, joined);
     }
-    return { tag: "object", fields };
+    const shape = optional.size === 0 ? { fields } : { fields, optional };
+    return left.name !== undefined && left.name === right.name ? { ...left, ...shape } : { tag: "object", ...shape };
   }
   return left;
 }
 
-/** Se um valor de tipo `value` cabe numa variável de tipo `target` (RN-VAR-004): o `null` só cabe no `| null` ou no tipo `null`. */
+/**
+ * Se um valor de tipo `value` cabe numa variável de tipo `target` (RN-VAR-004): o `null` só cabe no `| null` ou no tipo `null`. O objeto cabe quando tem cada campo
+ * do alvo com um tipo que cabe (o opcional pode faltar); os campos a mais não contam, como no TypeScript fora do objeto escrito (`conform`, em `named-types.ts`).
+ */
 export function fits(value: Type, target: Type): boolean {
   if (value.tag === "never") return true;
   if (target.tag === "nullable") return value.tag === "null" || fits(value.tag === "nullable" ? value.of : value, target.of);
@@ -199,14 +210,14 @@ export function fits(value: Type, target: Type): boolean {
   if (value.tag === "object" && target.tag === "object") {
     for (const [key, type] of target.fields) {
       const other = value.fields.get(key);
-      if (other === undefined || !fits(other, type)) return false;
+      if (other === undefined ? target.optional?.has(key) !== true : !fits(other, type)) return false;
     }
     return true;
   }
   return true;
 }
 
-/** O nome do tipo como a tela o escreve: `number`, `string[]`, `Date (dia)`, `sql`, `objeto`, com o `| null` (RN-VAR-024). */
+/** O nome do tipo como a tela o escreve: `number`, `string[]`, `Date (dia)`, `sql`, `objeto`, `Cliente` (o objeto anotado), com o `| null` (RN-VAR-024). */
 export function typeLabel(type: Type): string {
   switch (type.tag) {
     case "nullable":
@@ -218,7 +229,7 @@ export function typeLabel(type: Type): string {
     case "date":
       return type.precision === undefined ? "Date" : type.precision === "day" ? "Date (dia)" : "Date (instante)";
     case "object":
-      return "objeto";
+      return type.name ?? "objeto";
     case "never":
       return "never";
     default:

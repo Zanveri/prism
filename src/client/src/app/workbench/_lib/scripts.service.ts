@@ -4,7 +4,7 @@ import { allowRefusal, apiRequest, unwrap, userActionDeadlineMs, type ApiResult 
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
 import { editedScriptInput, type ScriptAppearance } from "./saved-scripts";
-import { scriptSchema, scriptSummariesSchema, scriptSummarySchema, type Script, type ScriptInput, type ScriptPlaceInput, type ScriptSummary } from "./scripts.schema";
+import { scriptSchema, scriptSummariesSchema, scriptSummarySchema, type RunValueEntry, type Script, type ScriptInput, type ScriptPlaceInput, type ScriptSummary } from "./scripts.schema";
 
 /**
  * As rotas dos scripts salvos (seção 23: RN-SCRIPT-001 a 004; e o genérico, RN-SCRIPT-005). As recusas que o diálogo de salvar e o de renomear mostram no próprio lugar voltam como valor
@@ -71,6 +71,14 @@ export async function renameScriptOrRefuse(id: string, name: string, signal: Abo
  */
 export async function editScriptOrRefuse(id: string, edited: ScriptAppearance, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
   return allowRefusal(await apiRequest(prismEndpoints.userScripts, { method: "PATCH", body: editedScriptInput(id, edited), schema: scriptSummarySchema, signal }), ...nameRefusals, "SCRIPT_ICON_INVALID");
+}
+
+/**
+ * RN-VAR-028: grava os valores lembrados do "Executar com valores…" (`values` vazio, sem conexão, os esquece). Toda recusa volta como valor: a gravação que falha só
+ * avisa, e a execução segue.
+ */
+export async function saveRunValues(id: string, body: { values: Record<string, RunValueEntry>; connectionID: string | null; database: string | null }, signal: AbortSignal = deadline()): Promise<ApiResult<void>> {
+  return allowRefusal(await apiRequest(prismEndpoints.userScriptRunValues(id), { method: "PUT", body, signal }), "SCRIPT_NOT_FOUND", "SCRIPT_RUN_VALUES_INVALID", "VAULT_UNAVAILABLE");
 }
 
 export function deleteScript(id: string, signal: AbortSignal = deadline()): Promise<ApiResult<void>> {

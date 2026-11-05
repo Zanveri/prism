@@ -1,0 +1,54 @@
+import { formatCount } from "@/lib/utils/format";
+
+import type { VariableFieldsCopy } from "./variable-fields.copy";
+
+export const variableFieldsCopyEs: VariableFieldsCopy = {
+  title: "Valores para ejecutar",
+  fullTitle: (name: string) => `Ejecutar con valores · ${name}`,
+  where: "Dónde",
+  connection: "Conexión",
+  database: "Base de datos",
+  defaultDatabase: "la predeterminada de la conexión",
+  values: "Valores",
+  below: "Más abajo en el script",
+  calculated: (count: number) => `${count === 1 ? "1 variable más se calcula" : `${count.toLocaleString("es")} variables más se calculan`} durante el script.`,
+  computed: (text: string) => `calculado: ${text}`,
+  noTopDeclarations: "Este script no declara variables.",
+  lastTime: "de la última vez",
+  resetToScript: "Volver al valor del script",
+  forget: "Olvidar los valores de este script",
+  rememberFailed: (reason: string) => `No se pudieron recordar los valores: ${reason}.`,
+  tooLargeToRemember: (names: readonly string[]) => (names.length === 1 ? `El valor de ${names[0]} es demasiado grande para recordarlo.` : `Los valores de ${names.join(", ")} son demasiado grandes para recordarlos.`),
+  summary: (count: number) => `El script declara ${formatCount(count, "variable", "variables")} sin valor. Escribe los valores para continuar.`,
+  run: "Ejecutar",
+  cancel: "Cancelar",
+
+  required: (name: string) => `Escribe un valor para ${name}.`,
+  emptyItem: "El elemento está vacío.",
+  notNumber: "Escribe un número, como 42 o 3.5.",
+  decimalHint: "Usa punto en los decimales, como 3.5.",
+  chooseDate: "Elige una fecha.",
+  chooseTime: "Elige la hora.",
+  badItem: (item: string, message: string) => `${item}: ${message}`,
+
+  yes: "Sí",
+  no: "No",
+  nullLabel: "NULL",
+  time: "Hora",
+  timeOptional: "Hora (opcional)",
+  sqlWarning: "Entra en la sentencia tal cual, sin comillas: revisa lo que escribes.",
+  items: (count: number) => formatCount(count, "elemento", "elementos"),
+  removeItem: (item: string) => `Quitar ${item}`,
+  itemsHint: "Enter o una coma cierran el elemento; pegar varias líneas crea un elemento por línea.",
+  edgeSpace: (start: boolean, end: boolean) => (start && end ? "Espacio al principio y al final" : start ? "1 espacio al principio" : "1 espacio al final"),
+
+  choiceNote: (table: string, column: string, described: boolean) => `Valores de ${table} (${column})${described ? ", con el nombre" : ""}`,
+  search: "Buscar",
+  loadMore: "Cargar más",
+  loading: "Cargando…",
+  noValues: "Ningún valor.",
+  tryAgain: "Intentar de nuevo",
+  truncated: "El valor es demasiado largo para elegirlo desde aquí: escríbelo.",
+  missing: (values: readonly string[], table: string, column: string) =>
+    values.length === 1 ? `El valor ${values[0]} no existe en ${table} (${column}).` : `Los valores ${values.slice(0, -1).join(", ")} y ${values[values.length - 1]} no existen en ${table} (${column}).`,
+};

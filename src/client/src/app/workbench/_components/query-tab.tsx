@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { Button, Dialog, HostProvider, type Engine } from "@/components/ui";
+import { Button, Dialog, HostProvider, useToast, type Engine } from "@/components/ui";
 import { focusedHost, hostFocus, mainHost } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
@@ -27,7 +27,9 @@ import { commandWillRun, initialLayout, layoutReducer, paneFlex, scriptWillRun }
 import { f6Action, isF6, placeMenu } from "../_lib/result-place";
 import { resultActivity, resultFocus, resultSlots } from "../_lib/result-slots";
 import { saveShortcut } from "../_lib/saved-scripts";
-import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScriptTab, statisticsSummary, type ScriptTab } from "../_lib/script-run";
+import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScriptTab, statisticsSummary, valuesShortcut, valuesShortcutLabel, type ScriptTab } from "../_lib/script-run";
+import { declaresAtTop } from "../_lib/variable-fields";
+import { variableFieldsCopy } from "../_lib/variable-fields.copy";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { tabEntries } from "../_lib/tab-focus";
@@ -42,11 +44,15 @@ import { useResultLinks } from "../_lib/use-result-links";
 import { inDatabase } from "../_lib/navigator-model";
 import { useAutoRefresh } from "../_lib/use-auto-refresh";
 import { useCommandConfirmation } from "../_lib/use-command-confirmation";
+import { useValuesQuestion } from "../_lib/use-values-question";
 import { useConnectedIds } from "../_lib/use-connected-ids";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import type { QueryTab, ResultPlace, TableView } from "../_lib/workbench-model";
 import { AutoRefreshControl, AutoRefreshDialog } from "./auto-refresh-control";
 import { ConfirmCommandDialog } from "./confirm-command-dialog";
+import { ValuesDialog } from "./values-dialog";
+import { ExecutionHeader, type ExecutionActions, type ExecutionRun } from "./execution-header";
+import { answersByName, entriesOf } from "../_lib/execution-tab";
 import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
@@ -180,10 +186,15 @@ function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onA
 export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, environmentColor, active, place = "panel", editorShown = active, resultShown = active, moving = false, onPlace, onToggleEntry, onBackToPanel, onFocusWindow, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase, onOpenQuery }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const queryClient = useQueryClient();
+  const toast = useToast();
   const script = useScriptRun(runner);
   // RN-PROT-001: o aviso antes de executar, pelas proteções da conexão da aba.
   const confirmation = useCommandConfirmation(tab.connectionId, tab.database);
   const { confirm: rawConfirm, confirmed } = confirmation;
+  // RN-VAR-021: a pergunta dos valores que faltam, e a sessão da árvore em que a escolha pela chave fala com o banco (RN-VAR-031).
+  const valuesQuestion = useValuesQuestion();
+  const { ask, askWith } = valuesQuestion;
+  const choiceScope = useMemo(() => (tab.connectionId === null ? null : { queryClient, connectionId: tab.connectionId, ...inDatabase(tab.database), engine }), [queryClient, tab.connectionId, tab.database, engine]);
   const confirm = useCallback(
     (make: Parameters<typeof rawConfirm>[0], proceed: (asked: boolean) => void) => {
       let asked = false;
@@ -486,6 +497,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const runHooks = useCallback(
     (flash?: FlashRun): RunHooks => ({
       confirm: (make) => confirmed(make),
+      ask,
       begin: () => {
         if (inPanel) dispatch({ type: "run" });
         clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
@@ -495,7 +507,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         if (hasConnection) flash?.(item);
       },
     }),
-    [confirmed, inPanel, hasConnection],
+    [confirmed, ask, inPanel, hasConnection],
   );
   const handleRun = useCallback(
     (target: RunTarget, flash: FlashRun) => {
@@ -538,6 +550,60 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
       else go();
     },
     [runner, guard, confirm, inPanel, variableRange, runHooks],
+  );
+  /**
+   * RN-VAR-026: o "Executar com valores…" pela barra do editor (e o Shift+Alt+X): o Alt+X do texto inteiro, com o diálogo (RN-VAR-027) no lugar da pergunta dos
+   * valores, na própria aba. O texto que não declara variáveis no topo não tem o que perguntar.
+   */
+  const handleRunWithValues = useCallback(() => {
+    const live = liveEditors.snapshot(tab.id);
+    if (live === null) return;
+    if (!declaresAtTop(readScript(live.sql, engine, { blankLines }))) return void toast.warning(variableFieldsCopy.noTopDeclarations);
+    const range: DocRange = { doc: { text: live.sql, blankLines }, engine, from: 0, to: live.sql.length };
+    guard(() => void runner.runScriptDoc(range, { ...runHooks(), withValues: true }));
+  }, [tab.id, engine, blankLines, runner, guard, runHooks, toast]);
+  /**
+   * RN-VAR-029: a aba de execução executa o texto do script com o diálogo (RN-VAR-027) no lugar da pergunta dos valores. Com `values`, os campos vêm deles: se
+   * todos servem, vão sem diálogo; se um falta ou não serve mais (o topo do script mudou), o diálogo abre com eles. `dialog`: abre de qualquer jeito ("Mudar os
+   * valores…"). "Executar numa aba nova" não executa aqui: leva os valores a outra aba.
+   */
+  const executionActions = useRef<ExecutionActions | null>(null);
+  const runExecution = useCallback<ExecutionRun>(
+    (text, values, { dialog, offerNewTab, onAnswered, onNewTab, onCancel }) => {
+      if (!declaresAtTop(readScript(text, engine, { blankLines }))) {
+        toast.warning(variableFieldsCopy.noTopDeclarations);
+        return onCancel?.();
+      }
+      const range: DocRange = { doc: { text, blankLines }, engine, from: 0, to: text.length };
+      const hooks = runHooks();
+      guard(
+        () =>
+          void runner.runScriptDoc(range, {
+            ...hooks,
+            withValues: true,
+            ask: async (question) => {
+              const direct = dialog || values === null ? null : answersByName(question.fields, values);
+              if (direct !== null) {
+                onAnswered(entriesOf(question.fields, direct));
+                return direct;
+              }
+              const reply = await askWith({ ...question, ...(values === null ? {} : { prefill: values }), offerNewTab });
+              if (reply === null) {
+                onCancel?.();
+                return null;
+              }
+              const entries = entriesOf(question.fields, reply.answers);
+              if (reply.newTab) {
+                onNewTab(entries);
+                return null;
+              }
+              onAnswered(entries);
+              return reply.answers;
+            },
+          }),
+      );
+    },
+    [engine, blankLines, runHooks, guard, runner, askWith, toast],
   );
   // RN-SQL-020: "Executar este comando", numa aba guardada do script: como o Ctrl+Enter nele. O que o executor recusaria (a aba ocupada) não pergunta, não
   // limpa o filtro nem mexe na área.
@@ -660,6 +726,20 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
 
   // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // RN-VAR-029: na aba de execução o Alt+X e o Shift+Alt+X são os botões do cabeçalho; o que depende do editor (o F6, o Ctrl+S, o Ctrl+9, o histórico) não faz
+    // nada. O F5 segue sendo o "Executar de novo" do resultado do último comando (RN-GRADE-012).
+    if (tab.execution !== undefined && !event.defaultPrevented) {
+      const withValues = valuesShortcut(event, platform);
+      if (withValues || scriptShortcut(event, platform)) {
+        event.preventDefault();
+        if (!event.repeat) (withValues ? executionActions.current?.change : executionActions.current?.rerun)?.();
+        return;
+      }
+      if (isF6(event) || saveShortcut(event) !== null || connectionShortcut(event) || ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "h")) {
+        event.preventDefault();
+        return;
+      }
+    }
     // RN-ABAS-014: o F6 alterna entre o editor e o resultado da aba, onde quer que ele esteja. O campo de edição da célula, os menus e os diálogos não deixam a
     // tecla subir até aqui. O resultado está noutro lugar da página (a área vai por portal), mas a tecla sobe pela árvore do React.
     if (!event.defaultPrevented && isF6(event)) {
@@ -691,6 +771,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     // RN-SQL-019: Alt+X (Cmd+Option+X no macOS), como no DBeaver, com o foco em qualquer ponto da aba; o campo da célula não deixa a tecla subir. Segurar as
     // teclas repete o evento (`repeat`): o script começa uma vez só, no primeiro, e a repetição não o começa de novo (com a pergunta de erro esperando, ela a
     // responderia "Parar" e começaria outro).
+    // RN-VAR-026: Shift+Alt+X, o "Executar com valores…", também com o foco em qualquer ponto da aba.
+    if (!event.defaultPrevented && valuesShortcut(event, platform)) {
+      event.preventDefault();
+      if (!event.repeat) handleRunWithValues();
+      return;
+    }
     if (!event.defaultPrevented && scriptShortcut(event, platform)) {
       event.preventDefault();
       if (!event.repeat) editor.current?.runScript();
@@ -749,7 +835,27 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   return (
     <>
       <div ref={root} onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
-        {tab.connectionId === null ? <NoConnectionBar reason={tab.script === undefined ? "restored" : tab.script.generic === true ? "generic" : "scriptMissing"} onAssign={handleChooseConnection} /> : null}
+        {tab.connectionId === null ? <NoConnectionBar reason={tab.execution !== undefined ? (tab.execution.generic ? "generic" : "scriptMissing") : tab.script === undefined ? "restored" : tab.script.generic === true ? "generic" : "scriptMissing"} onAssign={handleChooseConnection} /> : null}
+        {tab.execution !== undefined ? (
+          <ExecutionHeader
+            tab={tab}
+            execution={tab.execution}
+            runner={runner}
+            place={
+              <>
+                <ConnectionPicker connectionId={connectionId} busy={busy || scriptBusy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />
+                {connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy || scriptBusy} onChoose={handleChooseDatabase} />}
+              </>
+            }
+            busy={busy || scriptBusy}
+            cancelling={cancelling}
+            onCancel={handleCancel}
+            onRun={runExecution}
+            actionsRef={executionActions}
+            rerunShortcut={scriptShortcutLabel(platform).label}
+            valuesShortcut={valuesShortcutLabel(platform).label}
+          />
+        ) : (
         <EditorToolbar
           busy={busy}
           cancelling={cancelling}
@@ -758,16 +864,19 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           onRunScript={() => editor.current?.runScript()}
           scriptShortcut={scriptShortcutLabel(platform)}
           onCancel={handleCancel}
+          {...(declaresAtTop(variables.model) ? { onRunWithValues: handleRunWithValues, valuesShortcut: valuesShortcutLabel(platform) } : {})}
           connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
           database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
           transaction={connectionId === null ? null : <TransactionControl transaction={runner.transaction} engine={engine} busy={busy} />}
           historyOpen={historyOpen}
           onToggleHistory={() => setHistoryOpen((open) => !open)}
         />
+        )}
   
         <div className="flex min-h-0 min-w-0 flex-1 flex-row">
         <div ref={area} className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {/* Maximizada, o editor fica sem altura e fora da ordem do Tab, mas montado. */}
+          {/* Maximizada, o editor fica sem altura e fora da ordem do Tab, mas montado. A aba de execução não tem editor (RN-VAR-029). */}
+          {tab.execution !== undefined ? null : (
           <div inert={maximized} style={{ flex: flex.editor }} className={cn("min-h-0 overflow-hidden", maximized && "h-0")}>
             <SqlEditor
               ref={editor}
@@ -788,11 +897,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
               variables={editorVariables}
             />
           </div>
+          )}
   
-          {inPanel && layout.mode === "split" ? <ResultSplitter area={area} controls={resultId} resultPercent={layout.resultPercent} dispatch={dispatch} /> : null}
+          {inPanel && layout.mode === "split" && tab.execution === undefined ? <ResultSplitter area={area} controls={resultId} resultPercent={layout.resultPercent} dispatch={dispatch} /> : null}
 
           {/* O lugar da área de resultado no painel. Numa aba ou numa janela, ela está no lugar de lá, e aqui não há nada. */}
-          {inPanel ? <div ref={setPanelSlot} style={{ flex: flex.result }} className="flex min-h-0 min-w-0 flex-col" /> : null}
+          {inPanel ? <div ref={setPanelSlot} style={{ flex: tab.execution === undefined ? flex.result : "1 1 0px" }} className="flex min-h-0 min-w-0 flex-col" /> : null}
         </div>
         {historyOpen ? (
           <HistoryPanel
@@ -815,9 +925,9 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             environmentColor={environmentColor}
             state={kept === null ? state : kept.rows}
             connected={kept === null && tab.sessionId !== null}
-            collapsed={inPanel && layout.mode === "collapsed"}
-            placeControl={onPlace === undefined ? undefined : <ResultPlaceButton place={place} items={placeMenu(place, { moving })} onChoose={(next) => onPlace(tab.id, next)} />}
-            actions={inPanel ? <ResultActions mode={layout.mode} onAction={(type) => dispatch({ type })} /> : place === "window" && onBackToPanel !== undefined ? <BackToPanelButton onClick={() => onBackToPanel(tab.id)} /> : undefined}
+            collapsed={tab.execution === undefined && inPanel && layout.mode === "collapsed"}
+            placeControl={onPlace === undefined || tab.execution !== undefined ? undefined : <ResultPlaceButton place={place} items={placeMenu(place, { moving })} onChoose={(next) => onPlace(tab.id, next)} />}
+            actions={tab.execution !== undefined ? undefined : inPanel ? <ResultActions mode={layout.mode} onAction={(type) => dispatch({ type })} /> : place === "window" && onBackToPanel !== undefined ? <BackToPanelButton onClick={() => onBackToPanel(tab.id)} /> : undefined}
             nullText={preferences.results.nullText}
             // RN-CONFIG-005 e RN-GRADE-014: com a atualização automática ligada, a página seguinte espera o botão. Cada execução volta à primeira página, e a
             // grade que ficou no fim (a rolagem fica) pediria a seguinte a cada intervalo, segurando o bloqueio por inatividade e lendo de novo à toa.
@@ -933,6 +1043,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           />
         )}
         {/* RN-PROT-001: o aviso antes de executar; no Salvar, com o "Ver SQL", que abre os comandos por cima dele. */}
+        {valuesQuestion.open === null ? null : <ValuesDialog {...valuesQuestion.open} title={tab.execution?.name ?? tab.title} script={tab.execution !== undefined ? { id: tab.execution.scriptId, generic: tab.execution.generic } : tab.script === undefined ? null : { id: tab.script.id, generic: tab.script.generic === true }} scope={choiceScope} />}
         {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" || confirmation.open.question.kind === "wholeColumn" ? edits.banner.onViewSql : undefined} />}
       </ActiveHostProvider>
     </>

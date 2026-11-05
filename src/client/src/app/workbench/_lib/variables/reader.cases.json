@@ -1968,7 +1968,7 @@
       "error": {
         "line": 1,
         "column": 8,
-        "message": "O tipo any não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna)."
+        "message": "O tipo any não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null, o de uma coluna (tabela.coluna) e os do script (interface e type)."
       }
     },
     {
@@ -3481,7 +3481,7 @@
       "error": {
         "line": 1,
         "column": 8,
-        "message": "O tipo object não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna)."
+        "message": "O tipo object não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null, o de uma coluna (tabela.coluna) e os do script (interface e type)."
       }
     }
   ]

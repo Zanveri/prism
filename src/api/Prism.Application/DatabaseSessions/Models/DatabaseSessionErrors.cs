@@ -89,6 +89,15 @@ internal static class DatabaseSessionErrors
             EDatabaseFailure.QueryInvalid => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("QueryInvalidTitle"), "QUERY_INVALID", failure.Field ?? "params", failure.Message),
             EDatabaseFailure.ParametersMismatch => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("ParametersMismatchTitle"), "QUERY_PARAMETERS_MISMATCH", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["markers"] = failure.Markers, ["values"] = failure.Values }),
 
+            // RN-VAR-034: a consulta de uma variável que não é uma leitura (o motivo no detalhe e em `reason`, como na exportação), e a que passou de um limite
+            // (`reason` em `rows`, `columns` ou `bytes`, e `limit`).
+            EDatabaseFailure.VariableQueryNotRead => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("VariableQueryNotReadTitle"), "VARIABLE_QUERY_NOT_READ", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = failure.Reason }),
+            EDatabaseFailure.VariableQueryTooLarge => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("VariableQueryTooLargeTitle"), "VARIABLE_QUERY_TOO_LARGE", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = failure.Reason, ["limit"] = failure.Limit }),
+
+            // RN-VAR-035: a coluna ou a descrição que o catálogo da sessão recusa vem na forma do erro de campo, como a do validator; a tabela que não existe é 404.
+            EDatabaseFailure.ValuesInvalid => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("ValuesInvalidTitle"), "VALUES_INVALID", failure.Field ?? "column", failure.Message),
+            EDatabaseFailure.ValuesTableNotFound => ApiErrorDto.CreateNotFound(Texts.Get("ValuesTableNotFoundTitle"), "VALUES_TABLE_NOT_FOUND", failure.Message),
+
             // RN-PROT-002: nada foi ao banco, e o resultado anterior continua (sem `executed`).
             EDatabaseFailure.ConnectionReadOnly => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("ConnectionReadOnlyTitle"), "CONNECTION_READ_ONLY", failure.Message),
 

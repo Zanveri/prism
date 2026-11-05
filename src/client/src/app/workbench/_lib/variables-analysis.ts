@@ -36,7 +36,7 @@ export type DeclaredName = { name: string; itemIndex: number; from: number; to: 
 /** Onde o valor aparece no fim da linha: `at` é o fim da última linha da declaração. */
 export type ValueTail = { name: string; from: number; to: number; at: number };
 
-export type AnalysisItem = { kind: "statement" | "declaration" | "reassignment"; from: number; to: number };
+export type AnalysisItem = { kind: "statement" | "declaration" | "reassignment" | "type"; from: number; to: number };
 
 export type EditorAnalysis = {
   /** O tamanho do texto lido. */
@@ -338,8 +338,9 @@ function readAssignment(model: ScriptModel, item: ModelItem, analysis: EditorAna
   const parsed = item.parsed;
 
   const keywordAt = parsed === null ? firstTokenStart(source, item, model.engine) : parsed.kind === "declaration" ? parsed.start : -1;
-  if (item.kind === "declaration" && keywordAt >= 0) {
-    const word = /^(?:let|const)/.exec(source.slice(keywordAt, keywordAt + 5));
+  if ((item.kind === "declaration" || item.kind === "type") && keywordAt >= 0) {
+    // O tipo com nome (`interface Cliente`, `type Filtro =`) pinta a palavra como o `let`; o nome dele é de outro espaço de nomes e não leva a cor de variável.
+    const word = (item.kind === "type" ? /^(?:interface|type)/ : /^(?:let|const)/).exec(source.slice(keywordAt, keywordAt + 9));
     if (word !== null) marks.push({ from: keywordAt, to: keywordAt + word[0].length, kind: "keyword", name: null });
   }
 
