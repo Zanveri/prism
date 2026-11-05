@@ -3,7 +3,9 @@ import { chmod, open, readFile, realpath, rename, stat, unlink } from "node:fs/p
 import { basename, dirname, extname, join, parse, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 
-import { exportFileName, extensionLabels } from "./file-name";
+import { fileTransferCopy } from "./file-transfer.copy";
+import { exportFileName } from "./file-name";
+import type { Locale } from "./locale";
 import {
   clipboardLimitBytes,
   copyRequestSchema,
@@ -29,6 +31,8 @@ export type SaveDialogFilter = { name: string; extensions: string[] };
 export type TransferDeskDeps = {
   /** A pasta de dados do Prism (`PRISM_DATA_DIR`): o arquivo pronto está em `<dados>/transfers/<id>.ready`, e nenhum destino pode ficar dentro dela. */
   dataDir: string;
+  /** O idioma desta abertura do app (`locale.json`, lido pelo `main.ts`): o dos filtros do diálogo e das frases que vão à tela. Sem ele, o português. */
+  locale?: Locale;
   /** A pasta do primeiro diálogo de salvar desta abertura do app: a de Downloads do sistema (lida na hora: o Electron a dá depois de pronto). */
   downloadsDir: () => string;
   /** No Windows e no macOS os destinos se comparam sem diferenciar maiúsculas. */
@@ -81,16 +85,10 @@ async function exists(path: string): Promise<boolean> {
 
 const defaultCopy = (from: string, to: string, signal: AbortSignal) => pipeline(createReadStream(from), createWriteStream(to, { flags: "wx" }), { signal });
 
-/** As frases da entrega que falhou, sem caminho (RN-EXPORT-020): a tela as mostra depois de "<arquivo> não foi gravado: ". */
-export const deliveryFailureMessages: Record<Exclude<DeliveryFailureReason, "other">, string> = {
-  diskFull: "não há espaço no disco de destino",
-  notWritable: "sem permissão para gravar na pasta escolhida",
-  folderMissing: "a pasta escolhida não existe mais",
-  inUse: "o arquivo está aberto em outro programa",
-};
-
 export function createTransferDesk(deps: TransferDeskDeps) {
   const transfersDir = join(deps.dataDir, "transfers");
+  // As frases da entrega que falhou, sem caminho (RN-EXPORT-020; `file-transfer.copy.ts`): a tela as mostra depois de "<arquivo> não foi gravado: ".
+  const text = fileTransferCopy(deps.locale);
   const move = deps.move ?? rename;
   const copy = deps.copy ?? defaultCopy;
   const caseless = deps.platform === "win32" || deps.platform === "darwin";
@@ -144,8 +142,8 @@ export function createTransferDesk(deps: TransferDeskDeps) {
     // A mesma regra de nome da tela (RN-EXPORT-014): o nome que chega é conferido de novo, e só ele vai ao diálogo.
     const name = exportFileName(suggestedName, extension);
     const filters = [
-      { name: `${extensionLabels[extension]} (*.${extension})`, extensions: [extension] },
-      { name: "Todos os arquivos", extensions: ["*"] },
+      { name: `${text.desk.formats[extension]} (*.${extension})`, extensions: [extension] },
+      { name: text.allFiles, extensions: ["*"] },
     ];
     const mark = releaseMark(windowId);
     const chosen = await deps.showSaveDialog(windowId, { defaultPath: join(lastFolder ?? deps.downloadsDir(), name), filters }, resultWindow);
@@ -212,14 +210,14 @@ export function createTransferDesk(deps: TransferDeskDeps) {
 
   function failureOf(error: unknown, targetExists: boolean): { reason: DeliveryFailureReason; message: string } {
     const code = codeOf(error);
-    const known = (reason: Exclude<DeliveryFailureReason, "other">) => ({ reason, message: deliveryFailureMessages[reason] });
+    const known = (reason: Exclude<DeliveryFailureReason, "other">) => ({ reason, message: text.desk.delivery[reason] });
     if (code === "ENOSPC" || code === "EDQUOT") return known("diskFull");
     if (code === "ENOENT" || code === "ENOTDIR") return known("folderMissing");
     if (code === "EBUSY" || code === "ETXTBSY") return known("inUse");
     // No Windows, a planilha aberta no Excel prende o arquivo, e o sistema responde "sem permissão" ao substituí-lo.
     if ((code === "EPERM" || code === "EACCES") && deps.platform === "win32" && targetExists) return known("inUse");
     if (code === "EPERM" || code === "EACCES" || code === "EROFS") return known("notWritable");
-    return { reason: "other", message: `o sistema recusou a gravação (${code ?? "sem código"})` };
+    return { reason: "other", message: text.desk.delivery.other(code) };
   }
 
   async function deliver(windowId: number, raw: unknown): Promise<DeliverReply> {
@@ -299,7 +297,7 @@ export function createTransferDesk(deps: TransferDeskDeps) {
       return { status: "copied" };
     } catch (error) {
       if (codeOf(error) === "ENOENT") return { status: "missing" };
-      return { status: "failed", message: `Não foi possível ler o texto exportado (${codeOf(error) ?? "sem código"}).` };
+      return { status: "failed", message: text.desk.clipboardReadFailed(codeOf(error)) };
     }
   }
 

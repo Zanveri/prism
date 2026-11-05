@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { splitNotes } from "./checksums";
 import { choosePackage, type InstallFacts } from "./packages";
+import { updateMessagesCopy } from "./update-messages.copy";
 import { compareVersions, isNewerThan, releaseOfTag } from "./version";
 
 /**
@@ -22,14 +23,14 @@ export const maxNotesLength = 100_000;
  * desenhar centenas de milhares de elementos. Notas de verdade têm poucas dezenas de linhas.
  */
 export const maxNotesLines = 400;
-const notesCut = "As notas desta versão foram cortadas aqui: são mais longas do que o Prism mostra.";
 const fence = "```";
 
 /**
  * As notas como vão para a tela: no máximo `maxNotesLines` linhas, e uma linha final dizendo que foram cortadas. Se o corte
- * cai dentro de um bloco de código, a cerca é fechada antes, para a linha final não ser desenhada como código.
+ * cai dentro de um bloco de código, a cerca é fechada antes, para a linha final não ser desenhada como código. `notesCut`: a linha final no
+ * idioma da abertura (`update-messages.copy.ts`).
  */
-export function clipNotes(notes: string): string {
+export function clipNotes(notes: string, notesCut: string = updateMessagesCopy().releases.notesCut): string {
   const lines = notes.split(/\r?\n/);
   if (lines.length <= maxNotesLines) return notes;
 

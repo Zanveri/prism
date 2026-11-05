@@ -382,8 +382,12 @@ Fora da especificação (não há `RN-*` para isto): português (padrão), ingl�
 - **A API escreve no idioma da tela**: o `apiRequest` manda `Accept-Language` com o `locale` (sem ele, o Electron mandaria o do sistema), e a API
   responde títulos, detalhes e validação nele (seção `## Idiomas` de `src/api/AGENTS.md`). Por isso a tela nunca compara o texto de uma recusa: decide
   pelo código. O texto gravado no diário é histórico e fica em português.
-- **O que ainda está só em português**: as mensagens do processo principal que vão à tela (atualização, cópia de arquivo, DBeaver). O splash tem os textos dele em `splash.ts`, por idioma. Ficam em português de propósito, por
-  serem contrato: o conteúdo dos arquivos exportados e do SQL/DDL gerado (comentários, "Resultado"), os nomes de tipo da linguagem das variáveis
+- **O processo principal** não tem `window.prism`: o `main.ts` lê o `locale.json` ao abrir e passa o `locale` a quem manda frase à tela
+  (`createUpdater`, `createTransferDesk`, `createTransferSource`, `createDbeaverSource`, `startApi` e o menu Editar do macOS). Os textos ficam em
+  `electron/*.copy.ts` e `electron/update/update-messages.copy.ts`, como funções do idioma (`fileTransferCopy(locale)`), porque o módulo é
+  carregado antes de o idioma ser lido; sem o `locale`, o português. O splash tem os textos dele em `splash.ts`, por idioma. O log e os erros
+  internos, que não chegam à tela, ficam em português.
+- **Ficam em português de propósito**, por serem contrato: o conteúdo dos arquivos exportados e do SQL/DDL gerado (comentários, "Resultado"), os nomes de tipo da linguagem das variáveis
   (`Date (dia)`) e as variáveis do nome de arquivo (`${tabela}`).
 
 O glossário, para os idiomas não divergirem de um módulo para outro (inglês e espanhol, em sentença: só a primeira letra maiúscula, como no

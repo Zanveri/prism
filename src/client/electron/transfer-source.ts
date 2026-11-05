@@ -4,6 +4,8 @@ import { basename, dirname, join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import { fileTransferCopy, type FileTransferCopy } from "./file-transfer.copy";
+import type { Locale } from "./locale";
 import { chooseSourceRequestSchema, maxImportBytes, sourceRequestSchema, type SourceFailureReason, type SourceReply, type SourceStatus } from "./transfer-messages";
 
 /**
@@ -18,6 +20,8 @@ export type OpenDialogFilter = { name: string; extensions: string[] };
 export type TransferSourceDeps = {
   /** A pasta de dados do Prism (`PRISM_DATA_DIR`): a cópia vai para `<dados>/transfers/<fileId>.in`. */
   dataDir: string;
+  /** O idioma desta abertura do app (`locale.json`, lido pelo `main.ts`): o do diálogo e das frases que vão à tela. Sem ele, o português. */
+  locale?: Locale;
   /** A pasta do primeiro diálogo de abrir desta abertura do app: a de Downloads do sistema (lida na hora: o Electron a dá depois de pronto). */
   downloadsDir: () => string;
   /** Abre o diálogo de abrir do sistema sobre a janela que pediu, com o título e os filtros daqui; `null` quando a pessoa desiste. */
@@ -33,16 +37,20 @@ export type TransferSourceDeps = {
   copy?: (from: string, to: string, signal: AbortSignal, progress: (copied: number) => void) => Promise<void>;
 };
 
-/** O título e os filtros do diálogo de abrir (RN-IMPORT-018), escritos aqui: nada da tela vai ao diálogo. */
-export const sourceDialogTitle = "Importar dados";
-
-export const sourceDialogFilters: OpenDialogFilter[] = [
-  { name: "Arquivos de dados (*.csv, *.tsv, *.tab, *.txt, *.json, *.xlsx, *.xlsm)", extensions: ["csv", "tsv", "tab", "txt", "json", "xlsx", "xlsm"] },
-  { name: "CSV e TSV (*.csv, *.tsv, *.tab, *.txt)", extensions: ["csv", "tsv", "tab", "txt"] },
-  { name: "JSON (*.json)", extensions: ["json"] },
-  { name: "Excel (*.xlsx, *.xlsm)", extensions: ["xlsx", "xlsm"] },
-  { name: "Todos os arquivos", extensions: ["*"] },
-];
+/**
+ * Os filtros do diálogo de abrir (RN-IMPORT-018), escritos aqui: nada da tela vai ao diálogo. O título é `source.dialogTitle`. `text`: as frases
+ * no idioma da abertura (`file-transfer.copy.ts`), e sem ele as do português, como nas funções abaixo.
+ */
+export function sourceDialogFilters(text: FileTransferCopy = fileTransferCopy()): OpenDialogFilter[] {
+  const { filters } = text.source;
+  return [
+    { name: filters.data, extensions: ["csv", "tsv", "tab", "txt", "json", "xlsx", "xlsm"] },
+    { name: filters.delimited, extensions: ["csv", "tsv", "tab", "txt"] },
+    { name: filters.json, extensions: ["json"] },
+    { name: filters.excel, extensions: ["xlsx", "xlsm"] },
+    { name: text.allFiles, extensions: ["*"] },
+  ];
+}
 
 /** A folga além do tamanho do arquivo que a pasta de dados precisa ter livre para a cópia começar (RN-IMPORT-018). */
 export const spareBytes = 64 * 1024 * 1024;
@@ -53,33 +61,35 @@ const codeOf = (error: unknown): string | undefined => (typeof error === "object
  * A frase do motivo de não ler o arquivo, escolhida pelo código do sistema, e nunca pelo texto dele, que traz o caminho (RN-IMPORT-018). É a mesma ao escolher
  * (`unreadable`) e na cópia que falha no meio.
  */
-export function unreadableReason(code: string | undefined): string {
+export function unreadableReason(code: string | undefined, text: FileTransferCopy = fileTransferCopy()): string {
+  const reasons = text.source.unreadable;
   switch (code) {
     case "EACCES":
     case "EPERM":
-      return "o sistema não dá permissão para ler o arquivo";
+      return reasons.permission;
     case "EBUSY":
-      return "o arquivo está em uso por outro programa";
+      return reasons.busy;
     case "ENOENT":
-      return "o arquivo não existe mais";
+      return reasons.missing;
     case "EIO":
-      return "o disco deu erro de leitura";
+      return reasons.io;
     default:
-      return `erro ${code ?? "sem código"}`;
+      return reasons.other(code);
   }
 }
 
 /** As frases da cópia que falhou (RN-IMPORT-018), inteiras, sem caminho: a tela as mostra no campo do arquivo. */
-export function copyFailureMessage(reason: SourceFailureReason, code: string | undefined): string {
+export function copyFailureMessage(reason: SourceFailureReason, code: string | undefined, text: FileTransferCopy = fileTransferCopy()): string {
+  const { failure } = text.source;
   switch (reason) {
     case "diskFull":
-      return "Não há espaço na pasta de dados do Prism para copiar o arquivo.";
+      return failure.diskFull;
     case "tooLarge":
-      return "O arquivo passou de 2 GB durante a cópia.";
+      return failure.tooLarge;
     case "unreadable":
-      return `Não foi possível ler o arquivo: ${unreadableReason(code)}.`;
+      return failure.unreadable(unreadableReason(code, text));
     case "other":
-      return `Não foi possível copiar o arquivo (${code ?? "sem código"}).`;
+      return failure.other(code);
   }
 }
 
@@ -166,6 +176,8 @@ type Source = {
 
 export function createTransferSource(deps: TransferSourceDeps) {
   const transfersDir = join(deps.dataDir, "transfers");
+  const text = fileTransferCopy(deps.locale);
+  const filters = sourceDialogFilters(text);
   const copy = deps.copy ?? defaultCopy;
   const freeSpace = deps.freeSpace ?? defaultFreeSpace;
   const sources = new Map<string, Source>();
@@ -226,7 +238,7 @@ export function createTransferSource(deps: TransferSourceDeps) {
         const reason: SourceFailureReason =
           side.side === "size" ? "tooLarge" : side.side === "read" ? "unreadable" : side.code === "ENOSPC" || side.code === "EDQUOT" ? "diskFull" : "other";
         source.state = "failed";
-        source.failure = { reason, message: copyFailureMessage(reason, side.code) };
+        source.failure = { reason, message: copyFailureMessage(reason, side.code, text) };
         deps.log(`importação: a cópia do arquivo ${source.fileId} falhou: ${reason} (${side.code ?? "sem código"})`);
       }
     })();
@@ -240,7 +252,7 @@ export function createTransferSource(deps: TransferSourceDeps) {
   async function choose(windowId: number, raw: unknown = {}): Promise<SourceReply> {
     const { resultWindow } = chooseSourceRequestSchema.parse(raw ?? {});
     const mark = releaseMark(windowId);
-    const chosen = await deps.showOpenDialog(windowId, { title: sourceDialogTitle, defaultPath: lastFolder ?? deps.downloadsDir(), filters: sourceDialogFilters }, resultWindow);
+    const chosen = await deps.showOpenDialog(windowId, { title: text.source.dialogTitle, defaultPath: lastFolder ?? deps.downloadsDir(), filters }, resultWindow);
     if (chosen === null || chosen === "") return { status: "canceled" };
     lastFolder = dirname(chosen);
 
@@ -250,14 +262,14 @@ export function createTransferSource(deps: TransferSourceDeps) {
       if (!stats.isFile()) return { status: "notAFile" };
       size = stats.size;
     } catch (error) {
-      return { status: "unreadable", message: unreadableReason(codeOf(error)) };
+      return { status: "unreadable", message: unreadableReason(codeOf(error), text) };
     }
     if (size > maxImportBytes) return { status: "tooLarge", size };
     try {
       const handle = await open(chosen, "r");
       await handle.close();
     } catch (error) {
-      return { status: "unreadable", message: unreadableReason(codeOf(error)) };
+      return { status: "unreadable", message: unreadableReason(codeOf(error), text) };
     }
     if (!(await writable())) return { status: "notWritable" };
     const needed = size + spareBytes;
@@ -290,7 +302,7 @@ export function createTransferSource(deps: TransferSourceDeps) {
       case "ready":
         return { status: "ready" };
       case "failed":
-        return { status: "failed", reason: source.failure?.reason ?? "other", message: source.failure?.message ?? copyFailureMessage("other", undefined) };
+        return { status: "failed", reason: source.failure?.reason ?? "other", message: source.failure?.message ?? copyFailureMessage("other", undefined, text) };
     }
   }
 
