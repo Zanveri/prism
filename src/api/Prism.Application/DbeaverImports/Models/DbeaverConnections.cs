@@ -315,15 +315,18 @@ internal static class DbeaverConnections
             var savePassword = Flag(handler.Value, "save-password");
             if (string.Equals(type, "PROXY", StringComparison.OrdinalIgnoreCase) || key.Contains("proxy", StringComparison.Ordinal) || key.Contains("socks", StringComparison.Ordinal))
             {
-                proxy = proxy is null && key == "socks_proxy" ? ProxyOf(properties, login?.Proxy, savePassword) : null;
-                proxyLeftOut |= proxy is null;
+                // Só o `socks_proxy` vem, uma vez; outro handler de proxy fica de fora sem tirar o que já veio.
+                var mapped = proxy is null && key == "socks_proxy" ? ProxyOf(properties, login?.Proxy, savePassword) : null;
+                proxy ??= mapped;
+                proxyLeftOut |= mapped is null;
             }
             else if (key.Contains("ssl", StringComparison.Ordinal))
                 sslLeftOut = true;
             else
             {
-                ssh = ssh is null && key == "ssh_tunnel" ? SshOf(properties, login?.Tunnel, savePassword) : null;
-                tunnelLeftOut |= ssh is null;
+                var mapped = ssh is null && key == "ssh_tunnel" ? SshOf(properties, login?.Tunnel, savePassword) : null;
+                ssh ??= mapped;
+                tunnelLeftOut |= mapped is null;
             }
         }
 

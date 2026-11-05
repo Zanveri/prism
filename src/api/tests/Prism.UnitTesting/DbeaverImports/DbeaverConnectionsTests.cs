@@ -361,6 +361,22 @@ public sealed class DbeaverConnectionsTests
     }
 
     [Trait("DbeaverConnections", "Map")]
+    [Fact(DisplayName = "OK o segundo túnel e o segundo proxy ficam de fora sem tirar os que vieram")]
+    public void Map_SecondTunnelAndProxy_LeftOut()
+    {
+        //Act
+        var model = Map("""
+            {"provider":"postgresql","driver":"postgres-jdbc","name":"X","configuration":{"host":"h.exemplo.invalid",
+              "handlers":{"ssh_tunnel":{"type":"TUNNEL","enabled":true,"properties":{"host":"bastion.exemplo.invalid"}},"outro_tunel":{"type":"TUNNEL","enabled":true},
+                "socks_proxy":{"type":"PROXY","enabled":true,"properties":{"socks-host":"socks.exemplo.invalid"}},"http_proxy":{"type":"PROXY","enabled":true}}}}
+            """, login: new DbeaverLogin(null, null, new DbeaverLogin("usuario-do-tunel", null)));
+
+        //Assert
+        Assert.Equal(("bastion.exemplo.invalid", "socks.exemplo.invalid"), (model.Ssh?.Host, model.Proxy?.Host));
+        Assert.Equal(["sshTunnel", "proxy"], model.LeftOut);
+    }
+
+    [Trait("DbeaverConnections", "Map")]
     [Fact(DisplayName = "OK o proxy SOCKS vem com o usuário e a senha do credentials-config, e o SSL fica de fora com o código dele")]
     public void Map_SocksProxyAndSsl()
     {
