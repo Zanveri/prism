@@ -42,11 +42,13 @@ import { useResultLinks } from "../_lib/use-result-links";
 import { inDatabase } from "../_lib/navigator-model";
 import { useAutoRefresh } from "../_lib/use-auto-refresh";
 import { useCommandConfirmation } from "../_lib/use-command-confirmation";
+import { useValuesQuestion } from "../_lib/use-values-question";
 import { useConnectedIds } from "../_lib/use-connected-ids";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import type { QueryTab, ResultPlace, TableView } from "../_lib/workbench-model";
 import { AutoRefreshControl, AutoRefreshDialog } from "./auto-refresh-control";
 import { ConfirmCommandDialog } from "./confirm-command-dialog";
+import { ValuesDialog } from "./values-dialog";
 import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
@@ -184,6 +186,10 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // RN-PROT-001: o aviso antes de executar, pelas proteções da conexão da aba.
   const confirmation = useCommandConfirmation(tab.connectionId, tab.database);
   const { confirm: rawConfirm, confirmed } = confirmation;
+  // RN-VAR-021: a pergunta dos valores que faltam, e a sessão da árvore em que a escolha pela chave fala com o banco (RN-VAR-031).
+  const valuesQuestion = useValuesQuestion();
+  const { ask } = valuesQuestion;
+  const choiceScope = useMemo(() => (tab.connectionId === null ? null : { queryClient, connectionId: tab.connectionId, ...inDatabase(tab.database), engine }), [queryClient, tab.connectionId, tab.database, engine]);
   const confirm = useCallback(
     (make: Parameters<typeof rawConfirm>[0], proceed: (asked: boolean) => void) => {
       let asked = false;
@@ -486,6 +492,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const runHooks = useCallback(
     (flash?: FlashRun): RunHooks => ({
       confirm: (make) => confirmed(make),
+      ask,
       begin: () => {
         if (inPanel) dispatch({ type: "run" });
         clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
@@ -495,7 +502,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         if (hasConnection) flash?.(item);
       },
     }),
-    [confirmed, inPanel, hasConnection],
+    [confirmed, ask, inPanel, hasConnection],
   );
   const handleRun = useCallback(
     (target: RunTarget, flash: FlashRun) => {
@@ -933,6 +940,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           />
         )}
         {/* RN-PROT-001: o aviso antes de executar; no Salvar, com o "Ver SQL", que abre os comandos por cima dele. */}
+        {valuesQuestion.open === null ? null : <ValuesDialog {...valuesQuestion.open} scope={choiceScope} />}
         {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" || confirmation.open.question.kind === "wholeColumn" ? edits.banner.onViewSql : undefined} />}
       </ActiveHostProvider>
     </>

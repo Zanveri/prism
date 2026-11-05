@@ -104,7 +104,7 @@ function nullParameterType(type: Type | undefined): ParameterType {
 }
 
 /** O valor simples como parâmetro (RN-VAR-017). No PostgreSQL o instante leva o deslocamento da máquina naquela data (`-03`). */
-function toParameter(value: Value, variable: string, item: number | null, engine: Engine | undefined, declared: Type | undefined): BoundParameter {
+export function toParameter(value: Value, variable: string, item: number | null, engine: Engine | undefined, declared: Type | undefined): BoundParameter {
   switch (value.kind) {
     case "number": {
       const text = numberParameterText(value);

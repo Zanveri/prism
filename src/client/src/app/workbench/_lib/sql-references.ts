@@ -63,7 +63,7 @@ export const maxAnalyzedLength = 200_000;
 const afterTable = new Set(["natural", "straight_join", "tablesample", "window", "qualify", "returning", "using", "for", "partition"]);
 
 /** Um pedaço do nível do cursor: um pedaço do texto, ou um grupo entre parênteses inteiro (uma subconsulta, uma lista, uma chamada) como um item só. */
-type Item = SqlToken & { group?: true };
+export type Item = SqlToken & { group?: true };
 
 const isGroup = (item: Item | undefined) => item?.group === true;
 
@@ -71,7 +71,7 @@ const comma = (item: Item | undefined) => item !== undefined && !item.word && !i
 const wordIs = (item: Item | undefined, ...words: string[]) => item !== undefined && item.word && words.includes(item.text);
 
 /** O pedaço de abrir parêntese, e o que fecha cada um (`tokens.length` quando o grupo não fecha). */
-function parenthesesOf(tokens: readonly SqlToken[]): number[] {
+export function parenthesesOf(tokens: readonly SqlToken[]): number[] {
   const closes: number[] = new Array<number>(tokens.length).fill(-1);
   const open: number[] = [];
   tokens.forEach((token, index) => {
@@ -84,7 +84,7 @@ function parenthesesOf(tokens: readonly SqlToken[]): number[] {
 }
 
 /** Os itens do nível `[first, last)`: os grupos entre parênteses viram um item cada, e o que está dentro deles não conta. */
-function itemsOf(tokens: readonly SqlToken[], closes: readonly number[], first: number, last: number): Item[] {
+export function itemsOf(tokens: readonly SqlToken[], closes: readonly number[], first: number, last: number): Item[] {
   const items: Item[] = [];
   for (let index = first; index < last; index++) {
     const token = tokens[index];
@@ -98,7 +98,7 @@ function itemsOf(tokens: readonly SqlToken[], closes: readonly number[], first: 
 }
 
 /** Lê as tabelas de um nível. As subconsultas da lista (`FROM (SELECT …) s`) e as chamadas (`FROM f(x) g`) não são tabela, mas o apelido delas conta como usado. */
-function readReferences(sql: string, items: readonly Item[], engine: Engine | undefined): { references: Reference[]; derived: string[] } {
+export function readReferences(sql: string, items: readonly Item[], engine: Engine | undefined): { references: Reference[]; derived: string[] } {
   // `DELETE FROM t USING x c` e `MERGE INTO t USING x c` trazem tabelas; fora deles o `USING` é de outra coisa (`JOIN … USING (colunas)`, `CREATE INDEX … USING gin`, `TYPE int USING …`).
   const usingTables = items.some((item) => wordIs(item, "delete", "merge"));
   const references: Reference[] = [];

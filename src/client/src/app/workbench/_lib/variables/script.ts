@@ -115,7 +115,6 @@ export function staticDiagnostics(model: ScriptModel): ItemDiagnostic[] {
         if (declaration.value === null) {
           if (!declaration.mutable) report(item, phrase.constNeedsValue(declaration.name), declaration.nameStart);
           else if (declaration.annotation === null) report(item, phrase.letNeedsType(declaration.name), declaration.nameStart);
-          else if (declaration.annotation.base !== "column") report(item, phrase.provisionalNoValue(declaration.name), declaration.nameStart);
         }
       } else if (parsed.kind === "reassignment") {
         const first = declarations.get(parsed.name);
@@ -131,7 +130,6 @@ export function staticDiagnostics(model: ScriptModel): ItemDiagnostic[] {
           if (info === undefined) report(item, phrase.notDeclared(name), start);
           else if (info.itemIndex >= item.index) report(item, phrase.usedBeforeDeclared(name, info.line), start);
         });
-        checkProvisional(parsed.value, (message, offset) => report(item, message, offset));
       }
       continue;
     }
@@ -156,19 +154,12 @@ function dependsOnDatabase(node: Node, fromDatabase: ReadonlySet<string>): boole
   return childrenOf(node).some((child) => dependsOnDatabase(child, fromDatabase));
 }
 
-/** A anotação que a linguagem lê e ainda não executa, ou que não vale (RN-VAR-004). */
+/** A anotação que não vale (RN-VAR-004). O tipo de coluna se confere na execução, pelo catálogo. */
 function checkAnnotation(declaration: Declaration, report: (message: string, offset: number) => void): void {
   const annotation = declaration.annotation;
   if (annotation === null) return;
-  if (annotation.base === "column") report(phrase.provisionalColumnType(), annotation.start);
   if (annotation.base === "sql") {
     if (declaration.mutable) report(phrase.sqlMustBeConst(declaration.name), declaration.nameStart);
     if (annotation.list || annotation.nullable) report(phrase.sqlNoListOrNull(), annotation.start);
   }
-}
-
-/** A consulta e o `random.of`, que a linguagem lê e a conferência recusa com a frase provisória (a variável de consulta e o `random.of` chegam depois). */
-function checkProvisional(node: Node, report: (message: string, offset: number) => void): void {
-  if (node.t === "query") report(phrase.provisionalQuery(), node.start);
-  else if (node.t === "sample") report(phrase.provisionalSample(), node.start);
 }

@@ -137,9 +137,9 @@ export class Evaluator {
       case "constant":
         return numberValue(node.name === "PI" ? Math.PI : Math.E);
       case "query":
-        throw refuse(phrase.provisionalQuery());
+        throw refuse(phrase.queryOnlyWhole());
       case "sample":
-        throw refuse(phrase.provisionalSample());
+        throw refuse(phrase.sampleOnlyWhole());
     }
   }
 

@@ -54,6 +54,8 @@ export const commandConfirmationCopy = {
   },
 
   filter: (filter: string) => `Com o filtro do resultado: ${filter}`,
+  // RN-VAR-020: as consultas de variável que rodam antes do comando do Ctrl+Enter.
+  queries: (count: number) => (count === 1 ? "Antes, roda a consulta da variável:" : "Antes, rodam as consultas das variáveis:"),
 
   save: {
     description: (count: number) => `${formatCount(count, "alteração vai", "alterações vão")} ao banco, numa transação. Antes de salvar, dá para ver os comandos.`,

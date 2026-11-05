@@ -308,7 +308,7 @@ describe("Alt+X com variáveis (RN-VAR-019, 022 e 023)", () => {
 
   it("os erros da conferência impedem o script inteiro: nada é executado, e a lista diz a linha", async () => {
     const { api, runner, toast } = setup();
-    const text = "const a = 1\na = 2\nlet b: number\nselect @a;";
+    const text = "const a = 1\na = 2\nlet b = c\nselect @a;";
     await runner.runScriptDoc(range(text));
 
     expect(api.calls).toEqual([]);
@@ -704,5 +704,427 @@ describe("a pergunta numerada do script (RN-PROT-001)", () => {
     const protections = { confirm: { level: "irreversible", from: null }, readOnly: null } as never;
     const question = numberedScriptQuestion(protections, [{ number: 2, sql: "delete from t" }, { number: 3, sql: "select 1" }], 3);
     expect(question).toMatchObject({ kind: "script", total: 3, commands: [{ number: 2, sql: "delete from t" }] });
+  });
+});
+
+describe("A variável de consulta (RN-VAR-011, 019, 020, 022 e 034)", () => {
+  const variableQuery = `POST ${sessions}/s1/queries/variable`;
+  const answer = (rows: (string | null)[][], cols = [{ name: "total", type: "int8", kind: "number" }]) => json({ columns: cols, rows, elapsedMs: 7 });
+  const queried = (api: ReturnType<typeof fakeApi>) => api.calls.filter((call) => `${call.method} ${call.path}` === variableQuery).map((call) => call.body);
+
+  it("no Alt+X a consulta roda na vez dela, com os @nome como parâmetros, e o comando de baixo usa o valor", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, answer([["3"]]));
+    api.on(queries, page());
+    const text = "let id = 7\nlet total = (select count(*) from pedido where cliente = @id)\nconst dobro = total * 2\nselect @dobro;";
+    await runner.runScriptDoc(range(text));
+
+    expect(queried(api)).toEqual([{ sql: "select count(*) from pedido where cliente = $1", params: [{ type: "number", value: "7" }] }]);
+    expect(api.sent()).toEqual([{ sql: "select $1", params: [{ type: "number", value: "6" }] }]);
+    const total = runner.values.snapshot().values.get("total");
+    expect(total).toMatchObject({ origin: "consulta", ms: 7, value: { kind: "number", value: 3 } });
+    const entries = entriesOf(script(runner));
+    expect(entries.map((entry) => [entry.kind, entry.status])).toEqual([
+      ["declaration", "ok"],
+      ["declaration", "ok"],
+      ["declaration", "ok"],
+      ["statement", "ok"],
+    ]);
+    // As Estatísticas dizem as linhas que a consulta leu (RN-VAR-022).
+    expect(entries[1].rows).toEqual({ read: 1, more: false, total: null });
+    expect(entries[0].rows).toBeNull();
+  });
+
+  it("a lista de uma consulta vai num IN como um marcador por valor", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, answer([["1"], ["2"]], [{ name: "id", type: "int4", kind: "number" }]));
+    api.on(queries, page());
+    await runner.runScriptDoc(range("let ids = (select id from pedido)\nselect * from pedido where id in (@ids);"));
+
+    expect(api.sent()).toEqual([{ sql: "select * from pedido where id in ($1, $2)", params: [{ type: "number", value: "1" }, { type: "number", value: "2" }] }]);
+  });
+
+  it("a consulta de um valor só que devolve mais de uma linha é erro da declaração: Tentar de novo roda a consulta de novo", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, answer([["1"], ["2"], ["3"]]));
+    api.on(variableQuery, answer([["9"]]));
+    api.on(queries, page());
+    const done = runner.runScriptDoc(range("let total: number = (select id from pedido)\nselect @total;"));
+
+    await vi.waitFor(() => expect(script(runner).phase).toBe("paused"));
+    expect(entryAt(script(runner), 0)).toMatchObject({ kind: "declaration", status: "error", error: { message: "A consulta de total devolveu 3 linhas, e total é number: anote number[] para uma lista." } });
+    runner.script.decide("retry");
+    await done;
+
+    expect(queried(api)).toHaveLength(2);
+    expect(api.sent()).toEqual([{ sql: "select $1", params: [{ type: "number", value: "9" }] }]);
+  });
+
+  it("o erro do banco na consulta é o erro da declaração, como veio", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, problem(422, "SQL_EXECUTION_FAILED", { detail: "relation pedidos does not exist", sqlState: "42P01" }));
+    const done = runner.runScriptDoc(range("let total = (select count(*) from pedidos)\nselect @total;"));
+
+    await vi.waitFor(() => expect(script(runner).phase).toBe("paused"));
+    expect(entryAt(script(runner), 0)).toMatchObject({ kind: "declaration", status: "error", error: { message: "relation pedidos does not exist" } });
+    runner.script.decide("stop");
+    await done;
+    expect(api.sent()).toEqual([]);
+  });
+
+  it("o comando que não pôde ser montado com o valor da consulta é erro do comando, com as quatro escolhas (RN-VAR-022)", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, answer([], [{ name: "id", type: "int4", kind: "number" }]));
+    const done = runner.runScriptDoc(range("let ids: number[] = (select id from pedido)\nselect * from pedido where id in (@ids);"));
+
+    await vi.waitFor(() => expect(script(runner).phase).toBe("paused"));
+    expect(entryAt(script(runner), 1)).toMatchObject({ kind: "statement", status: "error" });
+    runner.script.decide("skip");
+    await done;
+    expect(entryAt(script(runner), 1).status).toBe("skipped");
+    expect(api.sent()).toEqual([]);
+  });
+
+  it("a pergunta da proteção lista a consulta da variável com o número dela, e o comando com o @nome que só se sabe depois", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, answer([["3"]]));
+    api.on(queries, page());
+    let asked: unknown = null;
+    await runner.runScriptDoc(range("let total = (select count(*) from pedido)\nselect @total;"), {
+      confirm: (make) => {
+        asked = make({ confirm: { level: "all", from: null }, readOnly: null } as never);
+        return Promise.resolve(true);
+      },
+    });
+
+    expect(asked).toMatchObject({
+      kind: "script",
+      total: 2,
+      commands: [
+        { number: 1, sql: "select count(*) from pedido", irreversible: null },
+        { number: 2, sql: "select @total" },
+      ],
+    });
+  });
+
+  it("cancelada a pergunta da proteção, a consulta não roda", async () => {
+    const { api, runner } = setup();
+    await runner.runScriptDoc(range("let total = (select count(*) from pedido)\nselect @total;"), { confirm: () => Promise.resolve(false) });
+    expect(api.calls).toEqual([]);
+    expect(runner.values.snapshot().values.size).toBe(0);
+  });
+
+  it("o Ctrl+Enter na declaração roda a consulta, guarda o valor e deixa o resultado na tela", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, answer([["4"]]));
+    await runner.runItem(cursorIn("let total = (select count(*) from pedido)\n", "let total"));
+
+    expect(queried(api)).toEqual([{ sql: "select count(*) from pedido" }]);
+    expect(runner.values.snapshot().values.get("total")?.value).toMatchObject({ value: 4 });
+    expect(runner.reveal.getState()).toMatchObject({ name: "total" });
+    expect(runner.getState()).toEqual({ status: "idle" });
+  });
+
+  it("o Ctrl+Enter no comando roda antes a consulta de que ele depende, numa pergunta só com as duas", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, answer([["4"]]));
+    api.on(queries, page());
+    let asked: unknown = null;
+    await runner.runItem(cursorIn("let total = (select count(*) from pedido)\nselect @total;", "select @"), {
+      confirm: (make) => {
+        asked = make({ confirm: { level: "all", from: null }, readOnly: null } as never);
+        return Promise.resolve(true);
+      },
+    });
+
+    expect(asked).toMatchObject({ kind: "command", command: { sql: "select @total" }, queries: [{ sql: "select count(*) from pedido" }] });
+    expect(api.sent()).toEqual([{ sql: "select $1", params: [{ type: "number", value: "4" }], confirmed: true }]);
+  });
+
+  it("o erro da consulta no Ctrl+Enter vai à lista de erros, na linha da declaração, e o comando não roda", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, problem(422, "VARIABLE_QUERY_NOT_READ", { detail: "A consulta de uma variável tem de ser uma leitura: um DELETE não é." }));
+    await runner.runItem(cursorIn("let x = 1\nlet total = (with d as (delete from t returning 1) select count(*) from d)\nselect @total;", "select @"));
+
+    const errors = errorsOf(runner.getState());
+    expect(errors).toEqual([expect.objectContaining({ line: 2, message: "A consulta de uma variável tem de ser uma leitura: um DELETE não é." })]);
+    expect(api.sent()).toEqual([]);
+  });
+
+  it("a pergunta da proteção mostra no comando os valores que já se sabem, e deixa o @nome do que vem do banco (RN-VAR-018)", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(variableQuery, answer([["3"]]));
+    api.on(queries, page());
+    let asked: unknown = null;
+    await runner.runScriptDoc(range("let id = 7\nlet total = (select count(*) from pedido)\nselect @total, @id;"), {
+      confirm: (make) => {
+        asked = make({ confirm: { level: "all", from: null }, readOnly: null } as never);
+        return Promise.resolve(true);
+      },
+    });
+
+    expect(asked).toMatchObject({ kind: "script", commands: [{ number: 2 }, { number: 3, sql: "select @total, 7" }] });
+  });
+
+  it("Cancelar a consulta do Ctrl+Enter deixa o resultado de antes na tela, sem o valor", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page([["1"]], { hasMore: true }));
+    await runner.run({ sql: "select id from pedido", offset: 0, engine: 1 });
+    const before = runner.getState();
+    expect(before.status).toBe("rows");
+
+    const pending = deferred<Response>();
+    api.on(variableQuery, pending.promise);
+    api.on(`POST ${sessions}/s1/queries/cancel`, new Response(null, { status: 204 }));
+    const done = runner.runItem(cursorIn("let total = (select count(*) from pedido)\n", "let total"));
+    await vi.waitFor(() => expect(runner.getState().status).toBe("running"));
+    await runner.cancel();
+    pending.resolve(problem(422, "SQL_EXECUTION_FAILED", { detail: "canceling statement due to user request", outcome: "canceled" }));
+    await done;
+
+    const after = runner.getState();
+    if (after.status !== "rows") throw new Error(`esperava linhas, veio ${after.status}`);
+    expect(after.rows).toEqual(before.status === "rows" ? before.rows : null);
+    expect(runner.values.snapshot().values.has("total")).toBe(false);
+  });
+
+  it("Cancelar durante a consulta a cancela no banco: a declaração fica cancelada, e os itens seguintes não rodam", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    const pending = deferred<Response>();
+    api.on(variableQuery, pending.promise);
+    api.on(`POST ${sessions}/s1/queries/cancel`, new Response(null, { status: 204 }));
+    const done = runner.runScriptDoc(range("let total = (select pg_sleep(10))\nselect @total;"));
+
+    await vi.waitFor(() => expect(api.calls.some((call) => call.path.endsWith("queries/variable"))).toBe(true));
+    await runner.cancel();
+    pending.resolve(problem(422, "SQL_EXECUTION_FAILED", { detail: "canceling statement due to user request", outcome: "canceled" }));
+    await done;
+
+    expect(entriesOf(script(runner)).map((entry) => entry.status)).toEqual(["cancelled", "notRun"]);
+    expect(api.sent()).toEqual([]);
+  });
+});
+
+describe("O tipo de coluna (RN-VAR-004)", () => {
+  const objectNames = `GET ${sessions}/s1/object-names`;
+  const pedidoColumns = `GET ${sessions}/s1/schemas/public/tables/pedido/columns`;
+  const names = () => json({ schemas: [{ name: "public", isSystem: false, tables: ["pedido"], views: [] }], truncated: false });
+  const catalogColumns = () => json([{ name: "cliente_id", type: "integer", isNullable: false, isPrimaryKey: false, position: 1, defaultValue: null, generated: null }]);
+  const routes = (api: ReturnType<typeof setup>["api"]) => api.calls.map((call) => `${call.method} ${call.path}`);
+
+  it("Alt+X lê o tipo no catálogo, pela sessão da aba, antes de avaliar; o valor que cabe vai como parâmetro", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(objectNames, names());
+    api.on(pedidoColumns, catalogColumns());
+    api.on(queries, page());
+    await runner.runScriptDoc(range("let c: pedido.cliente_id = 5\nselect @c;"));
+
+    expect(routes(api)).toEqual([`POST ${sessions}`, objectNames, pedidoColumns, queries]);
+    expect(api.sent()).toEqual([{ sql: "select $1", params: [{ type: "number", value: "5" }] }]);
+  });
+
+  it("o valor que não cabe no tipo da coluna é erro da declaração, e nenhum comando vai", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(objectNames, names());
+    api.on(pedidoColumns, catalogColumns());
+    await runner.runScriptDoc(range("let c: pedido.cliente_id = 'a'\nselect @c;"));
+
+    expect(errorsOf(runner.getState()).map((error) => [error.line, error.message])).toEqual([[1, "c é number, mas recebeu 'a'."]]);
+    expect(api.sent()).toEqual([]);
+  });
+
+  it("a coluna que não existe é erro da declaração", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(objectNames, names());
+    api.on(pedidoColumns, catalogColumns());
+    await runner.runScriptDoc(range("let c: pedido.cliente_idx = 5\nselect @c;"));
+
+    expect(errorsOf(runner.getState()).map((error) => error.message)).toEqual(["A coluna pedido.cliente_idx não existe."]);
+    expect(api.sent()).toEqual([]);
+  });
+
+  it("Ctrl+Enter na declaração de coluna lê o catálogo e guarda o valor com o tipo da coluna", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(objectNames, names());
+    api.on(pedidoColumns, catalogColumns());
+    await runner.runItem(cursorIn("let c: pedido.cliente_id = 5\n", "let c"));
+
+    expect(runner.values.snapshot().values.get("c")).toMatchObject({ value: { kind: "number", value: 5 }, declared: { tag: "number" } });
+    expect(api.sent()).toEqual([]);
+  });
+
+  it("a sessão que não abre para ler o catálogo não vira erro de declaração: nada roda, e a área fica como estava", async () => {
+    const { api, runner, toast } = setup();
+    api.on(`POST ${sessions}`, problem(422, "DATABASE_CONNECTION_FAILED", { detail: "password authentication failed" }));
+    await runner.runScriptDoc(range("let c: pedido.cliente_id = 5\nselect @c;"));
+
+    expect(runner.getState()).toEqual({ status: "idle" });
+    expect(routes(api)).toEqual([`POST ${sessions}`]);
+    expect(toast.error).not.toHaveBeenCalledWith(variableRunCopy.refused.script(1));
+  });
+
+  it("o script sem tipo de coluna não lê o catálogo", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page());
+    await runner.runScriptDoc(range("let c: number = 5\nselect @c;"));
+    expect(routes(api)).toEqual([`POST ${sessions}`, queries]);
+  });
+});
+
+describe("O random.of (RN-VAR-010)", () => {
+  const objectNames = `GET ${sessions}/s1/object-names`;
+  const pedidoColumns = `GET ${sessions}/s1/schemas/public/tables/pedido/columns`;
+  const valuesRoute = `POST ${sessions}/s1/schemas/public/tables/pedido/values`;
+  const catalog = (api: ReturnType<typeof setup>["api"]) => {
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(objectNames, json({ schemas: [{ name: "public", isSystem: false, tables: ["pedido"], views: [] }], truncated: false }));
+    api.on(pedidoColumns, json([{ name: "cliente_id", type: "integer", isNullable: true, isPrimaryKey: false, position: 1, defaultValue: null, generated: null }]));
+  };
+  const counted = (total: number) => json({ kind: "number", values: [], hasMore: total > 0, total });
+  const at = (value: string) => json({ kind: "number", values: [{ value, description: null, truncated: false }], hasMore: true, total: null });
+  const valueBodies = (api: ReturnType<typeof setup>["api"]) => api.calls.filter((call) => `${call.method} ${call.path}` === valuesRoute).map((call) => call.body);
+
+  it("pede o total, sorteia a posição e lê o valor dela na sessão da aba; o valor vai como parâmetro, e a pergunta mostra a chamada com o número dela", async () => {
+    const { api, runner } = setup();
+    catalog(api);
+    api.on(valuesRoute, counted(1));
+    api.on(valuesRoute, at("7"));
+    api.on(queries, page());
+    let asked: unknown = null;
+    await runner.runScriptDoc(range("let c = random.of(pedido.cliente_id)\nselect @c;"), {
+      confirm: (make) => {
+        asked = make({ confirm: { level: "all", from: null }, readOnly: null } as never);
+        return Promise.resolve(true);
+      },
+    });
+
+    expect(asked).toMatchObject({ kind: "script", commands: [{ number: 1, sql: "random.of(pedido.cliente_id)", irreversible: null }, { number: 2, sql: "select @c" }] });
+    expect(valueBodies(api)).toEqual([{ column: "cliente_id", limit: 0, total: true }, { column: "cliente_id", offset: 0, limit: 1 }]);
+    expect(api.sent()).toEqual([{ sql: "select $1", params: [{ type: "number", value: "7" }], confirmed: true }]);
+    expect(runner.values.snapshot().values.get("c")).toMatchObject({ origin: "random", value: { kind: "number", value: 7 } });
+  });
+
+  it("a lista sorteia posições diferentes, uma leitura por posição", async () => {
+    const { api, runner } = setup();
+    catalog(api);
+    api.on(valuesRoute, counted(3));
+    for (const value of ["1", "2", "3"]) api.on(valuesRoute, at(value));
+    api.on(queries, page());
+    await runner.runScriptDoc(range("let ids = random.of(pedido.cliente_id, 3)\nselect * from pedido where id in (@ids);"));
+
+    const offsets = valueBodies(api).slice(1).map((body) => (body as { offset: number }).offset);
+    expect([...offsets].sort()).toEqual([0, 1, 2]);
+    expect(api.sent()[0].params).toEqual([{ type: "number", value: "1" }, { type: "number", value: "2" }, { type: "number", value: "3" }]);
+  });
+
+  it("a coluna com menos valores que os pedidos é erro da declaração, e nada mais roda", async () => {
+    const { api, runner } = setup();
+    catalog(api);
+    api.on(valuesRoute, counted(2));
+    const done = runner.runScriptDoc(range("let ids = random.of(pedido.cliente_id, 3)\nselect @ids;"));
+
+    await vi.waitFor(() => expect(script(runner).phase).toBe("paused"));
+    expect(entryAt(script(runner), 0)).toMatchObject({ kind: "declaration", status: "error", error: { message: "random.of(pedido.cliente_id, 3): a coluna só tem 2 valores." } });
+    runner.script.decide("stop");
+    await done;
+    expect(api.sent()).toEqual([]);
+  });
+
+  it("a recusa da rota dos valores é erro da declaração, como veio", async () => {
+    const { api, runner } = setup();
+    catalog(api);
+    api.on(valuesRoute, problem(422, "VALUES_INVALID", { detail: "A coluna cliente_id não é da tabela." }));
+    const done = runner.runScriptDoc(range("let c = random.of(pedido.cliente_id)\nselect @c;"));
+
+    await vi.waitFor(() => expect(script(runner).phase).toBe("paused"));
+    expect(entryAt(script(runner), 0)).toMatchObject({ kind: "declaration", status: "error", error: { message: "A coluna cliente_id não é da tabela." } });
+    runner.script.decide("stop");
+    await done;
+  });
+
+  it("Ctrl+Enter na declaração sorteia de novo e guarda o valor, sem tocar no resultado", async () => {
+    const { api, runner } = setup();
+    catalog(api);
+    api.on(valuesRoute, counted(1));
+    api.on(valuesRoute, at("42"));
+    await runner.runItem(cursorIn("let c = random.of(pedido.cliente_id)\n", "let c"));
+
+    expect(runner.values.snapshot().values.get("c")).toMatchObject({ value: { kind: "number", value: 42 } });
+    expect(api.sent()).toEqual([]);
+  });
+});
+
+describe("A pergunta dos valores que faltam (RN-VAR-021)", () => {
+  const seven = new Map([[0, { kind: "number" as const, value: 7 }]]);
+
+  it("o Alt+X pergunta a declaração sem valor antes de avaliar, e a resposta é o valor dela, com a origem pergunta", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page());
+    const asked: string[][] = [];
+    await runner.runScriptDoc(range("let x: number -- o cliente\nconst y = x * 2\nselect @y;"), {
+      ask: async (question) => {
+        asked.push(question.fields.map((field) => `${field.name} · ${field.typeText} · ${field.help}`));
+        return seven;
+      },
+    });
+
+    expect(asked).toEqual([["x · number · o cliente"]]);
+    expect(api.sent()).toEqual([{ sql: "select $1", params: [{ type: "number", value: "14" }] }]);
+    expect(runner.values.snapshot().values.get("x")).toMatchObject({ origin: "pergunta", value: { kind: "number", value: 7 } });
+  });
+
+  it("cancelada, nada roda e nada abre", async () => {
+    const { api, runner } = setup();
+    await runner.runScriptDoc(range("let x: number\nselect @x;"), { ask: async () => null });
+
+    expect(api.calls).toEqual([]);
+    expect(runner.getState()).toEqual({ status: "idle" });
+    expect(runner.values.snapshot().values.size).toBe(0);
+  });
+
+  it("no Ctrl+Enter, só quando a aba ainda não tem o valor; o Alt+X pergunta toda vez, com o valor da aba para preencher", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page());
+    api.on(queries, page());
+    api.on(queries, page());
+    const text = "let x: number\nselect @x;";
+    const tabs: unknown[] = [];
+    const ask: RunHooks["ask"] = async (question) => {
+      tabs.push(question.tab.get("x")?.value ?? null);
+      return seven;
+    };
+    await runner.runItem(cursorIn(text, "select"), { ask });
+    await runner.runItem(cursorIn(text, "select"), { ask });
+    await runner.runScriptDoc(range(text), { ask });
+
+    expect(tabs).toEqual([null, { kind: "number", value: 7 }]);
+    expect(api.sent().map((body) => body.params)).toEqual([[{ type: "number", value: "7" }], [{ type: "number", value: "7" }], [{ type: "number", value: "7" }]]);
+  });
+
+  it("a resposta que não cabe na anotação é o erro da declaração", async () => {
+    const { api, runner } = setup();
+    await runner.runScriptDoc(range("let x: number\nselect @x;"), { ask: async () => new Map([[0, { kind: "string" as const, value: "a" }]]) });
+
+    expect(api.sent()).toEqual([]);
+    expect(errorsOf(runner.getState())).toEqual([{ line: 1, column: 1, offset: 0, message: "x é number, mas recebeu 'a'." }]);
   });
 });

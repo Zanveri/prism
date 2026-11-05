@@ -175,6 +175,14 @@ export function ConfirmCommandDialog({ question, context, onConfirm, onCancel, o
       }
     >
       <div className="flex flex-col gap-4">
+        {question.kind === "command" && question.queries !== undefined ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-body">{copy.queries(question.queries.length)}</p>
+            {question.queries.map((query, index) => (
+              <CommandBlock key={index} command={query} />
+            ))}
+          </div>
+        ) : null}
         {question.kind === "command" || question.kind === "autoRefresh" ? <CommandBlock command={question.command} ids={ids} /> : null}
         {question.kind === "autoRefresh" ? (
           <p id={`${ids}-resumo`} className="text-body">
@@ -202,8 +210,8 @@ export function ConfirmCommandDialog({ question, context, onConfirm, onCancel, o
               {question.commands.length === question.total ? copy.script.all(question.total) : copy.script.some(question.commands.length, question.total)}
             </p>
             <ol className="flex max-h-80 flex-col gap-4 overflow-y-auto">
-              {question.commands.map((command) => (
-                <li key={command.number}>
+              {question.commands.map((command, index) => (
+                <li key={command.number ?? `q${index}`}>
                   <CommandBlock command={command} />
                 </li>
               ))}

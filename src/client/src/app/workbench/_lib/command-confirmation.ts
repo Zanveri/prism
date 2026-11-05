@@ -28,7 +28,8 @@ export type AskedCommand = { number: number | null; sql: string; filter?: string
  * das edições (só em "Todos os comandos", com quantas alterações vão) ou ligar a atualização automática (só em "Todos os comandos", uma vez).
  */
 export type CommandQuestion =
-  | { kind: "command"; command: AskedCommand }
+  /** `queries`: as consultas de variável que rodam antes do comando no Ctrl+Enter (RN-VAR-020), só em "Todos os comandos". */
+  | { kind: "command"; command: AskedCommand; queries?: AskedCommand[] }
   | { kind: "script"; commands: AskedCommand[]; total: number }
   | { kind: "save"; count: number }
   | { kind: "autoRefresh"; command: AskedCommand }
@@ -92,6 +93,17 @@ export function commandQuestion(protections: Protections, target: ConfirmedTarge
   const irreversible = irreversibleOfTarget(target);
   if (level === "irreversible" && (protections.readOnly !== null || irreversible === null)) return null;
   return { kind: "command", command: asked(target, null, irreversible) };
+}
+
+/**
+ * O Ctrl+Enter que roda consultas de variável (RN-VAR-020): uma pergunta só, com as consultas e o comando. As consultas são leituras, e só "Todos os comandos" as
+ * pergunta. Sem comando (o Ctrl+Enter numa declaração), a última consulta é o que a pergunta mostra.
+ */
+export function itemQuestion(protections: Protections, queries: readonly ConfirmedTarget[], target: ConfirmedTarget | null): CommandQuestion | null {
+  const shown = protections.confirm?.level === "all" ? queries.map((query) => asked(query, null, null)) : [];
+  if (target === null) return shown.length === 0 ? null : { kind: "command", command: shown[shown.length - 1], ...(shown.length > 1 ? { queries: shown.slice(0, -1) } : {}) };
+  const question = commandQuestion(protections, target);
+  return question?.kind === "command" && shown.length > 0 ? { ...question, queries: shown } : question;
 }
 
 /**

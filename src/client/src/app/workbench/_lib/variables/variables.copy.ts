@@ -26,6 +26,9 @@ export const limits = {
   decimalDigits: 31,
   numberCharacters: 100,
   tabValuesBytes: 128 * 1024 * 1024,
+  /** A consulta de uma variável (RN-VAR-013 e 034): as linhas e as colunas que a API lê antes de recusar. */
+  queryRows: 10_000,
+  queryColumns: 100,
 } as const;
 
 /** O número de `n` com milhares separados por ponto, como a especificação escreve os limites. */
@@ -142,11 +145,31 @@ export const phrase = {
   sqlUnbalanced: (name: string) => `O valor de ${name} (sql) não tem os parênteses equilibrados e engoliria o resto do comando.`,
   sqlVariableInExpression: (name: string) => `${name} é sql, e uma variável sql só entra no SQL (@${name}).`,
 
-  // As provisórias (RN-VAR-011, 010, 004 e 021): saem quando o passo de cada uma entrar.
-  provisionalQuery: () => "A variável de consulta chega numa próxima versão.",
-  provisionalSample: () => "`random.of` chega numa próxima versão.",
-  provisionalColumnType: () => "O tipo de coluna chega numa próxima versão.",
-  provisionalNoValue: (name: string) => `\`${name}\` não tem valor: escreva \`= valor\` (a pergunta dos valores chega numa próxima versão).`,
+  // O `random.of` (RN-VAR-010): `written` é a chamada como está no script, `random.of(cliente.id)` ou `random.of(cliente.id, 10)`.
+  sampleEmpty: (written: string) => `${written}: a coluna não tem valores.`,
+  sampleTooFew: (written: string, total: number) => `${written}: a coluna só tem ${total === 1 ? "1 valor" : `${group(total)} valores`}.`,
+  sampleCountInvalid: (shown: string) => `random.of: quantos tem de ser um inteiro de 1 a 100, e recebeu ${shown}.`,
+  sampleTruncated: (written: string) => `${written}: o valor sorteado passa de 10.000 caracteres e não vem inteiro do banco.`,
+  sampleChanged: (written: string) => `${written}: a coluna mudou durante o sorteio; execute de novo.`,
+  sampleNotEvaluatedHere: (name: string) => `O random.of de ${name} roda no banco, na vez dele no script.`,
+
+  // O tipo de uma coluna (RN-VAR-004).
+  columnMissing: (written: string) => `A coluna ${written} não existe.`,
+  columnIsList: (column: string) => `A coluna ${column} é uma lista do banco, e o tipo de coluna não guarda lista.`,
+  /** A coluna que a execução não leu antes de avaliar: o executor da aba lê todas as do que vai (RN-VAR-019). */
+  columnNotRead: (written: string) => `O tipo da coluna ${written} não foi lido do catálogo.`,
+
+  // A variável de consulta (RN-VAR-011 e 013).
+  queryTooManyRows: (name: string, rows: number, type: string) => `A consulta de ${name} devolveu ${group(rows)} linhas, e ${name} é ${type}: anote ${type}[] para uma lista.`,
+  queryBinaryColumn: (column: string) => `A coluna ${column} é binária, e variável não guarda binário.`,
+  queryNotJsNumber: (value: string, column: string) => `O valor ${value} da coluna ${column} não é um número do JavaScript.`,
+  queryDuplicateColumn: (name: string, column: string) => `A consulta de ${name} tem duas colunas chamadas ${column}: dê um apelido a uma delas.`,
+  queryForbiddenColumn: (column: string) => `A coluna ${column} não pode ser campo de uma variável: dê outro apelido a ela.`,
+  queryTooLarge: (name: string, reason: "rows" | "columns" | "bytes") =>
+    `A consulta de ${name} passou de ${reason === "rows" ? `${group(limits.queryRows)} linhas` : reason === "columns" ? `${limits.queryColumns} colunas` : "16 MiB"}.`,
+  queryNotEvaluatedHere: (name: string) => `A consulta de ${name} roda no banco, na vez dela no script.`,
+  /** O Worker foi pedido a avaliar uma declaração sem valor: quem pergunta os valores (RN-VAR-021) não a mandou. */
+  answerMissing: (name: string) => `${name} não tem valor: escreva o valor na pergunta.`,
 
   // Os operadores (RN-VAR-008).
   plusOperands: (shown: string) => `+ soma números ou junta textos; ${shown} não é nenhum dos dois.`,

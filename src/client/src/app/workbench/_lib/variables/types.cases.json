@@ -1,5 +1,5 @@
 {
-  "rule": "RN-VAR-004 a 007: os tipos (sem o de coluna), os números exatos, os textos e as datas. As datas valem na hora de São Paulo (UTC-3, sem horário de verão desde 2019), que o teste fixa.",
+  "rule": "RN-VAR-004 a 007: os tipos (o de coluna com o que o catálogo leu em `columns`), os números exatos, os textos e as datas. As datas valem na hora de São Paulo (UTC-3, sem horário de verão desde 2019), que o teste fixa.",
   "cases": [
     {
       "name": "inferência de number",
@@ -355,25 +355,140 @@
       }
     },
     {
-      "name": "o tipo de coluna ainda não existe",
+      "name": "o tipo de coluna que o catálogo não leu",
       "engine": null,
       "input": "let c: pedido.cliente_id = 5",
       "seed": null,
       "error": {
         "line": 1,
         "column": 8,
-        "message": "O tipo de coluna chega numa próxima versão."
+        "message": "O tipo da coluna pedido.cliente_id não foi lido do catálogo."
       }
     },
     {
-      "name": "o tipo de coluna com esquema ainda não existe",
+      "name": "o tipo de coluna: o valor que cabe",
       "engine": null,
-      "input": "let c: estoque.pedido.cliente_id = 5",
+      "input": "let c: pedido.cliente_id = 5",
       "seed": null,
+      "columns": [
+        {
+          "text": "pedido.cliente_id",
+          "type": {
+            "t": "number"
+          }
+        }
+      ],
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "o tipo de coluna que aceita nulo",
+      "engine": null,
+      "input": "let c: pedido.cliente_id = null",
+      "seed": null,
+      "columns": [
+        {
+          "text": "pedido.cliente_id",
+          "type": {
+            "t": "nullable",
+            "o": {
+              "t": "number"
+            }
+          }
+        }
+      ],
+      "value": null,
+      "type": "number | null"
+    },
+    {
+      "name": "o tipo de coluna que não aceita nulo recusa o null",
+      "engine": null,
+      "input": "let c: pedido.cliente_id = null",
+      "seed": null,
+      "columns": [
+        {
+          "text": "pedido.cliente_id",
+          "type": {
+            "t": "number"
+          }
+        }
+      ],
+      "error": {
+        "line": 1,
+        "column": 28,
+        "message": "c é number, mas recebeu null."
+      }
+    },
+    {
+      "name": "o tipo de coluna com esquema: o valor que não cabe",
+      "engine": null,
+      "input": "let c: estoque.pedido.cliente_id = 'abc'",
+      "seed": null,
+      "columns": [
+        {
+          "text": "estoque.pedido.cliente_id",
+          "type": {
+            "t": "number"
+          }
+        }
+      ],
+      "error": {
+        "line": 1,
+        "column": 36,
+        "message": "c é number, mas recebeu 'abc'."
+      }
+    },
+    {
+      "name": "a lista do tipo de coluna",
+      "engine": null,
+      "input": "let ids: pedido.cliente_id[] = [1, 2]",
+      "seed": null,
+      "columns": [
+        {
+          "text": "pedido.cliente_id",
+          "type": {
+            "t": "number"
+          }
+        }
+      ],
+      "value": [
+        1,
+        2
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "o tipo de coluna de dia",
+      "engine": null,
+      "input": "let d: pedido.emitido_em = date.of(2026, 10, 20)",
+      "seed": null,
+      "columns": [
+        {
+          "text": "pedido.emitido_em",
+          "type": {
+            "t": "date",
+            "p": "day"
+          }
+        }
+      ],
+      "value": "2026-10-20",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "a coluna que não existe",
+      "engine": null,
+      "input": "let c: pedido.cliente_idx = 5",
+      "seed": null,
+      "columns": [
+        {
+          "text": "pedido.cliente_idx",
+          "error": "A coluna pedido.cliente_idx não existe."
+        }
+      ],
       "error": {
         "line": 1,
         "column": 8,
-        "message": "O tipo de coluna chega numa próxima versão."
+        "message": "A coluna pedido.cliente_idx não existe."
       }
     },
     {
@@ -478,14 +593,14 @@
       }
     },
     {
-      "name": "let sem valor, a pergunta chega depois",
+      "name": "let sem valor e sem a resposta da pergunta (RN-VAR-021)",
       "engine": null,
       "input": "let x: number",
       "seed": null,
       "error": {
         "line": 1,
         "column": 5,
-        "message": "`x` não tem valor: escreva `= valor` (a pergunta dos valores chega numa próxima versão)."
+        "message": "x não tem valor: escreva o valor na pergunta."
       }
     },
     {

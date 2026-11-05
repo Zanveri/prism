@@ -2,6 +2,7 @@ import type { Engine } from "@/components/ui/engine-tag";
 
 import type { DateFields, DatePrecision } from "./dates";
 import { dateValue, listValue, nullValue, numberValue, objectValue, sqlValue, stringValue, booleanValue, type Type, type Value } from "./values";
+import type { ColumnTypes } from "./column-types";
 import type { EvaluatedAssignment, Origin, StoredValue } from "./run";
 
 /*
@@ -170,7 +171,32 @@ export type EvaluateRequest = {
   counter: number;
   seed: [number, number, number, number];
   now: number;
+  /** O tipo de cada coluna que o script cita (RN-VAR-004), pelo texto dela: o tipo, ou a frase do erro. Sem ele, nenhuma foi lida. */
+  columns?: WireColumn[];
+  /**
+   * Os valores que vieram de fora do script (RN-VAR-021 e 027): a resposta da pergunta (`pergunta`) e o campo do diálogo (`diálogo`). O item com resposta não se
+   * avalia: o valor é dele, conferido contra a anotação como a avaliação confere.
+   */
+  answers?: WireAnswer[];
 };
+
+export type WireAnswer = { index: number; value: WireValue; origin: "pergunta" | "diálogo" };
+
+export type WireColumn = { text: string; type: WireType } | { text: string; error: string };
+
+export const columnsToWire = (columns: ColumnTypes): WireColumn[] => [...columns].map(([text, read]) => ("error" in read ? { text, error: read.error } : { text, type: typeToWire(read.type) }));
+
+/** Reconstrói os tipos de coluna de um dado de fora. Lança `TypeError` na forma errada. */
+export function columnsFromWire(data: unknown): ColumnTypes {
+  if (!Array.isArray(data)) throw new TypeError("Colunas malformadas.");
+  return new Map(
+    data.map((entry: unknown): [string, { type: Type } | { error: string }] => {
+      if (!isRecord(entry) || typeof entry.text !== "string") throw new TypeError("Coluna malformada.");
+      if (typeof entry.error === "string") return [entry.text, { error: entry.error }];
+      return [entry.text, { type: typeFromWire(entry.type) }];
+    }),
+  );
+}
 
 export type WireDiagnostic = { message: string; offset: number; line: number; column: number; itemIndex: number };
 

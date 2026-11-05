@@ -100,6 +100,31 @@ export const queryResultSchema = responseSchema.transform((response, context): Q
   return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null, resultId: response.resultID ?? null, readOnly, filterApplied: response.filterApplied ?? null, read: response.read ?? null, ...withTransaction(response) };
 });
 
+/**
+ * RN-VAR-034: a resposta da consulta de uma variável. A linha com tamanho diferente do número de colunas é recusada, como na página: o valor leria a célula de uma
+ * coluna na outra. Aqui o `kind` que a tela não conhece não vira `text` em silêncio: o binário tem de chegar como binário, para a recusa da RN-VAR-011.
+ */
+export const variableQueryResultSchema = z
+  .object({
+    columns: z.array(z.object({ name: z.string(), type: z.string(), kind: z.enum(["text", "number", "datetime", "boolean", "binary"]) })),
+    rows: z.array(z.array(z.string().nullable())),
+    elapsedMs: z.number(),
+  })
+  .refine((result) => result.rows.every((row) => row.length === result.columns.length), "Há linha com tamanho diferente do número de colunas.");
+
+/** RN-VAR-035: os valores diferentes de uma coluna (a escolha pela chave estrangeira, RN-VAR-031, e o `random.of`, RN-VAR-010). */
+export const columnValuesSchema = z.object({
+  kind: z.enum(["text", "number", "datetime", "boolean", "binary"]).catch("text"),
+  values: z.array(z.object({ value: z.string(), description: z.string().nullable(), truncated: z.boolean() })),
+  hasMore: z.boolean(),
+  total: z.number().int().nullable(),
+});
+
+export type ColumnValues = z.infer<typeof columnValuesSchema>;
+
+/** RN-VAR-035: as posições dos valores pedidos que não existem na coluna, na ordem. */
+export const columnValuesCheckSchema = z.object({ missing: z.array(z.number().int()) });
+
 /** "Carregar mais" só devolve página de linhas. */
 export const queryPageSchema = queryResultSchema.transform((result, context): QueryPage => {
   if (result.kind === "rows") return result;

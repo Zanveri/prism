@@ -46,6 +46,10 @@ export const prismEndpoints = {
   userDatabaseSessionQueriesNext: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/next`,
   userDatabaseSessionQueriesCount: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/count`,
   userDatabaseSessionQueriesCancel: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/cancel`,
+  // RN-VAR-034 e 035: a consulta de uma variável, e os valores de uma coluna (a escolha pela chave estrangeira e o `random.of`).
+  userDatabaseSessionQueriesVariable: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/variable`,
+  userDatabaseSessionColumnValues: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/values`,
+  userDatabaseSessionColumnValuesCheck: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/values/check`,
   // RN-TX-002: o Commit e o Rollback da transação manual da aba.
   userDatabaseSessionTransactionCommit: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/transaction/commit`,
   userDatabaseSessionTransactionRollback: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/transaction/rollback`,
