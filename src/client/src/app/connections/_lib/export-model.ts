@@ -28,15 +28,18 @@ export function initialMarks(tree: CheckTree, origin: ExportOrigin): { marked: S
   return { marked: new Set(leavesOf(tree, origin.id).map((leaf) => leaf.key)), scrollTo: tree.byKey.has(origin.id) ? origin.id : null };
 }
 
-type Credentials = Pick<Connection, "userName" | "hasPassword">;
+type Credentials = Pick<Connection, "userName" | "hasPassword"> & Partial<Pick<Connection, "ssh" | "proxy">>;
+
+/** RN-REDE-004: a conexão tem um segredo gravado para levar: a senha do banco, a do túnel SSH (ou a frase secreta da chave) ou a do proxy. */
+const hasSavedSecret = (connection: Credentials) => connection.hasPassword || connection.ssh?.hasSecret === true || connection.proxy?.hasPassword === true;
 
 /**
  * As escolhas que a conexão oferece (RN-TRANSF-003): só o que ela tem gravado. Sem usuário (a conexão que a importação trouxe sem ele, RN-TRANSF-015), só "Sem
- * usuário e senha"; com usuário e sem senha, não há "Usuário e senha".
+ * usuário e senha"; com usuário e sem nenhum segredo gravado (a senha do banco, a do túnel, a do proxy, RN-REDE-004), não há "Usuário e senha".
  */
 export function credentialsOffered(connection: Credentials): CredentialsChoice[] {
   if (connection.userName === "") return ["none"];
-  return connection.hasPassword ? ["none", "user", "userAndPassword"] : ["none", "user"];
+  return hasSavedSecret(connection) ? ["none", "user", "userAndPassword"] : ["none", "user"];
 }
 
 /** A escolha mais perto da pedida que a conexão tem: "Usuário e senha" vira "Só o usuário" na conexão sem senha, e "Sem usuário e senha" na sem usuário. */
@@ -67,7 +70,7 @@ export type ExportSelection = {
   connections: Connection[];
   /** As pastas vazias marcadas. */
   folderIDs: string[];
-  /** As conexões marcadas que levam a senha gravada ("Usuário e senha" numa conexão com senha). */
+  /** As conexões marcadas que levam um segredo gravado ("Usuário e senha" numa conexão com a senha do banco, a do túnel ou a do proxy). */
   withPassword: Connection[];
   /** As pastas que vão no arquivo, as do caminho inclusive. */
   foldersInFile: number;
