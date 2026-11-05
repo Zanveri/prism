@@ -22,8 +22,8 @@ export const buildUiCopyEs: BuildUiCopy = {
   sidebar: {
     actionsOf: (label: string) => `Acciones de ${label}`,
     schemaActions: (schema: string) => `Acciones del esquema ${schema}`,
-    cancelDropSchema: "Cancelar drop del esquema",
-    dropSchema: "Dropear esquema",
+    cancelDropSchema: "Cancelar el DROP del esquema",
+    dropSchema: "Hacer DROP del esquema",
     removeSchema: "Quitar esquema del modelo",
     deleteSchema: "Eliminar esquema",
     deleteTables: (count: number) => `Eliminar (${count} tablas)`,
