@@ -41,13 +41,41 @@ export type Node =
 /** A coluna de `random.of` e do tipo de coluna: `tabela.coluna` ou `esquema.tabela.coluna` (RN-VAR-004). */
 export type ColumnRef = Span & { schema: string | null; table: string; column: string; text: string };
 
+/**
+ * Um tipo escrito (RN-VAR-004): o de uma anotação, o de um campo de interface e o lado direito de um `type Nome =`. `base` diz o que ele é: um tipo da linguagem, o
+ * de uma coluna (`column`), o nome de uma interface ou de um `type` (`named`, com o nome em `named`) ou o objeto escrito na hora (`object`, `{ cidade: string }`,
+ * com os campos em `members`). O nome se resolve contra os tipos do script (`named-types.ts`), e não quando o texto é lido: pode vir antes da declaração dele.
+ */
 export type TypeAnnotation = Span & {
-  base: "number" | "string" | "boolean" | "Date" | "sql" | "column";
+  base: "number" | "string" | "boolean" | "Date" | "sql" | "column" | "named" | "object";
   column: ColumnRef | null;
+  /** O nome do tipo, na base `named` (`Cliente`), e onde ele está. */
+  named?: { name: string; start: number };
+  /** Os campos, na base `object`. */
+  members?: readonly TypeMember[];
   list: boolean;
   nullable: boolean;
   /** O tipo como a pessoa o escreveu, para as frases. */
   text: string;
+};
+
+/** Um campo de interface ou do objeto escrito na hora: `uf?: string` é opcional (pode faltar ou ser `null`, e falta como `null`). */
+export type TypeMember = { name: string; nameStart: number; optional: boolean; type: TypeAnnotation };
+
+/**
+ * Um tipo com nome (RN-VAR-002): `interface Nome extends A, B { campo: tipo … }` (`interface`) ou `type Nome = tipo` (`alias`). Não vai ao banco, não tem valor e
+ * não entra nas Estatísticas: é só a forma que as anotações citam pelo nome, num espaço de nomes à parte do das variáveis, como no TypeScript.
+ */
+export type TypeDeclaration = Span & {
+  kind: "interface" | "alias";
+  name: string;
+  nameStart: number;
+  /** Os nomes do `extends`, na interface. */
+  extends: readonly { name: string; start: number }[];
+  /** Os campos da interface (os dela, sem os herdados). */
+  members: readonly TypeMember[];
+  /** O tipo do `type Nome =`. */
+  type: TypeAnnotation | null;
 };
 
 export type Declaration = Span & {

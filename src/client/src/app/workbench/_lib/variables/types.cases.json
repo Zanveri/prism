@@ -311,15 +311,14 @@
       "type": "boolean"
     },
     {
-      "name": "o objeto não se anota",
+      "name": "o objeto escrito no tipo se anota (RN-VAR-004 com as interfaces)",
       "engine": null,
       "input": "let o: { a: number } = { a: 1 }",
       "seed": null,
-      "error": {
-        "line": 1,
-        "column": 8,
-        "message": "Objetos não se anotam: o tipo vem da consulta."
-      }
+      "value": {
+        "a": 1
+      },
+      "type": "{ a: number }"
     },
     {
       "name": "lista de lista anotada",
@@ -340,7 +339,7 @@
       "error": {
         "line": 1,
         "column": 8,
-        "message": "O tipo Array não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna)."
+        "message": "Array<…> não existe: os tipos não levam parâmetros, e a lista se anota number[]."
       }
     },
     {
@@ -351,7 +350,7 @@
       "error": {
         "line": 1,
         "column": 8,
-        "message": "O tipo number | string não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna)."
+        "message": "O tipo number | string não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null, o de uma coluna (tabela.coluna) e os do script (interface e type)."
       }
     },
     {

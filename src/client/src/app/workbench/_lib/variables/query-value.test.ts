@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { queryValue, type VariableQueryColumn, type VariableQueryResult } from "./query-value";
+import { conform } from "./named-types";
 import { annotationType } from "./run";
-import { displayValue, type Value } from "./values";
+import { displayValue, nullable, numberType, stringType, type Type, type Value } from "./values";
 
 // A forma do valor de uma variável de consulta (RN-VAR-011): o que a rota da consulta devolveu vira um valor da linguagem.
 const number = (name: string, type = "int4"): VariableQueryColumn => ({ name, type, kind: "number" });
@@ -94,5 +95,30 @@ describe("os nomes dos campos", () => {
 
   it("a coluna com um nome vedado é erro", () => {
     expect(message(() => queryValue("p", result([number("id"), text("__proto__")], [["1", "x"]]), null, 1))).toBe("A coluna __proto__ não pode ser campo de uma variável: dê outro apelido a ela.");
+  });
+});
+
+describe("a linha na forma de uma interface (RN-VAR-004 e 011)", () => {
+  const cliente: Type = { tag: "object", name: "Cliente", fields: new Map([["id", numberType], ["nome", stringType], ["uf", nullable(stringType)]]), optional: new Set(["uf"]) };
+  const shaped = (rows: (string | null)[][], columns = [number("id"), text("nome")], engine: 1 | 2 = 1, type: Type = cliente) =>
+    conform(queryValue("alvo", result(columns, rows), type, engine), type, "alvo", { literal: null, query: true, at: 0 });
+
+  it("a linha vira o objeto do tipo: a coluna a mais fica fora, o opcional que falta é null", () => {
+    expect(shown(shaped([["7", "Ana"]], [number("id"), text("nome"), text("extra")]))).toBe("{ id: 7, nome: 'Ana', uf: null }");
+  });
+
+  it("as colunas em maiúsculas do Db2 casam com os campos, que ficam com o nome do tipo", () => {
+    expect(shown(shaped([["7", "Ana"]], [number("ID"), text("NOME")], 2))).toBe("{ id: 7, nome: 'Ana', uf: null }");
+  });
+
+  it("a coluna que falta é erro; a célula nula num campo que não aceita null também", () => {
+    expect(message(() => shaped([["7"]], [number("id")]))).toBe("alvo não tem o campo nome, que Cliente pede.");
+    expect(message(() => shaped([["7", null]]))).toBe("A coluna nome de alvo veio nula, e Cliente.nome é string.");
+  });
+
+  it("uma coluna só ainda é a linha, e Cliente[] é a lista das linhas", () => {
+    const id: Type = { tag: "object", name: "Id", fields: new Map([["id", numberType]]) };
+    expect(shown(shaped([["7"]], [number("id")], 1, id))).toBe("{ id: 7 }");
+    expect(shown(shaped([["1", "Ana"], ["2", "Bia"]], undefined, 1, { tag: "list", item: cliente }))).toBe("[{ id: 1, nome: 'Ana', uf: null }, { id: 2, nome: 'Bia', uf: null }]");
   });
 });

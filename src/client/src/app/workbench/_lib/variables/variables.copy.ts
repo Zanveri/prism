@@ -100,9 +100,10 @@ export const phrase = {
   mixedNullish: () => "?? não se mistura com && nem com || sem parênteses.",
   unaryBeforePower: () => "Use parênteses: (-x) ** 2 ou -(x ** 2).",
   looseEquality: () => "Use === ou !==: o == do JavaScript converte os tipos antes de comparar.",
-  unknownType: (type: string) => `O tipo ${type} não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna).`,
+  unknownType: (type: string) =>
+    `O tipo ${type} não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null, o de uma coluna (tabela.coluna) e os do script (interface e type).`,
+  noGenerics: (type: string) => `${type}<…> não existe: os tipos não levam parâmetros, e a lista se anota number[].`,
   listOfList: () => "Lista de lista não existe aqui: anote uma lista de valores simples.",
-  objectNotAnnotated: () => "Objetos não se anotam: o tipo vem da consulta.",
   memberNotInType: (member: string, type: string) => `${member} não existe em ${type}.`,
   memberForbidden: (member: string) => `${member} não pode ser lido.`,
   keyForbidden: (key: string) => `${key} não pode ser chave de objeto.`,
@@ -144,6 +145,25 @@ export const phrase = {
   sqlHasNul: () => "Um valor sql não pode ter o caractere U+0000.",
   sqlUnbalanced: (name: string) => `O valor de ${name} (sql) não tem os parênteses equilibrados e engoliria o resto do comando.`,
   sqlVariableInExpression: (name: string) => `${name} é sql, e uma variável sql só entra no SQL (@${name}).`,
+
+  // As interfaces e os `type` (RN-VAR-002 a 004): a forma conferida contra os valores, com a semântica do TypeScript.
+  typeNameReserved: (name: string) => `${name} não pode ser nome de tipo: escolha outro.`,
+  expectedTypeName: () => "Esperava o nome do tipo.",
+  expectedOpenBrace: (name: string) => `Esperava { depois de ${name}: interface ${name} { campo: tipo }.`,
+  expectedColonInMember: (name: string) => `Esperava : depois do campo ${name}, como ${name}: string.`,
+  duplicateMember: (name: string) => `O campo ${name} aparece duas vezes.`,
+  sqlNotInType: () => "O tipo sql não entra numa interface nem num type: declare const nome: sql.",
+  expectedEndOfType: (name: string, found: string) => `Esperava ; ou o fim da linha depois do tipo ${name}, e veio ${found}.`,
+  typeAlreadyDeclared: (name: string, line: number) => `O tipo ${name} já foi declarado na linha ${line}.`,
+  typeCycle: (path: readonly string[]) => `O tipo ${path[0]} se refere a si mesmo: ${path.join(" → ")}.`,
+  typeTooDeep: (name: string) => `O tipo ${name} passou de ${limits.depth} níveis de tipos com nome.`,
+  extendsNotObject: (base: string, type: string) => `Uma interface só estende uma interface ou um type de objeto, e ${base} é ${type}.`,
+  extendsConflict: (name: string, base: string, field: string) => `${name} não pode estender ${base}: o campo ${field} tem outro tipo em ${base}.`,
+  typeHasError: (name: string, line: number) => `O tipo ${name} tem um erro (linha ${line}).`,
+  excessField: (field: string, type: string) => `O campo ${field} não existe em ${type}.`,
+  missingFields: (name: string, fields: readonly string[], type: string) =>
+    fields.length === 1 ? `${name} não tem o campo ${fields[0]}, que ${type} pede.` : `${name} não tem os campos ${fields.slice(0, -1).join(", ")} e ${fields[fields.length - 1]}, que ${type} pede.`,
+  queryNullColumn: (column: string, name: string, type: string, field: string, fieldType: string) => `A coluna ${column} de ${name} veio nula, e ${type}.${field} é ${fieldType}.`,
 
   // O `random.of` (RN-VAR-010): `written` é a chamada como está no script, `random.of(cliente.id)` ou `random.of(cliente.id, 10)`.
   sampleEmpty: (written: string) => `${written}: a coluna não tem valores.`,

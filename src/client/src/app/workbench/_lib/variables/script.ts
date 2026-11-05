@@ -1,10 +1,11 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
 import type { ScriptItem } from "../sql-statements";
-import { childrenOf, type Declaration, type Node, type ParsedItem, type TypeAnnotation } from "./ast";
+import { childrenOf, type Declaration, type Node, type ParsedItem, type TypeAnnotation, type TypeDeclaration } from "./ast";
 import { diagnosticOf, makeLocator, VariableError, type Diagnostic } from "./errors";
 import { findAtReferences, type AtScan } from "./at-names";
 import { scanMarkers } from "./markers";
+import { annotationProblem, typeDiagnostics, type TypeInfo } from "./named-types";
 import { parseItem } from "./parser";
 import { splitScript } from "./script-items";
 import { limits, phrase } from "./variables.copy";
@@ -18,8 +19,10 @@ import { limits, phrase } from "./variables.copy";
 export type ModelItem = ScriptItem & {
   index: number;
   line: number;
-  /** A declaração ou a reatribuição lida; nulo no comando e no item que não leu. */
+  /** A declaração ou a reatribuição lida; nulo no comando, no tipo com nome e no item que não leu. */
   parsed: ParsedItem | null;
+  /** A `interface` ou o `type Nome =` lido (o item `type`); nulo nos outros. Não tem valor: nada dele se avalia nem vai ao banco. */
+  typeDeclaration: TypeDeclaration | null;
   /** Por que não leu. */
   error: VariableError | null;
   /** Os `@nome` do comando (as posições são do texto do item). */
@@ -35,6 +38,8 @@ export type ScriptModel = {
   /** A primeira declaração de cada nome. */
   declarations: ReadonlyMap<string, DeclarationInfo>;
   declaredNames: ReadonlySet<string>;
+  /** A primeira `interface` ou `type` de cada nome de tipo, um espaço de nomes à parte do das variáveis (RN-VAR-002); os tipos se resolvem em `named-types.ts`. */
+  types: ReadonlyMap<string, TypeInfo>;
 };
 
 /** Um erro do script com o item a que ele pertence (RN-VAR-020: as conferências valem só para o comando e para as atribuições de que ele depende). */
@@ -47,13 +52,19 @@ export function readScript(source: string, engine?: Engine, options: ReadOptions
   const locate = makeLocator(source);
   const raw = splitScript(source, engine, options);
 
-  const items: ModelItem[] = raw.map((item, index) => ({ ...item, index, line: locate(item.start).line, parsed: null, error: null, atScan: null }));
+  const items: ModelItem[] = raw.map((item, index) => ({ ...item, index, line: locate(item.start).line, parsed: null, typeDeclaration: null, error: null, atScan: null }));
 
   const declarations = new Map<string, DeclarationInfo>();
+  const types = new Map<string, TypeInfo>();
   for (const item of items) {
     if (item.kind === "statement") continue;
     try {
       const { item: parsed } = parseItem(source, item.start, engine);
+      if (parsed.kind !== "declaration" && parsed.kind !== "reassignment") {
+        item.typeDeclaration = parsed;
+        if (!types.has(parsed.name)) types.set(parsed.name, { name: parsed.name, itemIndex: item.index, line: locate(parsed.nameStart).line, declaration: parsed });
+        continue;
+      }
       item.parsed = parsed;
       if (parsed.kind === "declaration" && !declarations.has(parsed.name))
         declarations.set(parsed.name, { name: parsed.name, itemIndex: item.index, line: locate(parsed.nameStart).line, mutable: parsed.mutable, annotation: parsed.annotation });
@@ -66,7 +77,7 @@ export function readScript(source: string, engine?: Engine, options: ReadOptions
   const declaredNames = new Set(declarations.keys());
   for (const item of items) if (item.kind === "statement") item.atScan = findAtReferences(item.text, engine, declaredNames);
 
-  return { source, engine, items, declarations, declaredNames };
+  return { source, engine, items, declarations, declaredNames, types };
 }
 
 /** Os nomes de variáveis que a expressão usa, com a posição de cada uso. */
@@ -93,6 +104,9 @@ export function staticDiagnostics(model: ScriptModel): ItemDiagnostic[] {
   const found: ItemDiagnostic[] = [];
   const report = (item: ModelItem, message: string, offset: number) => found.push({ message, offset, ...locate(offset), itemIndex: item.index });
 
+  // Os tipos com nome (RN-VAR-002): os erros de cada um são do item dele, e a declaração que usa um tipo com erro também tem o dela (`checkAnnotation`).
+  for (const problem of typeDiagnostics(model)) found.push({ message: problem.message, offset: problem.offset, ...locate(problem.offset), itemIndex: problem.itemIndex });
+
   // Os nomes cujo valor vem de uma consulta ou do `random.of`, direta ou indiretamente (RN-VAR-004): o `sql` não pode depender deles.
   const fromDatabase = new Set<string>();
   let assignments = 0;
@@ -101,6 +115,7 @@ export function staticDiagnostics(model: ScriptModel): ItemDiagnostic[] {
       found.push({ ...diagnosticOf(source, item.error), itemIndex: item.index });
       continue;
     }
+    if (item.typeDeclaration !== null) continue;
 
     const parsed = item.parsed;
     if (parsed !== null) {
@@ -110,7 +125,7 @@ export function staticDiagnostics(model: ScriptModel): ItemDiagnostic[] {
       if (declaration !== null) {
         const first = declarations.get(declaration.name);
         if (first !== undefined && first.itemIndex !== item.index) report(item, phrase.alreadyDeclared(declaration.name, first.line), declaration.nameStart);
-        checkAnnotation(declaration, (message, offset) => report(item, message, offset));
+        checkAnnotation(model, declaration, (message, offset) => report(item, message, offset));
         if (declaration.annotation?.base === "sql" && declaration.value !== null && dependsOnDatabase(declaration.value, fromDatabase)) report(item, phrase.sqlFromQuery(), declaration.value.start);
         if (declaration.value === null) {
           if (!declaration.mutable) report(item, phrase.constNeedsValue(declaration.name), declaration.nameStart);
@@ -154,10 +169,12 @@ function dependsOnDatabase(node: Node, fromDatabase: ReadonlySet<string>): boole
   return childrenOf(node).some((child) => dependsOnDatabase(child, fromDatabase));
 }
 
-/** A anotação que não vale (RN-VAR-004). O tipo de coluna se confere na execução, pelo catálogo. */
-function checkAnnotation(declaration: Declaration, report: (message: string, offset: number) => void): void {
+/** A anotação que não vale (RN-VAR-004): o `sql` fora do lugar, e o tipo com nome que não existe ou tem erro. O tipo de coluna se confere na execução, pelo catálogo. */
+function checkAnnotation(model: ScriptModel, declaration: Declaration, report: (message: string, offset: number) => void): void {
   const annotation = declaration.annotation;
   if (annotation === null) return;
+  const problem = annotationProblem(model, annotation);
+  if (problem !== null) report(problem.message, problem.offset);
   if (annotation.base === "sql") {
     if (declaration.mutable) report(phrase.sqlMustBeConst(declaration.name), declaration.nameStart);
     if (annotation.list || annotation.nullable) report(phrase.sqlNoListOrNull(), annotation.start);

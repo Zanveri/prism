@@ -251,26 +251,29 @@ const toStatement = ({ text, start, end }: Scanned): SqlStatement => ({ text, st
 
 /**
  * Quem sabe ler as declarações da linguagem das variáveis (RN-VAR-001): o leitor do SQL acha onde um item pode começar, e esta função diz se ali começa uma
- * declaração (`let` e `const`) ou uma reatribuição (`nome = valor`) e onde ela acaba (depois do `;` e dos comentários que sobram na linha). Nulo quando o texto
- * ali é SQL. `reassignment` diz se uma reatribuição vale ali (só nas posições de item). Vem de fora (`variables/script-items.ts`) para o leitor do SQL não
- * depender da linguagem, que depende dele.
+ * declaração (`let` e `const`), uma reatribuição (`nome = valor`) ou um tipo com nome (`interface Nome { … }` e `type Nome = …`, `type`) e onde ela acaba
+ * (depois do `;` e dos comentários que sobram na linha). Nulo quando o texto ali é SQL. `reassignment` diz se uma reatribuição vale ali (só nas posições de item;
+ * o `type Nome =` também só vale nelas). Vem de fora (`variables/script-items.ts`) para o leitor do SQL não depender da linguagem, que depende dele.
  */
-export type DeclarationReader = (sql: string, start: number, reassignment: boolean) => { kind: "declaration" | "reassignment"; end: number } | null;
+export type DeclarationReader = (sql: string, start: number, reassignment: boolean) => { kind: "declaration" | "reassignment" | "type"; end: number } | null;
 
 /**
  * Como achar os comandos do texto. `blankLines` é a preferência "A linha em branco separa os comandos" (RN-SQL-018), que vale só para o
  * comando do cursor; sem ela, só o `;` separa, como antes. `declarations` liga as declarações de variável (RN-VAR-001): cada uma é um item, a linha que começa
- * por `let` ou `const` termina o comando de cima, e o `//` no começo de uma linha é comentário (nos lugares da RN-VAR-001).
+ * por `let`, `const` ou `interface` termina o comando de cima, e o `//` no começo de uma linha é comentário (nos lugares da RN-VAR-001).
  */
 export type StatementOptions = { blankLines?: boolean; declarations?: DeclarationReader };
 
-/** Um item do script (RN-VAR-019): um comando, uma declaração ou uma reatribuição. `text` é `sql.slice(start, end)`; o da declaração inclui o `;` dela. */
-export type ScriptItem = SqlStatement & { kind: "statement" | "declaration" | "reassignment" };
+/**
+ * Um item do script (RN-VAR-019): um comando, uma declaração, uma reatribuição ou um tipo com nome (`type`: a `interface` e o `type Nome =`, que não vão ao banco).
+ * `text` é `sql.slice(start, end)`; o da declaração inclui o `;` dela.
+ */
+export type ScriptItem = SqlStatement & { kind: "statement" | "declaration" | "reassignment" | "type" };
 
 const noSemicolons: ReadonlySet<number> = new Set();
 
-/** Onde começa e acaba uma declaração ou uma reatribuição no texto, com o `;` e os comentários da mesma linha, e os `//` de cima. */
-type Region = { start: number; end: number; kind: "declaration" | "reassignment" };
+/** Onde começa e acaba uma declaração, uma reatribuição ou um tipo com nome no texto, com o `;` e os comentários da mesma linha, e os `//` de cima. */
+type Region = { start: number; end: number; kind: "declaration" | "reassignment" | "type" };
 
 /**
  * O texto como o leitor o vê, nas opções dadas: sem declarações, o próprio texto e as linhas em branco de `blankLineCuts`, como sempre. Com elas, o texto com cada
@@ -763,11 +766,11 @@ function itemCuts(sql: string, dialect: Dialect, reader: DeclarationReader | und
 
     if (reader !== undefined && token.word && !body.open()) {
       const lexeme = sql.slice(token.start, token.end);
-      const keyword = lexeme === "let" || lexeme === "const";
-      // A linha que começa por `let` ou `const` termina o comando de cima; a reatribuição só começa um item no começo, depois do `;`, depois de outra declaração e
-      // depois da linha em branco que separa, com o comando de cima fechado (RN-SQL-018).
+      const keyword = lexeme === "let" || lexeme === "const" || lexeme === "interface";
+      // A linha que começa por `let`, `const` ou `interface` termina o comando de cima; a reatribuição e o `type Nome =` só começam um item no começo, depois do `;`,
+      // depois de outra declaração e depois da linha em branco que separa, com o comando de cima fechado (RN-SQL-018).
       let reassignment = boundary;
-      if (!reassignment && !keyword && blankLines && gap && command.started() && !command.open() && followedByEquals(sql, token.end))
+      if (!reassignment && !keyword && blankLines && gap && command.started() && !command.open() && (followedByEquals(sql, token.end) || lexeme === "type"))
         reassignment = blankLinesBetween(sql, from, token.start, dialect) !== null;
 
       if ((keyword && (boundary || startsLine(sql, token.start))) || (!keyword && reassignment) || (keyword && reassignment)) {
