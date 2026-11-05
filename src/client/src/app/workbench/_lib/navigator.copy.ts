@@ -1,10 +1,15 @@
 import { formatCount } from "@/lib/utils/format";
 
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { navigatorCopyEn } from "./navigator.copy.en";
+import { navigatorCopyEs } from "./navigator.copy.es";
+
 /**
  * Os textos que o navegador ganhou quando as telas de Conexões e de Drivers passaram para a área de trabalho (seção 20 da especificação,
  * RN-NAV-001 a 008). Os que ele já tinha continuam em `workbench.copy.ts`.
  */
-export const navigatorCopy = {
+const pt = {
   // RN-NAV-002: a barra de ações acima da árvore. Cada botão é só um ícone: o nome é o que o leitor de tela diz e o que a dica mostra. A barra é da árvore das
   // conexões, e o nome dela o diz: a seção Scripts tem a árvore e os menus dela (RN-SCRIPT-008 e 009).
   toolbar: {
@@ -89,3 +94,6 @@ export const navigatorCopy = {
     none: (text: string) => `Nenhum item começa com “${text}”`,
   },
 } as const;
+
+export type NavigatorCopy = Localized<typeof pt>;
+export const navigatorCopy = pickCopy({ "pt-BR": pt, en: navigatorCopyEn, es: navigatorCopyEs });

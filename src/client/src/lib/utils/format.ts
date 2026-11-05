@@ -1,4 +1,4 @@
-const locale = "pt-BR";
+import { locale } from "@/lib/i18n";
 
 /**
  * `1 linha afetada`, `3 linhas afetadas`. A tela escreve a concordância certa em vez de

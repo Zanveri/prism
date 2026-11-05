@@ -13,13 +13,13 @@ public sealed class ExportConnectionsValidator : AbstractValidator<ExportConnect
 {
     public ExportConnectionsValidator()
     {
-        RuleFor(request => request.Connections).Must((request, connections) => (request.FolderIDs?.Count ?? 0) + (connections?.Count ?? 0) > 0).WithMessage(TransferErrors.ExportEmptyMessage).WithErrorCode("EXPORT_EMPTY");
+        RuleFor(request => request.Connections).Must((request, connections) => (request.FolderIDs?.Count ?? 0) + (connections?.Count ?? 0) > 0).WithMessage(_ => TransferErrors.ExportEmptyMessage).WithErrorCode("EXPORT_EMPTY");
 
-        RuleFor(request => request.Connections).Must(connections => connections is null || connections.All(choice => choice is not null && TransferRules.CredentialsAreValid(choice.Credentials))).WithMessage("Escolha o que vai de cada conexão: sem usuário e senha, só o usuário, ou usuário e senha.").WithErrorCode("EXPORT_INVALID");
-        RuleFor(request => request.Connections).Must(connections => connections is null || connections.Where(choice => choice is not null).Select(choice => choice!.ID).Distinct().Count() == connections.Count(choice => choice is not null)).WithMessage("A mesma conexão foi marcada duas vezes.").WithErrorCode("EXPORT_INVALID");
+        RuleFor(request => request.Connections).Must(connections => connections is null || connections.All(choice => choice is not null && TransferRules.CredentialsAreValid(choice.Credentials))).WithMessage(_ => TransferErrors.ExportCredentialsInvalidMessage).WithErrorCode("EXPORT_INVALID");
+        RuleFor(request => request.Connections).Must(connections => connections is null || connections.Where(choice => choice is not null).Select(choice => choice!.ID).Distinct().Count() == connections.Count(choice => choice is not null)).WithMessage(_ => TransferErrors.ExportDuplicateMessage).WithErrorCode("EXPORT_INVALID");
 
-        RuleFor(request => request.FolderIDs).Must(folderIDs => folderIDs is null || folderIDs.Count <= TransferLimits.MaxFolders).WithMessage(TransferErrors.ExportLimitsMessage).WithErrorCode("EXPORT_LIMITS_EXCEEDED");
-        RuleFor(request => request.Connections).Must(connections => connections is null || connections.Count <= TransferLimits.MaxConnections).WithMessage(TransferErrors.ExportLimitsMessage).WithErrorCode("EXPORT_LIMITS_EXCEEDED");
+        RuleFor(request => request.FolderIDs).Must(folderIDs => folderIDs is null || folderIDs.Count <= TransferLimits.MaxFolders).WithMessage(_ => TransferErrors.ExportLimitsMessage).WithErrorCode("EXPORT_LIMITS_EXCEEDED");
+        RuleFor(request => request.Connections).Must(connections => connections is null || connections.Count <= TransferLimits.MaxConnections).WithMessage(_ => TransferErrors.ExportLimitsMessage).WithErrorCode("EXPORT_LIMITS_EXCEEDED");
 
         RuleFor(request => request.Passphrase).MustPass(PassphraseRules.ExportRefusal).WithErrorCode("EXPORT_PASSPHRASE_INVALID");
     }

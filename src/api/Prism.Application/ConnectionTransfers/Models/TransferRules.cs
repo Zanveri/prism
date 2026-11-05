@@ -28,7 +28,7 @@ internal static class TransferRules
 
     /// <summary>RN-TRANSF-010, etapa 1: o texto do arquivo tem até 5 MiB (5.242.880 bytes em UTF-8), conferido antes de qualquer leitura.</summary>
     public static IRuleBuilderOptions<T, string> MustFitTheImportLimit<T>(this IRuleBuilder<T, string> rule)
-        => rule.Must(content => Encoding.UTF8.GetByteCount(content ?? string.Empty) <= TransferLimits.MaxFileBytes).WithMessage(TransferErrors.ImportLimitsMessage).WithErrorCode("IMPORT_LIMITS_EXCEEDED");
+        => rule.Must(content => Encoding.UTF8.GetByteCount(content ?? string.Empty) <= TransferLimits.MaxFileBytes).WithMessage(_ => TransferErrors.ImportLimitsMessage).WithErrorCode("IMPORT_LIMITS_EXCEEDED");
 
     /// <summary>RN-TRANSF-010, etapa 2: a senha de exportação da importação, sem derivar nada.</summary>
     public static IRuleBuilderOptions<T, string> MustBeAnImportPassphrase<T>(this IRuleBuilder<T, string> rule)

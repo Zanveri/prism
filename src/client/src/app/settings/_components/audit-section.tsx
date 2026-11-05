@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { useNavigate } from "react-router";
 
+import { locale } from "@/lib/i18n";
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { openFromHistory } from "@/app/workbench/_lib/history";
@@ -69,7 +70,7 @@ function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+  return `${(bytes / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 1 })} MB`;
 }
 
 function formatShortDate(iso: string | null | undefined): string {
@@ -270,7 +271,7 @@ export function AuditSection({ anchor }: { anchor: string }) {
         <div className="flex flex-wrap gap-5 text-xs text-muted">
           <span>
             <strong className="block text-base font-semibold text-ink">
-              {(facets?.count ?? 0).toLocaleString("pt-BR")}
+              {(facets?.count ?? 0).toLocaleString(locale)}
             </strong>
             {copy.stats.entries}
           </span>

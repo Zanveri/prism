@@ -1,5 +1,7 @@
 using CSharpFunctionalExtensions;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 
 namespace Prism.Infrastructure.Databases.Clients;
 
@@ -16,6 +18,9 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal static class EditPlanner
 {
+    /// <summary>Os textos, no idioma do pedido: <c>EditPlanner.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(EditPlanner));
+
     public static Result<IReadOnlyList<EditCommand>, DatabaseFailure> Plan(ESqlDialect dialect, EditTarget target, IReadOnlyList<QueryColumn> columns, IReadOnlyList<EditChange> changes)
     {
         var commands = new List<EditCommand>();
@@ -66,39 +71,39 @@ internal static class EditPlanner
             => new(EDatabaseFailure.EditInvalid, message, Change: index, Column: column);
 
         if (change.Table < 0 || change.Table >= target.Tables.Count)
-            return Invalid("A tabela da alteração não existe neste resultado.");
+            return Invalid(Texts.Get("TableNotInResult"));
 
         var table = target.Tables[change.Table];
         if (!table.Editable)
-            return Invalid($"A tabela da alteração não se edita: {table.Reason}.");
+            return Invalid(Texts.Get("TableNotEditable", table.Reason));
 
         if (change.Kind != EEditKind.Update && !target.RowOperations)
-            return Invalid("Este resultado não aceita linha nova nem exclusão de linha.");
+            return Invalid(Texts.Get("NoRowOperations"));
 
         var writer = new Writer(dialect, preview);
 
         if (change.Kind != EEditKind.Insert && (change.Key.Count != table.Key.Count || change.Key.Any(value => value is null)))
-            return Invalid("A chave da linha não tem os valores das colunas da chave.");
+            return Invalid(Texts.Get("KeyValuesMissing"));
 
         if (change.Kind != EEditKind.Delete && change.Values.Count == 0)
-            return Invalid(change.Kind == EEditKind.Insert ? "A linha nova não tem nenhuma coluna preenchida." : "A alteração não tem nenhuma coluna.");
+            return Invalid(change.Kind == EEditKind.Insert ? Texts.Get("NewRowEmpty") : Texts.Get("ChangeHasNoColumn"));
 
         var assigned = new List<(string Name, string Value)>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in change.Values)
         {
             if (value.Column < 0 || value.Column >= target.Columns.Count || value.Column >= columns.Count)
-                return Invalid("A coluna não existe no resultado.", value.Column);
+                return Invalid(Texts.Get("ColumnNotInResult"), value.Column);
 
             var column = target.Columns[value.Column];
             if (column.Editable && column.Table != change.Table)
-                return Invalid("A coluna não é da tabela da alteração.", value.Column);
+                return Invalid(Texts.Get("ColumnNotInTable"), value.Column);
 
             if (!column.Editable)
-                return Invalid($"A coluna não se edita: {column.Reason}.", value.Column);
+                return Invalid(Texts.Get("ColumnNotEditable", column.Reason), value.Column);
 
             if (!seen.Add(column.BaseColumn!))
-                return Invalid("A mesma coluna aparece duas vezes na alteração.", value.Column);
+                return Invalid(Texts.Get("ColumnRepeated"), value.Column);
 
             var written = writer.Value(column, columns[value.Column].Kind, value.Value);
             if (written.IsFailure)

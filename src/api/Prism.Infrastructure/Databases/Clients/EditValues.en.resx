@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotADate" xml:space="preserve">
+    <value>«{0}» is not a date in the format yyyy-mm-dd.</value>
+  </data>
+  <data name="NotATime" xml:space="preserve">
+    <value>«{0}» is not a time in the format hh:mm:ss.</value>
+  </data>
+  <data name="TypeNotEditable" xml:space="preserve">
+    <value>Prism does not edit this type in this database yet.</value>
+  </data>
+  <data name="NotABinary" xml:space="preserve">
+    <value>«{0}» is not a hexadecimal binary (0x…).</value>
+  </data>
+  <data name="NotAnInteger" xml:space="preserve">
+    <value>«{0}» is not an integer.</value>
+  </data>
+  <data name="OutOfRange" xml:space="preserve">
+    <value>«{0}» is out of the column's range.</value>
+  </data>
+  <data name="NotATimestamp" xml:space="preserve">
+    <value>«{0}» is not a date and time in the format yyyy-mm-dd hh:mm:ss, with up to {1} fraction digits.</value>
+  </data>
+  <data name="NotABooleanWords" xml:space="preserve">
+    <value>«{0}» is not a boolean value: use true or false.</value>
+  </data>
+  <data name="NotABooleanNumbers" xml:space="preserve">
+    <value>«{0}» is not a boolean value: use 1 or 0.</value>
+  </data>
+  <data name="NotANumber" xml:space="preserve">
+    <value>«{0}» is not a number: use a dot for the decimal places.</value>
+  </data>
+</root>

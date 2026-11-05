@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LockedTitle" xml:space="preserve">
+    <value>Vault locked.</value>
+  </data>
+  <data name="LockedDetail" xml:space="preserve">
+    <value>Sign in with your user and password to open the vault.</value>
+  </data>
+  <data name="UnavailableTitle" xml:space="preserve">
+    <value>Vault unavailable.</value>
+  </data>
+  <data name="UnavailableDetail" xml:space="preserve">
+    <value>The vault file couldn't be read or written. Try again in a moment.</value>
+  </data>
+  <data name="FormatUnsupportedTitle" xml:space="preserve">
+    <value>Vault from a newer version of Prism.</value>
+  </data>
+  <data name="FormatUnsupportedDetail" xml:space="preserve">
+    <value>This vault was created by a newer version of Prism. Update Prism to open it.</value>
+  </data>
+</root>

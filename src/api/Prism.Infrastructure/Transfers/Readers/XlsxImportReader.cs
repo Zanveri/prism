@@ -40,7 +40,6 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
     private const int MaxDepth = 64;
 
     /// <summary>RN-IMPORT-008 (emenda de 2026-10-17): a frase própria do XML que passa de <see cref="MaxDepth"/> níveis.</summary>
-    internal const string TooDeepMessage = "A planilha tem elementos aninhados demais (mais de 64 níveis).";
 
     private const string ContentTypesPart = "[Content_Types].xml";
     private const string DefaultWorkbookPart = "xl/workbook.xml";
@@ -103,15 +102,15 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
         var relationships = ReadRelationships($"{folder}_rels/{workbookPart[folder.Length..]}.rels", folder);
 
         if (sheets.Count == 0)
-            throw SheetRefusal("A pasta de trabalho não tem planilhas.");
+            throw SheetRefusal(ImportText.Say("SheetNone"));
 
         var chosen = options.Sheet is { } name ? sheets.FindIndex(sheet => sheet.Name == name) : sheets.FindIndex(sheet => !sheet.Hidden);
         if (chosen < 0 && options.Sheet is not null)
-            throw SheetRefusal($"A planilha {options.Sheet} não existe no arquivo.");
+            throw SheetRefusal(ImportText.Say("SheetMissing", options.Sheet));
 
         chosen = Math.Max(chosen, 0);
         _sheetName = sheets[chosen].Name;
-        _sheetPart = relationships.Targets.GetValueOrDefault(ids[chosen]) ?? throw XlsxPackage.Format($"Este arquivo não é um .xlsx que o Prism lê: a planilha {_sheetName} não tem a parte dela.");
+        _sheetPart = relationships.Targets.GetValueOrDefault(ids[chosen]) ?? throw XlsxPackage.Format(ImportText.Say("XlsxNoSheetPart", _sheetName));
 
         _styles = relationships.Styles is { } styles && _package.Has(styles) ? ReadStyles(styles) : [];
         _sharedStrings = relationships.SharedStrings is { } shared && _package.Has(shared) ? ReadSharedStrings(shared, cancellationToken) : [];
@@ -204,8 +203,8 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
                 if (IsFilled(cell.Value) || cell.Problem is not null)
                 {
                     empty = blank = false;
-                    var range = $"{ImportText.ColumnLetters(_firstColumn)} a {ImportText.ColumnLetters(_firstColumn + _width - 1)}";
-                    problem ??= new ImportProblem($"A linha {ImportText.Thousands(row.Number)} da planilha tem valor na coluna {ImportText.ColumnLetters(cell.Column)}, fora das colunas {(_header ? "do cabeçalho" : "lidas no começo da planilha")} ({range}).");
+                    var range = ImportText.Say("RangeTo", ImportText.ColumnLetters(_firstColumn), ImportText.ColumnLetters(_firstColumn + _width - 1));
+                    problem ??= new ImportProblem(ImportText.Say(_header ? "XlsxCellOutsideHeader" : "XlsxCellOutsideFirst", ImportText.Thousands(row.Number), ImportText.ColumnLetters(cell.Column), range));
                 }
 
                 continue;
@@ -309,7 +308,7 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
                 previousColumn = cell.Column;
                 rowBytes += cell.Value.Text is null ? 0 : ImportText.Utf8Length(cell.Value.Text);
                 if (rowBytes > MaxRowBytes)
-                    throw RowTooLarge($"A linha {ImportText.Thousands(number)} da planilha {_sheetName}", feminine: true, number);
+                    throw RowTooLarge("RowTooLargeSheet", number, _sheetName);
 
                 cells.Add(cell);
             }
@@ -343,7 +342,7 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
         string? value = null;
         string? inline = null;
         var formula = false;
-        ImportReadException TooLarge() => ValueTooLarge($"da linha {ImportText.Thousands(row)} da planilha {_sheetName}", row, ColumnName(column));
+        ImportReadException TooLarge() => ValueTooLarge("ValueTooLargeSheet", row, ColumnName(column), _sheetName);
 
         if (!reader.IsEmptyElement)
         {
@@ -389,7 +388,7 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
                 if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var shared) && shared < _sharedStrings.Count)
                     cellValue = new ImportValue(_sharedStrings[shared], EImportValueSource.Text);
                 else
-                    problem = $"A célula {name} aponta para um texto que a planilha não tem.";
+                    problem = ImportText.Say("XlsxCellSharedMissing", name);
 
                 break;
             case "str" when value is not null:
@@ -399,25 +398,25 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
                 if (value is "1" or "0")
                     cellValue = new ImportValue(value == "1" ? "true" : "false", EImportValueSource.Canonical);
                 else
-                    problem = $"A célula {name} tem um valor lógico que o Prism não lê.";
+                    problem = ImportText.Say("XlsxCellBoolean", name);
 
                 break;
             case "e" when value is not null:
                 errorCode = XlsxCells.ErrorText(value);
-                problem = $"A célula {name} tem o erro {errorCode} do Excel.";
+                problem = ImportText.Say("XlsxCellError", name, errorCode);
                 break;
             case "d" when value is not null:
                 if (XlsxCells.IsoDateText(value) is { } iso)
                     cellValue = new ImportValue(iso, EImportValueSource.Canonical);
                 else
-                    problem = $"A célula {name} tem uma data que o Prism não lê.";
+                    problem = ImportText.Say("XlsxCellDate", name);
 
                 break;
             case "n" when value is not null:
                 (cellValue, problem) = Number(value, style, name);
                 break;
             case not ("inlineStr" or "s" or "str" or "b" or "e" or "d" or "n"):
-                problem = $"A célula {name} tem um tipo que o Prism não lê.";
+                problem = ImportText.Say("XlsxCellType", name);
                 break;
         }
 
@@ -435,7 +434,7 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
     private (ImportValue Value, string? Problem) Number(string value, int style, string name)
     {
         if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) || !double.IsFinite(number))
-            return (ImportValue.Null, $"A célula {name} tem um número que o Prism não lê.");
+            return (ImportValue.Null, ImportText.Say("XlsxCellNumber", name));
 
         var kind = style < _styles.Length ? _styles[style] : EXlsxNumberKind.Number;
         if (kind == EXlsxNumberKind.Number)
@@ -445,8 +444,8 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
 
         return refusal switch
         {
-            EXlsxDateRefusal.Leap1900 => (ImportValue.Null, "A data 29/02/1900 do Excel não existe."),
-            EXlsxDateRefusal.NotADate => (ImportValue.Null, $"A célula {name} tem um número que não é uma data do Excel."),
+            EXlsxDateRefusal.Leap1900 => (ImportValue.Null, ImportText.Say("XlsxLeap1900")),
+            EXlsxDateRefusal.NotADate => (ImportValue.Null, ImportText.Say("XlsxCellNotDate", name)),
             _ => (new ImportValue(text, EImportValueSource.Canonical), null)
         };
     }
@@ -543,7 +542,7 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
     private string WorkbookPart()
     {
         if (!_package.Has(ContentTypesPart))
-            throw XlsxPackage.Format("Este arquivo não é um .xlsx que o Prism lê: falta a lista das partes do arquivo ([Content_Types].xml).");
+            throw XlsxPackage.Format(ImportText.Say("XlsxNoTypes"));
 
         using var reader = XmlReader.Create(_package.OpenEntry(ContentTypesPart, SmallPartLimit), Settings);
         while (Next(reader))
@@ -567,7 +566,7 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
                 continue;
 
             if (reader.Depth == 0 && reader.NamespaceURI == StrictNamespace)
-                throw XlsxPackage.Format("A planilha está no formato Strict do Office Open XML, que o Prism não lê. No Excel, salve-a como Pasta de Trabalho do Excel (.xlsx).");
+                throw XlsxPackage.Format(ImportText.Say("XlsxStrict"));
 
             if (reader.LocalName == "workbookPr")
                 _date1904 = reader.GetAttribute("date1904") is "1" or "true";
@@ -728,16 +727,16 @@ internal sealed class XlsxImportReader(Stream stream, XlsxImportOptions options,
     }
 
     private static ImportReadException TooDeep()
-        => new(new ImportReadFailure(EImportReadReason.Limits, TooDeepMessage));
+        => new(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say("XlsxTooDeep")));
 
     private static ImportReadException SharedStringsTooLarge()
-        => new(new ImportReadFailure(EImportReadReason.Limits, "Os textos da planilha passam de 256 MiB, o que o Prism lê de uma planilha. No Excel, salve a planilha como CSV e importe o CSV."));
+        => new(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say("XlsxSharedTooLarge")));
 
     private static ImportReadException SheetRefusal(string message)
         => new(new ImportReadFailure(EImportReadReason.Sheet, message));
 
     private static ImportReadException OutOfBounds()
-        => new(new ImportReadFailure(EImportReadReason.Limits, "A planilha tem uma célula fora dos limites do Excel."));
+        => new(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say("XlsxOutOfBounds")));
 
     private sealed record Relationships(IReadOnlyDictionary<string, string> Targets, string? Styles, string? SharedStrings);
 

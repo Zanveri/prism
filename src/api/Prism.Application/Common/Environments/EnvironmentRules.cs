@@ -2,6 +2,7 @@ using FluentValidation;
 using Prism.Application.Common.Texts;
 using Prism.Core.Extensions;
 using Prism.Infrastructure.Vault.Models;
+using System.Resources;
 
 namespace Prism.Application.Common.Environments;
 
@@ -13,6 +14,9 @@ namespace Prism.Application.Common.Environments;
 /// </summary>
 internal static class EnvironmentRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>EnvironmentRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(EnvironmentRules));
+
     /// <summary>RN-CONN-010: o nome do ambiente tem até 30 caracteres, medidos depois de normalizado.</summary>
     public const int NameMaxLength = 30;
 
@@ -34,13 +38,13 @@ internal static class EnvironmentRules
     {
         var normalized = environmentName.NormalizeName();
         if (normalized.Length > NameMaxLength)
-            return "O ambiente pode ter no máximo 30 caracteres.";
+            return Texts.Get("NameTooLong");
 
-        return TextRules.HasControlOrDirection(normalized) ? "O ambiente não pode ter caractere de controle nem de direção do texto." : null;
+        return TextRules.HasControlOrDirection(normalized) ? Texts.Get("NameInvalidCharacters") : null;
     }
 
     public static string? ColorRefusal(string? color)
-        => ColorIsValid(color) ? null : "Use uma cor no formato #RRGGBB.";
+        => ColorIsValid(color) ? null : Texts.Get("ColorInvalid");
 
     /// <summary>Opcional: em branco é "sem cor". Quando vem, é `#RRGGBB`.</summary>
     public static bool ColorIsValid(string? environmentColor)

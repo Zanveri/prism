@@ -26,6 +26,7 @@ export type SavedModelEntry = {
 };
 
 import { connectionEngineNumber } from "@/app/build/_lib/catalog-tree";
+import { buildUiCopy } from "@/app/build/_lib/build-ui.copy";
 
 type ModelsListProps = {
   models: readonly SavedModelEntry[];
@@ -116,7 +117,7 @@ export function ModelsList({
         <SearchIcon />
         <input
           type="text"
-          aria-label="Filtrar modelos"
+          aria-label={buildUiCopy.modelsList.filter}
           placeholder={buildCopy.filterModelsPlaceholder}
           value={filterText}
           onChange={(e) => setFilterText(e.target.value)}
@@ -184,7 +185,7 @@ export function ModelsList({
                       <Input
                         type="text"
                         value={renameValue}
-                        aria-label={`Novo nome para ${entry.name}`}
+                        aria-label={buildUiCopy.modelsList.newName(entry.name)}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onBlur={() => submitRename(entry)}
                         onKeyDown={(e) => {
@@ -261,7 +262,7 @@ export function ModelsList({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        aria-label={`Mais ações de ${entry.name}`}
+                        aria-label={buildUiCopy.modelsList.moreActions(entry.name)}
                         aria-haspopup="menu"
                         aria-expanded={isMenuOpen}
                         onClick={(e) => {
@@ -286,7 +287,7 @@ export function ModelsList({
 
                       {isMenuOpen && menuOpenFor && (
                         <ContextMenu
-                          label={`Ações de ${entry.name}`}
+                          label={buildUiCopy.modelsList.actionsOf(entry.name)}
                           point={{ x: menuOpenFor.x, y: menuOpenFor.y }}
                           onClose={() => setMenuOpenFor(null)}
                           groups={[

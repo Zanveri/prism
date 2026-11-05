@@ -1,10 +1,15 @@
 import { formatCount } from "@/lib/utils/format";
 
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { transactionCopyEn } from "./transaction.copy.en";
+import { transactionCopyEs } from "./transaction.copy.es";
+
 const commands = (count: number) => formatCount(count, "comando", "comandos");
 const notConfirmed = (count: number) => formatCount(count, "comando não foi confirmado", "comandos não foram confirmados");
 
 /** O modo de transação da aba e a transação manual (seção 22 da especificação, RN-TX-001 a 014 e RN-ISOL-001 a 006). */
-export const transactionCopy = {
+const pt = {
   editor: {
     // RN-TX-001: o seletor da barra do editor, como no canvas ("Transação").
     label: "Transação",
@@ -83,3 +88,6 @@ export const transactionCopy = {
     uncommitted: "sem commit",
   },
 } as const;
+
+export type TransactionCopy = Localized<typeof pt>;
+export const transactionCopy = pickCopy({ "pt-BR": pt, en: transactionCopyEn, es: transactionCopyEs });

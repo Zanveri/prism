@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FileIdInvalid" xml:space="preserve">
+    <value>The file identifier has 36 lowercase characters, with hyphens.</value>
+  </data>
+  <data name="FormatInvalid" xml:space="preserve">
+    <value>The format must be csv, tsv, json or xlsx.</value>
+  </data>
+  <data name="DecimalInvalid" xml:space="preserve">
+    <value>The decimal separator must be point or comma.</value>
+  </data>
+  <data name="ThousandsDotInvalid" xml:space="preserve">
+    <value>The thousands dot only applies with the decimal comma.</value>
+  </data>
+  <data name="DatesInvalid" xml:space="preserve">
+    <value>The date format must be iso or dayMonthYear.</value>
+  </data>
+  <data name="TargetRequired" xml:space="preserve">
+    <value>Provide the target table.</value>
+  </data>
+  <data name="TargetConnectionRequired" xml:space="preserve">
+    <value>Provide the target connection.</value>
+  </data>
+  <data name="SchemaNameLength" xml:space="preserve">
+    <value>The schema must have 1 to {0} characters, with no U+0000.</value>
+  </data>
+  <data name="TableNameLength" xml:space="preserve">
+    <value>The table must have 1 to {0} characters, with no U+0000.</value>
+  </data>
+  <data name="MappingRequired" xml:space="preserve">
+    <value>Choose at least one table column to receive values.</value>
+  </data>
+  <data name="MappingCount" xml:space="preserve">
+    <value>The mapping must have 1 to 16,384 columns.</value>
+  </data>
+  <data name="MappingEntryShape" xml:space="preserve">
+    <value>Each mapping entry has the file column and the table column.</value>
+  </data>
+  <data name="MappingSourceNegative" xml:space="preserve">
+    <value>The position of the file column starts at 0.</value>
+  </data>
+  <data name="MappingSourceDuplicate" xml:space="preserve">
+    <value>The file column is already in the mapping.</value>
+  </data>
+  <data name="MappingTargetNameLength" xml:space="preserve">
+    <value>The table column name must have 1 to {0} characters, with no U+0000.</value>
+  </data>
+  <data name="MappingTargetDuplicate" xml:space="preserve">
+    <value>The table column already receives another file column.</value>
+  </data>
+  <data name="LoadRequired" xml:space="preserve">
+    <value>Provide the load.</value>
+  </data>
+  <data name="LoadEmptyInvalid" xml:space="preserve">
+    <value>The emptying must be true or false.</value>
+  </data>
+  <data name="LoadCommitEvery" xml:space="preserve">
+    <value>Use from 1 to 1,000,000 rows.</value>
+  </data>
+  <data name="LoadCheckCopy" xml:space="preserve">
+    <value>The copy does not check a file before writing.</value>
+  </data>
+  <data name="LoadCheckInvalid" xml:space="preserve">
+    <value>The file check must be true or false.</value>
+  </data>
+  <data name="WindowInvalid" xml:space="preserve">
+    <value>The window number is a positive integer.</value>
+  </data>
+  <data name="SourceColumnMissingOne" xml:space="preserve">
+    <value>Column {0} of the source does not exist: {1} column was requested.</value>
+  </data>
+  <data name="SourceColumnMissingMany" xml:space="preserve">
+    <value>Column {0} of the source does not exist: {1} columns were requested.</value>
+  </data>
+</root>

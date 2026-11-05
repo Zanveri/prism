@@ -1,5 +1,6 @@
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Transfers.Models;
+using System.Globalization;
 
 namespace Prism.Infrastructure.Transfers.Services;
 
@@ -24,6 +25,9 @@ internal sealed class Transfer(Guid id, ETransferKind kind, Guid connectionID, l
     public DateTimeOffset StartedAt => startedAt;
 
     public long StartedTimestamp { get; } = startedTimestamp;
+
+    /// <summary>O idioma do pedido que criou o trabalho: o temporizador que o encerra por falta de progresso não é um pedido e diz a frase nele.</summary>
+    public CultureInfo Culture { get; } = CultureInfo.CurrentUICulture;
 
     /// <summary>RN-IMPORT-014 e 027: a conexão de destino da importação (a mesma de `ConnectionID`) e da cópia; nula na exportação.</summary>
     public Guid? TargetConnectionID { get; init; }

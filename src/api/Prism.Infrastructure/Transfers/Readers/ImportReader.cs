@@ -94,21 +94,21 @@ internal abstract class ImportReader(Stream stream, ILogger logger) : IDisposabl
     protected abstract ImportRecord? ReadNext(CancellationToken cancellationToken);
 
     /// <summary>
-    /// RN-IMPORT-008: a recusa do valor acima de 64 MiB, com a linha e a coluna do arquivo, nas palavras de cada formato: `place` é "da linha 1.234 do
-    /// arquivo", "do item 1.234 da lista" ou "da linha 1.234 da planilha Pedidos".
+    /// RN-IMPORT-008: a recusa do valor acima de 64 MiB, com a linha e a coluna do arquivo, nas palavras de cada formato: `key` é a frase do formato: a do
+    /// arquivo (`ValueTooLargeFile`), a do item da lista (`ValueTooLargeItem`) ou a da linha da planilha Pedidos (`ValueTooLargeSheet`).
     /// </summary>
-    protected static ImportReadException ValueTooLarge(string place, long line, string column)
-        => new(new ImportReadFailure(EImportReadReason.Limits, $"Um valor {place}, coluna {column}, passa de 64 MiB, e o Prism não o importa.", line, ValueTooLarge: true, Column: column));
+    protected static ImportReadException ValueTooLarge(string key, long line, string column, string? sheet = null)
+        => new(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say(key, ImportText.Thousands(line), column, sheet), line, ValueTooLarge: true, Column: column));
 
-    /// <summary>RN-IMPORT-008: a recusa da linha acima de 256 MiB de valores; `row` é "A linha 1.234 do arquivo", "O item 1.234 da lista" ou "A linha 1.234 da planilha Pedidos".</summary>
-    protected static ImportReadException RowTooLarge(string row, bool feminine, long line)
-        => new(new ImportReadFailure(EImportReadReason.Limits, $"{row} passa de 256 MiB de valores, e o Prism não {(feminine ? "a" : "o")} importa.", line, ValueTooLarge: true));
+    /// <summary>RN-IMPORT-008: a recusa da linha acima de 256 MiB de valores; `key` é a frase do formato (`RowTooLargeFile`, `RowTooLargeItem` ou `RowTooLargeSheet`).</summary>
+    protected static ImportReadException RowTooLarge(string key, long line, string? sheet = null)
+        => new(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say(key, ImportText.Thousands(line), sheet), line, ValueTooLarge: true));
 
     protected static ImportReadException TooManyColumns(long? line)
-        => new(new ImportReadFailure(EImportReadReason.Limits, $"O arquivo tem mais de {ImportText.Thousands(MaxColumns)} colunas.", line));
+        => new(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say("TooManyColumns", ImportText.Thousands(MaxColumns)), line));
 
     protected static ImportReadException ColumnNameTooLong(int position)
-        => new(new ImportReadFailure(EImportReadReason.Limits, $"O nome da coluna {ImportText.Thousands(position + 1)} do arquivo passa de {MaxColumnNameLength} caracteres."));
+        => new(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say("ColumnNameTooLong", ImportText.Thousands(position + 1), MaxColumnNameLength)));
 
     /// <summary>
     /// O único `try` da leitura. O log recebe a classe do erro e o `HResult`, nunca a mensagem, que pode trazer o caminho ou um pedaço do conteúdo do
@@ -122,7 +122,7 @@ internal abstract class ImportReader(Stream stream, ILogger logger) : IDisposabl
         }
         catch (OperationCanceledException)
         {
-            return new ImportReadFailure(EImportReadReason.System, "A leitura do arquivo foi cancelada.") { Canceled = true };
+            return new ImportReadFailure(EImportReadReason.System, ImportText.Say("ReadCanceled")) { Canceled = true };
         }
         catch (Exception exception)
         {
@@ -144,10 +144,10 @@ internal abstract class ImportReader(Stream stream, ILogger logger) : IDisposabl
         {
             ImportReadException read => read.Failure,
             JsonException json => JsonImportReader.Malformed(json),
-            XmlException => new ImportReadFailure(EImportReadReason.Format, "A planilha tem uma parte que não é um XML válido, e o Prism não a lê. No Excel, salve-a de novo como .xlsx."),
-            InvalidDataException => new ImportReadFailure(EImportReadReason.Format, "O .xlsx está estragado: o Prism não consegue descompactá-lo. No Excel, salve-o de novo como .xlsx."),
-            IOException or UnauthorizedAccessException => new ImportReadFailure(EImportReadReason.System, $"Não foi possível ler o arquivo copiado (código {exception.HResult & 0xFFFF})."),
-            _ => new ImportReadFailure(EImportReadReason.System, $"Não foi possível ler o arquivo ({exception.GetType().Name}).")
+            XmlException => new ImportReadFailure(EImportReadReason.Format, ImportText.Say("XmlInvalid")),
+            InvalidDataException => new ImportReadFailure(EImportReadReason.Format, ImportText.Say("XlsxCorrupt")),
+            IOException or UnauthorizedAccessException => new ImportReadFailure(EImportReadReason.System, ImportText.Say("ReadFailedCode", exception.HResult & 0xFFFF)),
+            _ => new ImportReadFailure(EImportReadReason.System, ImportText.Say("ReadFailedType", exception.GetType().Name))
         };
 }
 

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FileMissingTitle" xml:space="preserve">
+    <value>Arquivo da importação não localizado.</value>
+  </data>
+  <data name="FileMissingDetail" xml:space="preserve">
+    <value>O arquivo escolhido não está mais com o Prism. Escolha o arquivo de novo.</value>
+  </data>
+  <data name="FileTooLargeTitle" xml:space="preserve">
+    <value>Arquivo grande demais.</value>
+  </data>
+  <data name="UnreadableTitle" xml:space="preserve">
+    <value>O arquivo não pôde ser lido.</value>
+  </data>
+  <data name="TableNotFoundTitle" xml:space="preserve">
+    <value>Tabela não localizada.</value>
+  </data>
+  <data name="NotATableTitle" xml:space="preserve">
+    <value>O destino não é uma tabela.</value>
+  </data>
+  <data name="MappingInvalidTitle" xml:space="preserve">
+    <value>Mapeamento inválido.</value>
+  </data>
+  <data name="ReadOnlyTitle" xml:space="preserve">
+    <value>Conexão somente leitura.</value>
+  </data>
+  <data name="ReadOnlyDetail" xml:space="preserve">
+    <value>A conexão é somente leitura, e a importação grava na tabela. Nada foi enviado ao banco.</value>
+  </data>
+  <data name="TargetBusyTitle" xml:space="preserve">
+    <value>Tabela ocupada.</value>
+  </data>
+  <data name="TargetBusyCopyDetail" xml:space="preserve">
+    <value>Já há uma cópia para {0}.{1} em andamento. Espere ela terminar, ou cancele-a na barra de status.</value>
+  </data>
+  <data name="TargetBusyImportDetail" xml:space="preserve">
+    <value>Já há uma importação para {0}.{1} em andamento. Espere ela terminar, ou cancele-a na barra de status.</value>
+  </data>
+  <data name="TargetIsSourceTitle" xml:space="preserve">
+    <value>O destino é a própria origem.</value>
+  </data>
+  <data name="TargetIsSourceDetail" xml:space="preserve">
+    <value>A tabela de destino é a própria origem. Escolha outra tabela.</value>
+  </data>
+  <data name="CredentialsMissingTitle" xml:space="preserve">
+    <value>Conexão sem usuário ou sem senha.</value>
+  </data>
+  <data name="SourceUserNameMissingDetail" xml:space="preserve">
+    <value>A conexão de origem não tem usuário gravado. Preencha-o em Editar conexão e copie de novo.</value>
+  </data>
+  <data name="SourcePasswordMissingDetail" xml:space="preserve">
+    <value>A conexão de origem não tem senha gravada. Preencha-a em Editar conexão e copie de novo.</value>
+  </data>
+  <data name="TargetUserNameMissingDetail" xml:space="preserve">
+    <value>A conexão de destino não tem usuário gravado. Preencha-o em Editar conexão e copie de novo.</value>
+  </data>
+  <data name="TargetPasswordMissingDetail" xml:space="preserve">
+    <value>A conexão de destino não tem senha gravada. Preencha-a em Editar conexão e copie de novo.</value>
+  </data>
+  <data name="UserNameMissingDetail" xml:space="preserve">
+    <value>Esta conexão não tem usuário gravado. Preencha-o em Editar conexão e importe de novo.</value>
+  </data>
+  <data name="PasswordMissingDetail" xml:space="preserve">
+    <value>Esta conexão não tem senha gravada. Preencha-a em Editar conexão e importe de novo.</value>
+  </data>
+  <data name="CopiedFileUnreadable" xml:space="preserve">
+    <value>Não foi possível ler o arquivo copiado.</value>
+  </data>
+</root>

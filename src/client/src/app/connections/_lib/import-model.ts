@@ -1,3 +1,4 @@
+import { locale } from "@/lib/i18n";
 import { engineOption, type Confirmation } from "./connections.schema";
 import { checkTree, foldersInFile, markedLeaves, type CheckNode, type CheckTree } from "./check-tree";
 import type { ConflictPolicy, ImportPreview, ImportResult, PreviewConnection, PreviewFolder } from "./transfer.schema";
@@ -17,9 +18,9 @@ export const importFileMaxBytes = 5 * 1024 * 1024;
 
 /** O tamanho do arquivo escolhido, ao lado do nome ("14 KB"). */
 export function fileSizeLabel(bytes: number): string {
-  if (bytes < 1024) return `${bytes.toLocaleString("pt-BR")} ${bytes === 1 ? "byte" : "bytes"}`;
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString("pt-BR")} KB`;
-  return `${(bytes / (1024 * 1024)).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+  if (bytes < 1024) return `${bytes.toLocaleString(locale)} ${bytes === 1 ? "byte" : "bytes"}`;
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString(locale)} KB`;
+  return `${(bytes / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 1 })} MB`;
 }
 
 /** O nome que se vê de um item do arquivo (o do item que não pode ser importado pode faltar). */

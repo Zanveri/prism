@@ -16,6 +16,7 @@ import {
   getTableChecks,
 } from "@/app/workbench/_lib/database-sessions.service";
 import type { SchemaDiagram } from "@/app/workbench/_lib/database-sessions.schema";
+import { buildUiCopy } from "./build-ui.copy";
 
 export type CatalogTable = {
   schema: string;
@@ -499,7 +500,7 @@ export function rereadModel(
 
     if (!catTable) {
       notes.push(
-        `${table.schema}.${table.name} sumiu do banco e virou tabela nova no modelo.`,
+        buildUiCopy.reread.tableGone(`${table.schema}.${table.name}`),
       );
       return {
         ...table,
@@ -529,7 +530,7 @@ export function rereadModel(
 
       if (!freshCol) {
         notes.push(
-          `${table.schema}.${table.name}.${col.name} sumiu do banco e virou coluna nova no modelo.`,
+          buildUiCopy.reread.columnGone(`${table.schema}.${table.name}.${col.name}`),
         );
         existingProcessed.push({
           ...col,
@@ -551,11 +552,11 @@ export function rereadModel(
         if (dbChanged) {
           if (prevCol.type !== freshCol.type) {
             notes.push(
-              `${table.schema}.${table.name}.${freshCol.name} mudou no banco (${prevCol.type} → ${freshCol.type}).`,
+              buildUiCopy.reread.columnTypeChanged(`${table.schema}.${table.name}.${freshCol.name}`, prevCol.type, freshCol.type),
             );
           } else {
             notes.push(
-              `${table.schema}.${table.name}.${freshCol.name} mudou no banco.`,
+              buildUiCopy.reread.columnChanged(`${table.schema}.${table.name}.${freshCol.name}`),
             );
           }
         }
@@ -596,7 +597,7 @@ export function rereadModel(
       );
       if (!existedInPrevOrigin) {
         notes.push(
-          `${table.schema}.${table.name} ganhou a coluna ${freshCol.name} no banco.`,
+          buildUiCopy.reread.columnAdded(`${table.schema}.${table.name}`, freshCol.name),
         );
         dbNewCols.push(structuredClone(freshCol));
       }

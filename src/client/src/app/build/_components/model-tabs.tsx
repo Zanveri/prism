@@ -1,6 +1,7 @@
 import { buildCopy } from "@/app/build/_lib/build.copy";
 import { BuildIcon, CloseIcon, EnvironmentPill, PlusIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
+import { buildUiCopy } from "@/app/build/_lib/build-ui.copy";
 
 export type OpenModelTab = {
   id: string;
@@ -58,7 +59,7 @@ export function ModelTabs({
             </button>
             <button
               type="button"
-              aria-label={`Fechar ${tab.name}`}
+              aria-label={buildUiCopy.modelTabs.close(tab.name)}
               onClick={(e) => {
                 e.stopPropagation();
                 onCloseTab(tab.id);

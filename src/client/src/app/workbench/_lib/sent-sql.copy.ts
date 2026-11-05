@@ -1,5 +1,10 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { sentSqlCopyEn } from "./sent-sql.copy.en";
+import { sentSqlCopyEs } from "./sent-sql.copy.es";
+
 /** Os textos do "SQL enviado" (RN-VAR-018): o diálogo, o botão e a dica dele. */
-export const sentSqlCopy = {
+const pt = {
   title: "SQL enviado",
   description: "O comando com os valores das variáveis escritos como literais do banco, para ler e para copiar e executar noutro lugar. O que foi ao banco foram os parâmetros.",
   /** O botão de ícone da barra do resultado e das Estatísticas. */
@@ -15,3 +20,6 @@ export const sentSqlCopy = {
   copied: "SQL copiado.",
   notCopied: "Não foi possível copiar o SQL.",
 } as const;
+
+export type SentSqlCopy = Localized<typeof pt>;
+export const sentSqlCopy = pickCopy({ "pt-BR": pt, en: sentSqlCopyEn, es: sentSqlCopyEs });

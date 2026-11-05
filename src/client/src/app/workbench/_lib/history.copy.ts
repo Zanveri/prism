@@ -1,4 +1,9 @@
-export const historyCopy = {
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { historyCopyEn } from "./history.copy.en";
+import { historyCopyEs } from "./history.copy.es";
+
+const pt = {
   title: "Histórico",
   toolbarButton: "Histórico",
   toolbarTooltip: "Histórico (Ctrl+Shift+H)",
@@ -51,3 +56,6 @@ export const historyCopy = {
   clearConnectionConfirmButton: "Limpar histórico",
   clearConnectionCancelButton: "Cancelar"
 } as const;
+
+export type HistoryCopy = Localized<typeof pt>;
+export const historyCopy = pickCopy({ "pt-BR": pt, en: historyCopyEn, es: historyCopyEs });

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Blocked" xml:space="preserve">
+    <value>La carpeta {0} no se puede importar.</value>
+  </data>
+  <data name="Missing" xml:space="preserve">
+    <value>Falta {0} en el archivo.</value>
+  </data>
+  <data name="WrongType" xml:space="preserve">
+    <value>{0} no está en el formato que lee este Prism.</value>
+  </data>
+  <data name="PasswordWithoutUser" xml:space="preserve">
+    <value>La contraseña de la base de datos vino sin el usuario.</value>
+  </data>
+  <data name="EngineUnknown" xml:space="preserve">
+    <value>Este Prism no conoce el motor de base de datos {0}.</value>
+  </data>
+  <data name="ConfirmationInvalid" xml:space="preserve">
+    <value>Elige no confirmar, solo las sentencias irreversibles o todas las sentencias.</value>
+  </data>
+  <data name="LabelFolderName" xml:space="preserve">
+    <value>el nombre de la carpeta</value>
+  </data>
+  <data name="LabelFolderColor" xml:space="preserve">
+    <value>el color de la carpeta</value>
+  </data>
+  <data name="LabelFolderConfirmation" xml:space="preserve">
+    <value>la confirmación de la carpeta</value>
+  </data>
+  <data name="LabelFolderReadOnly" xml:space="preserve">
+    <value>el ajuste de solo lectura de la carpeta</value>
+  </data>
+  <data name="LabelFolderEffective" xml:space="preserve">
+    <value>lo que valía en la carpeta</value>
+  </data>
+  <data name="LabelConnectionName" xml:space="preserve">
+    <value>el nombre de la conexión</value>
+  </data>
+  <data name="LabelEngine" xml:space="preserve">
+    <value>el motor de base de datos de la conexión</value>
+  </data>
+  <data name="LabelHost" xml:space="preserve">
+    <value>el host</value>
+  </data>
+  <data name="LabelPort" xml:space="preserve">
+    <value>el puerto</value>
+  </data>
+  <data name="LabelDatabase" xml:space="preserve">
+    <value>la base de datos</value>
+  </data>
+  <data name="LabelUserName" xml:space="preserve">
+    <value>el usuario de la base de datos</value>
+  </data>
+  <data name="LabelPassword" xml:space="preserve">
+    <value>la contraseña de la base de datos</value>
+  </data>
+  <data name="LabelConnectionConfirmation" xml:space="preserve">
+    <value>la confirmación de la conexión</value>
+  </data>
+  <data name="LabelConnectionReadOnly" xml:space="preserve">
+    <value>el ajuste de solo lectura de la conexión</value>
+  </data>
+  <data name="LabelVerificationEnabled" xml:space="preserve">
+    <value>la verificación de la conexión</value>
+  </data>
+  <data name="LabelVerificationQuery" xml:space="preserve">
+    <value>la consulta de verificación</value>
+  </data>
+  <data name="LabelConnectionEffective" xml:space="preserve">
+    <value>lo que valía en la conexión</value>
+  </data>
+  <data name="LabelEnvironmentFolder" xml:space="preserve">
+    <value>el entorno de la carpeta</value>
+  </data>
+  <data name="LabelEnvironmentColorFolder" xml:space="preserve">
+    <value>el color del entorno de la carpeta</value>
+  </data>
+  <data name="LabelEnvironmentConnection" xml:space="preserve">
+    <value>el entorno de la conexión</value>
+  </data>
+  <data name="LabelEnvironmentColorConnection" xml:space="preserve">
+    <value>el color del entorno de la conexión</value>
+  </data>
+  <data name="LabelEnvironmentEffective" xml:space="preserve">
+    <value>el entorno que valía en la conexión</value>
+  </data>
+  <data name="LabelEnvironmentColorEffective" xml:space="preserve">
+    <value>el color del entorno que valía en la conexión</value>
+  </data>
+</root>

@@ -43,6 +43,7 @@ import { columnRowState, removedColumns } from "../_lib/editor-rows";
 import { ColumnRow, RemovedColumnRow } from "./column-row";
 import { ForeignKeysSection } from "./foreign-keys-section";
 import { IndexesSection } from "./indexes-section";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
 export type SimpleEditorProps = {
   model: BuildModel;
@@ -167,7 +168,7 @@ export function SimpleEditor({
   if (!table) {
     return (
       <div className="flex flex-1 items-center justify-center p-6 text-xs text-muted">
-        Selecione ou crie uma tabela para editar.
+        {buildUiCopy.simpleEditor.selectTable}
       </div>
     );
   }
@@ -190,16 +191,16 @@ export function SimpleEditor({
   if (isExisting) {
     if (changes.addedColumns.length > 0) {
       columnCountParts.push(
-        `${changes.addedColumns.length} ${changes.addedColumns.length === 1 ? "nova" : "novas"}`,
+        buildUiCopy.summary.newCount(changes.addedColumns.length),
       );
     }
     if (changes.changedColumns.length > 0) {
       columnCountParts.push(
-        `${changes.changedColumns.length} ${changes.changedColumns.length === 1 ? "alterada" : "alteradas"}`,
+        buildUiCopy.summary.changedCount(changes.changedColumns.length),
       );
     }
     if (removedCols.length > 0) {
-      columnCountParts.push(`${removedCols.length} a remover`);
+      columnCountParts.push(buildUiCopy.summary.toRemoveCount(removedCols.length));
     }
   }
 
@@ -217,8 +218,8 @@ export function SimpleEditor({
     [
       {
         id: "copy-table",
-        label: isExisting ? "Copiar como tabela nova" : "Duplicar tabela",
-        hint: "Uma tabela nova com as mesmas colunas",
+        label: isExisting ? buildUiCopy.simpleEditor.copyAsNew : buildUiCopy.simpleEditor.duplicateTable,
+        hint: buildUiCopy.simpleEditor.copyHint,
         onSelect: () =>
           onChange(copyAsNewTable(model, currentKey, model.defaultSchema)),
       },
@@ -226,16 +227,16 @@ export function SimpleEditor({
         ? [
             {
               id: "revert-table",
-              label: "Desfazer alterações da tabela",
-              hint: "Volta a tabela para como está no banco",
+              label: buildUiCopy.simpleEditor.revertTable,
+              hint: buildUiCopy.simpleEditor.revertTableHint,
               onSelect: () => onChange(revertTable(model, currentKey)),
             },
           ]
         : []),
       {
         id: "remove-table",
-        label: isExisting ? "Tirar do modelo" : "Excluir tabela",
-        hint: "Some daqui; nada vai para o DDL",
+        label: isExisting ? buildUiCopy.simpleEditor.removeFromModel : buildUiCopy.simpleEditor.deleteTable,
+        hint: buildUiCopy.simpleEditor.removeHint,
         onSelect: () => onChange(removeTable(model, currentKey), null),
       },
     ],
@@ -245,9 +246,9 @@ export function SimpleEditor({
             {
               id: "drop-in-db",
               label: table.dropInDatabase
-                ? "Cancelar exclusão no banco"
-                : "Excluir no banco…",
-              hint: "Vira DROP TABLE no DDL de diferenças",
+                ? buildUiCopy.simpleEditor.cancelDropInDatabase
+                : buildUiCopy.simpleEditor.dropInDatabase,
+              hint: buildUiCopy.simpleEditor.dropHint,
               onSelect: () => {
                 if (table.dropInDatabase) {
                   onChange(setDropInDatabase(model, currentKey, false));
@@ -275,13 +276,13 @@ export function SimpleEditor({
             }}
             className="text-xs"
           >
-            Tabela
+            {buildUiCopy.simpleEditor.table}
           </FieldLabel>
           <Input
             id={tableInputId}
             type="text"
             value={table.name}
-            title="Ctrl+clique para ir até a tabela no diagrama"
+            title={buildUiCopy.simpleEditor.goToDiagramHint}
             onClick={(e) => {
               if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
@@ -301,12 +302,12 @@ export function SimpleEditor({
           className="gap-1"
           title={
             isExisting
-              ? "Uma tabela existente não muda de esquema"
+              ? buildUiCopy.simpleEditor.schemaLockedHint
               : undefined
           }
         >
           <FieldLabel htmlFor={schemaSelectId} className="text-xs">
-            Esquema
+            {buildUiCopy.simpleEditor.schema}
           </FieldLabel>
           <Select
             id={schemaSelectId}
@@ -333,8 +334,8 @@ export function SimpleEditor({
           type="button"
           variant="secondary"
           size="icon"
-          title="Mais ações da tabela"
-          aria-label="Mais ações da tabela"
+          title={buildUiCopy.simpleEditor.moreTableActions}
+          aria-label={buildUiCopy.simpleEditor.moreTableActions}
           aria-haspopup="menu"
           aria-expanded={menuPoint !== null}
           onClick={(e) => {
@@ -353,7 +354,7 @@ export function SimpleEditor({
 
       {menuPoint !== null ? (
         <ContextMenu
-          label={`Ações de ${table.name}`}
+          label={buildUiCopy.sidebar.actionsOf(table.name)}
           point={menuPoint}
           groups={menuGroups}
           onClose={() => setMenuPoint(null)}
@@ -363,7 +364,7 @@ export function SimpleEditor({
       <section aria-labelledby="h-colunas" className="flex flex-col gap-1">
         <div className="flex h-7 items-center gap-2">
           <h2 id="h-colunas" className="m-0 text-[13px] font-semibold">
-            Colunas
+            {buildUiCopy.simpleEditor.columns}
           </h2>
           <span className="text-xs text-subtle">
             {columnCountParts.join(" · ")}
@@ -375,28 +376,28 @@ export function SimpleEditor({
           className="grid h-5 grid-cols-[12px_minmax(0,1fr)_112px_repeat(4,26px)_24px] items-center gap-1 text-[11px] font-medium text-subtle"
         >
           <span />
-          <span>Nome</span>
-          <span>Tipo</span>
+          <span>{buildUiCopy.simpleEditor.columnName}</span>
+          <span>{buildUiCopy.simpleEditor.columnType}</span>
           <span
-            title="PK — Chave primária (Primary Key): identifica cada registro da tabela"
+            title={buildUiCopy.simpleEditor.pkHeader}
             className="cursor-help text-center"
           >
             PK
           </span>
           <span
-            title="NN — Não nulo (Not Null): coluna obrigatória, não aceita NULL"
+            title={buildUiCopy.simpleEditor.nnHeader}
             className="cursor-help text-center"
           >
             NN
           </span>
           <span
-            title="UQ — Valor único (Unique): não permite valores repetidos nesta coluna"
+            title={buildUiCopy.simpleEditor.uqHeader}
             className="cursor-help text-center"
           >
             UQ
           </span>
           <span
-            title="AI — Auto-incremento (Identity / Serial): valor sequencial gerado automaticamente pelo banco"
+            title={buildUiCopy.aiHeader}
             className="cursor-help text-center"
           >
             AI
@@ -657,10 +658,10 @@ export function SimpleEditor({
           className="mt-1 gap-1.5 self-start border-dashed px-3 text-xs"
         >
           <PlusIcon />
-          <span>Adicionar coluna</span>
+          <span>{buildUiCopy.simpleEditor.addColumn}</span>
           {!isExisting ? (
             <span className="font-mono text-[11px] text-muted">
-              Enter na última
+              {buildUiCopy.simpleEditor.enterOnLast}
             </span>
           ) : null}
         </Button>
@@ -697,7 +698,7 @@ export function SimpleEditor({
           className="flex flex-col gap-1.5 border-t border-border pt-3"
         >
           <h2 id="h-comentario" className="m-0 text-[13px] font-semibold">
-            Comentário da tabela
+            {buildUiCopy.simpleEditor.tableComment}
           </h2>
           <textarea
             aria-labelledby="h-comentario"
@@ -721,9 +722,9 @@ export function SimpleEditor({
 
       <ConfirmDialog
         open={confirmDropOpen}
-        title={`Marcar ${currentKey} para excluir no banco?`}
-        description="A tabela ficará marcada para gerar DROP TABLE no DDL de diferenças. Nada é executado no banco agora."
-        confirmLabel="Marcar para excluir"
+        title={buildUiCopy.simpleEditor.confirmDropTitle(currentKey)}
+        description={buildUiCopy.simpleEditor.confirmDropDescription}
+        confirmLabel={buildUiCopy.simpleEditor.confirmDropLabel}
         tone="danger"
         onConfirm={() => {
           setConfirmDropOpen(false);

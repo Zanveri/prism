@@ -1,5 +1,7 @@
 using CSharpFunctionalExtensions;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 
 namespace Prism.Infrastructure.Databases.Clients;
 
@@ -20,11 +22,14 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal static class EditTargetResolver
 {
-    private const string Computed = "coluna calculada";
-    private const string GeneratedByTheDatabase = "gerada pelo banco";
-    private const string UnsupportedType = "o Prism ainda não edita este tipo neste banco";
-    private const string KeyInAJoin = "coluna da chave numa junção";
-    private const string Ambiguous = "a coluna sem tabela pode ser de mais de uma tabela do comando";
+    /// <summary>Os textos, no idioma do pedido: <c>EditTargetResolver.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(EditTargetResolver));
+
+    private static string Computed => Texts.Get(nameof(Computed));
+    private static string GeneratedByTheDatabase => Texts.Get(nameof(GeneratedByTheDatabase));
+    private static string UnsupportedType => Texts.Get(nameof(UnsupportedType));
+    private static string KeyInAJoin => Texts.Get(nameof(KeyInAJoin));
+    private static string Ambiguous => Texts.Get(nameof(Ambiguous));
 
     /// <param name="catalogs">O que o catálogo achou de cada tabela do `FROM`, na mesma ordem; nulo na que ele não acha como tabela nem visão. Nulo no todo: o catálogo não foi consultado (o resultado inteiro é só leitura).</param>
     public static Result<EditTarget, DatabaseFailure> Resolve(ESqlDialect dialect, ResultSource source, IReadOnlyList<QueryColumn> columns, IReadOnlyList<EditCatalogTable?>? catalogs)
@@ -48,15 +53,15 @@ internal static class EditTargetResolver
             var reason = kind switch
             {
                 EditTableKind.Table => null,
-                EditTableKind.View => $"{name} é uma visão",
-                EditTableKind.MaterializedView => $"{name} é uma visão materializada",
-                EditTableKind.Foreign => $"{name} é uma tabela estrangeira",
-                EditTableKind.Elsewhere => $"{name}, escrita sem esquema, leva agora a outra tabela na sessão",
-                _ => $"{name} não é uma tabela"
+                EditTableKind.View => Texts.Get("ViewReason", name),
+                EditTableKind.MaterializedView => Texts.Get("MaterializedViewReason", name),
+                EditTableKind.Foreign => Texts.Get("ForeignTableReason", name),
+                EditTableKind.Elsewhere => Texts.Get("ElsewhereReason", name),
+                _ => Texts.Get("NotATableReason", name)
             };
 
             if (reason is null && names.Count(other => other == name) > 1)
-                reason = $"{name} aparece mais de uma vez no comando";
+                reason = Texts.Get("AppearsManyTimesReason", name);
 
             // RN-GRADE-020: a chave pelo nome, para o "Gerar SQL": a que a edição usa, quando ela acha uma; senão, a primeira candidata.
             IReadOnlyList<int> key = [];
@@ -113,7 +118,7 @@ internal static class EditTargetResolver
            && before.Columns.SequenceEqual(now.Columns);
 
     private static Result<EditTarget, DatabaseFailure> NotEditable(string reason)
-        => new DatabaseFailure(EDatabaseFailure.ResultNotEditable, $"Somente leitura: {reason}.", Reason: reason);
+        => new DatabaseFailure(EDatabaseFailure.ResultNotEditable, Texts.Get("ReadOnlyDetail", reason), Reason: reason);
 
     /// <summary>
     /// De onde vem uma coluna do resultado: a tabela (a posição dela no `FROM`) e a coluna dela no catálogo. Sem tabela é coluna
@@ -264,7 +269,7 @@ internal static class EditTargetResolver
     {
         var candidates = CandidateKeys(catalog);
         if (candidates.Count == 0)
-            return ([], null, $"{name} não tem chave primária nem chave única de colunas não nulas");
+            return ([], null, Texts.Get("NoKeyReason", name));
 
         foreach (var key in candidates)
         {
@@ -281,8 +286,8 @@ internal static class EditTargetResolver
         var missing = candidates[0].Columns.Where(column => !origins.Any(origin => origin?.Name == column)).ToList();
 
         return missing.Count > 0
-            ? ([], null, $"a chave de {name} não está inteira no resultado: faltam {string.Join(", ", missing)}")
-            : ([], null, $"a chave de {name} tem coluna de um tipo que o Prism ainda não edita neste banco");
+            ? ([], null, Texts.Get("KeyIncompleteReason", name, string.Join(", ", missing)))
+            : ([], null, Texts.Get("KeyUnsupportedTypeReason", name));
     }
 
     /// <summary>

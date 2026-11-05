@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Carpeta no encontrada.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>No existe ninguna carpeta con el ID {0}.</value>
+  </data>
+  <data name="ParentNotFoundTitle" xml:space="preserve">
+    <value>Carpeta superior no encontrada.</value>
+  </data>
+  <data name="ParentNotFoundDetail" xml:space="preserve">
+    <value>La carpeta superior con el ID {0} no existe.</value>
+  </data>
+  <data name="AlreadyExistsTitle" xml:space="preserve">
+    <value>La carpeta ya existe.</value>
+  </data>
+  <data name="AlreadyExistsDetail" xml:space="preserve">
+    <value>Ya existe una carpeta llamada {0} en este lugar. El nombre no puede repetirse entre carpetas hermanas, ni siquiera con otras mayúsculas y minúsculas.</value>
+  </data>
+  <data name="CycleTitle" xml:space="preserve">
+    <value>Movimiento no válido.</value>
+  </data>
+  <data name="CycleDetail" xml:space="preserve">
+    <value>Una carpeta no se puede mover dentro de sí misma ni de una de sus subcarpetas.</value>
+  </data>
+  <data name="NotEmptyTitle" xml:space="preserve">
+    <value>La carpeta no está vacía.</value>
+  </data>
+  <data name="NotEmptyDetail" xml:space="preserve">
+    <value>Solo se puede eliminar una carpeta vacía. Antes, mueve o elimina sus subcarpetas y sus conexiones.</value>
+  </data>
+</root>

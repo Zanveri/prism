@@ -50,7 +50,7 @@ internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries,
             {
                 EImportFileRefusal.Missing => ImportErrors.FileMissing(),
                 EImportFileRefusal.TooLarge => ImportErrors.FileTooLarge(refusal),
-                _ => ImportErrors.Unreadable(new ImportReadFailure(EImportReadReason.System, refusal.Reason ?? "Não foi possível ler o arquivo copiado."))
+                _ => ImportErrors.Unreadable(new ImportReadFailure(EImportReadReason.System, refusal.Reason ?? ImportErrors.CopiedFileUnreadable()))
             });
 
         var read = await connectionQueries.GetRecordByID(target.ConnectionID, cancellationToken);

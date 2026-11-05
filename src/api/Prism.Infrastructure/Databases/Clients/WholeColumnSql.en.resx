@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CountNote" xml:space="preserve">
+    <value>The count checks, before the UPDATE, that the statement still returns the confirmed rows.</value>
+  </data>
+  <data name="BatchNote" xml:space="preserve">
+    <value>The keys go in batches of up to 1,000.</value>
+  </data>
+  <data name="JoinReason" xml:space="preserve">
+    <value>in a join result, the whole column cannot be changed: choose the column's cells (drag, or Shift+click), and the edit applies to them</value>
+  </data>
+  <data name="NotReadReason" xml:space="preserve">
+    <value>the whole column runs the result's statement again, and it is not read-only</value>
+  </data>
+  <data name="LimitReason" xml:space="preserve">
+    <value>the statement limits the rows without an order, and the database may pick other rows when it runs again: add an ORDER BY, or choose the column's cells</value>
+  </data>
+  <data name="SampleReason" xml:space="preserve">
+    <value>the statement samples the rows, and the database would pick other ones when it runs again: choose the column's cells</value>
+  </data>
+  <data name="TooManyKeysReason" xml:space="preserve">
+    <value>the statement returns more than 1,000,000 rows, and in this database the whole column of a statement with a row limit reads the keys first: remove the limit from the statement, or change it in parts</value>
+  </data>
+  <data name="KeyReason" xml:space="preserve">
+    <value>{0} is part of the key of {1}: on the whole column, all the rows would end up with the same key</value>
+  </data>
+  <data name="RepeatedKeyReason" xml:space="preserve">
+    <value>{0}, from the key of {1}, appears with the same name in more than one column of the result</value>
+  </data>
+  <data name="CountChanged" xml:space="preserve">
+    <value>The result changed since the count: the statement now returns {0}, and not {1}. Nothing was written; save again to count once more.</value>
+  </data>
+  <data name="UpdateChanged" xml:space="preserve">
+    <value>The result changed since the count: the statement changed {0}, and not {1}. Nothing was written; save again to count once more. If the number repeats in the following attempts, the cause may be a trigger, a rule or a cascade of the database, which the count does not see.</value>
+  </data>
+  <data name="WrittenAnyway" xml:space="preserve">
+    <value>The whole column was changed in {0}, and not in {1}: the result changed since the count. This database has no transaction log, and the change stayed written.</value>
+  </data>
+  <data name="CountedOne" xml:space="preserve">
+    <value>the 1 counted</value>
+  </data>
+  <data name="CountedMany" xml:space="preserve">
+    <value>the {0} counted</value>
+  </data>
+  <data name="LinesOne" xml:space="preserve">
+    <value>1 row</value>
+  </data>
+  <data name="LinesMany" xml:space="preserve">
+    <value>{0} rows</value>
+  </data>
+  <data name="ConfirmedOne" xml:space="preserve">
+    <value>the 1 confirmed</value>
+  </data>
+  <data name="ConfirmedMany" xml:space="preserve">
+    <value>the {0} confirmed</value>
+  </data>
+  <data name="NotSupported" xml:space="preserve">
+    <value>The whole column cannot be changed in this result: {0}.</value>
+  </data>
+  <data name="SeveralWholeChanges" xml:space="preserve">
+    <value>The request has more than one whole-column change: send just one, with all the columns in the set.</value>
+  </data>
+  <data name="CountTakesOnlyWhole" xml:space="preserve">
+    <value>The count takes only the whole-column change (updateAll).</value>
+  </data>
+  <data name="CountNeedsWhole" xml:space="preserve">
+    <value>The count needs the whole-column change (updateAll).</value>
+  </data>
+  <data name="RowsMissing" xml:space="preserve">
+    <value>State how many rows the count gave (rows).</value>
+  </data>
+  <data name="RowsInvalid" xml:space="preserve">
+    <value>The number of rows (rows) must be an integer from 0 up.</value>
+  </data>
+  <data name="TableNotInResult" xml:space="preserve">
+    <value>The change's table does not exist in this result.</value>
+  </data>
+  <data name="TableNotEditable" xml:space="preserve">
+    <value>The change's table cannot be edited: {0}.</value>
+  </data>
+  <data name="WholeChangeHasNoColumn" xml:space="preserve">
+    <value>The whole-column change has no column.</value>
+  </data>
+  <data name="ColumnNotInResult" xml:space="preserve">
+    <value>The column does not exist in the result.</value>
+  </data>
+  <data name="ColumnNotInTable" xml:space="preserve">
+    <value>The column does not belong to the change's table.</value>
+  </data>
+  <data name="ColumnNotEditable" xml:space="preserve">
+    <value>The column cannot be edited: {0}.</value>
+  </data>
+  <data name="ColumnRepeated" xml:space="preserve">
+    <value>The same column appears twice in the change.</value>
+  </data>
+</root>

@@ -1,4 +1,6 @@
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 using System.Text;
 
 namespace Prism.Infrastructure.Databases.Clients;
@@ -18,18 +20,21 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal static class EditableSql
 {
-    public const string NotASelect = "o comando não é um SELECT";
-    public const string NoTable = "o comando não lê uma tabela";
-    public const string Union = "união de consultas";
+    /// <summary>Os textos, no idioma do pedido: <c>EditableSql.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(EditableSql));
+
+    public static string NotASelect => Texts.Get(nameof(NotASelect));
+    public static string NoTable => Texts.Get(nameof(NoTable));
+    public static string Union => Texts.Get(nameof(Union));
     public const string Distinct = "DISTINCT";
-    public const string Grouping = "agrupamento";
+    public static string Grouping => Texts.Get(nameof(Grouping));
     public const string ForUpdate = "SELECT ... FOR UPDATE";
-    public const string SubqueryOrWith = "subconsulta ou WITH no FROM";
-    public const string WroteRows = "o comando gravou e devolveu linhas";
-    public const string UnknownOrigin = "o Prism não conseguiu saber de onde vêm as colunas";
+    public static string SubqueryOrWith => Texts.Get(nameof(SubqueryOrWith));
+    public static string WroteRows => Texts.Get(nameof(WroteRows));
+    public static string UnknownOrigin => Texts.Get(nameof(UnknownOrigin));
 
     /// <summary>RN-GRADE-011: o filtro embrulhou um comando que a leitura aceitaria, mas cujas cláusulas a junção do filtro não conhece.</summary>
-    public const string FilteredOutside = "o filtro foi aplicado por fora do comando";
+    public static string FilteredOutside => Texts.Get(nameof(FilteredOutside));
 
     /// <summary>As palavras que encerram o `FROM` no nível de fora. O `WITH` do fim é o nível de isolamento do Db2 (`WITH UR`).</summary>
     private static readonly HashSet<string> FromEnd = ["WHERE", "GROUP", "HAVING", "ORDER", "LIMIT", "OFFSET", "FETCH", "FOR", "UNION", "INTERSECT", "EXCEPT", "MINUS", "WINDOW", "WITH", "INTO"];

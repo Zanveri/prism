@@ -1,10 +1,14 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { recordsCopyEn } from "./records.copy.en";
+import { recordsCopyEs } from "./records.copy.es";
 
 /**
  * Os textos novos da vista Registros e da grade do resultado (seção 20 da especificação). Os de antes seguem em `workbench.copy.ts`; os que estes
  * trocam (`tableTab.records.filterLabel`, `where`, `placeholder` e `severalStatements`) ficaram lá, sem uso, até o fechamento da leva.
  */
-export const recordsCopy = {
+const pt = {
   // RN-TABELA-010: o campo recebe o que vem depois do nome da tabela (a condição, a ordem ou as duas), e não só a condição.
   filter: {
     label: "Filtro e ordem dos registros",
@@ -183,3 +187,6 @@ export const recordsCopy = {
     readOnlyHint: "Somente leitura",
   },
 } as const;
+
+export type RecordsCopy = Localized<typeof pt>;
+export const recordsCopy = pickCopy({ "pt-BR": pt, en: recordsCopyEn, es: recordsCopyEs });

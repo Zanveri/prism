@@ -161,10 +161,10 @@ internal sealed class ImportPreviewService(IEnumerable<IDatabaseClient> clients,
 
         var name = $"{schema}.{table}";
         if (described.Value is not { } catalog)
-            return new ImportPreviewFailure(EImportPreviewFailure.TableNotFound, $"A tabela {name} não existe mais.");
+            return new ImportPreviewFailure(EImportPreviewFailure.TableNotFound, TransferMessages.Say("TableGone", name));
 
         if (ImportTargets.NotATableReason(engine, catalog.Table.Kind) is { } kind)
-            return new ImportPreviewFailure(EImportPreviewFailure.NotATable, $"Só uma tabela recebe linhas: {name} {kind}.");
+            return new ImportPreviewFailure(EImportPreviewFailure.NotATable, TransferMessages.Say("TargetNotTable", name, kind));
 
         return ImportTargets.TableOf(engine, catalog);
     }
@@ -229,14 +229,14 @@ internal sealed class ImportPreviewService(IEnumerable<IDatabaseClient> clients,
     private static ImportPreviewFailure FileFailure(ImportFileRefusal refusal)
         => refusal.Kind switch
         {
-            EImportFileRefusal.Missing => new ImportPreviewFailure(EImportPreviewFailure.FileMissing, "O arquivo escolhido não está mais com o Prism. Escolha o arquivo de novo."),
+            EImportFileRefusal.Missing => new ImportPreviewFailure(EImportPreviewFailure.FileMissing, TransferMessages.Say("PreviewFileMissing")),
             EImportFileRefusal.TooLarge => new ImportPreviewFailure(EImportPreviewFailure.FileTooLarge, ImportText.TooLarge(refusal.Size), Size: refusal.Size),
-            _ => Unreadable(new ImportReadFailure(EImportReadReason.System, refusal.Reason ?? "Não foi possível ler o arquivo copiado."))
+            _ => Unreadable(new ImportReadFailure(EImportReadReason.System, refusal.Reason ?? TransferMessages.Say("PreviewReadFailed")))
         };
 
     /// <summary>RN-ABERTO-006: como no registro de sessões, o banco sem client é o Db2 ou o Informix numa plataforma para a qual a IBM não publica o driver.</summary>
     private Task<Result<IDatabaseConnection, DatabaseFailure>> ConnectAsync(ConnectionSettings settings, CancellationToken cancellationToken)
         => _clients.TryGetValue(settings.Engine, out var client)
             ? client.OpenAsync(settings, cancellationToken)
-            : Task.FromResult(Result.Failure<IDatabaseConnection, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ConnectionFailed, $"O Prism para {RuntimeInformation.RuntimeIdentifier} ainda não conecta em Db2 e Informix: a IBM não publica o driver para ela.")));
+            : Task.FromResult(Result.Failure<IDatabaseConnection, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ConnectionFailed, TransferMessages.Say("NoClient", RuntimeInformation.RuntimeIdentifier))));
 }

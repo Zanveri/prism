@@ -187,7 +187,7 @@ export function StructureSections({
     ddl: { kind: "none" },
   };
   const hasEnrichment = Boolean(enrichment);
-  const columnsLabel = hasEnrichment ? "Info. e Colunas" : entryLabels.columns;
+  const columnsLabel = hasEnrichment ? copy.structure.infoAndColumns : entryLabels.columns;
   const entries: NavEntry[] = structureSections.map((id) => ({ id, label: id === "columns" ? columnsLabel : entryLabels[id], mark: marks[id] }));
   const copyText = ddl.kind === "ready" ? ddl.text : null;
 
@@ -266,7 +266,7 @@ export function StructureSections({
               <div className="flex flex-col @2xl:flex-row">
                 <div className="min-w-0 flex-1">{tableEl}</div>
                 <aside className="flex w-full flex-none flex-col border-t border-border bg-panel p-4 @2xl:w-72 @2xl:border-t-0 @2xl:border-l">
-                  <div className="mb-3 font-mono text-xs font-semibold text-ink">Inf. do atributo ({activeColName})</div>
+                  <div className="mb-3 font-mono text-xs font-semibold text-ink">{copy.structure.attributeInfo(activeColName)}</div>
                   <dl className="flex flex-col gap-2.5 text-xs">
                     {activeDetails.map((detail, index) => (
                       <div key={index} className="flex flex-col gap-1">
@@ -375,7 +375,7 @@ export function StructureSections({
             ) : null}
             {enrichment?.tableDescription ? (
               <span className="text-sm text-body">
-                <span className="text-muted">Descrição da tabela: </span>
+                <span className="text-muted">{copy.structure.tableDescription} </span>
                 <span className="font-medium text-ink">{enrichment.tableDescription}</span>
               </span>
             ) : null}

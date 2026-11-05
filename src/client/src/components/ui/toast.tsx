@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils/cn";
 import { HostProvider } from "./host-context";
 import { createToastApi, type ToastApi } from "./toast-api";
 import { dismissToast, type ToastItem, type ToastTone } from "./toast-queue";
+import { uiCopy } from "./ui.copy";
 
 export type { ToastAction } from "./toast-queue";
 
@@ -156,7 +157,7 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: str
           )}
         </div>
 
-        <button type="button" aria-label="Fechar aviso" title="Fechar aviso" onClick={() => onDismiss(toast.id)} className="-mt-1 flex size-7 flex-none cursor-pointer items-center justify-center rounded-md text-base leading-none text-subtle transition-colors hover:bg-selected hover:text-ink">
+        <button type="button" aria-label={uiCopy.toast.close} title={uiCopy.toast.close} onClick={() => onDismiss(toast.id)} className="-mt-1 flex size-7 flex-none cursor-pointer items-center justify-center rounded-md text-base leading-none text-subtle transition-colors hover:bg-selected hover:text-ink">
           ×
         </button>
       </div>

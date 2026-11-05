@@ -1,6 +1,7 @@
 import { Button, DatabaseIcon } from "@/components/ui";
 import type { TableChanges } from "../_lib/build-model";
 import { buildCopy } from "../_lib/build.copy";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
 export type ExistingTableBannerProps = {
   baseLabel: string;
@@ -22,7 +23,7 @@ export function ExistingTableBanner({
         <span className="shrink-0 text-muted">
           <DatabaseIcon />
         </span>
-        <span className="font-semibold">Existe em {baseLabel}</span>
+        <span className="font-semibold">{buildUiCopy.existingTable.existsIn(baseLabel)}</span>
         {isChanged ? (
           <span className="inline-flex h-4 items-center rounded border border-accent px-1.5 text-[10px] font-semibold leading-[14px] text-accent">
             {buildCopy.changedTableBadge}
@@ -35,7 +36,7 @@ export function ExistingTableBanner({
         ) : null}
       </div>
       <p className="m-0 text-xs leading-[18px] text-muted">
-        O que você mudar aqui vira ALTER no DDL de diferenças. A tabela não muda de esquema.
+        {buildUiCopy.existingTable.note}
       </p>
       {isChanged || isDropped ? (
         <div className="flex flex-wrap gap-1.5">
@@ -46,7 +47,7 @@ export function ExistingTableBanner({
             onClick={onRevertTable}
             className="h-7 px-2.5 text-xs"
           >
-            Desfazer as mudanças desta tabela
+            {buildUiCopy.existingTable.revert}
           </Button>
         </div>
       ) : null}

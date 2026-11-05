@@ -1,6 +1,7 @@
 import { exactNameFromCatalog, sameName } from "@/app/build/_lib/build-engines";
 import { tableChanges } from "@/app/build/_lib/build-model";
 import type { BuildEngine, BuildModel } from "@/app/build/_lib/build-model.schema";
+import { buildUiCopy } from "./build-ui.copy";
 
 function sameIdentifier(engine: BuildEngine, a: string, b: string): boolean {
   return sameName(
@@ -38,22 +39,22 @@ export function modelSummary(
 
   const parts: string[] = [];
   if (newTables > 0) {
-    parts.push(`${newTables} ${newTables === 1 ? "nova" : "novas"}`);
+    parts.push(buildUiCopy.summary.newCount(newTables));
   }
   if (existing > 0) {
-    const existingLabel = `${existing} ${existing === 1 ? "existente" : "existentes"}`;
+    const existingLabel = buildUiCopy.summary.existingCount(existing);
     const changedLabel =
       changed > 0
-        ? `, ${changed} ${changed === 1 ? "alterada" : "alteradas"}`
+        ? `, ${buildUiCopy.summary.changedCount(changed)}`
         : "";
     parts.push(`${existingLabel}${changedLabel}`);
   }
 
-  const label = parts.length > 0 ? parts.join(" · ") : "Sem tabelas";
+  const label = parts.length > 0 ? parts.join(" · ") : buildUiCopy.summary.noTables;
 
-  let start = "Do zero";
+  let start: string = buildUiCopy.summary.fromScratch;
   if (model.base) {
-    const conn = connectionName(model.base.connectionId) ?? "Conexão removida";
+    const conn = connectionName(model.base.connectionId) ?? buildUiCopy.summary.connectionRemoved;
     const dbPart = model.base.database ? `${conn} / ${model.base.database}` : conn;
     const existingSchemas = Array.from(
       new Set(
@@ -118,7 +119,7 @@ export function footerCountsLabel(model: BuildModel): string {
   const { label } = modelSummary(model, () => null);
   const relations = countModelRelations(model);
   const indexes = countModelIndexes(model);
-  const relText = `${relations} ${relations === 1 ? "relação" : "relações"}`;
-  const idxText = `${indexes} ${indexes === 1 ? "índice" : "índices"}`;
+  const relText = buildUiCopy.summary.relationCount(relations);
+  const idxText = buildUiCopy.summary.indexCount(indexes);
   return `${label} · ${relText} · ${idxText}`;
 }

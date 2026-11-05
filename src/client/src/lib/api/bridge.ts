@@ -48,7 +48,9 @@ import {
 } from "../../../electron/window-messages";
 import { createWorkspaceHub, saveWorkspaceThroughApi } from "../../../electron/workspace-hub";
 import type { SavedWorkspace } from "../../../electron/workspace-messages";
+import type { Locale } from "../../../electron/locale";
 import { isAppZoom, type AppZoom } from "../../../electron/zoom";
+import { apiCopy } from "./api.copy";
 
 declare global {
   interface Window {
@@ -99,6 +101,15 @@ export async function requestAppZoom(zoom: AppZoom): Promise<AppZoom | null> {
   }
 }
 
+/** Grava o idioma da próxima abertura (`electron/locale.ts`); `false` se o pedido não valeu. Nunca lança. */
+export async function requestAppLocale(locale: Locale): Promise<boolean> {
+  try {
+    return (await getBridge().setLocale(locale)) === locale;
+  } catch {
+    return false;
+  }
+}
+
 /** O zoom mudou: por um atalho, nesta ou noutra janela, ou pelas Configurações de outra. O aviso que não é um dos passos é ignorado. */
 export function onAppZoomChanged(listener: (zoom: AppZoom) => void): () => void {
   return listen(() =>
@@ -144,9 +155,9 @@ function devWorkspaceBridge(api: { baseUrl: string; token: string }): PrismWorks
   return devWorkspace;
 }
 
-const outsideElectron = "Exportar só funciona no app do Prism.";
-const importOutsideElectron = "Importar só funciona no app do Prism.";
-const dbeaverOutsideElectron = "Importar do DBeaver só funciona no app do Prism.";
+const outsideElectron = apiCopy.outsideElectron.export;
+const importOutsideElectron = apiCopy.outsideElectron.import;
+const dbeaverOutsideElectron = apiCopy.outsideElectron.dbeaver;
 
 /**
  * A ponte com o processo principal. Só em desenvolvimento, com a tela aberta num navegador comum
@@ -167,6 +178,8 @@ export function getBridge(): PrismBridge {
       onApiExit: () => () => {},
       restartApi: async () => {},
       version: "dev",
+      locale: "pt-BR",
+      setLocale: async () => {},
       getDataFolder: async () => null,
       // Fora do Electron não há processo principal: nada procura atualização, e a consulta manual diz "sem origem".
       updates: {

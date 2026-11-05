@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Transferência não localizada.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>Não existe uma transferência com o ID {0}: ela terminou e foi esquecida, foi abandonada, ou é de outro cofre.</value>
+  </data>
+  <data name="LimitReachedTitle" xml:space="preserve">
+    <value>Limite de transferências.</value>
+  </data>
+  <data name="LimitReachedDetail" xml:space="preserve">
+    <value>Já há 3 transferências em andamento (exportações, importações ou cópias para outro banco). Espere uma terminar, ou cancele uma na barra de status.</value>
+  </data>
+  <data name="CredentialsMissingTitle" xml:space="preserve">
+    <value>Conexão sem usuário ou sem senha.</value>
+  </data>
+  <data name="UserNameMissingDetail" xml:space="preserve">
+    <value>Esta conexão não tem usuário gravado. Preencha-o em Editar conexão e exporte de novo.</value>
+  </data>
+  <data name="PasswordMissingDetail" xml:space="preserve">
+    <value>Esta conexão não tem senha gravada. Preencha-a em Editar conexão e exporte de novo.</value>
+  </data>
+  <data name="DatabaseNameInvalidTitle" xml:space="preserve">
+    <value>Nome de banco inválido.</value>
+  </data>
+  <data name="DatabaseNameInvalidDetail" xml:space="preserve">
+    <value>O nome do banco deve ter de 1 a 128 caracteres, sem caractere de controle.</value>
+  </data>
+  <data name="OptionsInvalidTitle" xml:space="preserve">
+    <value>Erro ao enviar dados para a API.</value>
+  </data>
+  <data name="InformixRowsDetail" xml:space="preserve">
+    <value>O Informix não aceita várias linhas num INSERT.</value>
+  </data>
+  <data name="MarkersMismatchTitle" xml:space="preserve">
+    <value>Os marcadores não batem com os valores.</value>
+  </data>
+  <data name="MultipleStatementsTitle" xml:space="preserve">
+    <value>Só um comando por exportação.</value>
+  </data>
+  <data name="FilterInvalidTitle" xml:space="preserve">
+    <value>Filtro inválido.</value>
+  </data>
+  <data name="NotReadTitle" xml:space="preserve">
+    <value>O comando não é só de leitura.</value>
+  </data>
+  <data name="NotReadDetail" xml:space="preserve">
+    <value>Exportar executa o comando de novo, e só se exporta uma leitura: {0}. Nada foi enviado ao banco.</value>
+  </data>
+</root>

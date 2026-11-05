@@ -1,3 +1,4 @@
+import { locale } from "@/lib/i18n";
 import { limits, phrase } from "./variables.copy";
 import { storedFromWire, type EvaluateMessage, type EvaluateRequest, type WireDiagnostic, type WireStored } from "./wire";
 import type { StoredValue } from "./run";
@@ -53,7 +54,7 @@ export class EvaluatorHost {
 
   /** Avalia os itens pedidos; resolve quando o Worker acaba, falha ou é terminado por passar do tempo. Um pedido por vez. */
   evaluate(request: Omit<EvaluateRequest, "id" | "kind">): Promise<EvaluateOutcome> {
-    if (this.settle !== null) return Promise.reject(new Error("Já há uma avaliação em andamento."));
+    if (this.settle !== null) return Promise.reject(new Error(phrase.evaluationBusy()));
 
     const worker = (this.worker ??= this.createWorker());
     const id = this.nextId++;
@@ -125,7 +126,7 @@ export class EvaluatorHost {
 
 /** O Worker de verdade, do pacote da tela (o Vite o empacota). Só o navegador chama. */
 export function createBrowserWorker(): WorkerLike {
-  return new Worker(new URL("./evaluator.worker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike;
+  return new Worker(new URL("./evaluator.worker.ts", import.meta.url), { type: "module", name: locale }) as unknown as WorkerLike;
 }
 
 /** O que o executor da aba precisa do hospedeiro: avaliar e largar o Worker. Os testes passam o deles (`inlineEvaluator`). */

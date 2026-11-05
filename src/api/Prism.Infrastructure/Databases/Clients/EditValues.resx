@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotADate" xml:space="preserve">
+    <value>«{0}» não é uma data no formato aaaa-mm-dd.</value>
+  </data>
+  <data name="NotATime" xml:space="preserve">
+    <value>«{0}» não é uma hora no formato hh:mm:ss.</value>
+  </data>
+  <data name="TypeNotEditable" xml:space="preserve">
+    <value>O Prism ainda não edita este tipo neste banco.</value>
+  </data>
+  <data name="NotABinary" xml:space="preserve">
+    <value>«{0}» não é um binário em hexadecimal (0x…).</value>
+  </data>
+  <data name="NotAnInteger" xml:space="preserve">
+    <value>«{0}» não é um número inteiro.</value>
+  </data>
+  <data name="OutOfRange" xml:space="preserve">
+    <value>«{0}» está fora da faixa da coluna.</value>
+  </data>
+  <data name="NotATimestamp" xml:space="preserve">
+    <value>«{0}» não é uma data e hora no formato aaaa-mm-dd hh:mm:ss, com até {1} casas de fração.</value>
+  </data>
+  <data name="NotABooleanWords" xml:space="preserve">
+    <value>«{0}» não é um valor lógico: use true ou false.</value>
+  </data>
+  <data name="NotABooleanNumbers" xml:space="preserve">
+    <value>«{0}» não é um valor lógico: use 1 ou 0.</value>
+  </data>
+  <data name="NotANumber" xml:space="preserve">
+    <value>«{0}» não é um número: use ponto para as casas decimais.</value>
+  </data>
+</root>

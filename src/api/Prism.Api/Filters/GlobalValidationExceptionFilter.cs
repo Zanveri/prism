@@ -2,11 +2,16 @@
 using Microsoft.AspNetCore.Mvc.Filters;
 using Prism.Core.Api.Models.Dtos;
 using System.Net;
+using Prism.Core.Extensions;
+using System.Resources;
 
 namespace Prism.Api.Filters;
 
 public class GlobalValidationExceptionFilter : IExceptionFilter, IOrderedFilter
 {
+    /// <summary>Os textos, no idioma do pedido: <c>GlobalValidationExceptionFilter.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(GlobalValidationExceptionFilter));
+
     public int Order => 0;
 
     public void OnException(ExceptionContext context)
@@ -42,7 +47,7 @@ public class GlobalValidationExceptionFilter : IExceptionFilter, IOrderedFilter
             ["errorCodes"] = errorCodes
         };
 
-        context.Result = new UnprocessableEntityObjectResult(ApiErrorDto.Create(type, "Erro ao enviar dados para a API.", HttpStatusCode.UnprocessableEntity, "Verifique os dados incorretos e tente novamente.", null, extensions));
+        context.Result = new UnprocessableEntityObjectResult(ApiErrorDto.Create(type, Texts.Get("Title"), HttpStatusCode.UnprocessableEntity, Texts.Get("Detail"), null, extensions));
 
         context.ExceptionHandled = true;
     }

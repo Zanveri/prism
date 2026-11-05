@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Drivers.Clients;
@@ -7,6 +9,9 @@ namespace Prism.Infrastructure.Drivers.Services;
 
 internal sealed class DriverService : IDriverService, IAsyncDisposable
 {
+    /// <summary>Os textos, no idioma do pedido: <c>DriverService.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DriverService));
+
     private readonly DriverCatalog _catalog;
     private readonly DriverSettings _settings;
     private readonly IDriverPackageClient _client;
@@ -70,7 +75,7 @@ internal sealed class DriverService : IDriverService, IAsyncDisposable
         lock (_gate)
             installedAfterStartup = installation.Installed;
 
-        return new DatabaseFailure(EDatabaseFailure.DriverNotInstalled, installedAfterStartup ? $"O driver {driver.Name} foi instalado e só passa a valer quando o Prism reiniciar." : $"O driver {driver.Name} não está instalado. Instale-o na tela de Drivers: ele passa a valer quando o Prism reiniciar.", DriverID: driver.ID);
+        return new DatabaseFailure(EDatabaseFailure.DriverNotInstalled, installedAfterStartup ? Texts.Get("InstalledAfterStartup", driver.Name) : Texts.Get("NotInstalled", driver.Name), DriverID: driver.ID);
     }
 
     public UnitResult<EDriverFailure> Install(string driverID, bool acceptedLicense)

@@ -29,4 +29,13 @@
 		<RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
 	</PropertyGroup>
 
+	<!--
+		Idiomas da API: o `.resx` sem sufixo de cada classe é o português, que vai no próprio assembly; o `.en.resx` e o `.es.resx`
+		viram os satélites `en/` e `es/` ao lado dele. Com o pt-BR declarado neutro, o pedido em português lê o assembly direto, sem
+		procurar satélite.
+	-->
+	<PropertyGroup>
+		<NeutralLanguage>pt-BR</NeutralLanguage>
+	</PropertyGroup>
+
 </Project>

@@ -586,12 +586,12 @@ class Parser {
       let key: string;
       if (keyToken.type === "name") key = keyToken.text;
       else if (keyToken.type === "string") key = keyToken.cooked ?? "";
-      else if (keyToken.type === "punct" && keyToken.text === "[") throw new VariableError(phrase.noVarOrFunctionHere("A chave calculada"), keyToken.start);
+      else if (keyToken.type === "punct" && keyToken.text === "[") throw new VariableError(phrase.noVarOrFunctionHere(phrase.computedKey), keyToken.start);
       else throw this.unexpected(phrase.expectedFieldName());
       if (forbiddenMembers.has(key)) throw new VariableError(phrase.keyForbidden(key), keyToken.start);
 
       this.advance();
-      if (!this.is(":")) throw this.unexpected(this.is(",") || this.is("}") ? phrase.noVarOrFunctionHere(`A forma curta { ${key} }`) : phrase.expectedColonInObject());
+      if (!this.is(":")) throw this.unexpected(this.is(",") || this.is("}") ? phrase.noVarOrFunctionHere(phrase.shortForm(key)) : phrase.expectedColonInObject());
       this.advance(true);
       pairs.push({ key, keyStart: keyToken.start, value: this.parseExpression() });
     });

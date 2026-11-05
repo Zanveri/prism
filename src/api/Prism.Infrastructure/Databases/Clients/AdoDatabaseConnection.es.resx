@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CanceledMessage" xml:space="preserve">
+    <value>Se canceló la sentencia.</value>
+  </data>
+  <data name="UnknownOutcomeAdvice" xml:space="preserve">
+    <value>Prism no sabe si la sentencia terminó: revisa la base de datos antes de ejecutarla de nuevo.</value>
+  </data>
+  <data name="UnknownOutcomeMessage" xml:space="preserve">
+    <value>La base de datos no respondió a la cancelación a tiempo, y la sesión se cerró. {0}</value>
+  </data>
+  <data name="CanceledWhileReturningRowsMessage" xml:space="preserve">
+    <value>La cancelación llegó mientras la sentencia devolvía las filas. Lo que escribió hasta ese punto está confirmado, y puede ser solo una parte de la sentencia: Prism no sabe si terminó. Revisa la base de datos antes de ejecutarla de nuevo.</value>
+  </data>
+  <data name="ConnectionClosedMessage" xml:space="preserve">
+    <value>Se cerró la conexión con la base de datos, y la sentencia no se envió. Abre la sesión de nuevo.</value>
+  </data>
+  <data name="NoOpenCursorMessage" xml:space="preserve">
+    <value>No hay un cursor abierto: ejecuta la sentencia de nuevo.</value>
+  </data>
+  <data name="UnknownObjectKindMessage" xml:space="preserve">
+    <value>El tipo de objeto pedido no existe: usa tables, views, routines o sequences.</value>
+  </data>
+  <data name="TransactionControlMessage" xml:space="preserve">
+    <value>Las sentencias de control de transacción (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) no se aceptan en Auto-commit, donde cada sentencia se confirma al terminar. Para controlar la transacción, elige "Commit manual" en la barra del editor: la primera sentencia abre la transacción, y "Commit" y "Rollback" (o COMMIT y ROLLBACK escritos) la terminan.</value>
+  </data>
+  <data name="NeverTransactionControlMessage" xml:space="preserve">
+    <value>La confirmación en dos fases (PREPARE TRANSACTION, COMMIT PREPARED), el AND CHAIN y el COMMIT o ROLLBACK con algo más después no se aceptan; no se envió nada. Usa COMMIT o ROLLBACK solos, o los botones "Commit" y "Rollback".</value>
+  </data>
+  <data name="NotAllowedInTransactionMessage" xml:space="preserve">
+    <value>Esta sentencia no se ejecuta dentro de una transacción, y el rechazo de la base de datos estropearía la transacción manual de la pestaña; no se envió nada. Ejecútala en una pestaña en Auto-commit.</value>
+  </data>
+  <data name="ReadOnlyWithTransactionMessage" xml:space="preserve">
+    <value>La conexión pasó a solo lectura con una transacción manual abierta en esta pestaña; no se envió nada. Termina la transacción con "Commit" o "Rollback" antes.</value>
+  </data>
+  <data name="RollbackWorkToSavepointMessage" xml:space="preserve">
+    <value>Con el driver de IBM, ROLLBACK WORK TO SAVEPOINT revierte la transacción entera, y no solo lo que vino después del punto de guardado; no se envió nada. Escribe ROLLBACK TO SAVEPOINT, sin el WORK.</value>
+  </data>
+  <data name="CanceledWhileReturningRowsInTransactionMessage" xml:space="preserve">
+    <value>La cancelación llegó mientras la sentencia devolvía las filas. Lo que escribió hasta ese punto quedó en la transacción, sin commit, y puede ser solo una parte de la sentencia: Prism no sabe si terminó. Revisa antes del Commit.</value>
+  </data>
+  <data name="UndoneTransactionMessage" xml:space="preserve">
+    <value>La sentencia dejó una transacción abierta, y Prism la revirtió: nada de lo que escribió dentro de ella quedó. {0}</value>
+  </data>
+  <data name="WritesAfterTheFirstPageMessage" xml:space="preserve">
+    <value>La sentencia empezó como lectura e intentó escribir después de la primera página; no se escribió nada. Ejecútala de nuevo: se ejecutará hasta el final.</value>
+  </data>
+  <data name="SeveralStatementsMessage" xml:space="preserve">
+    <value>Cada ejecución lleva una sola sentencia, y el texto enviado tiene más de una; no se ejecutó nada. Envía una por vez. Un bloque con `;` en el cuerpo (procedimiento, función, trigger, bloque compuesto) es una sola sentencia.</value>
+  </data>
+  <data name="NotCountableMessage" xml:space="preserve">
+    <value>Solo una lectura se puede contar, y la sentencia enviada no es una sola lectura; no se ejecutó nada.</value>
+  </data>
+  <data name="NoRowMessage" xml:space="preserve">
+    <value>La fila ya no existe, o su clave cambió: la sentencia no modificó ninguna fila.</value>
+  </data>
+  <data name="IsolationLevelInvalid" xml:space="preserve">
+    <value>El nivel de aislamiento "{0}" no existe para esta base de datos.</value>
+  </data>
+  <data name="TransactionOpenForIsolation" xml:space="preserve">
+    <value>La pestaña tiene una transacción abierta: termínala con Commit o Rollback antes de cambiar el nivel de aislamiento.</value>
+  </data>
+  <data name="NoTransactionLogForIsolation" xml:space="preserve">
+    <value>Esta base de datos no tiene log de transacciones: el único nivel de aislamiento disponible es Dirty Read.</value>
+  </data>
+  <data name="EditWouldChangeMany" xml:space="preserve">
+    <value>La sentencia modificaría {0} filas, y no solo una.</value>
+  </data>
+  <data name="CountReturnedNoRow" xml:space="preserve">
+    <value>El conteo no devolvió ninguna fila.</value>
+  </data>
+  <data name="SemicolonInHost" xml:space="preserve">
+    <value>El driver de IBM no acepta `;` en el host: es el carácter con que separa los datos de la conexión.</value>
+  </data>
+  <data name="SemicolonInPassword" xml:space="preserve">
+    <value>El driver de IBM no acepta `;` en la contraseña: es el carácter con que separa los datos de la conexión.</value>
+  </data>
+  <data name="SemicolonInDatabase" xml:space="preserve">
+    <value>El driver de IBM no acepta `;` en el nombre de la base de datos: es el carácter con que separa los datos de la conexión.</value>
+  </data>
+  <data name="SemicolonInUserName" xml:space="preserve">
+    <value>El driver de IBM no acepta `;` en el usuario: es el carácter con que separa los datos de la conexión.</value>
+  </data>
+</root>

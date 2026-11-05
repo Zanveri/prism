@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Carpeta no encontrada.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>No existe ninguna carpeta de scripts con el ID {0}.</value>
+  </data>
+  <data name="ParentNotFoundTitle" xml:space="preserve">
+    <value>Carpeta superior no encontrada.</value>
+  </data>
+  <data name="ParentNotFoundDetail" xml:space="preserve">
+    <value>La carpeta superior ya no existe.</value>
+  </data>
+  <data name="DestinationNotFoundTitle" xml:space="preserve">
+    <value>Carpeta de destino no encontrada.</value>
+  </data>
+  <data name="DestinationNotFoundDetail" xml:space="preserve">
+    <value>La carpeta de destino ya no existe.</value>
+  </data>
+  <data name="ChosenNotFoundDetail" xml:space="preserve">
+    <value>La carpeta elegida ya no existe.</value>
+  </data>
+  <data name="AlreadyExistsTitle" xml:space="preserve">
+    <value>La carpeta ya existe.</value>
+  </data>
+  <data name="AlreadyExistsAtRootDetail" xml:space="preserve">
+    <value>Ya existe una carpeta llamada {0} en la raíz de la sección Scripts.</value>
+  </data>
+  <data name="AlreadyExistsInDetail" xml:space="preserve">
+    <value>Ya existe una carpeta llamada {0} en {1}.</value>
+  </data>
+  <data name="CycleTitle" xml:space="preserve">
+    <value>Movimiento no válido.</value>
+  </data>
+  <data name="CycleDetail" xml:space="preserve">
+    <value>Una carpeta no puede ir dentro de sí misma ni de una de sus subcarpetas.</value>
+  </data>
+  <data name="NotEmptyTitle" xml:space="preserve">
+    <value>La carpeta no está vacía.</value>
+  </data>
+  <data name="NotEmptyDetail" xml:space="preserve">
+    <value>La carpeta {0} tiene {1}. Solo se puede eliminar una carpeta vacía: antes, mueve o elimina lo que hay dentro.</value>
+  </data>
+  <data name="ContentsSubfolderOne" xml:space="preserve">
+    <value>1 subcarpeta</value>
+  </data>
+  <data name="ContentsSubfolderMany" xml:space="preserve">
+    <value>{0} subcarpetas</value>
+  </data>
+  <data name="ContentsScriptOne" xml:space="preserve">
+    <value>1 script</value>
+  </data>
+  <data name="ContentsScriptMany" xml:space="preserve">
+    <value>{0} scripts</value>
+  </data>
+  <data name="ContentsJoin" xml:space="preserve">
+    <value> y </value>
+  </data>
+</root>

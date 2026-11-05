@@ -8,6 +8,7 @@ using Prism.Application.Folders.Models;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 using System.Text.Json;
 
 namespace Prism.Application.ConnectionTransfers.Models;
@@ -25,6 +26,9 @@ namespace Prism.Application.ConnectionTransfers.Models;
 /// </summary>
 internal sealed class ImportAnalysis
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ImportAnalysis.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ImportAnalysis));
+
     private ImportAnalysis(IReadOnlyList<ImportFolderItem> folders, IReadOnlyList<ImportConnectionItem> connections)
     {
         Folders = folders;
@@ -163,7 +167,7 @@ internal sealed class ImportAnalysis
     }
 
     private static string Blocked(string folderName)
-        => $"A pasta {folderName} não pode ser importada.";
+        => Texts.Get("Blocked", folderName);
 
     /// <summary>RN-PROT-001 e 004: a confirmação mais alta entre as que vieram, nula quando é "Não".</summary>
     private static string? Strongest(params string?[] confirmations)
@@ -174,22 +178,22 @@ internal sealed class ImportAnalysis
     {
         candidate = null;
 
-        if (TextRule(folder.Name, "o nome da pasta", required: true, FolderRules.NameRefusal, out var name) is { } nameRefusal)
+        if (TextRule(folder.Name, Label("FolderName"), required: true, FolderRules.NameRefusal, out var name) is { } nameRefusal)
             return nameRefusal;
 
-        if (TextRule(folder.Color, "a cor da pasta", required: false, EnvironmentRules.ColorRefusal, out var color) is { } colorRefusal)
+        if (TextRule(folder.Color, Label("FolderColor"), required: false, EnvironmentRules.ColorRefusal, out var color) is { } colorRefusal)
             return colorRefusal;
 
-        if (Environment(folder.EnvironmentName, folder.EnvironmentColor, "da pasta", out var environmentName, out var environmentColor) is { } environmentRefusal)
+        if (Environment(folder.EnvironmentName, folder.EnvironmentColor, "Folder", out var environmentName, out var environmentColor) is { } environmentRefusal)
             return environmentRefusal;
 
-        if (Confirmation(folder.ConfirmCommands, "a confirmação da pasta", out var confirm) is { } confirmRefusal)
+        if (Confirmation(folder.ConfirmCommands, Label("FolderConfirmation"), out var confirm) is { } confirmRefusal)
             return confirmRefusal;
 
-        if (Flag(folder.ReadOnly, "o somente leitura da pasta", fallback: false, out var readOnly) is { } readOnlyRefusal)
+        if (Flag(folder.ReadOnly, Label("FolderReadOnly"), fallback: false, out var readOnly) is { } readOnlyRefusal)
             return readOnlyRefusal;
 
-        if (Effective(folder.Effective, "o que valia na pasta", withEnvironment: false, out var effective) is { } effectiveRefusal)
+        if (Effective(folder.Effective, Label("FolderEffective"), withEnvironment: false, out var effective) is { } effectiveRefusal)
             return effectiveRefusal;
 
         candidate = new FolderCandidate(name.NormalizeName(), EnvironmentRules.NormalizeColor(color), environmentName, environmentColor, ProtectionRules.NormalizeConfirmation(confirm), readOnly, effective.ReadOnly, effective.ConfirmCommands);
@@ -202,45 +206,45 @@ internal sealed class ImportAnalysis
     {
         candidate = null;
 
-        if (TextRule(connection.Name, "o nome da conexão", required: true, ConnectionRules.NameRefusal, out var name) is { } nameRefusal)
+        if (TextRule(connection.Name, Label("ConnectionName"), required: true, ConnectionRules.NameRefusal, out var name) is { } nameRefusal)
             return nameRefusal;
 
         if (EngineRefusal(connection.Engine, out var engine) is { } engineRefusal)
             return engineRefusal;
 
-        if (TextRule(connection.Host, "o host", required: true, ConnectionRules.HostRefusal, out var host) is { } hostRefusal)
+        if (TextRule(connection.Host, Label("Host"), required: true, ConnectionRules.HostRefusal, out var host) is { } hostRefusal)
             return hostRefusal;
 
         if (connection.Port.IsMissing)
-            return Missing("a porta");
+            return Missing(Label("Port"));
 
         // A porta é um inteiro de 1 a 65535: o texto, o número com casas e o negativo dão a frase da regra.
         if (connection.Port.Integer is not { } port || ConnectionRules.PortRefusal(port) is not null)
             return ConnectionRules.PortRefusal(0);
 
-        if (TextRule(connection.Database, "o banco de dados", required: true, ConnectionRules.DatabaseRefusal, out var database) is { } databaseRefusal)
+        if (TextRule(connection.Database, Label("Database"), required: true, ConnectionRules.DatabaseRefusal, out var database) is { } databaseRefusal)
             return databaseRefusal;
 
-        if (TextRule(connection.UserName, "o usuário do banco", required: false, userName => ConnectionRules.UserNameRefusal(userName, required: false), out var userName) is { } userRefusal)
+        if (TextRule(connection.UserName, Label("UserName"), required: false, userName => ConnectionRules.UserNameRefusal(userName, required: false), out var userName) is { } userRefusal)
             return userRefusal;
 
-        if (TextRule(connection.Password, "a senha do banco", required: false, ConnectionRules.PasswordRefusal, out var password) is { } passwordRefusal)
+        if (TextRule(connection.Password, Label("Password"), required: false, ConnectionRules.PasswordRefusal, out var password) is { } passwordRefusal)
             return passwordRefusal;
 
         // RN-TRANSF-007: o `password` só vem com o `userName`.
         if (!string.IsNullOrEmpty(password) && string.IsNullOrWhiteSpace(userName))
-            return "A senha do banco veio sem o usuário.";
+            return Texts.Get("PasswordWithoutUser");
 
-        if (Environment(connection.EnvironmentName, connection.EnvironmentColor, "da conexão", out var environmentName, out var environmentColor) is { } environmentRefusal)
+        if (Environment(connection.EnvironmentName, connection.EnvironmentColor, "Connection", out var environmentName, out var environmentColor) is { } environmentRefusal)
             return environmentRefusal;
 
-        if (Confirmation(connection.ConfirmCommands, "a confirmação da conexão", out var confirm) is { } confirmRefusal)
+        if (Confirmation(connection.ConfirmCommands, Label("ConnectionConfirmation"), out var confirm) is { } confirmRefusal)
             return confirmRefusal;
 
-        if (Flag(connection.ReadOnly, "o somente leitura da conexão", fallback: false, out var readOnly) is { } readOnlyRefusal)
+        if (Flag(connection.ReadOnly, Label("ConnectionReadOnly"), fallback: false, out var readOnly) is { } readOnlyRefusal)
             return readOnlyRefusal;
 
-        if (Flag(connection.VerificationEnabled, "a verificação da conexão", fallback: true, out var verificationEnabled) is { } enabledRefusal)
+        if (Flag(connection.VerificationEnabled, Label("VerificationEnabled"), fallback: true, out var verificationEnabled) is { } enabledRefusal)
             return enabledRefusal;
 
         var interval = ConnectionRules.VerificationIntervalDefault;
@@ -254,10 +258,10 @@ internal sealed class ImportAnalysis
 
         // RN-VERIF-001: até 1.000 caracteres e uma leitura só no banco da conexão, com a caixa "Manter as consultas de verificação do arquivo" marcada ou não:
         // ela roda sozinha a cada intervalo depois de conectar, com as credenciais da conexão.
-        if (TextRule(connection.VerificationQuery, "a consulta de verificação", required: false, query => ConnectionRules.VerificationQueryRefusal(query, engine), out var query) is { } queryRefusal)
+        if (TextRule(connection.VerificationQuery, Label("VerificationQuery"), required: false, query => ConnectionRules.VerificationQueryRefusal(query, engine), out var query) is { } queryRefusal)
             return queryRefusal;
 
-        if (Effective(connection.Effective, "o que valia na conexão", withEnvironment: true, out var effective) is { } effectiveRefusal)
+        if (Effective(connection.Effective, Label("ConnectionEffective"), withEnvironment: true, out var effective) is { } effectiveRefusal)
             return effectiveRefusal;
 
         if (Network(connection, out var ssh, out var ssl, out var proxy) is { } networkRefusal)
@@ -419,7 +423,7 @@ internal sealed class ImportAnalysis
     {
         engine = default;
         if (value.IsMissing)
-            return Missing("o banco da conexão");
+            return Missing(Label("Engine"));
 
         if (EngineOf(value) is { } known)
         {
@@ -429,7 +433,7 @@ internal sealed class ImportAnalysis
         }
 
         // O número (o da API) e o nome que este Prism não conhece, citados como vieram: um arquivo de um Prism mais novo pode trazer um banco a mais.
-        return value.Kind is JsonValueKind.String or JsonValueKind.Number ? $"Este Prism não conhece o banco {TextRules.Cut(value.Text!, TransferLimits.InvalidTextLength)}." : WrongType("o banco da conexão");
+        return value.Kind is JsonValueKind.String or JsonValueKind.Number ? Texts.Get("EngineUnknown", TextRules.Cut(value.Text!, TransferLimits.InvalidTextLength)) : WrongType(Label("Engine"));
     }
 
     /// <summary>O ambiente (nome e cor), opcional, com as regras e a normalização do ambiente (RN-PASTA-005 e RN-CONN-010).</summary>
@@ -438,10 +442,10 @@ internal sealed class ImportAnalysis
         environmentName = null;
         environmentColor = null;
 
-        if (TextRule(name, $"o ambiente {owner}", required: false, EnvironmentRules.NameRefusal, out var nameText) is { } nameRefusal)
+        if (TextRule(name, Label($"Environment{owner}"), required: false, EnvironmentRules.NameRefusal, out var nameText) is { } nameRefusal)
             return nameRefusal;
 
-        if (TextRule(color, $"a cor do ambiente {owner}", required: false, EnvironmentRules.ColorRefusal, out var colorText) is { } colorRefusal)
+        if (TextRule(color, Label($"EnvironmentColor{owner}"), required: false, EnvironmentRules.ColorRefusal, out var colorText) is { } colorRefusal)
             return colorRefusal;
 
         environmentName = EnvironmentRules.NormalizeName(nameText);
@@ -456,7 +460,7 @@ internal sealed class ImportAnalysis
         if (Text(value, label, required: false, out confirm) is { } refusal)
             return refusal;
 
-        return ProtectionRules.ConfirmationIsValid(confirm) ? null : "Escolha não confirmar, só os comandos irreversíveis ou todos os comandos.";
+        return ProtectionRules.ConfirmationIsValid(confirm) ? null : Texts.Get("ConfirmationInvalid");
     }
 
     /// <summary>
@@ -480,7 +484,7 @@ internal sealed class ImportAnalysis
 
         string? environmentName = null;
         string? environmentColor = null;
-        if (withEnvironment && Environment(value.EnvironmentName, value.EnvironmentColor, "que valia na conexão", out environmentName, out environmentColor) is { } environmentRefusal)
+        if (withEnvironment && Environment(value.EnvironmentName, value.EnvironmentColor, "Effective", out environmentName, out environmentColor) is { } environmentRefusal)
             return environmentRefusal;
 
         effective = new ImportFileEffective(readOnly, ProtectionRules.NormalizeConfirmation(confirm), environmentName, environmentColor);
@@ -522,11 +526,18 @@ internal sealed class ImportAnalysis
         return null;
     }
 
+    /// <summary>O nome do campo na frase, com o artigo ("o nome da pasta"): um texto por idioma, porque o artigo e a ordem mudam.</summary>
+    private static string Label(string key)
+        => Texts.Get($"Label{key}");
+
+    private static string Capitalize(string text)
+        => $"{char.ToUpperInvariant(text[0])}{text[1..]}";
+
     private static string Missing(string label)
-        => $"Falta {label} no arquivo.";
+        => Capitalize(Texts.Get("Missing", label));
 
     private static string WrongType(string label)
-        => $"{char.ToUpperInvariant(label[0])}{label[1..]} não está no formato que este Prism lê.";
+        => Texts.Get("WrongType", Capitalize(label));
 }
 
 /// <summary>Uma pasta do arquivo conferida: o que ela traz já normalizado (`Candidate`), ou o motivo de não poder ser importada (`Invalid`).</summary>

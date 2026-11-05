@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ConsentRequiredTitle" xml:space="preserve">
+    <value>Consent required for third-party plugins.</value>
+  </data>
+  <data name="ConsentRequiredDetail" xml:space="preserve">
+    <value>You must accept the disclaimer and turn off restricted mode before installing or enabling third-party plugins.</value>
+  </data>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Plugin not found.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>The plugin '{0}' is not installed in this vault.</value>
+  </data>
+  <data name="AlreadyInstalledTitle" xml:space="preserve">
+    <value>Plugin already installed.</value>
+  </data>
+  <data name="AlreadyInstalledDetail" xml:space="preserve">
+    <value>The plugin '{0}' is already installed.</value>
+  </data>
+  <data name="LocalPluginTitle" xml:space="preserve">
+    <value>A local plugin does not use Git.</value>
+  </data>
+  <data name="LocalPluginDetail" xml:space="preserve">
+    <value>Plugins linked from a local folder already reflect the files on disk when the structure is refreshed.</value>
+  </data>
+  <data name="SourceInvalidTitle" xml:space="preserve">
+    <value>Invalid plugin source.</value>
+  </data>
+  <data name="ManifestInvalidTitle" xml:space="preserve">
+    <value>Invalid plugin manifest.</value>
+  </data>
+  <data name="GitFailedTitle" xml:space="preserve">
+    <value>Failed to access the Git repository.</value>
+  </data>
+  <data name="BundleUnavailableTitle" xml:space="preserve">
+    <value>Plugin code unavailable.</value>
+  </data>
+</root>

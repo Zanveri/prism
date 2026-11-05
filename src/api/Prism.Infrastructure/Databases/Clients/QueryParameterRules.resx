@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ListShape" xml:space="preserve">
+    <value>Informe os valores como uma lista de { type, value }.</value>
+  </data>
+  <data name="TooManyValues" xml:space="preserve">
+    <value>O comando leva até 10.000 valores.</value>
+  </data>
+  <data name="EntryShape" xml:space="preserve">
+    <value>Cada valor é um objeto com type e value.</value>
+  </data>
+  <data name="TypeInvalid" xml:space="preserve">
+    <value>O tipo é text, number, boolean, date ou timestamp.</value>
+  </data>
+  <data name="ValueNotText" xml:space="preserve">
+    <value>O valor é um texto, ou nulo.</value>
+  </data>
+  <data name="TextBrokenEncoding" xml:space="preserve">
+    <value>O texto tem metade de um par UTF-16 ou UTF-8 inválido, que o banco não guarda.</value>
+  </data>
+  <data name="ValuesTooBig" xml:space="preserve">
+    <value>Os valores do comando passam de 4 MiB.</value>
+  </data>
+  <data name="TimestampZoneOnlyPostgres" xml:space="preserve">
+    <value>O instante com fuso só vale no PostgreSQL; o {0} guarda o instante sem fuso.</value>
+  </data>
+  <data name="NumberDigits" xml:space="preserve">
+    <value>O número tem {0} dígitos, e o {1} guarda até {2}.</value>
+  </data>
+  <data name="NumberDigitsDriver" xml:space="preserve">
+    <value>O número tem {0} dígitos, e o {1} guarda até {2} pelo driver.</value>
+  </data>
+  <data name="NumberDouble" xml:space="preserve">
+    <value>O número passa do que o {0} guarda em um DOUBLE.</value>
+  </data>
+  <data name="FilterMarker" xml:space="preserve">
+    <value>O filtro não pode ter marcador de parâmetro ($1 ou ?).</value>
+  </data>
+  <data name="NumberForm" xml:space="preserve">
+    <value>O número é escrito como 12, -3.5 ou 1e10, com até 100 caracteres.</value>
+  </data>
+  <data name="BooleanForm" xml:space="preserve">
+    <value>O booleano é true ou false.</value>
+  </data>
+  <data name="DateForm" xml:space="preserve">
+    <value>A data é aaaa-mm-dd, e tem de existir.</value>
+  </data>
+  <data name="TimestampForm" xml:space="preserve">
+    <value>O instante é aaaa-mm-dd hh:mm:ss, com até 6 casas depois de um ponto e, no PostgreSQL, o fuso no fim.</value>
+  </data>
+  <data name="TextTooLong" xml:space="preserve">
+    <value>O texto pode ter até 1.000.000 de caracteres.</value>
+  </data>
+  <data name="TextHasNul" xml:space="preserve">
+    <value>O texto não pode ter o caractere U+0000.</value>
+  </data>
+  <data name="TextHalfPair" xml:space="preserve">
+    <value>O texto tem metade de um par UTF-16, que o banco não guarda.</value>
+  </data>
+</root>

@@ -5,6 +5,7 @@ import { scriptRunCopy } from "../_lib/script-run.copy";
 import { sentSqlCopy } from "../_lib/sent-sql.copy";
 import type { RunTarget } from "../_lib/use-query-runner";
 import { variableRunCopy } from "../_lib/variable-run.copy";
+import { workbenchCopy } from "../_lib/workbench.copy";
 
 const copy = scriptRunCopy.error;
 
@@ -29,7 +30,7 @@ export function ScriptErrorDialog({ entry, number, total, onChoose, onViewSent }
   const error = entry.error;
   // RN-VAR-022: o erro numa declaração só deixa "Parar" e "Tentar de novo": sem o valor, os comandos que o usam não têm como rodar.
   const declaration = entry.kind === "declaration";
-  const name = declaration ? (/^\s*(?:let|const)?\s*([^\s=:;]+)/.exec(entry.target.sql)?.[1] ?? "a variável") : "";
+  const name = declaration ? (/^\s*(?:let|const)?\s*([^\s=:;]+)/.exec(entry.target.sql)?.[1] ?? workbenchCopy.result.unnamedVariable) : "";
   const skipReason = declaration ? variableRunCopy.skipDisabled(name) : undefined;
 
   return (

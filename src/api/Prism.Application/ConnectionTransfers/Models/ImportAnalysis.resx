@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Blocked" xml:space="preserve">
+    <value>A pasta {0} não pode ser importada.</value>
+  </data>
+  <data name="Missing" xml:space="preserve">
+    <value>Falta {0} no arquivo.</value>
+  </data>
+  <data name="WrongType" xml:space="preserve">
+    <value>{0} não está no formato que este Prism lê.</value>
+  </data>
+  <data name="PasswordWithoutUser" xml:space="preserve">
+    <value>A senha do banco veio sem o usuário.</value>
+  </data>
+  <data name="EngineUnknown" xml:space="preserve">
+    <value>Este Prism não conhece o banco {0}.</value>
+  </data>
+  <data name="ConfirmationInvalid" xml:space="preserve">
+    <value>Escolha não confirmar, só os comandos irreversíveis ou todos os comandos.</value>
+  </data>
+  <data name="LabelFolderName" xml:space="preserve">
+    <value>o nome da pasta</value>
+  </data>
+  <data name="LabelFolderColor" xml:space="preserve">
+    <value>a cor da pasta</value>
+  </data>
+  <data name="LabelFolderConfirmation" xml:space="preserve">
+    <value>a confirmação da pasta</value>
+  </data>
+  <data name="LabelFolderReadOnly" xml:space="preserve">
+    <value>o somente leitura da pasta</value>
+  </data>
+  <data name="LabelFolderEffective" xml:space="preserve">
+    <value>o que valia na pasta</value>
+  </data>
+  <data name="LabelConnectionName" xml:space="preserve">
+    <value>o nome da conexão</value>
+  </data>
+  <data name="LabelEngine" xml:space="preserve">
+    <value>o banco da conexão</value>
+  </data>
+  <data name="LabelHost" xml:space="preserve">
+    <value>o host</value>
+  </data>
+  <data name="LabelPort" xml:space="preserve">
+    <value>a porta</value>
+  </data>
+  <data name="LabelDatabase" xml:space="preserve">
+    <value>o banco de dados</value>
+  </data>
+  <data name="LabelUserName" xml:space="preserve">
+    <value>o usuário do banco</value>
+  </data>
+  <data name="LabelPassword" xml:space="preserve">
+    <value>a senha do banco</value>
+  </data>
+  <data name="LabelConnectionConfirmation" xml:space="preserve">
+    <value>a confirmação da conexão</value>
+  </data>
+  <data name="LabelConnectionReadOnly" xml:space="preserve">
+    <value>o somente leitura da conexão</value>
+  </data>
+  <data name="LabelVerificationEnabled" xml:space="preserve">
+    <value>a verificação da conexão</value>
+  </data>
+  <data name="LabelVerificationQuery" xml:space="preserve">
+    <value>a consulta de verificação</value>
+  </data>
+  <data name="LabelConnectionEffective" xml:space="preserve">
+    <value>o que valia na conexão</value>
+  </data>
+  <data name="LabelEnvironmentFolder" xml:space="preserve">
+    <value>o ambiente da pasta</value>
+  </data>
+  <data name="LabelEnvironmentColorFolder" xml:space="preserve">
+    <value>a cor do ambiente da pasta</value>
+  </data>
+  <data name="LabelEnvironmentConnection" xml:space="preserve">
+    <value>o ambiente da conexão</value>
+  </data>
+  <data name="LabelEnvironmentColorConnection" xml:space="preserve">
+    <value>a cor do ambiente da conexão</value>
+  </data>
+  <data name="LabelEnvironmentEffective" xml:space="preserve">
+    <value>o ambiente que valia na conexão</value>
+  </data>
+  <data name="LabelEnvironmentColorEffective" xml:space="preserve">
+    <value>a cor do ambiente que valia na conexão</value>
+  </data>
+</root>

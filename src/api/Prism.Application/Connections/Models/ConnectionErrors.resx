@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Conexão não localizada.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>Não existe uma conexão com o ID {0}.</value>
+  </data>
+  <data name="AlreadyExistsTitle" xml:space="preserve">
+    <value>Conexão já existe.</value>
+  </data>
+  <data name="AlreadyExistsDetail" xml:space="preserve">
+    <value>Já existe uma conexão chamada {0} neste lugar. O nome não pode se repetir na mesma pasta, nem com outras maiúsculas e minúsculas.</value>
+  </data>
+  <data name="InvalidPasswordTitle" xml:space="preserve">
+    <value>Senha incorreta.</value>
+  </data>
+  <data name="InvalidPasswordDetail" xml:space="preserve">
+    <value>A senha informada não é a do seu usuário no Prism.</value>
+  </data>
+  <data name="PasswordRequiredToChangeServer" xml:space="preserve">
+    <value>Ao mudar o host ou a porta, informe a senha da conexão de novo.</value>
+  </data>
+  <data name="PasswordRequiredToTestOtherServer" xml:space="preserve">
+    <value>Para testar com outro host ou outra porta, informe a senha da conexão.</value>
+  </data>
+  <data name="RequestInvalidTitle" xml:space="preserve">
+    <value>Erro ao enviar dados para a API.</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Informe o usuário do banco.</value>
+  </data>
+  <data name="UserNameMissingToConnect" xml:space="preserve">
+    <value>A conexão não tem usuário gravado. Preencha o usuário e a senha em "Editar conexão" para conectar.</value>
+  </data>
+  <data name="PasswordMissingToConnect" xml:space="preserve">
+    <value>A conexão não tem senha gravada. Preencha a senha em "Editar conexão" para conectar.</value>
+  </data>
+  <data name="PasswordMissingToTest" xml:space="preserve">
+    <value>Esta conexão não tem senha gravada. Informe a senha do banco para testar.</value>
+  </data>
+  <data name="CredentialsMissingTitle" xml:space="preserve">
+    <value>Conexão sem usuário ou sem senha.</value>
+  </data>
+</root>

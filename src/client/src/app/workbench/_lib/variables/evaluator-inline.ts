@@ -1,5 +1,6 @@
 import type { EvaluateOutcome, Evaluator, ItemOutcome } from "./evaluator-host";
 import { handleEvaluateRequest } from "./evaluator-service";
+import { phrase } from "./variables.copy";
 import { storedFromWire } from "./wire";
 
 /*
@@ -10,7 +11,7 @@ export function inlineEvaluator(): Evaluator {
   return {
     evaluate(request): Promise<EvaluateOutcome> {
       const items: ItemOutcome[] = [];
-      let outcome: EvaluateOutcome = { kind: "failed", items, message: "O avaliador não respondeu." };
+      let outcome: EvaluateOutcome = { kind: "failed", items, message: phrase.evaluatorSilent() };
       handleEvaluateRequest({ ...request, id: 1, kind: "evaluate" }, (message) => {
         if (message.kind === "item") items.push({ index: message.index, result: message.result.ok ? { ok: true, stored: storedFromWire(message.result.stored), steps: message.result.steps } : message.result });
         else if (message.kind === "done") outcome = { kind: "done", items, counter: message.counter, tab: message.tab.map((entry) => storedFromWire(entry)) };

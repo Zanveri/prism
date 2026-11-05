@@ -1,4 +1,5 @@
 import { useInternalTableDescription } from "../../_lib/use-table-structure-enrichment";
+import { workbenchCopy } from "../../_lib/workbench.copy";
 
 type TableDescriptionBannerProps = {
   connectionId: string;
@@ -24,7 +25,7 @@ export function TableDescriptionBanner({ connectionId, database, table, visible 
   return (
     <div className="flex flex-none items-center border-b border-border bg-panel px-4 py-1.5 text-xs text-body">
       <span>
-        <span className="font-medium text-muted">Descrição da tabela: </span>
+        <span className="font-medium text-muted">{workbenchCopy.tableTab.structure.tableDescription} </span>
         <span className="font-medium text-ink">{description}</span>
       </span>
     </div>

@@ -25,7 +25,7 @@ public static class ImportReaderOptionsReader
     {
         var errors = new List<ImportOptionError>();
         if (reader is { ValueKind: not (JsonValueKind.Object or JsonValueKind.Null or JsonValueKind.Undefined) })
-            return (null, [new ImportOptionError("reader", "As opções do leitor vêm num objeto.")]);
+            return (null, [new ImportOptionError("reader", ImportText.Say("ReaderObject"))]);
 
         var options = new Reader(reader, errors);
         ImportReaderOptions? read = format switch
@@ -41,16 +41,16 @@ public static class ImportReaderOptionsReader
 
     private static CsvImportOptions Csv(Reader options, bool tsv)
     {
-        var encoding = options.Choice("encoding", ImportEncodings.All, ImportEncodings.Auto, "A codificação deve ser auto, utf-8, utf-16le, utf-16be, windows-1252 ou iso-8859-1.");
+        var encoding = options.Choice("encoding", ImportEncodings.All, ImportEncodings.Auto, ImportText.Say("EncodingChoice"));
         var delimiter = tsv
-            ? options.Choice("delimiter", ["\t"], "\t", "No TSV o separador é a tabulação.")
-            : options.Choice("delimiter", Delimiters, "auto", "O separador deve ser auto, ;, a vírgula, a tabulação ou |.");
-        var quote = options.Choice("quote", ["double", "none"], "double", "As aspas devem ser double ou none.");
+            ? options.Choice("delimiter", ["\t"], "\t", ImportText.Say("DelimiterTsv"))
+            : options.Choice("delimiter", Delimiters, "auto", ImportText.Say("DelimiterChoice"));
+        var quote = options.Choice("quote", ["double", "none"], "double", ImportText.Say("QuoteChoice"));
         var nullText = options.Text("nullText", string.Empty);
         if (nullText.Length > MaxNullText)
-            options.Refuse("nullText", $"O texto do nulo pode ter até {MaxNullText} caracteres.");
+            options.Refuse("nullText", ImportText.Say("NullTextMax", MaxNullText));
         else if (nullText.Any(char.IsControl))
-            options.Refuse("nullText", "O texto do nulo não pode ter caractere de controle.");
+            options.Refuse("nullText", ImportText.Say("NullTextControl"));
 
         return new CsvImportOptions(encoding, delimiter == "auto" ? null : delimiter, options.Bool("header", true), quote == "double", nullText, options.Bool("emptyAsNull", false), options.Bool("trim", false), options.Bool("skipEmptyLines", true), options.Bool("unguardFormulas", true));
     }
@@ -69,7 +69,7 @@ public static class ImportReaderOptionsReader
             if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
                 return value.GetBoolean();
 
-            Refuse(name, $"A opção {name} deve ser true ou false.");
+            Refuse(name, ImportText.Say("OptionBool", name));
 
             return fallback;
         }
@@ -95,7 +95,7 @@ public static class ImportReaderOptionsReader
             if (value.ValueKind == JsonValueKind.String)
                 return value.GetString()!;
 
-            Refuse(name, $"A opção {name} deve ser um texto.");
+            Refuse(name, ImportText.Say("OptionText", name));
 
             return fallback;
         }
@@ -109,7 +109,7 @@ public static class ImportReaderOptionsReader
             if (value.ValueKind == JsonValueKind.String && value.GetString() is { Length: >= 1 and <= MaxSheetName } sheet)
                 return sheet;
 
-            Refuse("sheet", $"O nome da planilha tem de 1 a {MaxSheetName} caracteres.");
+            Refuse("sheet", ImportText.Say("SheetName", MaxSheetName));
 
             return null;
         }
@@ -120,7 +120,7 @@ public static class ImportReaderOptionsReader
             if (Get("keys") is not { } value)
                 return null;
 
-            const string message = "As chaves são uma lista de 1 a 16.384 nomes de até 256 caracteres, sem repetir.";
+            var message = ImportText.Say("KeysList");
             if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() is 0 or > 16384 || value.EnumerateArray().Any(key => key.ValueKind != JsonValueKind.String || key.GetString()!.Length > 256))
             {
                 Refuse("keys", message);

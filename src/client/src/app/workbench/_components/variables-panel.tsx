@@ -8,6 +8,7 @@ import { copyTextOf, emptyView, navigate, panelRows, showMoreOf, type PanelRow, 
 import { variablesPanelCopy as copy } from "../_lib/variables-panel.copy";
 import type { ScriptModel } from "../_lib/variables/script";
 import type { TabValuesSnapshot } from "../_lib/variables/tab-values";
+import { workbenchCopy } from "../_lib/workbench.copy";
 
 type VariablesPanelProps = {
   /** O texto do editor lido (as variáveis declaradas, na ordem). */
@@ -170,7 +171,7 @@ export function VariablesPanel({ model, values, select, onGoTo }: VariablesPanel
                     <button
                       type="button"
                       tabIndex={-1}
-                      aria-label={row.expanded ? "Fechar" : "Abrir"}
+                      aria-label={row.expanded ? workbenchCopy.common.close : workbenchCopy.common.open}
                       onClick={(event) => {
                         event.stopPropagation();
                         setOpen(row.key, !row.expanded);

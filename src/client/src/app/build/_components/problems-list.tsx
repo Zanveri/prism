@@ -2,6 +2,7 @@ import { AlertIcon, Button, InfoIcon, RefreshIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import { buildCopy } from "../_lib/build.copy";
 import { fixButtonLabel, type Problem, type ProblemFix } from "../_lib/model-check";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
 export type ProblemsListProps = {
   problems: readonly Problem[];
@@ -13,42 +14,8 @@ export type ProblemsListProps = {
 };
 
 function problemTitle(problem: Problem): string {
-  switch (problem.code) {
-    case "W1":
-      return "Tabela sem chave primária";
-    case "W2":
-      return "Tipos diferentes na FK";
-    case "W3":
-      return "FKs sem índice";
-    case "W4":
-      return "Identificador exige aspas";
-    case "W5":
-      return "Tipo fora do catálogo padrão";
-    case "W6":
-      return "FK sem restrição única no destino";
-    case "W7":
-      return "Tabela já existe no banco";
-    case "W8":
-      return "Construção ignorada ao ler texto";
-    case "W10":
-      return "Comando destrutivo no DDL";
-    case "W11":
-      return "NOT NULL sem valor padrão";
-    case "W12":
-      return "FK para tabela fora do modelo";
-    case "W13":
-      return "Mudança vinda da releitura";
-    case "W14":
-      return "Sequência não criada no script";
-    case "I1":
-      return "Sobre a conexão de destino";
-    case "I2":
-      return "Sobre a leitura do banco";
-    case "I3":
-      return "Tudo é para outro banco";
-    default:
-      return `Erro ${problem.code}`;
-  }
+  const titles: Record<string, string> = buildUiCopy.problemTitles;
+  return titles[problem.code] ?? buildUiCopy.problemFallbackTitle(problem.code);
 }
 
 export function formatProblemsSummary(problems: readonly Problem[]): string {
@@ -56,12 +23,12 @@ export function formatProblemsSummary(problems: readonly Problem[]): string {
   const warnings = problems.filter((p) => p.severity === "warning").length;
   const warningsText =
     warnings === 0
-      ? "nenhum aviso"
-      : `${warnings} ${warnings === 1 ? "aviso" : "avisos"}`;
+      ? buildUiCopy.summary.noWarnings
+      : buildUiCopy.summary.warningCount(warnings);
   const errorsText =
     errors === 0
-      ? "nenhum erro"
-      : `${errors} ${errors === 1 ? "erro" : "erros"}`;
+      ? buildUiCopy.summary.noErrors
+      : buildUiCopy.summary.errorCount(errors);
   return `${warningsText} · ${errorsText}`;
 }
 
@@ -134,7 +101,7 @@ export function ProblemsList({
               </span>
               {line !== undefined && line !== null && (
                 <span className="ml-auto flex-none text-xs text-muted">
-                  linha {line}
+                  {buildUiCopy.problemLine(line)}
                 </span>
               )}
             </div>

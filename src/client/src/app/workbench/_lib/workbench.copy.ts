@@ -1,10 +1,15 @@
 import { formatCount, formatElapsed } from "@/lib/utils/format";
 
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { workbenchCopyEn } from "./workbench.copy.en";
+import { workbenchCopyEs } from "./workbench.copy.es";
+
 /** A frase com a primeira letra em minúscula, para entrar no meio de outra ("Somente leitura" vira "somente leitura"). */
 const lowerFirst = (text: string) => `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 
 /** Os textos da área de trabalho, num lugar só (RN-AVISO-002 a 005, RN-SESSAO-005, RN-ARVORE-003, RN-SQL-004 a 009). */
-export const workbenchCopy = {
+const pt = {
   navigator: {
     label: "Navegador de bancos",
     title: "Navegador",
@@ -281,6 +286,7 @@ export const workbenchCopy = {
     followLabel: (table: string, column: string, value: string) => `Abrir ${table} com ${column} igual a ${value}`,
     recordsDisconnected: "A conexão está desconectada.",
     recordsDisconnectedHint: "Use Atualizar para conectar e carregar os registros.",
+    unnamedVariable: "a variável",
     refresh: "Atualizar",
   },
 
@@ -321,6 +327,10 @@ export const workbenchCopy = {
       label: "Estrutura da tabela",
       // RN-TABELA-009: a lista lateral. Cada entrada diz quantos itens a seção tem; a seção cuja lista falhou leva uma marca de aviso, com este texto para o leitor de tela.
       sections: { label: "Seções da estrutura", failed: "Falhou ao carregar" },
+      tableDescription: "Descrição da tabela:",
+      attributeInfo: (name: string) => `Inf. do atributo (${name})`,
+      infoAndColumns: "Info. e Colunas",
+      description: "Descrição",
       columns: { title: "Colunas", empty: "A API não achou colunas para esta tabela.", number: "#", name: "Nome", type: "Tipo", nullable: "Aceita nulo", key: "Chave", yes: "sim", no: "não" },
       foreignKeys: { title: "Chaves estrangeiras", empty: "Esta tabela não tem chaves estrangeiras.", name: "Nome", columns: "Colunas", references: "Referência" },
       indexes: { title: "Índices", empty: "Esta tabela não tem índices.", name: "Nome", columns: "Colunas", unique: "Único" },
@@ -348,6 +358,9 @@ export const workbenchCopy = {
     },
     // RN-TABELA-004: o diagrama da tabela e das que ela referencia.
     diagram: {
+      columnsCount: (count: number) => `${count} colunas`,
+      references: (count: number) => `Referencia (${count})`,
+      referencedBy: (count: number) => `Referenciada por (${count})`,
       label: "Diagrama da tabela",
       // O canvas escreve "producao · 6 tabelas, 6 chaves estrangeiras": o esquema vem antes, em outra fonte.
       counts: (tables: number, foreignKeys: number) => `${formatCount(tables, "tabela", "tabelas")}, ${formatCount(foreignKeys, "chave estrangeira", "chaves estrangeiras")}`,
@@ -370,6 +383,29 @@ export const workbenchCopy = {
       incoming: "À esquerda ficam as tabelas que apontam para esta; à direita, as que esta tabela referencia.",
       omitted: (shown: number, total: number) => `Mostrando ${shown} de ${total} tabelas referenciadas.`,
       noForeignKeys: "Esta tabela não tem chaves estrangeiras.",
+      addColumn: "+ Adicionar coluna",
+      organize: "Organizar",
+      export: "Exportar",
+      exportMenu: "Exportar diagrama",
+      minimapOf: "Mini-mapa do diagrama",
+      select: "Selecionar",
+      selectHint: "Selecionar (V)",
+      addTable: "Tabela",
+      connectColumns: "Ligar colunas",
+      minimap: "Mini-mapa",
+      minimapToggle: "Mostrar ou ocultar mini-mapa",
+      selectedTable: "Tabela selecionada",
+      closePanel: "Fechar painel",
+      openData: "Abrir dados",
+      structure: "Estrutura",
+      generateSelect: "Gerar SELECT",
+      noReferenced: "Nenhuma tabela referenciada.",
+      noIncoming: "Nenhuma referência recebida no desenho.",
+      problemsLabel: "Problemas no diagrama",
+      problemsTitle: "Problemas no modelo",
+      problemCount: (count: number) => (count === 1 ? "aviso ou problema encontrado" : "avisos ou problemas encontrados"),
+      closeProblems: "Fechar problemas",
+      ignoreProblem: "Ignorar",
     },
   },
 
@@ -402,6 +438,7 @@ export const workbenchCopy = {
     openDiagram: "Ver diagrama",
     largeDiagramNotice: (count: number) => `Este esquema tem ${formatCount(count, "tabela", "tabelas")}. Recomendamos “Mostrar só chaves” para facilitar a leitura.`,
     renderAnyway: "Desenhar diagrama",
+    diagramLabel: "Diagrama do esquema",
   },
 
   // RN-BANCO-001: a aba de um banco de dados.
@@ -433,6 +470,7 @@ export const workbenchCopy = {
     systemSchema: "sistema",
     largeDiagramNotice: (count: number) => `Este banco tem ${formatCount(count, "tabela", "tabelas")} nos esquemas selecionados. Recomendamos “Mostrar só chaves” para facilitar a leitura.`,
     renderAnyway: "Desenhar diagrama",
+    diagramLabel: "Diagrama do banco",
     properties: {
       label: "Propriedades do banco",
       serverVersion: "Versão do servidor",
@@ -442,6 +480,8 @@ export const workbenchCopy = {
       notAvailable: "Não informado pelo banco",
     },
   },
+
+  common: { open: "Abrir", close: "Fechar" },
 
   status: {
     label: "Barra de status",
@@ -489,3 +529,6 @@ export const workbenchCopy = {
     restoredTablesDropped: (count: number) => (count === 1 ? "Uma aba de tabela não voltou: a conexão dela não existe mais." : `${formatCount(count, "aba de tabela", "abas de tabela")} não voltaram: a conexão delas não existe mais.`),
   },
 } as const;
+
+export type WorkbenchCopy = Localized<typeof pt>;
+export const workbenchCopy = pickCopy({ "pt-BR": pt, en: workbenchCopyEn, es: workbenchCopyEs });

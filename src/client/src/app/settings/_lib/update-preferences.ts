@@ -1,6 +1,7 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
+import { locale } from "@/lib/i18n";
 import { getBridge } from "@/lib/api/bridge";
 
 /**
@@ -63,5 +64,5 @@ export function formatCheckedAt(iso: string | null, timeZone?: string): string |
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
 
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone }).format(date);
+  return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short", timeZone }).format(date);
 }
