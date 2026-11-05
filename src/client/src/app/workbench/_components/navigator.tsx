@@ -21,7 +21,7 @@ import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
 import { notConnectedIds, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
-import { credentialsMissingField } from "../_lib/credentials-missing";
+import { credentialsMissingField, isNetworkSecretField } from "../_lib/credentials-missing";
 import { openExportWizard } from "../_lib/data-export/data-exports";
 import { openImportWizard } from "../_lib/data-import/data-imports";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, objectNamesKey, objectNamesQuery, openSessionForSearch, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
@@ -279,12 +279,20 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     [shown.connections, connectedSignature, connectingSignature, treeSessions],
   );
 
-  // RN-TRANSF-016: a conexão que a API recusou por faltar o usuário ou a senha fica fechada, como estava antes do clique; um efeito a fecha de vez.
+  // RN-TRANSF-016: a conexão que a API recusou por faltar o usuário ou a senha fica fechada, como estava antes do clique; um efeito a fecha de vez. A que recusou
+  // por faltar o segredo do túnel ou do proxy (RN-REDE-006) fica fechada só na tela: aberta por dentro, a sessão dela continua observada e conecta de novo quando o
+  // diálogo do segredo conecta, e o nó abre sozinho.
   const lackingCredentials = connectionList.filter((connection) => {
     const session = sessionById.get(connection.id);
     return session !== undefined && lacksCredentials(session);
   });
-  const lackingKey = lackingCredentials.map((connection) => connection.id).join(" ");
+  const lackingKey = lackingCredentials
+    .filter((connection) => {
+      const field = credentialsMissingField(sessionById.get(connection.id)?.error);
+      return field === null || !isNetworkSecretField(field);
+    })
+    .map((connection) => connection.id)
+    .join(" ");
   const lackingKeys = new Set(lackingCredentials.map((connection) => navKey({ type: "connection", connectionId: connection.id })));
   // RN-NAV-014: as pastas abertas são as lembradas; com o seletor de ambiente ou "Só as conectadas" ligado (RN-NAV-010 e 013), as do caminho até as conexões à
   // vista abrem só nessa vista, menos as que a pessoa recolheu nela. Desligar o filtro encerra a vista e trocá-lo começa outra (ajuste durante a renderização: as
@@ -436,9 +444,16 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     }
 
     const opening = !open.has(node.key);
+    const path = parseNavKey(node.key);
+    // RN-REDE-006: a conexão fechada só na tela (a que recusou por faltar o segredo do túnel ou do proxy, e a pessoa cancelou o pedido) já está aberta por
+    // dentro: abri-la é buscar de novo, e a recusa pede o segredo outra vez.
+    if (opening && path.type === "connection" && expanded.has(node.key)) {
+      void queryClient.refetchQueries({ queryKey: databaseSessionKey(path.connectionId), exact: true });
+      return;
+    }
+
     setNodeOpen(node.key, opening);
     // O banco da conexão abre junto com ela: é o que a conexão diz que se quer ver, e os outros bancos do servidor ficam fechados ao lado dele.
-    const path = parseNavKey(node.key);
     if (opening && path.type === "connection") setNodeOpen(navKey({ type: "database", connectionId: path.connectionId }), true);
   }
 
