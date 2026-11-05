@@ -1,4 +1,8 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { multiEditCopyEn } from "./multi-edit.copy.en";
+import { multiEditCopyEs } from "./multi-edit.copy.es";
 
 const number = (count: number) => count.toLocaleString("pt-BR");
 const lines = (count: number) => (count === 1 ? "1 linha" : `${number(count)} linhas`);
@@ -12,7 +16,7 @@ function joined(names: readonly string[]): string {
  * Os textos da edição de várias células de uma vez e da coluna inteira (seção 38: RN-EDIT-017 a 022). Os da edição de uma célula seguem em `records.copy.ts`, e
  * os da seleção em `grid-selection.copy.ts`.
  */
-export const multiEditCopy = {
+const pt = {
   // RN-EDIT-017: a dica do campo de edição, para quantas a edição vale.
   hint: {
     cells: (count: number, column: string) => `Vale para as ${number(count)} células escolhidas da coluna ${column}.`,
@@ -119,3 +123,6 @@ export const multiEditCopy = {
   keptNote: (columns: readonly string[], rows: number) =>
     `${columns.length === 1 ? `Coluna ${columns[0]} atualizada` : `Colunas ${joined(columns)} atualizadas`} em ${lines(rows)}; esta aba mostra só as que leu. Executar este comando lê todas de novo.`,
 } as const;
+
+export type MultiEditCopy = Localized<typeof pt>;
+export const multiEditCopy = pickCopy({ "pt-BR": pt, en: multiEditCopyEn, es: multiEditCopyEs });

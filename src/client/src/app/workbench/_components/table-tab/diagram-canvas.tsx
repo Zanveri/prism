@@ -344,7 +344,7 @@ function TableCard({
             }}
             className="flex h-7 w-full cursor-pointer items-center justify-between border-t border-dashed border-border px-3 font-sans text-[11px] text-muted transition-colors hover:bg-selected/60 hover:text-ink"
           >
-            <span>+ Adicionar coluna</span>
+            <span>{copy.addColumn}</span>
             <kbd className="rounded border border-border bg-background px-1 font-mono text-[10px] text-subtle">Enter</kbd>
           </button>
         ) : null}
@@ -1063,7 +1063,7 @@ export function DiagramCanvas({
         {onOrganize ? (
           <Button type="button" variant="secondary" size="compact" className="h-7 px-2.5 text-xs" onClick={onOrganize}>
             <AutoLayoutIcon />
-            Organizar
+            {copy.organize}
           </Button>
         ) : null}
 
@@ -1079,11 +1079,11 @@ export function DiagramCanvas({
               onClick={() => setExportMenuOpen((current) => !current)}
             >
               <DownloadIcon />
-              Exportar
+              {copy.export}
             </Button>
             <div
               role="menu"
-              aria-label="Exportar diagrama"
+              aria-label={copy.exportMenu}
               hidden={!exportMenuOpen}
               className={cn(
                 "absolute right-0 top-full z-30 mt-1 flex w-48 flex-col rounded-md border border-border-strong bg-overlay p-1 shadow-lg",
@@ -1325,7 +1325,7 @@ export function DiagramCanvas({
         {/* Mini-mapa no canto inferior esquerdo */}
         {showMinimap && displayBoxes.length > 0 ? (
           <div
-            aria-label="Mini-mapa do diagrama"
+            aria-label={copy.minimapOf}
             role="img"
             className="pointer-events-none absolute bottom-3 left-3 z-10 hidden h-28 w-46 rounded-lg border border-border-strong bg-panel/90 p-1.5 shadow-md backdrop-blur-xs sm:block"
           >
@@ -1362,8 +1362,8 @@ export function DiagramCanvas({
         >
           <button
             type="button"
-            aria-label="Selecionar"
-            title="Selecionar (V)"
+            aria-label={copy.select}
+            title={copy.selectHint}
             aria-pressed={!panLocked && !connectMode}
             onClick={() => {
               setPanLocked(false);
@@ -1393,7 +1393,7 @@ export function DiagramCanvas({
               {onAddTable ? (
                 <Button type="button" variant="ghost" size="compact" className="h-7 px-2 text-xs" onClick={onAddTable}>
                   <PlusIcon />
-                  Tabela
+                  {copy.addTable}
                 </Button>
               ) : null}
               {onConnect ? (
@@ -1409,7 +1409,7 @@ export function DiagramCanvas({
                   className={cn("h-7 px-2 text-xs", connectMode && "bg-selected text-accent ring-1 ring-accent/50")}
                 >
                   <ConnectColumnsIcon />
-                  Ligar colunas
+                  {copy.connectColumns}
                 </Button>
               ) : null}
             </>
@@ -1446,8 +1446,8 @@ export function DiagramCanvas({
           </Button>
           <button
             type="button"
-            aria-label="Mini-mapa"
-            title="Mostrar ou ocultar mini-mapa"
+            aria-label={copy.minimap}
+            title={copy.minimapToggle}
             aria-pressed={showMinimap}
             onClick={() => setShowMinimap((current) => !current)}
             className={cn(iconButton, showMinimap && "bg-selected text-accent")}
@@ -1459,7 +1459,7 @@ export function DiagramCanvas({
         {/* Painel flutuante lateral da tabela selecionada na área de trabalho */}
         {selectedBox !== null && !onConnect ? (
           <aside
-            aria-label="Tabela selecionada"
+            aria-label={copy.selectedTable}
             className="absolute right-3 top-3 z-20 flex max-h-[calc(100%-4rem)] w-68 flex-col overflow-hidden rounded-lg border border-border-strong bg-panel/95 shadow-lg backdrop-blur-xs"
           >
             <div className="flex items-start justify-between gap-2 border-b border-border px-3 py-2.5">
@@ -1468,7 +1468,7 @@ export function DiagramCanvas({
                   <h3 className="truncate font-sans text-sm font-semibold text-ink">{selectedBox.ref.name}</h3>
                 </div>
                 <p className="mt-0.5 font-mono text-[11px] text-subtle">
-                  {selectedBox.columns?.length ?? 0} colunas
+                  {copy.columnsCount(selectedBox.columns?.length ?? 0)}
                   {selectedBox.columns?.some((c) => c.primaryKey)
                     ? ` · PK ${selectedBox.columns
                         .filter((c) => c.primaryKey)
@@ -1479,7 +1479,7 @@ export function DiagramCanvas({
               </div>
               <button
                 type="button"
-                aria-label="Fechar painel"
+                aria-label={copy.closePanel}
                 onClick={() => setInternalSelectedKey(null)}
                 className={iconButton}
               >
@@ -1495,7 +1495,7 @@ export function DiagramCanvas({
                 className="h-6 px-2 text-[11px]"
                 onClick={() => (onOpenData ? onOpenData(selectedBox.ref) : onOpenTable(selectedBox.ref))}
               >
-                Abrir dados
+                {copy.openData}
               </Button>
               <Button
                 type="button"
@@ -1504,7 +1504,7 @@ export function DiagramCanvas({
                 className="h-6 px-2 text-[11px]"
                 onClick={() => (onOpenStructure ? onOpenStructure(selectedBox.ref) : onOpenTable(selectedBox.ref))}
               >
-                Estrutura
+                {copy.structure}
               </Button>
               <Button
                 type="button"
@@ -1521,17 +1521,17 @@ export function DiagramCanvas({
                   void navigator.clipboard?.writeText(sql);
                 }}
               >
-                Gerar SELECT
+                {copy.generateSelect}
               </Button>
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto px-3 py-2.5 text-xs">
               <div>
                 <h4 className="mb-1 text-[11px] font-semibold tracking-wider text-subtle uppercase">
-                  Referencia ({outgoingEdges.length})
+                  {copy.references(outgoingEdges.length)}
                 </h4>
                 {outgoingEdges.length === 0 ? (
-                  <p className="text-[11px] text-muted">Nenhuma tabela referenciada.</p>
+                  <p className="text-[11px] text-muted">{copy.noReferenced}</p>
                 ) : (
                   <ul className="space-y-1">
                     {outgoingEdges.map((edge) => {
@@ -1557,10 +1557,10 @@ export function DiagramCanvas({
 
               <div>
                 <h4 className="mb-1 text-[11px] font-semibold tracking-wider text-subtle uppercase">
-                  Referenciada por ({incomingEdges.length})
+                  {copy.referencedBy(incomingEdges.length)}
                 </h4>
                 {incomingEdges.length === 0 ? (
-                  <p className="text-[11px] text-muted">Nenhuma referência recebida no desenho.</p>
+                  <p className="text-[11px] text-muted">{copy.noIncoming}</p>
                 ) : (
                   <ul className="space-y-1">
                     {incomingEdges.map((edge) => {
@@ -1615,23 +1615,23 @@ export function DiagramCanvas({
 
           return (
             <aside
-              aria-label="Problemas no diagrama"
+              aria-label={copy.problemsLabel}
               className="absolute right-3 top-3 z-20 flex max-h-[calc(100%-4rem)] w-80 flex-col overflow-hidden rounded-lg border border-border-strong bg-panel/95 shadow-lg backdrop-blur-xs"
             >
               <div className="flex items-start justify-between gap-2 border-b border-border px-3 py-2.5">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <h3 className="truncate font-sans text-sm font-semibold text-ink">
-                      {singleTable ? singleTable.ref.name : "Problemas no modelo"}
+                      {singleTable ? singleTable.ref.name : copy.problemsTitle}
                     </h3>
                   </div>
                   <p className="mt-0.5 font-mono text-[11px] text-subtle">
-                    {totalCount} {totalCount === 1 ? "aviso ou problema encontrado" : "avisos ou problemas encontrados"}
+                    {totalCount} {copy.problemCount(totalCount)}
                   </p>
                 </div>
                 <button
                   type="button"
-                  aria-label="Fechar problemas"
+                  aria-label={copy.closeProblems}
                   onClick={() => {
                     if (selectedBox) setDismissedProblemKey(selectedBox.key);
                     onCloseProblems?.();
@@ -1698,7 +1698,7 @@ export function DiagramCanvas({
                                     onClick={() => onIgnoreProblem(problem.key)}
                                     className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-selected hover:text-ink"
                                   >
-                                    Ignorar
+                                    {copy.ignoreProblem}
                                   </button>
                                 ) : null}
                               </div>

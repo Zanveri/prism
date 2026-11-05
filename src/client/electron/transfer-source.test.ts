@@ -112,14 +112,14 @@ describe("escolher o arquivo (RN-IMPORT-018): o processo principal abre o diálo
     const path = harness.file("pedidos.csv", "id;nome\n1;Ana\n");
     const reply = await choose(path);
     expect(harness.dialogs[0]).toEqual({ windowId: 1, title: "Importar dados", defaultPath: harness.downloads });
-    expect(sourceDialogFilters.map((filter) => filter.name)).toEqual([
+    expect(sourceDialogFilters().map((filter) => filter.name)).toEqual([
       "Arquivos de dados (*.csv, *.tsv, *.tab, *.txt, *.json, *.xlsx, *.xlsm)",
       "CSV e TSV (*.csv, *.tsv, *.tab, *.txt)",
       "JSON (*.json)",
       "Excel (*.xlsx, *.xlsm)",
       "Todos os arquivos",
     ]);
-    expect(sourceDialogFilters.at(-1)?.extensions).toEqual(["*"]);
+    expect(sourceDialogFilters().at(-1)?.extensions).toEqual(["*"]);
     expect(reply.status).toBe("chosen");
 
     await choose(null);

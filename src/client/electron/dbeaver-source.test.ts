@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { dbeaverLimits, dbeaverSourceReplySchema } from "./dbeaver-messages";
-import { createDbeaverSource, dbeaverDialogTitle, dbeaverRoots, symlinkMessage, type DbeaverSourceDeps } from "./dbeaver-source";
+import { createDbeaverSource, dbeaverRoots, type DbeaverSourceDeps } from "./dbeaver-source";
+import { dbeaverSourceCopy } from "./dbeaver-source.copy";
+
+const { dialogTitle: dbeaverDialogTitle, symlink: symlinkMessage } = dbeaverSourceCopy();
 
 /**
  * A procura e a cópia do DBeaver (RN-DBEAVER-004 a 006), em pastas temporárias de verdade, com uma pasta pessoal falsa. Os nomes e o conteúdo dos arquivos são

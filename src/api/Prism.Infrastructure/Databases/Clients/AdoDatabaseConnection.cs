@@ -1,10 +1,12 @@
 using CSharpFunctionalExtensions;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using Serilog.Events;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
+using System.Resources;
 using System.Text;
 using ILogger = Serilog.ILogger;
 
@@ -26,6 +28,9 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnection
 {
+    /// <summary>Os textos, no idioma do pedido: <c>AdoDatabaseConnection.resx</c> (português) e as traduções ao lado; protegido porque o <c>IbmDatabaseConnection</c>, compilado só com o driver da IBM, lê dele.</summary>
+    protected static readonly ResourceManager Texts = new(typeof(AdoDatabaseConnection));
+
     private const string CommitSql = "COMMIT";
     private const string RollbackSql = "ROLLBACK";
 
@@ -51,33 +56,33 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// <summary>O SQLSTATE com que o PostgreSQL e o Db2 dizem que interromperam o comando a pedido ("query canceled").</summary>
     private const string QueryCanceledSqlState = "57014";
 
-    private const string CanceledMessage = "O comando foi cancelado.";
-    private const string UnknownOutcomeAdvice = "O Prism não sabe se o comando foi concluído: confira no banco antes de executá-lo de novo.";
-    private const string UnknownOutcomeMessage = $"O banco não respondeu ao cancelamento a tempo, e a sessão foi encerrada. {UnknownOutcomeAdvice}";
-    private const string CanceledWhileReturningRowsMessage = "O cancelamento chegou enquanto o comando devolvia as linhas. O que ele gravou até ali está confirmado, e pode ser só uma parte do comando: o Prism não sabe se ele foi concluído. Confira no banco antes de executá-lo de novo.";
-    private const string ConnectionClosedMessage = "A conexão com o banco foi encerrada, e o comando não foi enviado. Abra a sessão de novo.";
-    private const string NoOpenCursorMessage = "Não há cursor aberto: execute o comando de novo.";
+    private static string CanceledMessage => Texts.Get(nameof(CanceledMessage));
+    private static string UnknownOutcomeAdvice => Texts.Get(nameof(UnknownOutcomeAdvice));
+    private static string UnknownOutcomeMessage => Texts.Get(nameof(UnknownOutcomeMessage), UnknownOutcomeAdvice);
+    private static string CanceledWhileReturningRowsMessage => Texts.Get(nameof(CanceledWhileReturningRowsMessage));
+    private static string ConnectionClosedMessage => Texts.Get(nameof(ConnectionClosedMessage));
+    private static string NoOpenCursorMessage => Texts.Get(nameof(NoOpenCursorMessage));
     /// <summary>RN-BUSCA-002: o tipo que a quarta coluna de <see cref="ObjectNamesSql"/> traz para a visão; o que não é ele é tabela.</summary>
     private const string ViewObjectKind = "view";
 
-    private const string UnknownObjectKindMessage = "O tipo de objeto pedido não existe: use tables, views, routines ou sequences.";
-    private const string TransactionControlMessage = "Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos em Auto-commit, em que cada comando é confirmado quando termina. Para controlar a transação, escolha \"Commit manual\" na barra do editor: o primeiro comando abre a transação, e \"Commit\" e \"Rollback\" (ou COMMIT e ROLLBACK digitados) a encerram.";
-    private const string NeverTransactionControlMessage = "A confirmação em duas fases (PREPARE TRANSACTION, COMMIT PREPARED), o AND CHAIN e o COMMIT ou ROLLBACK com mais alguma coisa depois não são aceitos; nada foi enviado. Use COMMIT ou ROLLBACK sozinhos, ou os botões \"Commit\" e \"Rollback\".";
-    private const string NotAllowedInTransactionMessage = "Este comando não roda dentro de transação, e a recusa do banco estragaria a transação manual da aba; nada foi enviado. Execute-o numa aba em Auto-commit.";
-    private const string ReadOnlyWithTransactionMessage = "A conexão passou a somente leitura com uma transação manual aberta nesta aba; nada foi enviado. Encerre a transação com \"Commit\" ou \"Rollback\" antes.";
-    private const string RollbackWorkToSavepointMessage = "Pelo driver da IBM, ROLLBACK WORK TO SAVEPOINT desfaz a transação inteira, e não só o que veio depois do ponto de salvamento; nada foi enviado. Escreva ROLLBACK TO SAVEPOINT, sem o WORK.";
-    private const string CanceledWhileReturningRowsInTransactionMessage = "O cancelamento chegou enquanto o comando devolvia as linhas. O que ele gravou até ali ficou na transação, sem commit, e pode ser só uma parte do comando: o Prism não sabe se ele foi concluído. Confira antes do Commit.";
+    private static string UnknownObjectKindMessage => Texts.Get(nameof(UnknownObjectKindMessage));
+    private static string TransactionControlMessage => Texts.Get(nameof(TransactionControlMessage));
+    private static string NeverTransactionControlMessage => Texts.Get(nameof(NeverTransactionControlMessage));
+    private static string NotAllowedInTransactionMessage => Texts.Get(nameof(NotAllowedInTransactionMessage));
+    private static string ReadOnlyWithTransactionMessage => Texts.Get(nameof(ReadOnlyWithTransactionMessage));
+    private static string RollbackWorkToSavepointMessage => Texts.Get(nameof(RollbackWorkToSavepointMessage));
+    private static string CanceledWhileReturningRowsInTransactionMessage => Texts.Get(nameof(CanceledWhileReturningRowsInTransactionMessage));
 
     /// <summary>RN-TX-011: o ponto de salvamento da leitura paginada dentro da transação manual do PostgreSQL, desfeito quando o cursor fecha antes do fim.</summary>
     private const string ReadSavepoint = "prism_read";
 
     /// <summary>RN-EDIT-005: o ponto de salvamento do "Salvar" dentro da transação manual, desfeito quando ele falha.</summary>
     private const string EditSavepoint = "prism_edit";
-    private const string UndoneTransactionMessage = $"O comando deixou uma transação aberta, e o Prism a desfez: nada do que ele gravou dentro dela ficou. {TransactionControlMessage}";
-    private const string WritesAfterTheFirstPageMessage = "O comando começou como leitura e tentou gravar depois da primeira página; nada foi gravado. Execute-o de novo: ele será executado até o fim.";
-    private const string SeveralStatementsMessage = "Cada execução leva um comando só, e o texto enviado tem mais de um; nada foi executado. Envie um de cada vez. Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) é um comando só.";
-    private const string NotCountableMessage = "Só uma leitura pode ser contada, e o comando enviado não é uma leitura só; nada foi executado.";
-    private const string NoRowMessage = "A linha não existe mais, ou a chave dela mudou: o comando não alterou nenhuma linha.";
+    private static string UndoneTransactionMessage => Texts.Get(nameof(UndoneTransactionMessage), TransactionControlMessage);
+    private static string WritesAfterTheFirstPageMessage => Texts.Get(nameof(WritesAfterTheFirstPageMessage));
+    private static string SeveralStatementsMessage => Texts.Get(nameof(SeveralStatementsMessage));
+    private static string NotCountableMessage => Texts.Get(nameof(NotCountableMessage));
+    private static string NoRowMessage => Texts.Get(nameof(NoRowMessage));
 
     private readonly ILogger _logger = logger.ForContext<AdoDatabaseConnection>();
 
@@ -750,10 +755,10 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     public async Task<UnitResult<DatabaseFailure>> SetIsolationLevelAsync(string isolationLevel, CancellationToken cancellationToken)
     {
         if (!IsolationLevels.IsKnown(isolationLevel) || !IsolationLevels.IsSupportedBy(Engine, isolationLevel))
-            return new DatabaseFailure(EDatabaseFailure.IsolationLevelInvalid, $"O nível de isolamento \"{isolationLevel}\" não existe para este banco.");
+            return new DatabaseFailure(EDatabaseFailure.IsolationLevelInvalid, Texts.Get("IsolationLevelInvalid", isolationLevel));
 
         if (_manualTransaction is not null)
-            return new DatabaseFailure(EDatabaseFailure.TransactionOpen, "A aba tem uma transação aberta: encerre-a com Commit ou Rollback antes de trocar o nível de isolamento.");
+            return new DatabaseFailure(EDatabaseFailure.TransactionOpen, Texts.Get("TransactionOpenForIsolation"));
 
         var applied = await RunAsync(nameof(SetIsolationLevelAsync), EDatabaseFailure.ExecutionFailed, async token =>
         {
@@ -765,7 +770,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             }
 
             if (Engine == EDatabaseEngine.Informix && !IsolationLevels.IsSupportedByInformixLogging(loggingMode, isolationLevel))
-                return UnitResult.Failure(new DatabaseFailure(EDatabaseFailure.TransactionsNotAvailable, "Este banco não tem log de transação: o único nível de isolamento disponível é Dirty Read."));
+                return UnitResult.Failure(new DatabaseFailure(EDatabaseFailure.TransactionsNotAvailable, Texts.Get("NoTransactionLogForIsolation")));
 
             var sql = Engine switch
             {
@@ -1405,7 +1410,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
                 failing = edit.Change;
                 var affected = await RunEditAsync(edit, token);
                 if (affected != 1)
-                    return new DatabaseFailure(EDatabaseFailure.EditRowMismatch, affected == 0 ? NoRowMessage : $"O comando alteraria {affected} linhas, e não uma só.", Change: edit.Change, RowsAffected: affected);
+                    return new DatabaseFailure(EDatabaseFailure.EditRowMismatch, affected == 0 ? NoRowMessage : Texts.Get("EditWouldChangeMany", affected), Change: edit.Change, RowsAffected: affected);
 
                 applied++;
             }
@@ -1473,7 +1478,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             await BeginReadOnlyAsync(token);
             var counted = await CountWholeColumnRowsAsync(whole.CountSql, whole.CountParameters, token);
 
-            return counted < 0 ? new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "A contagem não devolveu nenhuma linha.") : Result.Success<long, DatabaseFailure>(counted);
+            return counted < 0 ? new DatabaseFailure(EDatabaseFailure.ExecutionFailed, Texts.Get("CountReturnedNoRow")) : Result.Success<long, DatabaseFailure>(counted);
         }, cancellationToken);
 
         // A posição seria a do comando embrulhado, e não a do que o usuário escreveu.

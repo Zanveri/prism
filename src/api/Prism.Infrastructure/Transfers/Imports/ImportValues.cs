@@ -125,7 +125,7 @@ public static partial class ImportValues
 
         var sourceBinary = sourceKind == "binary" || cell.Bytes is not null;
         if (sourceBinary != (column.Class == EImportClass.Binary))
-            return sourceBinary ? $"A coluna {sourceColumn} da origem é binária, e a coluna de destino não é." : $"A coluna {sourceColumn} da origem não é binária, e a coluna de destino é.";
+            return ImportText.Say(sourceBinary ? "CopiedBinaryIntoText" : "CopiedTextIntoBinary", sourceColumn);
 
         if (cell.Bytes is { } bytes)
             return new EditParameter(bytes, DbType.Binary);
@@ -150,10 +150,10 @@ public static partial class ImportValues
         {
             var quoted = ImportText.Quoted(text);
             if (parsed.Zone.Length > 0 && !keepsZone)
-                return $"{quoted} tem fuso, e a coluna não guarda fuso.";
+                return ImportText.Say("ZoneRefused", quoted);
 
             if (column.Class == EImportClass.Date && parsed.Time is { } time && time.Trim('0', ':', '.').Length > 0)
-                return $"{quoted} tem hora, e a coluna {column.Name} é só data.";
+                return ImportText.Say("TimeInDateColumn", quoted, column.Name);
         }
 
         return new EditParameter(text);
@@ -179,10 +179,10 @@ public static partial class ImportValues
             }
 
             if (char.IsSurrogate(character))
-                return $"O valor tem um caractere inválido (U+{(int)character:X4} sozinho).";
+                return ImportText.Say("InvalidSurrogate", ((int)character).ToString("X4", CultureInfo.InvariantCulture));
 
             if (character == '\0' && importClass != EImportClass.Binary)
-                return "O valor tem o caractere nulo (U+0000), que o Prism não grava num texto.";
+                return ImportText.Say("NullCharacter");
         }
 
         return null;
@@ -208,7 +208,7 @@ public static partial class ImportValues
             if (PointNumber().IsMatch(text))
                 return Ok(text);
 
-            return No(text.Contains(',') && LooksLikeANumber().IsMatch(text) ? $"{quoted} não é um número com ponto decimal. Se o arquivo usa vírgula, escolha Vírgula em Separador decimal." : NotANumber(quoted, integer));
+            return No(text.Contains(',') && LooksLikeANumber().IsMatch(text) ? ImportText.Say("NumberPointComma", quoted) : NotANumber(quoted, integer));
         }
 
         if (!formats.ThousandsDot)
@@ -216,13 +216,13 @@ public static partial class ImportValues
             if (CommaNumber().IsMatch(text))
                 return Ok(text.Replace(',', '.'));
 
-            return No(text.Contains('.') && LooksLikeANumber().IsMatch(text) ? $"{quoted} tem ponto, e o separador decimal escolhido é a vírgula. Se o arquivo usa ponto decimal, escolha Ponto em Separador decimal; se escreve os milhares com ponto, ligue Aceitar o ponto como separador de milhar." : NotANumber(quoted, integer));
+            return No(text.Contains('.') && LooksLikeANumber().IsMatch(text) ? ImportText.Say("NumberCommaPoint", quoted) : NotANumber(quoted, integer));
         }
 
         if (ThousandsNumber().IsMatch(text))
             return Ok(text.Replace(".", string.Empty, StringComparison.Ordinal).Replace(',', '.'));
 
-        return No(text.Contains('.') && LooksLikeANumber().IsMatch(text) ? $"{quoted} não é um número com vírgula decimal e ponto de milhar." : NotANumber(quoted, integer));
+        return No(text.Contains('.') && LooksLikeANumber().IsMatch(text) ? ImportText.Say("NumberThousands", quoted) : NotANumber(quoted, integer));
     }
 
     private static Result<ImportConverted, string> Number(ESqlDialect dialect, ImportTargetColumn column, string text, ImportValueFormats formats)
@@ -241,10 +241,10 @@ public static partial class ImportValues
             case EImportNumber.Int16 or EImportNumber.Int32 or EImportNumber.Int64:
             {
                 if (Plain(canonical.Value) is not { } plain)
-                    return $"{quoted} está fora da faixa da coluna.";
+                    return ImportText.Say("OutOfRange", quoted);
 
                 if (plain.Fraction.TrimEnd('0').Length > 0)
-                    return $"{quoted} não é um número inteiro.";
+                    return ImportText.Say("NotInteger", quoted);
 
                 return Edit(dialect, column.Number == EImportNumber.Int16 ? EEditType.Int16 : column.Number == EImportNumber.Int32 ? EEditType.Int32 : EEditType.Int64, plain.Integer.Length == 0 ? "0" : $"{plain.Sign}{plain.Integer}", text);
             }
@@ -252,13 +252,13 @@ public static partial class ImportValues
             case EImportNumber.Decimal when column.Scale is { } scale:
             {
                 if (Plain(canonical.Value) is not { } plain)
-                    return $"{quoted} está fora da faixa da coluna.";
+                    return ImportText.Say("OutOfRange", quoted);
 
                 var fraction = plain.Fraction;
                 if (fraction.Length > scale)
                 {
                     if (fraction[scale..].Any(digit => digit != '0'))
-                        return scale == 0 ? $"{quoted} tem casas decimais, e a coluna {column.Name} não guarda nenhuma." : $"{quoted} tem mais casas decimais que as {scale} da coluna {column.Name}.";
+                        return scale == 0 ? ImportText.Say("DecimalsNone", quoted, column.Name) : ImportText.Say("DecimalsMore", quoted, scale, column.Name);
 
                     fraction = fraction[..scale];
                 }
@@ -324,7 +324,7 @@ public static partial class ImportValues
         => Result.Failure<string, string>(refusal);
 
     private static string NotANumber(string quoted, bool integer)
-        => integer ? $"{quoted} não é um número inteiro." : $"{quoted} não é um número.";
+        => integer ? ImportText.Say("NotInteger", quoted) : ImportText.Say("NotNumber", quoted);
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------
     // A data, a data e hora e a hora.
@@ -347,31 +347,31 @@ public static partial class ImportValues
         {
             case EImportClass.Date:
                 if (parsed.Date is null)
-                    return No(DateFormatRefusal(quoted, formats.Dates, "uma data"));
+                    return No(DateFormatRefusal(quoted, formats.Dates, dateTime: false));
 
                 if (parsed.Time is null)
                     return Ok(parsed.Date);
 
                 if (parsed.Zone.Length > 0)
-                    return No($"{quoted} tem fuso, e a coluna não guarda fuso.");
+                    return No(ImportText.Say("ZoneRefused", quoted));
 
-                return parsed.Time.Trim('0', ':', '.').Length == 0 ? Ok(parsed.Date) : No($"{quoted} tem hora, e a coluna {column} é só data.");
+                return parsed.Time.Trim('0', ':', '.').Length == 0 ? Ok(parsed.Date) : No(ImportText.Say("TimeInDateColumn", quoted, column));
 
             case EImportClass.DateTime:
                 if (parsed.Date is null)
-                    return No(parsed.Time is null ? DateFormatRefusal(quoted, formats.Dates, "uma data e hora") : $"{quoted} não é uma data e hora.");
+                    return No(parsed.Time is null ? DateFormatRefusal(quoted, formats.Dates, dateTime: true) : ImportText.Say("NotDateTime", quoted));
 
                 if (parsed.Zone.Length > 0 && !timeZone)
-                    return No($"{quoted} tem fuso, e a coluna não guarda fuso.");
+                    return No(ImportText.Say("ZoneRefused", quoted));
 
                 return Ok($"{parsed.Date} {parsed.Time ?? "00:00:00"}{parsed.Zone}");
 
             default:
                 if (parsed.Date is not null || parsed.Time is null)
-                    return No($"{quoted} não é uma hora no formato hh:mm:ss.");
+                    return No(ImportText.Say("NotTime", quoted));
 
                 if (parsed.Zone.Length > 0 && !timeZone)
-                    return No($"{quoted} tem fuso, e a coluna não guarda fuso.");
+                    return No(ImportText.Say("ZoneRefused", quoted));
 
                 return Ok($"{parsed.Time}{parsed.Zone}");
         }
@@ -421,8 +421,8 @@ public static partial class ImportValues
         var extra = endsAt switch
         {
             EImportDateTimeEnd.Day => Zero(hour) && Zero(minute) && Zero(second) && Zero(fraction) ? null : "hora",
-            EImportDateTimeEnd.Hour => !Zero(minute) ? "minutos" : !Zero(second) ? "segundos" : !Zero(fraction) ? "casas de fração" : null,
-            _ => !Zero(second) ? "segundos" : !Zero(fraction) ? "casas de fração" : null
+            EImportDateTimeEnd.Hour => !Zero(minute) ? "ExtraMinutes" : !Zero(second) ? "ExtraSeconds" : !Zero(fraction) ? "ExtraFraction" : null,
+            _ => !Zero(second) ? "ExtraSeconds" : !Zero(fraction) ? "ExtraFraction" : null
         };
 
         if (extra is not null)
@@ -431,9 +431,9 @@ public static partial class ImportValues
 
             return endsAt switch
             {
-                EImportDateTimeEnd.Day => $"{quoted} tem hora, e a coluna {column.Name} é só data.",
-                EImportDateTimeEnd.Hour => $"{quoted} tem {extra}, e a coluna {column.Name} guarda só até a hora.",
-                _ => $"{quoted} tem {extra}, e a coluna {column.Name} guarda só até os minutos."
+                EImportDateTimeEnd.Day => ImportText.Say("TimeInDateColumn", quoted, column.Name),
+                EImportDateTimeEnd.Hour => ImportText.Say("UntilHour", quoted, ImportText.Say(extra), column.Name),
+                _ => ImportText.Say("UntilMinutes", quoted, ImportText.Say(extra), column.Name)
             };
         }
 
@@ -480,7 +480,7 @@ public static partial class ImportValues
         {
             var quoted = ImportText.Quoted(text);
 
-            return No(kept == 0 ? $"{quoted} tem casas de fração, e a coluna {column.Name} não guarda nenhuma." : $"{quoted} tem mais casas de fração que as {kept} da coluna {column.Name}.");
+            return No(kept == 0 ? ImportText.Say("FractionNone", quoted, column.Name) : ImportText.Say("FractionMore", quoted, kept, column.Name));
         }
 
         return Ok(kept == 0 ? canonical[..point] : canonical[..(point + 1 + kept)]);
@@ -490,26 +490,26 @@ public static partial class ImportValues
     private static (string? Date, string? Time, string Zone, Func<string, string>? Refusal) ParseTemporal(string text, EImportDates dates)
     {
         if (TimeOnly().Match(text) is { Success: true } time)
-            return TimeOf(time) is { } clock ? (null, clock, time.Groups["zone"].Value, null) : (null, null, string.Empty, quoted => $"{quoted} não é uma hora válida.");
+            return TimeOf(time) is { } clock ? (null, clock, time.Groups["zone"].Value, null) : (null, null, string.Empty, quoted => ImportText.Say("InvalidTime", quoted));
 
         var match = dates == EImportDates.Iso ? IsoDateTime().Match(text) : DayMonthYearDateTime().Match(text);
         if (!match.Success)
             return (null, null, string.Empty, null);
 
         if (match.Groups["year"].Length != 4)
-            return (null, null, string.Empty, quoted => $"O ano tem de ter 4 dígitos: {quoted}.");
+            return (null, null, string.Empty, quoted => ImportText.Say("YearDigits", quoted));
 
         var year = int.Parse(match.Groups["year"].Value, CultureInfo.InvariantCulture);
         var month = int.Parse(match.Groups["month"].Value, CultureInfo.InvariantCulture);
         var day = int.Parse(match.Groups["day"].Value, CultureInfo.InvariantCulture);
         if (year < 1 || month is < 1 or > 12 || day < 1 || day > System.DateTime.DaysInMonth(year, month))
-            return (null, null, string.Empty, quoted => $"{quoted} não é uma data válida.");
+            return (null, null, string.Empty, quoted => ImportText.Say("InvalidDate", quoted));
 
         var date = $"{year:0000}-{month:00}-{day:00}";
         if (!match.Groups["hour"].Success)
             return (date, null, string.Empty, null);
 
-        return TimeOf(match) is { } clockOf ? (date, clockOf, match.Groups["zone"].Value, null) : (null, null, string.Empty, quoted => $"{quoted} não é uma hora válida.");
+        return TimeOf(match) is { } clockOf ? (date, clockOf, match.Groups["zone"].Value, null) : (null, null, string.Empty, quoted => ImportText.Say("InvalidTime", quoted));
     }
 
     /// <summary>A hora `hh:mm:ss[.f…]` de um texto que casou com uma das expressões, ou nula fora da faixa (até 23:59:59).</summary>
@@ -526,8 +526,8 @@ public static partial class ImportValues
         return $"{hour:00}:{minute:00}:{second:00}{fraction}";
     }
 
-    private static string DateFormatRefusal(string quoted, EImportDates dates, string what)
-        => $"{quoted} não é {what} no formato {(dates == EImportDates.Iso ? "aaaa-mm-dd" : "dd/mm/aaaa")}{(what == "uma data" ? string.Empty : " hh:mm:ss")}.";
+    private static string DateFormatRefusal(string quoted, EImportDates dates, bool dateTime)
+        => ImportText.Say(dates == EImportDates.Iso ? (dateTime ? "DateFormatIsoDateTime" : "DateFormatIsoDate") : (dateTime ? "DateFormatDmyDateTime" : "DateFormatDmyDate"), quoted);
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------
     // O lógico e o binário.
@@ -568,7 +568,7 @@ public static partial class ImportValues
     private static Result<ImportConverted, string> Binary(ESqlDialect dialect, string text)
     {
         if (BinaryOf(text, dialect == ESqlDialect.PostgreSql) is not { } bytes)
-            return "Um binário vem como 0x seguido dos dígitos hexadecimais.";
+            return ImportText.Say("BinaryFormat");
 
         return new ImportConverted(PreviewBinary(bytes), new EditParameter(bytes, DbType.Binary), false);
     }

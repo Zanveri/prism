@@ -1,4 +1,6 @@
+using Prism.Core.Extensions;
 using System.Globalization;
+using System.Resources;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -20,6 +22,13 @@ public static partial class ImportText
 
     /// <summary>RN-IMPORT-011: o binário da prévia mostra os primeiros 32 bytes.</summary>
     public const int MaxPreviewBytes = 32;
+
+    /// <summary>Os textos que chegam à tela, no idioma do pedido: <c>ImportText.resx</c> (português) e as traduções ao lado. A leitura, as conversões e as recusas desta pasta e da dos leitores os dizem por <see cref="Say"/>.</summary>
+    internal static readonly ResourceManager Texts = new(typeof(ImportText));
+
+    /// <summary>O texto da chave na <see cref="CultureInfo.CurrentUICulture"/>, com os argumentos formatados na <see cref="CultureInfo.CurrentCulture"/>.</summary>
+    internal static string Say(string key, params object?[] args)
+        => Texts.Get(key, args);
 
     /// <summary>
     /// RN-IMPORT-004: a volta exata da proteção contra fórmula. O valor que começa por `'` e cujo resto a proteção protegeria (o primeiro caractere depois
@@ -70,9 +79,9 @@ public static partial class ImportText
         return $"{value[..end]}…";
     }
 
-    /// <summary>O número com o ponto de milhar do português ("1.234"), sem depender da cultura da máquina.</summary>
+    /// <summary>O número com o separador de milhar do idioma do texto ("1.234" em português e espanhol, "1,234" em inglês), sem depender da cultura da máquina.</summary>
     public static string Thousands(long value)
-        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');
+        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(",", Texts.GetString("ThousandsSeparator"), StringComparison.Ordinal);
 
     /// <summary>RN-IMPORT-003 e 008: o tamanho em GB de 1.024³ bytes, com uma casa e a vírgula ("2,4 GB"), como o Windows o escreve.</summary>
     public static string Gigabytes(long bytes)
@@ -83,13 +92,13 @@ public static partial class ImportText
     /// o próprio limite: o tamanho mostrado é, no mínimo, "2,1 GB".
     /// </summary>
     public static string TooLarge(long bytes)
-        => $"O arquivo tem {TenthsText(Math.Max(GigabyteTenths(bytes), 21))}, e o Prism importa até 2 GB.";
+        => Say("TooLarge", TenthsText(Math.Max(GigabyteTenths(bytes), 21)));
 
     private static long GigabyteTenths(long bytes)
         => (long)Math.Round(bytes * 10.0 / (1L << 30), MidpointRounding.AwayFromZero);
 
     private static string TenthsText(long tenths)
-        => $"{tenths / 10},{tenths % 10} GB";
+        => Say("GigabytesFormat", tenths / 10, tenths % 10);
 
     /// <summary>A letra da coluna da planilha (a primeira é 0 e vale `A`; a 16.383 é `XFD`).</summary>
     public static string ColumnLetters(int index)
@@ -128,7 +137,7 @@ public static partial class ImportText
 
     /// <summary>RN-IMPORT-004: o nome da coluna sem cabeçalho ("Coluna 1"), pela posição a partir de 0.</summary>
     public static string DefaultColumnName(int position)
-        => $"Coluna {position + 1}";
+        => Say("DefaultColumnName", position + 1);
 
     /// <summary>RN-IMPORT-008: o tamanho do texto em bytes de UTF-8, contado sem montar os bytes (o par substituto solto conta 3, como o U+FFFD que o trocaria).</summary>
     public static long Utf8Length(ReadOnlySpan<char> text)

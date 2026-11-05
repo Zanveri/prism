@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="TabNull" xml:space="preserve">
+    <value>Cada aba da lista tem de ser uma aba.</value>
+  </data>
+  <data name="TabShape" xml:space="preserve">
+    <value>A aba não tem a forma de uma aba de consulta nem de uma aba de tabela.</value>
+  </data>
+  <data name="DatabaseInvalid" xml:space="preserve">
+    <value>O nome do banco deve ter de 1 a {0} caracteres, sem caractere de controle.</value>
+  </data>
+  <data name="TabTooLarge" xml:space="preserve">
+    <value>O texto de uma aba passa de 1 MB.</value>
+  </data>
+  <data name="ActiveIndexInvalid" xml:space="preserve">
+    <value>A aba ativa tem de ser uma das abas da lista.</value>
+  </data>
+</root>

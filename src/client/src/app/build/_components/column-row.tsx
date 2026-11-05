@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Button, ChevronIcon, GripIcon, Input, Select, type SelectOption } from "@/components/ui";
 import type { ModelColumn } from "../_lib/build-model.schema";
 import type { RowState } from "../_lib/editor-rows";
+import { buildUiCopy } from "@/app/build/_lib/build-ui.copy";
 
 const parameterizedPresets: Record<string, readonly string[]> = {
   varchar: ["varchar(80)", "varchar(255)"],
@@ -118,8 +119,8 @@ export function ColumnRow({
   const beforeId = rowState.marker === "changed" ? `col${index + 1}-antes` : undefined;
   const nameAriaLabel =
     rowState.marker === "new"
-      ? `Nome da coluna ${index + 1}, nova`
-      : `Nome da coluna ${index + 1}`;
+      ? buildUiCopy.column.nameLabelNew(index + 1)
+      : buildUiCopy.column.nameLabel(index + 1);
 
   const borderClass =
     rowState.marker === "changed"
@@ -130,10 +131,10 @@ export function ColumnRow({
 
   const gripTitle =
     isExistingTable && rowState.marker === "changed"
-      ? "Alterada · Arrastar para reordenar coluna (ou Alt+↑ / Alt+↓)"
+      ? buildUiCopy.column.gripChanged
       : isExistingTable && rowState.marker === "new"
-        ? "Nova · Arrastar para reordenar coluna (ou Alt+↑ / Alt+↓)"
-        : "Arrastar para reordenar coluna (ou Alt+↑ / Alt+↓)";
+        ? buildUiCopy.column.gripNew
+        : buildUiCopy.column.grip;
 
   return (
     <div
@@ -160,7 +161,7 @@ export function ColumnRow({
         <button
           type="button"
           draggable
-          aria-label={`Reordenar coluna ${column.name}`}
+          aria-label={buildUiCopy.column.reorder(column.name)}
           title={gripTitle}
           onPointerDown={onGripPointerDown}
           onDragStart={onDragStartRow}
@@ -226,7 +227,7 @@ export function ColumnRow({
           />
           {fkTargetDisplay ? (
             <span
-              title={`Chave estrangeira para ${fkTargetDisplay}`}
+              title={buildUiCopy.column.foreignKeyTo(fkTargetDisplay)}
               onClick={(e) => {
                 if ((e.ctrlKey || e.metaKey) && onCtrlClickFk) {
                   e.preventDefault();
@@ -242,7 +243,7 @@ export function ColumnRow({
             </span>
           ) : rowState.marker === "new" ? (
             <span className="absolute top-[5px] right-[7px] font-mono text-[10px] font-semibold text-success">
-              NOVA
+              {buildUiCopy.column.newBadge}
             </span>
           ) : null}
         </div>
@@ -250,7 +251,7 @@ export function ColumnRow({
         <Select
           value={column.type}
           options={typeOptions}
-          aria-label={`Tipo de ${column.name}`}
+          aria-label={buildUiCopy.column.typeOf(column.name)}
           aria-describedby={beforeId}
           onChange={(nextType) => onUpdateColumn({ type: nextType })}
           wideList
@@ -265,12 +266,12 @@ export function ColumnRow({
           aria-disabled={rowState.locks.primaryKey}
           title={
             rowState.locks.primaryKey
-              ? "PK — Chave primária (Primary Key) · Trocar a chave primária de uma tabela existente não é suportado nesta versão"
+              ? buildUiCopy.column.pkLocked
               : isPk
-                ? "PK — Chave primária (Primary Key): ativa nesta coluna"
-                : "PK — Chave primária (Primary Key): clique para marcar como chave primária"
+                ? buildUiCopy.column.pkOn
+                : buildUiCopy.column.pkOff
           }
-          aria-label={`${column.name}: chave primária`}
+          aria-label={buildUiCopy.column.pkLabel(column.name)}
           onClick={() => {
             if (rowState.locks.primaryKey) return;
             onTogglePk();
@@ -289,10 +290,10 @@ export function ColumnRow({
           aria-pressed={!column.nullable}
           title={
             !column.nullable
-              ? "NN — Não nulo (Not Null): obrigatório, não aceita NULL"
-              : "NN — Não nulo (Not Null): opcional, aceita NULL"
+              ? buildUiCopy.column.nnOn
+              : buildUiCopy.column.nnOff
           }
-          aria-label={`${column.name}: não aceita nulo`}
+          aria-label={buildUiCopy.column.nnLabel(column.name)}
           onClick={() => onUpdateColumn({ nullable: !column.nullable })}
           className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
             !column.nullable
@@ -308,10 +309,10 @@ export function ColumnRow({
           aria-pressed={isUnique}
           title={
             isUnique
-              ? "UQ — Valor único (Unique): ativo nesta coluna (não permite valores repetidos)"
-              : "UQ — Valor único (Unique): clique para impedir valores repetidos nesta coluna"
+              ? buildUiCopy.column.uqOn
+              : buildUiCopy.column.uqOff
           }
-          aria-label={`${column.name}: valor único`}
+          aria-label={buildUiCopy.column.uqLabel(column.name)}
           onClick={onToggleUnique}
           className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
             isUnique
@@ -328,12 +329,12 @@ export function ColumnRow({
           aria-disabled={rowState.locks.identity}
           title={
             rowState.locks.identity
-              ? "AI — Auto-incremento (Identity / Serial): gerado automaticamente pelo banco · Não editável em tabela existente ou para este tipo"
+              ? buildUiCopy.column.aiLocked
               : column.identity !== null
-                ? "AI — Auto-incremento (Identity / Serial): ativo nesta coluna"
-                : "AI — Auto-incremento (Identity / Serial): clique para gerar valor sequencial automaticamente"
+                ? buildUiCopy.column.aiOn
+                : buildUiCopy.column.aiOff
           }
-          aria-label={`${column.name}: gerado pelo banco`}
+          aria-label={buildUiCopy.column.aiLabel(column.name)}
           onClick={() => {
             if (rowState.locks.identity) return;
             onUpdateColumn({
@@ -355,13 +356,13 @@ export function ColumnRow({
           size="compact"
           title={
             expanded
-              ? `Recolher opções avançadas de ${column.name}`
-              : `Mais opções de ${column.name} (tipo/tamanho, valor padrão, check, comentário)`
+              ? buildUiCopy.column.collapseOptions(column.name)
+              : buildUiCopy.column.moreOptionsTitle(column.name)
           }
           aria-label={
             expanded
-              ? `Menos opções de ${column.name}`
-              : `Mais opções de ${column.name}`
+              ? buildUiCopy.column.lessOptions(column.name)
+              : buildUiCopy.column.moreOptions(column.name)
           }
           aria-expanded={expanded}
           onClick={() => setExpanded((prev) => !prev)}
@@ -379,7 +380,7 @@ export function ColumnRow({
           className="flex items-center gap-2 pb-1 pl-4 text-xs leading-[18px] text-muted"
         >
           <span>
-            Era <span className="font-mono text-body">{rowState.before}</span>
+            {buildUiCopy.column.was} <span className="font-mono text-body">{rowState.before}</span>
           </span>
           <Button
             type="button"
@@ -388,14 +389,14 @@ export function ColumnRow({
             onClick={onRevert}
             className="ml-auto h-6 px-2 text-xs underline"
           >
-            Voltar como era
+            {buildUiCopy.column.revert}
           </Button>
         </div>
       ) : null}
 
       {expanded ? (
         <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 border-t border-border pt-2 pr-3 pb-3 pl-[19px] text-xs text-muted">
-          <label htmlFor={`col-${index}-tipo`}>Tipo / tamanho</label>
+          <label htmlFor={`col-${index}-tipo`}>{buildUiCopy.column.typeAndSize}</label>
           <Input
             id={`col-${index}-tipo`}
             type="text"
@@ -404,7 +405,7 @@ export function ColumnRow({
             className="h-7 rounded border-border bg-background px-2 font-mono text-xs text-body"
           />
 
-          <label htmlFor={`col-${index}-padrao`}>Padrão</label>
+          <label htmlFor={`col-${index}-padrao`}>{buildUiCopy.column.defaultValue}</label>
           <Input
             id={`col-${index}-padrao`}
             type="text"
@@ -415,7 +416,7 @@ export function ColumnRow({
             className="h-7 rounded border-border bg-background px-2 font-mono text-xs text-success"
           />
 
-          <label htmlFor={`col-${index}-check`}>Check</label>
+          <label htmlFor={`col-${index}-check`}>{buildUiCopy.column.check}</label>
           <Input
             id={`col-${index}-check`}
             type="text"
@@ -424,7 +425,7 @@ export function ColumnRow({
             className="h-7 rounded border-border bg-background px-2 font-mono text-xs text-body"
           />
 
-          <label htmlFor={`col-${index}-comentario`}>Comentário</label>
+          <label htmlFor={`col-${index}-comentario`}>{buildUiCopy.column.comment}</label>
           <Input
             id={`col-${index}-comentario`}
             type="text"
@@ -444,7 +445,7 @@ export function ColumnRow({
               onClick={onDuplicate}
               className="h-7 px-2.5 text-xs"
             >
-              Duplicar coluna
+              {buildUiCopy.column.duplicate}
             </Button>
             <Button
               type="button"
@@ -453,7 +454,7 @@ export function ColumnRow({
               onClick={onRemove}
               className="h-7 px-2.5 text-xs"
             >
-              Excluir coluna
+              {buildUiCopy.column.remove}
             </Button>
           </div>
         </div>
@@ -470,7 +471,7 @@ export type RemovedColumnRowProps = {
 export function RemovedColumnRow({ column, onRestore }: RemovedColumnRowProps) {
   return (
     <div className="grid h-8 grid-cols-[12px_minmax(0,1fr)_112px_minmax(0,128px)] items-center gap-1 text-subtle">
-      <span title="A remover" className="h-0.5 w-2 bg-danger" />
+      <span title={buildUiCopy.column.toRemove} className="h-0.5 w-2 bg-danger" />
       <span className="px-2 font-mono text-xs line-through">{column.name}</span>
       <span className="px-2 font-mono text-xs line-through">{column.type}</span>
       <Button
@@ -480,7 +481,7 @@ export function RemovedColumnRow({ column, onRestore }: RemovedColumnRowProps) {
         onClick={onRestore}
         className="h-6 justify-self-end px-2 text-xs"
       >
-        Restaurar
+        {buildUiCopy.column.restore}
       </Button>
     </div>
   );

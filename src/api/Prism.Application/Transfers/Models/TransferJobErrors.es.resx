@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Transferencia no encontrada.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>No existe una transferencia con el ID {0}: terminó y se olvidó, se abandonó, o es de otra caja fuerte.</value>
+  </data>
+  <data name="LimitReachedTitle" xml:space="preserve">
+    <value>Límite de transferencias.</value>
+  </data>
+  <data name="LimitReachedDetail" xml:space="preserve">
+    <value>Ya hay 3 transferencias en curso (exportaciones, importaciones o copias a otra base de datos). Espera a que termine una, o cancela una en la barra de estado.</value>
+  </data>
+  <data name="CredentialsMissingTitle" xml:space="preserve">
+    <value>Conexión sin usuario o sin contraseña.</value>
+  </data>
+  <data name="UserNameMissingDetail" xml:space="preserve">
+    <value>Esta conexión no tiene usuario guardado. Rellénalo en Editar conexión y exporta de nuevo.</value>
+  </data>
+  <data name="PasswordMissingDetail" xml:space="preserve">
+    <value>Esta conexión no tiene contraseña guardada. Rellénala en Editar conexión y exporta de nuevo.</value>
+  </data>
+  <data name="DatabaseNameInvalidTitle" xml:space="preserve">
+    <value>Nombre de base de datos no válido.</value>
+  </data>
+  <data name="DatabaseNameInvalidDetail" xml:space="preserve">
+    <value>El nombre de la base de datos debe tener de 1 a 128 caracteres, sin caracteres de control.</value>
+  </data>
+  <data name="OptionsInvalidTitle" xml:space="preserve">
+    <value>Error al enviar datos a la API.</value>
+  </data>
+  <data name="InformixRowsDetail" xml:space="preserve">
+    <value>Informix no acepta varias filas en un INSERT.</value>
+  </data>
+  <data name="MarkersMismatchTitle" xml:space="preserve">
+    <value>Los marcadores no coinciden con los valores.</value>
+  </data>
+  <data name="MultipleStatementsTitle" xml:space="preserve">
+    <value>Solo una sentencia por exportación.</value>
+  </data>
+  <data name="FilterInvalidTitle" xml:space="preserve">
+    <value>Filtro no válido.</value>
+  </data>
+  <data name="NotReadTitle" xml:space="preserve">
+    <value>La sentencia no es solo de lectura.</value>
+  </data>
+  <data name="NotReadDetail" xml:space="preserve">
+    <value>Exportar ejecuta la sentencia de nuevo, y solo se exporta una lectura: {0}. No se envió nada a la base de datos.</value>
+  </data>
+  <data name="SshSecretMissingDetail" xml:space="preserve">
+    <value>La contraseña (o frase de contraseña de la clave) del túnel SSH no está guardada en esta conexión. Indícala cuando Prism la pida y vuelve a intentarlo: sin "Guardar credenciales", solo queda en la memoria hasta que la conexión se desconecte o Prism se bloquee.</value>
+  </data>
+  <data name="ProxyPasswordMissingDetail" xml:space="preserve">
+    <value>La contraseña del proxy no está guardada en esta conexión. Indícala cuando Prism la pida y vuelve a intentarlo: sin "Guardar credenciales", solo queda en la memoria hasta que la conexión se desconecte o Prism se bloquee.</value>
+  </data>
+</root>

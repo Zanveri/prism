@@ -1,6 +1,7 @@
 import { Button, CloseIcon, Input, PlusIcon, Select } from "@/components/ui";
 import type { TableChanges } from "../_lib/build-model";
 import type { ModelIndex, ModelTable } from "../_lib/build-model.schema";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
 export type IndexesSectionProps = {
   table: ModelTable;
@@ -20,7 +21,7 @@ export function IndexesSection({
   const newIndexesCount = changes?.addedIndexes.length ?? 0;
   const countLabel =
     newIndexesCount > 0
-      ? `${table.indexes.length} · ${newIndexesCount} ${newIndexesCount === 1 ? "novo" : "novos"}`
+      ? `${table.indexes.length} · ${buildUiCopy.summary.newIndexCount(newIndexesCount)}`
       : `${table.indexes.length}`;
 
   const handleAdd = () => {
@@ -39,7 +40,7 @@ export function IndexesSection({
     >
       <div className="flex h-7 items-center gap-2">
         <h2 id="h-indices" className="m-0 text-[13px] font-semibold">
-          Índices
+          {buildUiCopy.indexes.title}
         </h2>
         <span className="text-xs text-subtle">{countLabel}</span>
         <Button
@@ -50,7 +51,7 @@ export function IndexesSection({
           className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
         >
           <PlusIcon />
-          <span>Novo índice</span>
+          <span>{buildUiCopy.indexes.add}</span>
         </Button>
       </div>
 
@@ -72,7 +73,7 @@ export function IndexesSection({
               <Input
                 type="text"
                 value={ix.name}
-                aria-label={`Nome do índice ${idx + 1}`}
+                aria-label={buildUiCopy.indexes.name(idx + 1)}
                 onChange={(e) =>
                   onUpdateIndex(idx, { ...ix, name: e.target.value })
                 }
@@ -80,7 +81,7 @@ export function IndexesSection({
               />
               {isNewInExisting ? (
                 <span className="font-mono text-[10px] font-semibold text-success">
-                  NOVO
+                  {buildUiCopy.indexes.newBadge}
                 </span>
               ) : null}
             </div>
@@ -88,11 +89,11 @@ export function IndexesSection({
             <button
               type="button"
               aria-pressed={ix.unique}
-              aria-label="Índice único"
+              aria-label={buildUiCopy.indexes.unique}
               title={
                 ix.unique
-                  ? "UQ — Índice único (Unique): ativo neste índice"
-                  : "UQ — Índice único (Unique): clique para impedir valores repetidos"
+                  ? buildUiCopy.indexes.uniqueOn
+                  : buildUiCopy.indexes.uniqueOff
               }
               onClick={() => onUpdateIndex(idx, { ...ix, unique: !ix.unique })}
               className={`h-6 cursor-pointer rounded border p-0 font-mono text-[10px] font-semibold ${
@@ -108,8 +109,8 @@ export function IndexesSection({
               type="button"
               variant="ghost"
               size="compact"
-              aria-label={`Remover o índice ${ix.name}`}
-              title={`Remover o índice ${ix.name}`}
+              aria-label={buildUiCopy.indexes.remove(ix.name)}
+              title={buildUiCopy.indexes.remove(ix.name)}
               onClick={() => onRemoveIndex(idx)}
               className="h-7 w-7 p-0"
             >
@@ -125,7 +126,7 @@ export function IndexesSection({
                   {col}
                   <button
                     type="button"
-                    aria-label={`Tirar ${col} do índice`}
+                    aria-label={buildUiCopy.indexes.removeColumn(col)}
                     onClick={() => {
                       const nextCols = ix.columns.filter((c) => c !== col);
                       if (nextCols.length === 0) {
@@ -143,9 +144,9 @@ export function IndexesSection({
 
               {availableCols.length > 0 ? (
                 <Select
-                  aria-label="Adicionar coluna ao índice"
+                  aria-label={buildUiCopy.indexes.addColumn}
                   value=""
-                  placeholder="+ coluna"
+                  placeholder={buildUiCopy.indexes.addColumnPlaceholder}
                   onChange={(selected) => {
                     if (selected) {
                       onUpdateIndex(idx, {

@@ -1,9 +1,14 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { variablesEditorCopyEn } from "./variables-editor.copy.en";
+import { variablesEditorCopyEs } from "./variables-editor.copy.es";
+
 /*
  * As frases do editor para as variáveis (RN-VAR-025): as dicas, a dica do ponteiro e o autocompletar. Cada dica é a frase da especificação, palavra por palavra. Os erros
  * não estão aqui: são os da conferência da linguagem (`variables/variables.copy.ts`), mostrados como vieram.
  */
 
-export const variablesEditorCopy = {
+const pt = {
   hint: {
     /** O `@nome` onde seria variável e não foi declarado (RN-VAR-015). */
     undeclared: (name: string) => `@${name} não é uma variável deste script, e vai ao banco como está.`,
@@ -43,3 +48,6 @@ export const variablesEditorCopy = {
     listLabel: "Variáveis",
   },
 } as const;
+
+export type VariablesEditorCopy = Localized<typeof pt>;
+export const variablesEditorCopy = pickCopy({ "pt-BR": pt, en: variablesEditorCopyEn, es: variablesEditorCopyEs });

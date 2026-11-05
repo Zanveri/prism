@@ -7,9 +7,9 @@ body:
       value: |
         You can write this issue in English, Portuguese or Spanish.
 
-        Say in one sentence, in the title, what you would like to be able to do. Before submitting, check the "Coming soon" section of
-        the documentation site (https://zanveri.github.io/prism/) to see what is already planned. A suggestion becomes work when the
-        maintainers assess it (CONTRIBUTING.md). Do not paste passwords, tokens, connection strings with passwords or real data.
+        Say in one sentence, in the title, what you would like to be able to do. Before submitting, check the documentation
+        (https://zanveri.com/docs/prism), to see whether Prism already does it, and the open issues, to see whether it is already
+        planned. A suggestion becomes work when the maintainers assess it (CONTRIBUTING.md). Do not paste passwords, tokens, connection strings with passwords or real data.
   - type: textarea
     id: problema
     attributes:

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils/cn";
 import { ModeMenu } from "./mode-menu";
 import { PoweredByZanveri } from "./powered-by-zanveri";
 import { PrismMark } from "./prism-mark";
+import { layoutCopy } from "./layout.copy";
 
 /**
  * Abaixo de 1100 px (a janela vai até 1024) a barra fica mais compacta, para caber numa linha só com o texto das Configurações
@@ -102,7 +103,7 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
 
       {leading}
 
-      <nav aria-label="Principal" className="ml-auto flex flex-none items-center gap-2 max-[1100px]:gap-0.5">
+      <nav aria-label={layoutCopy.mainNavigation} className="ml-auto flex flex-none items-center gap-2 max-[1100px]:gap-0.5">
         <ModeMenu />
         {/* O lembrete do reinício que ficou para depois (RN-DRIVER-005 e RN-NAV-006): leva a Configurações › Drivers, onde está o "Reiniciar agora". */}
         {restartPending ? (
@@ -128,7 +129,7 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
       ) : null}
 
       <button type="button" onClick={() => void requestLeave()} disabled={leave.isPending || checking} className={cn(itemClassName, "cursor-pointer text-muted enabled:hover:bg-selected enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-50")}>
-        Sair
+        {layoutCopy.signOut}
       </button>
 
       <PoweredByZanveri />

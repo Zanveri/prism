@@ -17,10 +17,6 @@ namespace Prism.Infrastructure.Transfers.Services;
 /// </summary>
 internal sealed class CopyRun(CopyJob job, Func<ConnectionSettings, CancellationToken, Task<Result<IDatabaseConnection, DatabaseFailure>>> connect, TransferProgress progress, CancellationToken token)
 {
-    private const string What = "a cópia";
-    private const string ColumnsChangedMessage = "As colunas do resultado mudaram desde a grade. Execute o comando de novo e copie outra vez.";
-    private const string ValueTooLargeMessage = "Um valor passa de 64 MiB, e o Prism não o copia.";
-    private const string RowTooLargeMessage = "A linha passa de 256 MiB de valores, e o Prism não a copia.";
 
     /// <summary>RN-LOG-001: as linhas lidas da origem, para o log do fim.</summary>
     public long ReadRows { get; private set; }
@@ -62,7 +58,7 @@ internal sealed class CopyRun(CopyJob job, Func<ConnectionSettings, Cancellation
         if (begunWrite.IsFailure)
             return LoadEnd.Of(LoadSteps.Database(begunWrite.Error, ETransferSide.Target, token));
 
-        var first = await LoadSteps.DescribeAsync(writing, engine, job.Schema, job.Table, job.Mapping, null, What, token);
+        var first = await LoadSteps.DescribeAsync(writing, engine, job.Schema, job.Table, job.Mapping, null, "TableChangedCopy", token);
         if (first.IsFailure)
             return LoadEnd.Of(first.Error);
 
@@ -87,11 +83,11 @@ internal sealed class CopyRun(CopyJob job, Func<ConnectionSettings, Cancellation
         // leva só as pedidas, na ordem das posições.
         var columns = started.Value;
         if (columns.Count == 0 || (job.CheckColumns && job.Columns.Any(column => column.Position >= columns.Count || columns[column.Position].Name != column.Name)))
-            return LoadEnd.Of(LoadSteps.Prism(ETransferError.ColumnsChanged, ColumnsChangedMessage, side: ETransferSide.Source));
+            return LoadEnd.Of(LoadSteps.Prism(ETransferError.ColumnsChanged, TransferMessages.Say("ColumnsChangedCopy"), side: ETransferSide.Source));
 
         var ordinals = job.Mapping.Select(entry => OrdinalOf(job.Columns[entry.Source])).ToList();
         if (ordinals.Any(ordinal => ordinal >= columns.Count))
-            return LoadEnd.Of(LoadSteps.Prism(ETransferError.ColumnsChanged, ColumnsChangedMessage, side: ETransferSide.Source));
+            return LoadEnd.Of(LoadSteps.Prism(ETransferError.ColumnsChanged, TransferMessages.Say("ColumnsChangedCopy"), side: ETransferSide.Source));
 
         var sources = ordinals.Select(ordinal => columns[ordinal]).ToList();
         var target = new LoadTarget(first.Value.Table.Schema, first.Value.Table.Name, [.. job.Mapping.Select(entry => entry.Target)]);
@@ -100,7 +96,7 @@ internal sealed class CopyRun(CopyJob job, Func<ConnectionSettings, Cancellation
             return LoadEnd.Of(notBegun);
 
         // RN-IMPORT-015: na primeira transação, antes de gravar, o catálogo de novo; as conversões usam os tipos desta leitura.
-        var second = await LoadSteps.DescribeAsync(writing, engine, job.Schema, job.Table, job.Mapping, first.Value.Columns, What, token);
+        var second = await LoadSteps.DescribeAsync(writing, engine, job.Schema, job.Table, job.Mapping, first.Value.Columns, "TableChangedCopy", token);
         if (second.IsFailure)
             return LoadEnd.Of(second.Error);
 
@@ -123,7 +119,7 @@ internal sealed class CopyRun(CopyJob job, Func<ConnectionSettings, Cancellation
             {
                 ReadRows++;
                 if (growing is { } limit && ReadRows > limit)
-                    return LoadEnd.Of(LoadSteps.Prism(ETransferError.ImportSourceGrowing, $"A origem continua crescendo: a cópia leu mais linhas do que as {ImportText.Thousands(total!.Value)} contadas e foi encerrada.", side: ETransferSide.Source));
+                    return LoadEnd.Of(LoadSteps.Prism(ETransferError.ImportSourceGrowing, TransferMessages.Say("SourceGrowing", ImportText.Thousands(total!.Value)), side: ETransferSide.Source));
 
                 var values = new EditParameter[row.Count];
                 for (var index = 0; index < values.Length; index++)
@@ -141,7 +137,7 @@ internal sealed class CopyRun(CopyJob job, Func<ConnectionSettings, Cancellation
             }
 
             if (batch.Value.Oversize is { } oversize)
-                return LoadEnd.Of(LoadSteps.Prism(ETransferError.ValueTooLarge, oversize.WholeRow ? RowTooLargeMessage : ValueTooLargeMessage, ReadRows + 1, oversize.WholeRow ? null : job.Columns[job.Mapping[oversize.Column].Source].Name, ETransferSide.Source));
+                return LoadEnd.Of(LoadSteps.Prism(ETransferError.ValueTooLarge, TransferMessages.Say(oversize.WholeRow ? "CopyRowTooLarge" : "CopyValueTooLarge"), ReadRows + 1, oversize.WholeRow ? null : job.Columns[job.Mapping[oversize.Column].Source].Name, ETransferSide.Source));
 
             if (batch.Value.Finished)
                 break;

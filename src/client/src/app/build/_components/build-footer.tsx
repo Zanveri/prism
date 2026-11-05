@@ -5,6 +5,7 @@ import type { Problem } from "@/app/build/_lib/model-check";
 import { footerCountsLabel } from "@/app/build/_lib/model-summary";
 import { EngineTag, LockOpenIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
+import { buildUiCopy } from "@/app/build/_lib/build-ui.copy";
 
 type BuildFooterProps = {
   userName: string;
@@ -48,9 +49,9 @@ export function BuildFooter({
       <span className="flex items-center gap-1.5">
         <EngineTag engine={connectionEngineNumber(model.engine)} />
         <span>
-          Modelo {modelName ?? ""}
+          {buildUiCopy.footer.model(modelName ?? "")}
           {model.base && baseConn
-            ? ` · existentes lidas de ${baseConn} / ${model.base.database} em ${model.base.readAt}`
+            ? buildUiCopy.footer.existingRead(baseConn, model.base.database, model.base.readAt)
             : ""}
         </span>
       </span>

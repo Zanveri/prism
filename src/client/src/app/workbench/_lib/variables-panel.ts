@@ -1,7 +1,10 @@
+import { locale } from "@/lib/i18n";
 import { staleNames, type StoredValue } from "./variables/run";
 import type { ScriptModel } from "./variables/script";
 import type { TabValuesSnapshot } from "./variables/tab-values";
 import { dateValueText, displayValue, numberText, textOf, typeLabel, typeOfValue, type Value } from "./variables/values";
+import { variablesPanelCopy } from "./variables-panel.copy";
+import { phrase } from "./variables/variables.copy";
 
 /*
  * O painel "Variáveis" (RN-VAR-024), sem React: as linhas da tabela em árvore (uma por variável declarada, na ordem do texto; a lista e o objeto abrem em um item ou
@@ -74,11 +77,11 @@ const isComposite = (value: Value) => value.kind === "list" || value.kind === "o
 function describe(value: Value): { text: string; hint: string } {
   if (value.kind === "list") {
     const count = value.items.length;
-    return { text: `${count.toLocaleString("pt-BR")} ${count === 1 ? "item" : "itens"} ${displayValue(value, rowLimit)}`, hint: displayValue(value, hintLimit) };
+    return { text: `${variablesPanelCopy.items(count)} ${displayValue(value, rowLimit)}`, hint: displayValue(value, hintLimit) };
   }
   if (value.kind === "object") {
     const count = value.fields.size;
-    return { text: `${count.toLocaleString("pt-BR")} ${count === 1 ? "campo" : "campos"} ${displayValue(value, rowLimit)}`, hint: displayValue(value, hintLimit) };
+    return { text: `${variablesPanelCopy.fields(count)} ${displayValue(value, rowLimit)}`, hint: displayValue(value, hintLimit) };
   }
   return { text: displayValue(value, rowLimit), hint: displayValue(value, hintLimit) };
 }
@@ -122,7 +125,7 @@ function childrenOf(row: PanelRow, view: PanelView): PanelRow[] {
     const shown = Math.min(value.items.length, view.shown.get(row.key) ?? listPage);
     for (let index = 0; index < shown; index++) push(make(`[${index}]`, `${row.key}/${index}`, "item", value.items[index]));
     if (shown < value.items.length) {
-      rows.push({ ...make("", `${row.key}/more`, "item", value), kind: "more", name: `Mostrar mais ${listPage.toLocaleString("pt-BR")} (de ${value.items.length.toLocaleString("pt-BR")})`, value: "", hint: "", type: "", expandable: false, expanded: false, more: { shown, total: value.items.length }, raw: null, isNull: false });
+      rows.push({ ...make("", `${row.key}/more`, "item", value), kind: "more", name: phrase.showMore(listPage, value.items.length), value: "", hint: "", type: "", expandable: false, expanded: false, more: { shown, total: value.items.length }, raw: null, isNull: false });
     }
   } else if (value.kind === "object") {
     for (const [name, field] of value.fields) push(make(name, `${row.key}/${name}`, "field", field));
@@ -143,7 +146,7 @@ export function panelRows(model: ScriptModel, snapshot: TabValuesSnapshot, view:
   for (const declaration of declared) {
     const entry: StoredValue | undefined = snapshot.values.get(declaration.name);
     if (entry === undefined) {
-      rows.push({ key: declaration.name, kind: "variable", parent: null, level: 1, name: declaration.name, type: "", value: "sem valor", hint: "", origin: null, when: null, stale: false, noValue: true, isNull: false, isSql: false, expandable: false, expanded: false, more: null, raw: null, variable: declaration.name });
+      rows.push({ key: declaration.name, kind: "variable", parent: null, level: 1, name: declaration.name, type: "", value: phrase.noValueRow(), hint: "", origin: null, when: null, stale: false, noValue: true, isNull: false, isSql: false, expandable: false, expanded: false, more: null, raw: null, variable: declaration.name });
       continue;
     }
 
@@ -158,7 +161,7 @@ export function panelRows(model: ScriptModel, snapshot: TabValuesSnapshot, view:
       value: text,
       hint,
       origin: entry.origin,
-      when: entry.origin === "consulta" ? `${clockText(entry.at)} · ${Math.round(entry.ms).toLocaleString("pt-BR")} ms` : clockText(entry.at),
+      when: entry.origin === "consulta" ? `${clockText(entry.at)} · ${Math.round(entry.ms).toLocaleString(locale)} ms` : clockText(entry.at),
       stale: stale.has(declaration.name),
       noValue: false,
       isNull: entry.value.kind === "null",

@@ -61,8 +61,6 @@ type FunctionDef = {
 
 type MethodDef = Omit<FunctionDef, "run"> & { run: (receiver: never, args: readonly Value[], context: CallContext) => Value };
 
-const kindNames: Record<ParamKind, string> = { number: "number", numberAny: "number", integer: "um número inteiro", string: "string", date: "Date", list: "lista", any: "um valor", stringOrNumber: "string ou number" };
-
 const required = (...kinds: ParamKind[]): Param[] => kinds.map((kind) => ({ kind }));
 const withOptional = (...kinds: ParamKind[]): Param[] => kinds.map((kind) => ({ kind, optional: true }));
 
@@ -112,7 +110,7 @@ function checkArguments(def: Pick<FunctionDef, "params" | "rest">, name: string,
   args.forEach((arg, index) => {
     const param = index < def.params.length ? def.params[index] : def.rest?.param;
     if (param === undefined) return;
-    if (!conforms(param.kind, arg)) throw refuse(phrase.argType(name, kindNames[param.kind], index + 1, displayValue(arg, 60)));
+    if (!conforms(param.kind, arg)) throw refuse(phrase.argType(name, phrase.paramKinds[param.kind], index + 1, displayValue(arg, 60)));
     if ((param.kind === "number" || param.kind === "integer" || param.kind === "stringOrNumber") && arg.kind === "number" && arg.inexact === true) throw inexactError(arg);
   });
 }

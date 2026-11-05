@@ -47,7 +47,7 @@ reporte necesita un archivo de bóveda, crea uno con un usuario de prueba.
 Lo que Prism se propone proteger: la bóveda cifrada de cada usuario, la contraseña de las conexiones, la API local (que solo
 escucha en `127.0.0.1` y exige un token de lanzamiento), la ventana de la aplicación, lo que va al log y la actualización (el
 paquete descargado se verifica contra dos sumas SHA-256 antes de cualquier uso; mira la
-[documentación](https://zanveri.github.io/prism/es/#actualizaciones)).
+[documentación](https://zanveri.com/docs/prism/atualizacoes-e-canal-beta), en portugués).
 
 Fuera del alcance: quien ya tiene acceso a la sesión del usuario en el sistema operativo, con la aplicación abierta y
 desbloqueada, y las fallas de las bases de datos a las que Prism se conecta. Un defecto común, sin efecto sobre la seguridad,

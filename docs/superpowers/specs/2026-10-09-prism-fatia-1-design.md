@@ -2299,7 +2299,10 @@ que é novo.
 - **RN-GITHUB-001.** O repositório principal é `github.com/Zanveri/prism`. Nada do GitLab fica no
   repositório: saem `.gitlab-ci.yml` e `.gitlab/`, e os documentos deixam de falar de GitLab (os
   registros de execução e esta especificação guardam a história; a limpeza deles é da Tarefa 19).
-  O site de documentação (Tarefa 25) passa a ser publicado no GitHub Pages.
+  A documentação de uso fica no site da Zanveri, em <https://zanveri.com/docs/prism>, e o download em
+  <https://zanveri.com/products/prism>; os dois moram no repositório do site, e não neste. *Alterada a
+  pedido do dono em 2026-11-05: o site de documentação da Tarefa 25 (`site/`, publicado no GitHub
+  Pages pelo `paginas.yml`) saiu do repositório, com o workflow dele.*
 - **RN-GITHUB-002.** Organização da pipeline. O GitHub só lê workflows direto em
   `.github/workflows/`, sem subpastas; a divisão por assunto que o dono pediu fica assim: um
   workflow de entrada, disparado pelo merge em `develop` e em `main`, que chama workflows
@@ -2314,6 +2317,10 @@ que é novo.
   contribui por fork. Nenhum pull request roda pipeline (RN-ABERTO-005): quem revisa roda as
   verificações na própria máquina, com os comandos que o `CONTRIBUTING.md` lista, e a pipeline
   confirma depois do merge.
+  *Acrescentado a pedido do dono em 2026-11-05:* a documentação de uso mora no repositório do site
+  (RN-GITHUB-001), que só os mantenedores mudam. O pull request que muda o que a pessoa vê ou faz
+  no Prism diz, na seção "Documentation" do modelo, que página muda e como, e os mantenedores
+  atualizam o site; um erro da documentação se relata aqui, como defeito, com o link da página.
 - **RN-GITHUB-004.** Custo. Cada merge na `develop` empacota Windows e Linux e publica um beta, e só
   o merge em `main` empacota também o macOS (decisão do dono, sabendo do custo, e em 2026-10-20, para
   economizar minutos da pipeline). Enquanto o repositório for privado, os minutos de runner

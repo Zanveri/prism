@@ -10,6 +10,8 @@ import {
 } from "@/lib/plugins/plugin-runtime";
 import { pluginBundlesQuery } from "@/lib/plugins/plugins.service";
 
+import { workbenchCopy } from "./workbench.copy";
+
 import type { Column } from "./database-sessions.schema";
 import { databaseMark, databaseSessionQuery, keepUntilRefreshed } from "./database-sessions.service";
 
@@ -116,7 +118,7 @@ export function useTableStructureEnrichment({
   if (internalDescriptionsEnabled) {
     return {
       tableDescription: null,
-      extraColumns: [{ key: "description", label: "Descrição" }],
+      extraColumns: [{ key: "description", label: workbenchCopy.tableTab.structure.description }],
       columnValues: {},
     };
   }

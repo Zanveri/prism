@@ -1,5 +1,14 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { buildCopyEn } from "./build.copy.en";
+import { buildCopyEs } from "./build.copy.es";
+
+export type IdentifierKind = "table" | "column" | "constraint" | "index";
+
+const identifierKinds: Record<IdentifierKind, string> = { table: "tabela", column: "coluna", constraint: "restrição", index: "índice" };
+
 /** Textos do modo Construir (RN-CONSTRUIR-*). */
-export const buildCopy = {
+const pt = {
   emptyModels: "Nenhum modelo aberto.",
   emptyModelsHint:
     "Abra um modelo salvo ou crie um novo: as tabelas dele aparecem aqui, separadas entre as que você vai criar e as que já existem no banco.",
@@ -163,8 +172,8 @@ export const buildCopy = {
   connectionChoiceBaseNote: "as existentes já estão aqui",
   connectionChoiceConfirm: "Abrir na Área de trabalho",
   problems: {
-    e1: (target: string) =>
-      `Nome de ${target} vazio ou com caractere de controle. O banco rejeita identificadores assim.`,
+    e1: (target: IdentifierKind) =>
+      `Nome de ${identifierKinds[target]} vazio ou com caractere de controle. O banco rejeita identificadores assim.`,
     e2: (name: string) =>
       `O nome ${name} está repetido no mesmo escopo. O banco não permite dois objetos com o mesmo nome.`,
     e3: (table: string) =>
@@ -236,3 +245,6 @@ export const buildCopy = {
       `As tabelas existentes já estão em ${baseLabel}: lá, este script falha no primeiro CREATE. Ao abrir na Área de trabalho, o Prism pergunta a conexão.`,
   },
 } as const;
+
+export type BuildCopy = Localized<typeof pt>;
+export const buildCopy = pickCopy({ "pt-BR": pt, en: buildCopyEn, es: buildCopyEs });

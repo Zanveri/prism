@@ -1,8 +1,13 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { autoRefreshCopyEn } from "./auto-refresh.copy.en";
+import { autoRefreshCopyEs } from "./auto-refresh.copy.es";
+
 /**
  * Os textos da atualização automática do resultado (RN-GRADE-014, issue #11): o submenu da grade, o controle da barra do resultado, a nota de quando ela
  * para sozinha e o diálogo do "Personalizado…", num lugar só. O intervalo vem escrito por `intervalLabel` ("5 s", "1 min").
  */
-export const autoRefreshCopy = {
+const pt = {
   menu: {
     /** O item do menu da célula que abre o submenu, logo depois de "Atualizar" (F5); é também o nome do submenu e do menu da barra. */
     label: "Atualizar automaticamente",
@@ -11,6 +16,7 @@ export const autoRefreshCopy = {
     /** O "Personalizado…" com o intervalo em uso, quando ele não é um dos do menu. */
     customChosen: (interval: string) => `Personalizado (${interval})…`,
     off: "Desligar",
+    notApplicable: (reason: string) => `Não se aplica: ${reason}.`,
   },
 
   /** Por que ela não liga agora (completam o "Não se aplica: …" do menu). */
@@ -55,3 +61,6 @@ export const autoRefreshCopy = {
     cancel: "Cancelar",
   },
 };
+
+export type AutoRefreshCopy = Localized<typeof pt>;
+export const autoRefreshCopy = pickCopy({ "pt-BR": pt, en: autoRefreshCopyEn, es: autoRefreshCopyEs });

@@ -1,8 +1,10 @@
 using CSharpFunctionalExtensions;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using System.Buffers;
 using System.Data;
 using System.Globalization;
+using System.Resources;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -36,6 +38,9 @@ internal enum EEditType
 /// </summary>
 internal static partial class EditValues
 {
+    /// <summary>Os textos, no idioma do pedido: <c>EditValues.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(EditValues));
+
     /// <summary>As casas de fração que a data e hora do C# guarda.</summary>
     private const int MaxDateTimeFraction = 7;
 
@@ -95,11 +100,11 @@ internal static partial class EditValues
             EEditType.Int64 => Integer(text, long.MinValue, long.MaxValue, value => value),
             EEditType.Decimal => DecimalOf(text),
             EEditType.Float => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && double.IsFinite(number) ? new EditParameter(number) : NotANumber(text),
-            EEditType.Date => DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? new EditParameter(date, DbType.Date) : $"«{text}» não é uma data no formato aaaa-mm-dd.",
-            EEditType.Time => TimeSpan.TryParseExact(text, @"hh\:mm\:ss", CultureInfo.InvariantCulture, out var time) ? new EditParameter(time, DbType.Time) : $"«{text}» não é uma hora no formato hh:mm:ss.",
+            EEditType.Date => DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? new EditParameter(date, DbType.Date) : Texts.Get("NotADate", text),
+            EEditType.Time => TimeSpan.TryParseExact(text, @"hh\:mm\:ss", CultureInfo.InvariantCulture, out var time) ? new EditParameter(time, DbType.Time) : Texts.Get("NotATime", text),
             EEditType.Timestamp => TimestampOf(dialect, text),
             EEditType.Boolean => BooleanOf(dialect, text),
-            _ => "O Prism ainda não edita este tipo neste banco."
+            _ => Texts.Get("TypeNotEditable")
         };
     }
 
@@ -148,7 +153,7 @@ internal static partial class EditValues
     private static Result<EditParameter, string> BinaryOf(ESqlDialect dialect, string text)
         => BinaryBytesOf(dialect, text) is { } bytes
             ? new EditParameter(bytes, DbType.Binary)
-            : $"«{text}» não é um binário em hexadecimal (0x…).";
+            : Texts.Get("NotABinary", text);
 
     private static byte[]? BinaryBytesOf(ESqlDialect dialect, string text)
     {
@@ -169,9 +174,9 @@ internal static partial class EditValues
     private static Result<EditParameter, string> Integer(string text, long minimum, long maximum, Func<long, object> narrow)
     {
         if (!IntegerText().IsMatch(text))
-            return $"«{text}» não é um número inteiro.";
+            return Texts.Get("NotAnInteger", text);
 
-        return long.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var value) && value >= minimum && value <= maximum ? new EditParameter(narrow(value)) : $"«{text}» está fora da faixa da coluna.";
+        return long.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var value) && value >= minimum && value <= maximum ? new EditParameter(narrow(value)) : Texts.Get("OutOfRange", text);
     }
 
     /// <summary>O `decimal` do C# guarda 28 dígitos com folga: acima disso o texto vai como está (já conferido), e o banco o lê.</summary>
@@ -195,7 +200,7 @@ internal static partial class EditValues
         var maximum = dialect == ESqlDialect.Db2 ? 12 : MaxDateTimeFraction;
         var match = Timestamp().Match(text);
         if (!match.Success || match.Groups[3].Length > maximum || !DateTime.TryParseExact($"{match.Groups[1].Value} {match.Groups[2].Value}", "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var value))
-            return $"«{text}» não é uma data e hora no formato aaaa-mm-dd hh:mm:ss, com até {maximum} casas de fração.";
+            return Texts.Get("NotATimestamp", text, maximum);
 
         var fraction = match.Groups[3].Value;
         if (fraction.Length > MaxDateTimeFraction)
@@ -208,7 +213,7 @@ internal static partial class EditValues
     private static Result<EditParameter, string> BooleanOf(ESqlDialect dialect, string text)
     {
         if (BooleanText(text) is not { } flag)
-            return $"«{text}» não é um valor lógico: use {(dialect == ESqlDialect.Db2 ? "true ou false" : "1 ou 0")}.";
+            return Texts.Get(dialect == ESqlDialect.Db2 ? "NotABooleanWords" : "NotABooleanNumbers", text);
 
         return dialect == ESqlDialect.Db2 ? new EditParameter(flag) : new EditParameter(flag ? "t" : "f");
     }
@@ -222,7 +227,7 @@ internal static partial class EditValues
         };
 
     private static string NotANumber(string text)
-        => $"«{text}» não é um número: use ponto para as casas decimais.";
+        => Texts.Get("NotANumber", text);
 
     [GeneratedRegex(@"^[+-]?\d+$")]
     private static partial Regex IntegerText();

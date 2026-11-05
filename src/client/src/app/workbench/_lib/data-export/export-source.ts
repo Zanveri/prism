@@ -90,13 +90,13 @@ export function originSchema(origin: ExportOrigin): string {
 
 /** Como a barra de status e os avisos de erro chamam a exportação (RN-EXPORT-021): "pedido", ou "resultado de consulta-1.sql". */
 export function progressName(origin: ExportOrigin): string {
-  return origin.kind === "result" ? `resultado de ${origin.tabTitle}` : origin.name;
+  return origin.kind === "result" ? dataExportCopy.source.progressResult(origin.tabTitle) : origin.name;
 }
 
 /** O sujeito do aviso de sucesso (RN-EXPORT-022): "Tabela pedido" (feminino), "Visão v_pedido", "Resultado de consulta-1.sql" (masculino). */
 export function toastSubject(origin: ExportOrigin): { subject: string; feminine: boolean } {
-  if (origin.kind === "result") return { subject: `Resultado de ${origin.tabTitle}`, feminine: false };
-  return { subject: `${origin.kind === "table" && origin.view ? "Visão" : "Tabela"} ${origin.name}`, feminine: true };
+  if (origin.kind === "result") return { subject: dataExportCopy.source.toastResult(origin.tabTitle), feminine: false };
+  return { subject: `${origin.kind === "table" && origin.view ? dataExportCopy.source.toastView : dataExportCopy.source.toastTable} ${origin.name}`, feminine: true };
 }
 
 /** A tabela de destino do SQL e do DbUnit (RN-EXPORT-011 e 012): a da origem na tabela e nos Registros; no resultado, a do alvo da edição ou vazia. */

@@ -43,8 +43,8 @@ Quatro apostas, confirmadas pelo dono, que juntas um vizinho (DBeaver, DataGrip)
 - O driver do PostgreSQL vem com o app. O do Db2 e do Informix é da IBM e o Prism o baixa em Configurações › Drivers; a IBM não o publica
   para Mac com processador Intel.
 - Quem chega costuma vir do DBeaver, com as conexões já montadas lá.
-- A interface está em português do Brasil. O README e o site de documentação (`site/`, publicado em zanveri.github.io/prism) já existem
-  em inglês, português e espanhol.
+- A interface está em português do Brasil. O README existe em inglês, português e espanhol; a documentação de uso fica no site da
+  Zanveri (zanveri.com/docs/prism), em português, e o download em zanveri.com/products/prism.
 
 ## Capabilities and Constraints
 
@@ -74,9 +74,8 @@ Quatro apostas, confirmadas pelo dono, que juntas um vizinho (DBeaver, DataGrip)
 
 ## Evidence on Hand
 
-- Capturas reais do app em `site/img/` (o editor com resultado, as conexões, as configurações, os temas, a tabela com registros e
-  diagrama, a busca no navegador, o erro do banco, o tema claro, a criação de usuário).
-- O README em três línguas, o site de documentação em `site/` e o `CHANGELOG.md` com cada versão (o app está na 0.6.0).
+- Capturas reais do app: as da documentação no repositório do site da Zanveri, e a do README em `docs/images/`.
+- O README em três línguas, a documentação em zanveri.com/docs/prism e o `CHANGELOG.md` com cada versão (o app está na 0.6.0).
 - As marcas em `assets/` (Prism, escura e clara, em SVG e PNG) e `assets/zanveri/` (monograma e wordmark).
 - **Não existem, e não se inventam:** medições de velocidade contra o DBeaver ou o DataGrip, números de usuários ou de downloads,
   depoimentos, clientes nomeados.

@@ -36,6 +36,7 @@ import {
   splitStatements,
   sqlTokens,
 } from "@/app/workbench/_lib/sql-statements";
+import { buildUiCopy } from "./build-ui.copy";
 
 function findInlineCheckColumn(table: ModelTable, check: ModelCheck): ModelColumn | null {
   const identifiers = check.expression.match(/[A-Za-z_][A-Za-z0-9_$]*/g) ?? [];
@@ -771,7 +772,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
             error: {
               line: pos.line,
               column: pos.column,
-              message: "esperava o nome da tabela após CREATE TABLE",
+              message: buildUiCopy.parse.expectedTableName,
             },
           };
         }
@@ -783,7 +784,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
             error: {
               line: pos.line,
               column: pos.column,
-              message: "esperava ( após o nome da tabela",
+              message: buildUiCopy.parse.expectedOpenParen,
             },
           };
         }
@@ -797,7 +798,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
             error: {
               line: pos.line,
               column: pos.column,
-              message: "esperava ) para fechar CREATE TABLE",
+              message: buildUiCopy.parse.expectedCloseParen,
             },
           };
         }
@@ -852,7 +853,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
                   error: {
                     line: pos.line,
                     column: pos.column,
-                    message: `esperava , ou ) antes de ${unexpected.raw}`,
+                    message: buildUiCopy.parse.expectedCommaOrParen(unexpected.raw),
                   },
                 };
               }
@@ -881,7 +882,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
               error: {
                 line: pos.line,
                 column: pos.column,
-                message: `esperava o tipo da coluna ${colIdent.name}`,
+                message: buildUiCopy.parse.expectedColumnType(colIdent.name),
               },
             };
           }
@@ -940,7 +941,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
                   error: {
                     line: pos.line,
                     column: pos.column,
-                    message: `esperava expressão após DEFAULT em ${colIdent.name}`,
+                    message: buildUiCopy.parse.expectedDefaultExpression(colIdent.name),
                   },
                 };
               }
@@ -1011,7 +1012,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
                   error: {
                     line: pos.line,
                     column: pos.column,
-                    message: `referência inválida na coluna ${colIdent.name}`,
+                    message: buildUiCopy.parse.invalidReference(colIdent.name),
                   },
                 };
               }
@@ -1029,7 +1030,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
                   error: {
                     line: pos.line,
                     column: pos.column,
-                    message: `CHECK sem fechar ) na coluna ${colIdent.name}`,
+                    message: buildUiCopy.parse.checkUnclosed(colIdent.name),
                   },
                 };
               }
@@ -1053,7 +1054,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
               error: {
                 line: pos.line,
                 column: pos.column,
-                message: `esperava , ou ) antes de ${kw.raw}`,
+                message: buildUiCopy.parse.expectedCommaOrParen(kw.raw),
               },
             };
           }
@@ -1096,7 +1097,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
       if (tokens[kIdx]?.word) {
         label = `CREATE ${tokens[kIdx].text.toUpperCase()}`;
       }
-      warnings.push({ line: stmtLine, message: `linha ${stmtLine}: ${label} ignorado` });
+      warnings.push({ line: stmtLine, message: buildUiCopy.parse.ignored(stmtLine, label) });
       continue;
     }
 
@@ -1125,7 +1126,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
         }
       }
       const stmtLine = lineAndCol(text, first.start).line;
-      warnings.push({ line: stmtLine, message: `linha ${stmtLine}: ALTER TABLE ignorado` });
+      warnings.push({ line: stmtLine, message: buildUiCopy.parse.ignored(stmtLine, "ALTER TABLE") });
       continue;
     }
 
@@ -1182,7 +1183,7 @@ export function readModelSql(text: string, before: BuildModel): TextRead {
       (first.text === "drop" || first.text === "alter") && second?.word
         ? `${first.text.toUpperCase()} ${second.text.toUpperCase()}`
         : first.raw.toUpperCase();
-    warnings.push({ line: stmtLine, message: `linha ${stmtLine}: ${cmdLabel} ignorado` });
+    warnings.push({ line: stmtLine, message: buildUiCopy.parse.ignored(stmtLine, cmdLabel) });
   }
 
   return {

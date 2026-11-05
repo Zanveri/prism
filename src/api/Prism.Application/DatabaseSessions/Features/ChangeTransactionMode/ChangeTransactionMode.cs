@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using CSharpFunctionalExtensions;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
@@ -21,10 +23,13 @@ public sealed record ChangeTransactionModeCommand : IRequest<Result<DatabaseSess
 
 internal sealed class ChangeTransactionModeHandler(IDatabaseSessionService databaseSessionService) : IRequestHandler<ChangeTransactionModeCommand, Result<DatabaseSessionDto, ApiErrorDto>>
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ChangeTransactionMode.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ChangeTransactionModeCommand));
+
     public async Task<Result<DatabaseSessionDto, ApiErrorDto>> Handle(ChangeTransactionModeCommand request, CancellationToken cancellationToken)
     {
         if (databaseSessionService.InfoOf(request.ID) is not { } session || databaseSessionService.TransactionOf(request.ID) is not { } transaction)
-            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.SessionNotFound, "A sessão não existe mais.")));
+            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.SessionNotFound, Texts.Get("SessionGone"))));
 
         if (request.TransactionMode is { } mode)
         {

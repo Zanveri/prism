@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ResultRequired" xml:space="preserve">
+    <value>Informe o resultado (resultID) da página que está sendo editada.</value>
+  </data>
+  <data name="PurposeInvalid" xml:space="preserve">
+    <value>O pedido (purpose) deve ser edit ou sql.</value>
+  </data>
+  <data name="ChangesRequired" xml:space="preserve">
+    <value>Informe ao menos uma alteração.</value>
+  </data>
+  <data name="ChangeKindInvalid" xml:space="preserve">
+    <value>O tipo da alteração deve ser update, delete, insert ou updateAll.</value>
+  </data>
+</root>

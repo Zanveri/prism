@@ -120,8 +120,6 @@ function shownType(declared: Type, value: Value): Type {
   return declared;
 }
 
-const unclosedPhrases = { text: "um texto", quoted: "um nome entre aspas", comment: "um comentário", dollar: "um $tag$" } as const;
-
 export class ScriptRun {
   readonly model: ScriptModel;
   private readonly config: RunConfig;
@@ -227,7 +225,7 @@ export class ScriptRun {
   private checkSqlText(name: string, text: string, at: number): void {
     const engine = this.env.engine;
     const unclosed = unclosedConstruct(text, engine);
-    if (unclosed !== null) throw new VariableError(phrase.sqlEndsInside(name, unclosedPhrases[unclosed]), at);
+    if (unclosed !== null) throw new VariableError(phrase.sqlEndsInside(name, phrase.unclosed[unclosed]), at);
 
     let depth = 0;
     let balanced = true;

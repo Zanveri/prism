@@ -20,6 +20,7 @@ import {
   TableIcon,
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
+import { buildUiCopy } from "@/app/build/_lib/build-ui.copy";
 
 type BuildSidebarProps = {
   model: BuildModel | null;
@@ -519,8 +520,8 @@ export function BuildSidebar({
         <ContextMenu
           label={
             contextMenu.kind === "tables"
-              ? `Ações de ${contextMenu.label}`
-              : `Ações do esquema ${contextMenu.schema}`
+              ? buildUiCopy.sidebar.actionsOf(contextMenu.label)
+              : buildUiCopy.sidebar.schemaActions(contextMenu.schema)
           }
           point={contextMenu.point}
           groups={
@@ -531,8 +532,8 @@ export function BuildSidebar({
                       id: "delete-table",
                       label:
                         contextMenu.tableKeys.length > 1
-                          ? `Deletar (${contextMenu.tableKeys.length} tabelas)`
-                          : "Deletar",
+                          ? buildUiCopy.sidebar.deleteTables(contextMenu.tableKeys.length)
+                          : buildUiCopy.sidebar.deleteTable,
                       shortcut: "Delete",
                       onSelect: () => executeDeleteTables(contextMenu.tableKeys),
                     },
@@ -546,8 +547,8 @@ export function BuildSidebar({
                             id: "drop-schema",
                             label:
                               contextMenu.isExistingSchema && contextMenu.isDropped
-                                ? "Cancelar drop do esquema"
-                                : "Dropar esquema",
+                                ? buildUiCopy.sidebar.cancelDropSchema
+                                : buildUiCopy.sidebar.dropSchema,
                             shortcut: "Delete",
                             onSelect: () =>
                               onDropSchema(
@@ -563,8 +564,8 @@ export function BuildSidebar({
                             id: "delete-schema",
                             label:
                               hasSchemas && onDropSchema && contextMenu.isExistingSchema
-                                ? "Tirar esquema do modelo"
-                                : "Deletar esquema",
+                                ? buildUiCopy.sidebar.removeSchema
+                                : buildUiCopy.sidebar.deleteSchema,
                             shortcut: !hasSchemas || !onDropSchema ? "Delete" : undefined,
                             onSelect: () => onDeleteSchema(contextMenu.schema),
                           },
@@ -591,8 +592,8 @@ export function BuildSidebar({
           />
           <span className="flex-1">
             {errorCount > 0
-              ? `${errorCount} ${errorCount === 1 ? "erro" : "erros"} no modelo`
-              : `${warningCount} ${warningCount === 1 ? "aviso" : "avisos"} no modelo`}
+              ? buildUiCopy.sidebar.errorsInModel(errorCount)
+              : buildUiCopy.sidebar.warningsInModel(warningCount)}
           </span>
           <span className="text-muted">{buildCopy.viewProblems}</span>
         </button>

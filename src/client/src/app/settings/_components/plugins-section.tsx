@@ -23,7 +23,7 @@ const copy = settingsCopy.plugins;
 function errorMessageOf(error: unknown): string {
   if (error instanceof ApiRequestError) return error.error.detail || error.error.title || error.message;
   if (error instanceof Error) return error.message;
-  return "Não foi possível concluir a operação.";
+  return copy.operationFailed;
 }
 
 export function PluginsSection({ anchor }: { anchor: string }) {
@@ -132,7 +132,7 @@ export function PluginsSection({ anchor }: { anchor: string }) {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-raised px-4 py-3">
             <div className="flex items-center gap-2 text-sm text-body">
               <PackageIcon />
-              <span>Plugins de terceiros liberados neste cofre.</span>
+              <span>{copy.unlockedInVault}</span>
             </div>
             <Button
               type="button"
@@ -213,7 +213,7 @@ export function PluginsSection({ anchor }: { anchor: string }) {
                           <StatusBadge tone={plugin.enabled ? "success" : "neutral"}>
                             {plugin.enabled ? copy.enabledLabel : copy.disabledLabel}
                           </StatusBadge>
-                          <StatusBadge tone="neutral">{plugin.sourceKind === "git" ? "Git" : "Local"}</StatusBadge>
+                          <StatusBadge tone="neutral">{plugin.sourceKind === "git" ? "Git" : copy.sourceLocal}</StatusBadge>
                         </div>
                         {plugin.description ? <p className="text-sm text-body">{plugin.description}</p> : null}
                         {!plugin.available && plugin.errorMessage ? (
@@ -221,7 +221,7 @@ export function PluginsSection({ anchor }: { anchor: string }) {
                         ) : null}
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                           <span className="font-mono">{plugin.id}</span>
-                          {plugin.author ? <span>por {plugin.author}</span> : null}
+                          {plugin.author ? <span>{settingsCopy.plugins.byAuthor(plugin.author)}</span> : null}
                           <span className="truncate font-mono" title={plugin.source}>
                             {plugin.source}
                           </span>
@@ -235,7 +235,7 @@ export function PluginsSection({ anchor }: { anchor: string }) {
                           disabled={togglingThis}
                           onClick={() => toggleMutation.mutate({ id: plugin.id, enabled: !plugin.enabled })}
                         >
-                          {plugin.enabled ? "Desativar" : "Ativar"}
+                          {plugin.enabled ? copy.disableAction : copy.enableAction}
                         </Button>
                         <Button
                           type="button"

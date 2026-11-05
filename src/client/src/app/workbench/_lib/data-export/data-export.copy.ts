@@ -1,16 +1,21 @@
+import { locale, pickCopy, type Localized } from "@/lib/i18n";
+
+import { dataExportCopyEn } from "./data-export.copy.en";
+import { dataExportCopyEs } from "./data-export.copy.es";
+
 /**
  * Os textos da exportação de dados (seção 35 da especificação, RN-EXPORT-001 a 023), em pt-BR. As frases são as da especificação; as que ela não escreve
  * seguem o tom das vizinhas.
  */
 
-const thousands = new Intl.NumberFormat("pt-BR");
+const thousands = new Intl.NumberFormat(locale);
 
-/** O número com o ponto de milhar do pt-BR: `12.345`. */
+/** O número com o separador de milhar do idioma da janela (`12.345` em português). */
 export const formatCount = (value: number): string => thousands.format(value);
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
-export const dataExportCopy = {
+const pt = {
   // RN-EXPORT-001: as entradas e os motivos de não valerem.
   entry: {
     menu: "Exportar dados…",
@@ -41,6 +46,14 @@ export const dataExportCopy = {
     sourceResult: (tab: string) => `Resultado de ${tab}`,
     sourceScriptResult: (number: number, tab: string) => `Resultado ${number} de ${tab}`,
     readOnly: "Somente leitura",
+  },
+
+  // O nome da origem nos avisos (`progressName`, `toastSubject`); o nome do arquivo (`${tabela}`) não passa por aqui.
+  source: {
+    progressResult: (tab: string) => `resultado de ${tab}`,
+    toastTable: "Tabela",
+    toastView: "Visão",
+    toastResult: (tab: string) => `Resultado de ${tab}`,
   },
 
   // RN-EXPORT-004: os formatos, na ordem da lista.
@@ -354,3 +367,6 @@ export const dataExportCopy = {
       count === 1 ? "1 exportação com a entrega que falhou será descartada." : `${formatCount(count)} exportações com a entrega que falhou serão descartadas.`,
   },
 } as const;
+
+export type DataExportCopy = Localized<typeof pt>;
+export const dataExportCopy = pickCopy({ "pt-BR": pt, en: dataExportCopyEn, es: dataExportCopyEs });

@@ -1,3 +1,7 @@
+import { buildUiCopy } from "../_lib/build-ui.copy";
+
+const copy = buildUiCopy.tableCommands;
+
 export type TableCommandsProps = {
   ddl: string;
   removedColumnNames: string[];
@@ -21,11 +25,10 @@ export function TableCommands({ ddl, removedColumnNames }: TableCommandsProps) {
     >
       <div className="flex h-7 items-center gap-2">
         <h2 id="h-mudancas" className="m-0 text-[13px] font-semibold">
-          O que esta tabela vai gerar
+          {copy.title}
         </h2>
         <span className="text-xs text-subtle">
-          {commandCount} {commandCount === 1 ? "comando" : "comandos"}, no DDL
-          de diferenças
+          {copy.count(commandCount)}
         </span>
       </div>
 
@@ -52,11 +55,11 @@ export function TableCommands({ ddl, removedColumnNames }: TableCommandsProps) {
             <path d="M8 7v2.5M8 11.25v.01" />
           </svg>
           <span>
-            Remover{" "}
-            <span className="font-mono">{removedColumnNames[0]}</span> apaga os
-            dados dessa coluna. Se era para trocar o nome, restaure-a e
-            renomeie: renomear vira <span className="font-mono">RENAME COLUMN</span>{" "}
-            e mantém os dados.
+            {copy.removedWarning.before}{" "}
+            <span className="font-mono">{removedColumnNames[0]}</span>
+            {copy.removedWarning.middle}
+            <span className="font-mono">RENAME COLUMN</span>
+            {copy.removedWarning.after}
           </span>
         </p>
       ) : null}

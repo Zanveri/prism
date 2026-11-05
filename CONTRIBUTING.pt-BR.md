@@ -23,6 +23,10 @@ O fluxo é o da RN-GITHUB-003, decidido pelo dono do projeto:
 5. **De `develop` para `main`, só o pull request de lançamento** (`release: vX.Y.Z`), aberto pelos mantenedores
    ([docs/versionamento.md](docs/versionamento.md)).
 6. Responda à revisão com novos commits no mesmo ramo.
+7. **A documentação de uso mora no site da Zanveri** (<https://zanveri.com/docs/prism>), no repositório do site, e não aqui, e só os
+   mantenedores a mudam. O pull request que muda o que a pessoa vê ou faz no Prism diz, na seção **Documentation**, que página
+   muda e o que ela deve dizer; depois do merge, os mantenedores atualizam o site. Um erro da documentação se relata aqui, com o
+   formulário de defeito e o link da página.
 
 **Nenhum pull request roda a pipeline** (RN-ABERTO-005): ela só roda depois do merge, na `develop` e na `main`. Quem revisa roda as
 verificações na própria máquina, com os comandos de [O que quem revisa roda](#o-que-quem-revisa-roda), e a pipeline confirma depois do
@@ -99,7 +103,6 @@ app empacotado sem tocar nos dados de ninguém). O log do processo principal tra
 | `src/api/` | A API em C# (.NET 10) e os testes. Orientação em [src/api/AGENTS.md](src/api/AGENTS.md). |
 | `docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md` | Especificação da primeira entrega: regras `RN-*`, rotas, códigos de erro e critérios de aceite. |
 | `docs/design/canvas/` | Canvas de design aprovado: a medida de cores, espaçamentos e textos. |
-| `site/` | O site de documentação (HTML e CSS estáticos, em inglês, português e espanhol), publicado no GitHub Pages pela pipeline em <https://zanveri.github.io/prism/>. |
 | `docs/versionamento.md` | Como o Prism é versionado e como se lança uma versão (o pull request de lançamento da `develop` para a `main`). |
 | `docs/ci.md` | A pipeline: o que cada workflow e cada job faz, o que cada merge publica, como rodar na máquina, os runners, a lista de conferência do repositório no GitHub e o ensaio com o repositório privado. |
 | `.github/workflows/`, `.github/actions/`, `scripts/ci/` | A pipeline (GitHub Actions: o workflow de entrada, os reutilizáveis e as actions compostas) e os roteiros que ela chama, um por passo, com os testes deles. |
@@ -128,7 +131,9 @@ português.
   estão logo abaixo).
 - **Pacotes travados:** se você mudou um `PackageReference`, rode `dotnet restore src/api/Prism.slnx --force-evaluate` e inclua os
   `packages.lock.json` no mesmo commit. Na interface, o `pnpm-lock.yaml` entra junto com a mudança no `package.json`.
-- **Documentação** atualizada quando a mudança altera um comando, uma pasta ou uma regra. Os textos públicos (README, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT e o site) existem em inglês, português e espanhol: mude os três.
+- **Documentação** atualizada quando a mudança altera um comando, uma pasta ou uma regra. Os textos públicos do repositório (README,
+  CONTRIBUTING, SECURITY e CODE_OF_CONDUCT) existem em inglês, português e espanhol: mude os três. O que muda na documentação de
+  uso vai na seção **Documentation** do pull request (passo 7 do [fluxo](#fluxo)).
 - **Título do pull request** no formato dos commits (veja abaixo).
 
 ## O que quem revisa roda

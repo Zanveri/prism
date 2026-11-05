@@ -1,3 +1,4 @@
+using System.Resources;
 using Prism.Application.Common.Texts;
 using Prism.Application.Connections.Models.Dtos;
 using Prism.Core.Extensions;
@@ -14,6 +15,9 @@ namespace Prism.Application.Connections.Models;
 /// </summary>
 internal static class ConnectionRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ConnectionRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ConnectionRules));
+
     /// <summary>
     /// RN-CONN-004 e RN-CONN-013: a senha gravada só é enviada ao servidor para o qual foi gravada, e "o mesmo servidor" é o mesmo host e a
     /// mesma porta. O host é comparado de forma EXATA (`Ordinal`), depois da única normalização que a gravação aplica, aparar as pontas
@@ -53,74 +57,79 @@ internal static class ConnectionRules
     {
         var normalized = name.NormalizeName();
         if (normalized.Length is < 1 or > NameMaxLength)
-            return "O nome da conexão deve ter de 1 a 80 caracteres.";
+            return Texts.Get("NameLength");
 
-        return TextRules.HasControlOrDirection(normalized) ? "O nome da conexão não pode ter caractere de controle nem de direção do texto." : null;
+        return TextRules.HasControlOrDirection(normalized) ? Texts.Get("NameControl") : null;
     }
 
     public static string? HostRefusal(string? host)
-        => Refusal(host, required: true, HostMaxLength, "Informe o host.", "O host pode ter até 255 caracteres.", "O host não pode ter caractere de controle nem de direção do texto.");
+        => Refusal(host, required: true, HostMaxLength, Texts.Get("HostRequired"), Texts.Get("HostLength"), Texts.Get("HostControl"));
 
     public static string? PortRefusal(int port)
-        => port is >= 1 and <= 65535 ? null : "Informe uma porta de 1 a 65535.";
+        => port is >= 1 and <= 65535 ? null : Texts.Get("PortRange");
 
     public static string? DatabaseRefusal(string? database)
-        => Refusal(database, required: true, DatabaseMaxLength, "Informe o banco de dados.", "O banco de dados pode ter até 128 caracteres.", "O banco de dados não pode ter caractere de controle nem de direção do texto.");
+        => Refusal(database, required: true, DatabaseMaxLength, Texts.Get("DatabaseRequired"), Texts.Get("DatabaseLength"), Texts.Get("DatabaseControl"));
 
     /// <summary>
     /// `required` é o formulário de criar e o teste. No `PATCH` o usuário vazio passa aqui, e quem decide é a gravação: ele só fica vazio na conexão gravada
     /// já sem usuário (a que a importação trouxe sem ele, RN-TRANSF-015). Na importação ele é opcional.
     /// </summary>
     public static string? UserNameRefusal(string? userName, bool required)
-        => Refusal(userName, required, UserNameMaxLength, "Informe o usuário do banco.", "O usuário do banco pode ter até 128 caracteres.", "O usuário do banco não pode ter caractere de controle nem de direção do texto.");
+        => Refusal(userName, required, UserNameMaxLength, Texts.Get("UserNameRequired"), Texts.Get("UserNameLength"), Texts.Get("UserNameControl"));
 
     /// <summary>A senha não é aparada nem conferida quanto aos caracteres: espaço e qualquer caractere fazem parte dela. Só o teto, contado como veio.</summary>
     public static string? PasswordRefusal(string? password)
-        => password is { Length: > PasswordMaxLength } ? "A senha do banco pode ter até 1.024 caracteres." : null;
+        => password is { Length: > PasswordMaxLength } ? Texts.Get("PasswordLength") : null;
+
+    /// <summary>RN-CONN-010: os tetos do segredo do túnel e da senha do proxy, também na rota que só lembra o segredo (`RememberNetworkSecret`).</summary>
+    public static string SshSecretLengthMessage => Texts.Get("SshSecretLength");
+
+    public static string ProxyPasswordLengthMessage => Texts.Get("ProxyPasswordLength");
 
     public static string? SshRefusal(ConnectionSshInputDto? ssh)
     {
         if (ssh is null)
             return null;
 
-        if (Refusal(ssh.Host, required: true, HostMaxLength, "Informe o host do túnel SSH.", "O host do túnel SSH pode ter até 255 caracteres.", "O host do túnel SSH não pode ter caractere de controle nem de direção do texto.") is { } hostRefusal)
+        if (Refusal(ssh.Host, required: true, HostMaxLength, Texts.Get("SshHostRequired"), Texts.Get("SshHostLength"), Texts.Get("SshHostControl")) is { } hostRefusal)
             return hostRefusal;
 
         if (ssh.Port is < 1 or > 65535)
-            return "Informe uma porta SSH de 1 a 65535.";
+            return Texts.Get("SshPortRange");
 
-        if (Refusal(ssh.UserName, required: true, UserNameMaxLength, "Informe o usuário do túnel SSH.", "O usuário do túnel SSH pode ter até 128 caracteres.", "O usuário do túnel SSH não pode ter caractere de controle nem de direção do texto.") is { } userRefusal)
+        if (Refusal(ssh.UserName, required: true, UserNameMaxLength, Texts.Get("SshUserNameRequired"), Texts.Get("SshUserNameLength"), Texts.Get("SshUserNameControl")) is { } userRefusal)
             return userRefusal;
 
         var authMethod = ssh.AuthMethod?.Trim();
         if (authMethod is not ("password" or "privateKey"))
-            return "Escolha o método de autenticação SSH: senha ou chave privada.";
+            return Texts.Get("SshAuthMethodInvalid");
 
-        if (authMethod == "privateKey" && Refusal(ssh.PrivateKeyPath, required: true, PathMaxLength, "Informe o caminho da chave privada SSH.", "O caminho da chave privada SSH pode ter até 1.024 caracteres.", "O caminho da chave privada SSH não pode ter caractere de controle nem de direção do texto.") is { } keyRefusal)
+        if (authMethod == "privateKey" && Refusal(ssh.PrivateKeyPath, required: true, PathMaxLength, Texts.Get("SshPrivateKeyPathRequired"), Texts.Get("SshPrivateKeyPathLength"), Texts.Get("SshPrivateKeyPathControl")) is { } keyRefusal)
             return keyRefusal;
 
         if (ssh.Secret is { Length: > PasswordMaxLength })
-            return "A senha ou frase secreta do SSH pode ter até 1.024 caracteres.";
+            return Texts.Get("SshSecretLength");
 
         if (ssh.KeepAliveIntervalMs is < 0 or > 3_600_000)
-            return "O intervalo de keep-alive SSH deve ser de 0 a 3.600.000 ms.";
+            return Texts.Get("SshKeepAliveRange");
 
         if (ssh.TunnelTimeoutMs is < 0 or > 600_000)
-            return "O timeout de conexão do túnel SSH deve ser de 0 a 600.000 ms.";
+            return Texts.Get("SshTimeoutRange");
 
-        if (Refusal(ssh.LocalHost, required: false, HostMaxLength, string.Empty, "O host local do túnel SSH pode ter até 255 caracteres.", "O host local do túnel SSH não pode ter caractere de controle nem de direção do texto.") is { } localHostRefusal)
+        if (Refusal(ssh.LocalHost, required: false, HostMaxLength, string.Empty, Texts.Get("SshLocalHostLength"), Texts.Get("SshLocalHostControl")) is { } localHostRefusal)
             return localHostRefusal;
 
         if (ssh.LocalPort is < 0 or > 65535)
-            return "Informe uma porta local de 0 a 65535.";
+            return Texts.Get("SshLocalPortRange");
 
-        if (Refusal(ssh.RemoteHost, required: false, HostMaxLength, string.Empty, "O host remoto do túnel SSH pode ter até 255 caracteres.", "O host remoto do túnel SSH não pode ter caractere de controle nem de direção do texto.") is { } remoteHostRefusal)
+        if (Refusal(ssh.RemoteHost, required: false, HostMaxLength, string.Empty, Texts.Get("SshRemoteHostLength"), Texts.Get("SshRemoteHostControl")) is { } remoteHostRefusal)
             return remoteHostRefusal;
 
-        if (Refusal(ssh.HostKeyFingerprint, required: false, HostMaxLength, string.Empty, "A impressão digital da chave do servidor SSH pode ter até 255 caracteres.", "A impressão digital da chave do servidor SSH não pode ter caractere de controle nem de direção do texto.") is { } fingerprintRefusal)
+        if (Refusal(ssh.HostKeyFingerprint, required: false, HostMaxLength, string.Empty, Texts.Get("SshHostKeyFingerprintLength"), Texts.Get("SshHostKeyFingerprintControl")) is { } fingerprintRefusal)
             return fingerprintRefusal;
 
-        return ssh.RemotePort is < 0 or > 65535 ? "Informe uma porta remota de 0 a 65535." : null;
+        return ssh.RemotePort is < 0 or > 65535 ? Texts.Get("SshRemotePortRange") : null;
     }
 
     public static string? SslRefusal(ConnectionSslSettings? ssl)
@@ -128,20 +137,20 @@ internal static class ConnectionRules
         if (ssl is null)
             return null;
 
-        if (Refusal(ssl.CaCertificatePath, required: false, PathMaxLength, string.Empty, "O caminho do certificado CA pode ter até 1.024 caracteres.", "O caminho do certificado CA não pode ter caractere de controle nem de direção do texto.") is { } caRefusal)
+        if (Refusal(ssl.CaCertificatePath, required: false, PathMaxLength, string.Empty, Texts.Get("SslCaCertificatePathLength"), Texts.Get("SslCaCertificatePathControl")) is { } caRefusal)
             return caRefusal;
 
-        if (Refusal(ssl.ClientCertificatePath, required: false, PathMaxLength, string.Empty, "O caminho do certificado de cliente pode ter até 1.024 caracteres.", "O caminho do certificado de cliente não pode ter caractere de controle nem de direção do texto.") is { } certRefusal)
+        if (Refusal(ssl.ClientCertificatePath, required: false, PathMaxLength, string.Empty, Texts.Get("SslClientCertificatePathLength"), Texts.Get("SslClientCertificatePathControl")) is { } certRefusal)
             return certRefusal;
 
-        if (Refusal(ssl.ClientKeyPath, required: false, PathMaxLength, string.Empty, "O caminho da chave privada de cliente pode ter até 1.024 caracteres.", "O caminho da chave privada de cliente não pode ter caractere de controle nem de direção do texto.") is { } keyRefusal)
+        if (Refusal(ssl.ClientKeyPath, required: false, PathMaxLength, string.Empty, Texts.Get("SslClientKeyPathLength"), Texts.Get("SslClientKeyPathControl")) is { } keyRefusal)
             return keyRefusal;
 
         if (!string.IsNullOrWhiteSpace(ssl.SslMode))
         {
             var mode = ssl.SslMode.Trim().ToLowerInvariant();
             if (mode is not ("disable" or "allow" or "prefer" or "require" or "verify-ca" or "verify-full"))
-                return "Escolha um modo SSL válido.";
+                return Texts.Get("SslModeInvalid");
         }
 
         return null;
@@ -152,16 +161,16 @@ internal static class ConnectionRules
         if (proxy is null)
             return null;
 
-        if (Refusal(proxy.Host, required: true, HostMaxLength, "Informe o host do proxy SOCKS.", "O host do proxy SOCKS pode ter até 255 caracteres.", "O host do proxy SOCKS não pode ter caractere de controle nem de direção do texto.") is { } hostRefusal)
+        if (Refusal(proxy.Host, required: true, HostMaxLength, Texts.Get("ProxyHostRequired"), Texts.Get("ProxyHostLength"), Texts.Get("ProxyHostControl")) is { } hostRefusal)
             return hostRefusal;
 
         if (proxy.Port is < 1 or > 65535)
-            return "Informe uma porta do proxy SOCKS de 1 a 65535.";
+            return Texts.Get("ProxyPortRange");
 
-        if (Refusal(proxy.UserName, required: false, UserNameMaxLength, string.Empty, "O usuário do proxy SOCKS pode ter até 128 caracteres.", "O usuário do proxy SOCKS não pode ter caractere de controle nem de direção do texto.") is { } userRefusal)
+        if (Refusal(proxy.UserName, required: false, UserNameMaxLength, string.Empty, Texts.Get("ProxyUserNameLength"), Texts.Get("ProxyUserNameControl")) is { } userRefusal)
             return userRefusal;
 
-        return proxy.Password is { Length: > PasswordMaxLength } ? "A senha do proxy SOCKS pode ter até 1.024 caracteres." : null;
+        return proxy.Password is { Length: > PasswordMaxLength } ? Texts.Get("ProxyPasswordLength") : null;
     }
 
     /// <summary>
@@ -287,7 +296,7 @@ internal static class ConnectionRules
     public const int VerificationQueryMaxLength = 1000;
 
     /// <summary>RN-VERIF-001: a frase do intervalo fora da faixa, a mesma no formulário, no teste e na importação (RN-TRANSF-014).</summary>
-    public const string VerificationIntervalMessage = "A verificação deve ser feita a cada 5 a 3.600 segundos.";
+    public static string VerificationIntervalMessage => Texts.Get("VerificationIntervalMessage");
 
     /// <summary>Opcional: ausente ou nulo é o padrão (30).</summary>
     public static bool VerificationIntervalIsValid(int? interval)
@@ -309,12 +318,12 @@ internal static class ConnectionRules
             return null;
 
         if (normalized.Length > VerificationQueryMaxLength)
-            return "A consulta de verificação pode ter no máximo 1.000 caracteres.";
+            return Texts.Get("VerificationQueryLength");
 
         if (TextRules.HasControlOrDirectionBesidesLineBreaks(normalized))
-            return "A consulta de verificação não pode ter caractere de controle nem de direção do texto.";
+            return Texts.Get("VerificationQueryControl");
 
-        return ReadOnlySql.VerificationRefusal(normalized, engine) is { } reason ? $"A consulta de verificação tem de ser uma leitura só: {reason}." : null;
+        return ReadOnlySql.VerificationRefusal(normalized, engine) is { } reason ? Texts.Get("VerificationQueryNotReadOnly", reason) : null;
     }
 
     /// <summary>

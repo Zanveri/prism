@@ -4,6 +4,8 @@
  * não é soma. O nome lido nunca vira caminho: só serve para achar a soma do pacote cujo nome o app mesmo montou.
  */
 
+import { updateMessagesCopy, type UpdateMessagesCopy } from "./update-messages.copy";
+
 /** Nome de arquivo → soma em minúsculas. */
 export type Sums = ReadonlyMap<string, string>;
 
@@ -63,19 +65,19 @@ export function splitNotes(description: unknown): { notes: string; sums: Map<str
 /**
  * Por que a atualização é recusada, ou nada se pode seguir (RN-ATUALIZA-005). As duas fontes têm de trazer a soma do
  * arquivo. Com a soma do que foi baixado (`actual`), ela tem de bater com as duas. Quem apaga o arquivo recusado, e diz se
- * conseguiu, é quem chamou.
+ * conseguiu, é quem chamou. `text`: as frases no idioma da abertura (`update-messages.copy.ts`).
  */
-export function sumRefusal(fileName: string, notes: Sums, published: Sums, actual?: string): string | null {
+export function sumRefusal(fileName: string, notes: Sums, published: Sums, actual?: string, text: UpdateMessagesCopy["sums"] = updateMessagesCopy().sums): string | null {
   const fromNotes = notes.get(fileName);
   const fromFile = published.get(fileName);
 
-  if (fromNotes === undefined) return `As notas da versão não trazem a soma SHA-256 de ${fileName}. Sem as duas somas o Prism não instala a atualização.`;
-  if (fromFile === undefined) return `O SHA256SUMS da versão não traz a soma de ${fileName}. Sem as duas somas o Prism não instala a atualização.`;
+  if (fromNotes === undefined) return text.notesMissing(fileName);
+  if (fromFile === undefined) return text.fileMissing(fileName);
   if (actual === undefined) return null;
 
   const sum = actual.toLowerCase();
-  if (sum !== fromNotes && sum !== fromFile) return `O arquivo baixado (${fileName}) não confere com a soma SHA-256 das notas da versão nem com a do SHA256SUMS.`;
-  if (sum !== fromNotes) return `O arquivo baixado (${fileName}) não confere com a soma SHA-256 das notas da versão.`;
-  if (sum !== fromFile) return `O arquivo baixado (${fileName}) não confere com a soma SHA-256 do SHA256SUMS da versão.`;
+  if (sum !== fromNotes && sum !== fromFile) return text.mismatchBoth(fileName);
+  if (sum !== fromNotes) return text.mismatchNotes(fileName);
+  if (sum !== fromFile) return text.mismatchFile(fileName);
   return null;
 }

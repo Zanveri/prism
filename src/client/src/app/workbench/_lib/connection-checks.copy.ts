@@ -1,13 +1,14 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
 import { formatElapsed } from "@/lib/utils/format";
 
-/** A hora de uma resposta, no relógio da máquina ("14:32:05"). */
-export function clockOf(checkedAt: string): string {
-  const date = new Date(checkedAt);
-  return Number.isNaN(date.getTime()) ? checkedAt : date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
+import { clockOf } from "./connection-checks.clock";
+import { connectionChecksCopyEn } from "./connection-checks.copy.en";
+import { connectionChecksCopyEs } from "./connection-checks.copy.es";
+
+export { clockOf };
 
 /** Os textos da verificação periódica (RN-VERIF-002 e 003): o indicador, a dica dele, a janela da falha e os avisos. */
-export const connectionChecksCopy = {
+const pt = {
   // O indicador, ao lado do nome da conexão conectada (na árvore, no lugar do ponto de conectada, no botão da conexão da aba e na barra de status).
   state: {
     waiting: "Conectada, ainda não verificada",
@@ -37,3 +38,6 @@ export const connectionChecksCopy = {
     recovered: (connection: string) => `${connection} voltou a responder à verificação`,
   },
 } as const;
+
+export type ConnectionChecksCopy = Localized<typeof pt>;
+export const connectionChecksCopy = pickCopy({ "pt-BR": pt, en: connectionChecksCopyEn, es: connectionChecksCopyEs });

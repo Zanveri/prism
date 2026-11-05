@@ -1,10 +1,14 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { gridSelectionCopyEn } from "./grid-selection.copy.en";
+import { gridSelectionCopyEs } from "./grid-selection.copy.es";
 
 /**
  * Os textos da seleção da grade, do copiar e do menu da grade da seção 37 (RN-GRADE-001 a 004, 015 e RN-EDIT-013 a 016 no plural). Os da edição de antes
  * seguem em `records.copy.ts`.
  */
-export const gridSelectionCopy = {
+const pt = {
   // RN-GRADE-001: a contagem da barra do resultado, com mais de uma célula escolhida.
   count: (rows: number, cells: number, whole: boolean) => (whole ? `${formatCount(rows, "linha escolhida", "linhas escolhidas")}` : `${formatCount(cells, "célula escolhida", "células escolhidas")}`),
   // RN-GRADE-022: a contagem com colunas inteiras: o nome da coluna como o cabeçalho o mostra (ou quantas), e os números que já se sabem. Com o total sabido,
@@ -109,3 +113,6 @@ export const gridSelectionCopy = {
     fetchCancelled: "As linhas não foram duplicadas: a busca dos valores completos foi cancelada.",
   },
 } as const;
+
+export type GridSelectionCopy = Localized<typeof pt>;
+export const gridSelectionCopy = pickCopy({ "pt-BR": pt, en: gridSelectionCopyEn, es: gridSelectionCopyEs });

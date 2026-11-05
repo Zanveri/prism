@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CountNote" xml:space="preserve">
+    <value>El conteo verifica, antes del UPDATE, que la sentencia aún devuelve las filas confirmadas.</value>
+  </data>
+  <data name="BatchNote" xml:space="preserve">
+    <value>Las claves van en lotes de hasta 1.000.</value>
+  </data>
+  <data name="JoinReason" xml:space="preserve">
+    <value>en un resultado de join, la columna entera no se modifica: elige las celdas de la columna (arrastra, o Shift+clic), y la edición vale para ellas</value>
+  </data>
+  <data name="NotReadReason" xml:space="preserve">
+    <value>la columna entera ejecuta de nuevo la sentencia del resultado, y no es solo de lectura</value>
+  </data>
+  <data name="LimitReason" xml:space="preserve">
+    <value>la sentencia limita las filas sin un orden, y la base de datos puede elegir otras filas al ejecutar de nuevo: agrega un ORDER BY, o elige las celdas de la columna</value>
+  </data>
+  <data name="SampleReason" xml:space="preserve">
+    <value>la sentencia sortea las filas, y la base de datos elegiría otras al ejecutar de nuevo: elige las celdas de la columna</value>
+  </data>
+  <data name="TooManyKeysReason" xml:space="preserve">
+    <value>la sentencia devuelve más de 1.000.000 de filas, y en esta base de datos la columna entera de una sentencia con límite de filas lee las claves antes: quita el límite de la sentencia, o modifica por partes</value>
+  </data>
+  <data name="KeyReason" xml:space="preserve">
+    <value>{0} es de la clave de {1}: en la columna entera, todas las filas quedarían con la misma clave</value>
+  </data>
+  <data name="RepeatedKeyReason" xml:space="preserve">
+    <value>{0}, de la clave de {1}, aparece con el mismo nombre en más de una columna del resultado</value>
+  </data>
+  <data name="CountChanged" xml:space="preserve">
+    <value>El resultado cambió desde el conteo: la sentencia devuelve ahora {0}, y no {1}. No se escribió nada; guarda de nuevo para contar otra vez.</value>
+  </data>
+  <data name="UpdateChanged" xml:space="preserve">
+    <value>El resultado cambió desde el conteo: la sentencia modificó {0}, y no {1}. No se escribió nada; guarda de nuevo para contar otra vez. Si el número se repite en los intentos siguientes, el motivo puede ser un trigger, una regla o una cascada de la base de datos, que el conteo no ve.</value>
+  </data>
+  <data name="WrittenAnyway" xml:space="preserve">
+    <value>La columna entera se modificó en {0}, y no en {1}: el resultado cambió desde el conteo. Esta base de datos no tiene log de transacciones, y el cambio quedó escrito.</value>
+  </data>
+  <data name="CountedOne" xml:space="preserve">
+    <value>la 1 contada</value>
+  </data>
+  <data name="CountedMany" xml:space="preserve">
+    <value>las {0} contadas</value>
+  </data>
+  <data name="LinesOne" xml:space="preserve">
+    <value>1 fila</value>
+  </data>
+  <data name="LinesMany" xml:space="preserve">
+    <value>{0} filas</value>
+  </data>
+  <data name="ConfirmedOne" xml:space="preserve">
+    <value>la 1 confirmada</value>
+  </data>
+  <data name="ConfirmedMany" xml:space="preserve">
+    <value>las {0} confirmadas</value>
+  </data>
+  <data name="NotSupported" xml:space="preserve">
+    <value>La columna entera no se modifica en este resultado: {0}.</value>
+  </data>
+  <data name="SeveralWholeChanges" xml:space="preserve">
+    <value>La solicitud tiene más de un cambio de columna entera: envía solo uno, con todas las columnas en el set.</value>
+  </data>
+  <data name="CountTakesOnlyWhole" xml:space="preserve">
+    <value>El conteo lleva solo el cambio de la columna entera (updateAll).</value>
+  </data>
+  <data name="CountNeedsWhole" xml:space="preserve">
+    <value>El conteo necesita el cambio de la columna entera (updateAll).</value>
+  </data>
+  <data name="RowsMissing" xml:space="preserve">
+    <value>Indica cuántas filas dio el conteo (rows).</value>
+  </data>
+  <data name="RowsInvalid" xml:space="preserve">
+    <value>El número de filas (rows) tiene que ser un entero de 0 en adelante.</value>
+  </data>
+  <data name="TableNotInResult" xml:space="preserve">
+    <value>La tabla del cambio no existe en este resultado.</value>
+  </data>
+  <data name="TableNotEditable" xml:space="preserve">
+    <value>La tabla del cambio no se puede editar: {0}.</value>
+  </data>
+  <data name="WholeChangeHasNoColumn" xml:space="preserve">
+    <value>El cambio de la columna entera no tiene ninguna columna.</value>
+  </data>
+  <data name="ColumnNotInResult" xml:space="preserve">
+    <value>La columna no existe en el resultado.</value>
+  </data>
+  <data name="ColumnNotInTable" xml:space="preserve">
+    <value>La columna no es de la tabla del cambio.</value>
+  </data>
+  <data name="ColumnNotEditable" xml:space="preserve">
+    <value>La columna no se puede editar: {0}.</value>
+  </data>
+  <data name="ColumnRepeated" xml:space="preserve">
+    <value>La misma columna aparece dos veces en el cambio.</value>
+  </data>
+</root>

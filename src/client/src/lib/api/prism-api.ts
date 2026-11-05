@@ -1,6 +1,9 @@
 import type { z } from "zod";
 
+import { locale } from "@/lib/i18n";
+
 import { apiErrorSchema } from "./api-error.schema";
+import { apiCopy } from "./api.copy";
 import { getBridge } from "./bridge";
 import { vaultLock } from "./vault-lock";
 
@@ -62,7 +65,7 @@ function failure(status: number, code: string, title: string): { ok: false; erro
   return { ok: false, error: { status, code, title, detail: null, errors: null, extensions: {} } };
 }
 
-const responseInvalid = (status: number) => failure(status, "RESPONSE_INVALID", "A API respondeu em um formato inesperado.");
+const responseInvalid = (status: number) => failure(status, "RESPONSE_INVALID", apiCopy.invalidResponse);
 
 /**
  * O prazo das chamadas que a PESSOA faz e espera ("Sair", "Desbloquear"): a API local responde em décimos de segundo, e a derivação da senha do
@@ -84,7 +87,7 @@ export async function apiRequest<T = void>(path: string, options: ApiRequestOpti
   const { method = "GET", body, schema, signal, whileLocked = false } = options;
 
   // Bloqueado, o cofre está fechado: o pedido espera o desbloqueio em vez de bater na API e receber 401 (ver `vault-lock.ts`).
-  if (!whileLocked && vaultLock.isLocked() && !(await vaultLock.whenUnlocked(signal))) return failure(0, "NETWORK_ERROR", "Sem resposta da API.");
+  if (!whileLocked && vaultLock.isLocked() && !(await vaultLock.whenUnlocked(signal))) return failure(0, "NETWORK_ERROR", apiCopy.noResponse);
 
   let response: Response;
   let payload: unknown;
@@ -93,14 +96,15 @@ export async function apiRequest<T = void>(path: string, options: ApiRequestOpti
     const { baseUrl, token } = await getBridge().getApiConfig();
     response = await fetch(`${baseUrl}/${path}`, {
       method,
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      // O idioma do Prism, não o do sistema (que o Electron mandaria): a API escreve as mensagens nele.
+      headers: { Accept: "application/json", "Accept-Language": locale, Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
     });
     payload = await readJson(response);
   } catch {
     // Pedido cancelado pelo `signal` também cai aqui; quem cancelou não lê o resultado.
-    return failure(0, "NETWORK_ERROR", "Sem resposta da API.");
+    return failure(0, "NETWORK_ERROR", apiCopy.noResponse);
   }
 
   if (!response.ok) {

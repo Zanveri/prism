@@ -22,6 +22,7 @@ import {
   moveTable,
   organize,
 } from "../_lib/model-layout";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
 export type PendingForeignKeyChoice = {
   fromKey: string;
@@ -238,17 +239,17 @@ export function BuildDiagram({
       {pendingFk ? (
         <Dialog
           open
-          title="Escolher coluna referenciada"
+          title={buildUiCopy.diagram.chooseColumnTitle}
           size="sm"
           onClose={() => setPendingFk(null)}
         >
           <div className="space-y-4">
             <p className="text-xs text-muted">
-              A tabela <span className="font-mono font-semibold text-ink">{pendingFk.fk.target.table}</span> não tem chave primária de coluna única. Escolha a coluna de destino para{" "}
+              {buildUiCopy.noSinglePk.before}<span className="font-mono font-semibold text-ink">{pendingFk.fk.target.table}</span>{buildUiCopy.noSinglePk.after}{" "}
               <span className="font-mono font-semibold text-ink">{pendingFk.fk.columns.join(", ")}</span>:
             </p>
             <Select
-              aria-label="Coluna referenciada"
+              aria-label={buildUiCopy.diagram.referencedColumn}
               value={pendingFk.selectedTargetCol}
               onChange={(value) =>
                 setPendingFk((current) => (current ? { ...current, selectedTargetCol: value } : null))
@@ -264,7 +265,7 @@ export function BuildDiagram({
             />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setPendingFk(null)}>
-                Cancelar
+                {buildCopy.cancelButton}
               </Button>
               <Button
                 type="button"
@@ -282,7 +283,7 @@ export function BuildDiagram({
                   setPendingFk(null);
                 }}
               >
-                Criar chave estrangeira
+                {buildUiCopy.diagram.createForeignKey}
               </Button>
             </div>
           </div>

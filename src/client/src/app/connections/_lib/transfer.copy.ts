@@ -1,4 +1,8 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { transferCopyEn } from "./transfer.copy.en";
+import { transferCopyEs } from "./transfer.copy.es";
 
 /** "3 conexões", "1 pasta": a conta com a concordância certa. */
 const connections = (count: number) => formatCount(count, "conexão", "conexões");
@@ -8,7 +12,7 @@ const folders = (count: number) => formatCount(count, "pasta", "pastas");
  * Os textos de exportar e importar conexões (seção 34 da especificação, RN-TRANSF-001 a 016), num lugar só. As frases das recusas são da tela (a API manda o
  * código e, no campo, a mesma frase): "A tela mostra a frase dela, e não o detalhe da API" (RN-TRANSF-010).
  */
-export const transferCopy = {
+const pt = {
   // RN-TRANSF-002: o diálogo grande da exportação.
   export: {
     title: "Exportar conexões",
@@ -223,3 +227,6 @@ export const transferCopy = {
     },
   },
 } as const;
+
+export type TransferCopy = Localized<typeof pt>;
+export const transferCopy = pickCopy({ "pt-BR": pt, en: transferCopyEn, es: transferCopyEs });

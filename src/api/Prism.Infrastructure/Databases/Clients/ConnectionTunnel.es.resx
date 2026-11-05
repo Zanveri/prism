@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="HostKeyMismatch" xml:space="preserve">
+    <value>La clave del servidor SSH ({0}) no coincide con la huella digital guardada en la conexión ({1}). Puede haber otro servidor en el camino: confírmalo con quien administra el servidor (ssh-keygen -lf). Si la clave cambió de verdad, indica la nueva en "Huella digital del host", en Editar conexión.</value>
+  </data>
+  <data name="EncryptedKeyWithoutPassphrase" xml:space="preserve">
+    <value>La clave privada del túnel SSH está cifrada, y esta conexión no tiene su frase de contraseña. Indícala para conectar.</value>
+  </data>
+  <data name="WrongPassphrase" xml:space="preserve">
+    <value>La frase de contraseña no abre la clave privada del túnel SSH. Revisa la frase y vuelve a intentarlo.</value>
+  </data>
+  <data name="SshPasswordMissing" xml:space="preserve">
+    <value>La contraseña del túnel SSH no está guardada en esta conexión. Conéctate a ella e indícala cuando Prism la pida: sin "Guardar credenciales", solo queda en la memoria hasta que la conexión se desconecte.</value>
+  </data>
+  <data name="ProxyPasswordMissing" xml:space="preserve">
+    <value>La contraseña del proxy no está guardada en esta conexión. Conéctate a ella e indícala cuando Prism la pida: sin "Guardar credenciales", solo queda en la memoria hasta que la conexión se desconecte.</value>
+  </data>
+  <data name="PrivateKeyPathRequired" xml:space="preserve">
+    <value>Indica la ruta de la clave privada SSH.</value>
+  </data>
+  <data name="SocksInvalidResponse" xml:space="preserve">
+    <value>Respuesta no válida del servidor proxy SOCKS5.</value>
+  </data>
+  <data name="SocksCredentialsRefused" xml:space="preserve">
+    <value>El proxy SOCKS5 rechazó el usuario o la contraseña.</value>
+  </data>
+  <data name="SocksMethodRefused" xml:space="preserve">
+    <value>El proxy SOCKS5 no aceptó el método de autenticación.</value>
+  </data>
+  <data name="SocksConnectFailed" xml:space="preserve">
+    <value>El proxy SOCKS5 no pudo conectarse al destino (código {0}).</value>
+  </data>
+  <data name="SocksAddressTypeInvalid" xml:space="preserve">
+    <value>Tipo de dirección no válido en la respuesta del proxy SOCKS5.</value>
+  </data>
+</root>

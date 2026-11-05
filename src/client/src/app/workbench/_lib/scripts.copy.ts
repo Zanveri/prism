@@ -1,5 +1,8 @@
 import { maxScriptNameLength, type ScriptIcon } from "./saved-scripts";
 import { maxScriptFolderNameLength } from "./script-tree";
+import { pickCopy, type Localized } from "@/lib/i18n";
+import { scriptsCopyEn } from "./scripts.copy.en";
+import { scriptsCopyEs } from "./scripts.copy.es";
 
 /** "2 subpastas e 3 scripts", "1 subpasta", "1 script": no singular e no plural, e só com a parte que existe. */
 function folderContents(folders: number, scripts: number): string {
@@ -11,7 +14,7 @@ function folderContents(folders: number, scripts: number): string {
  * Os textos dos scripts salvos (seção 23 da especificação, RN-SCRIPT-001 a 004, o genérico da seção 27, RN-SCRIPT-005, o ícone e a cor da seção 28,
  * RN-SCRIPT-006, e as pastas de scripts da seção 33, RN-SCRIPT-007 a 010): o salvar, o editar, a aba, a pergunta de fechar e a seção "Scripts" do navegador.
  */
-export const scriptsCopy = {
+const pt = {
   // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S.
   save: {
     title: "Salvar script",
@@ -216,3 +219,6 @@ export const scriptsCopy = {
     confirm: "Excluir",
   },
 } as const;
+
+export type ScriptsCopy = Localized<typeof pt>;
+export const scriptsCopy = pickCopy({ "pt-BR": pt, en: scriptsCopyEn, es: scriptsCopyEs });

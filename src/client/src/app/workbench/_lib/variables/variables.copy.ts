@@ -1,3 +1,7 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+import { phraseEn } from "./variables.copy.en";
+import { phraseEs } from "./variables.copy.es";
+
 /*
  * As frases da linguagem das variáveis (seção 41). Cada função é uma frase da especificação, palavra por palavra, ou a mais próxima dela quando a especificação só
  * diz o que a frase tem de dizer. Nenhuma traz texto do JavaScript da tela (a pilha, o nome de uma classe, um `[object Object]`, RN-VAR-012).
@@ -34,7 +38,7 @@ export const limits = {
 /** O número de `n` com milhares separados por ponto, como a especificação escreve os limites. */
 const group = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
-export const phrase = {
+const pt = {
   // Os limites (RN-VAR-013).
   tooManyDeclarations: () => `O script passou de ${group(limits.declarationsPerScript)} declarações.`,
   nameTooLong: () => `O nome pode ter até ${limits.nameLength} caracteres.`,
@@ -249,9 +253,22 @@ export const phrase = {
   valueNotInText: (name: string, type: string) => `${name} é ${type}, que não vai para o SQL.`,
   sentWithoutLiteral: (markers: string) => `-- Sem literal (ficam como marcador): ${markers}`,
   sentSqlNote: (name: string) => `sql: @${name} (texto entrou no comando)`,
+
+  // As partes que entram em outras frases e as do painel e do avaliador.
+  computedKey: "A chave calculada",
+  shortForm: (key: string) => `A forma curta { ${key} }`,
+  paramKinds: { number: "number", numberAny: "number", integer: "um número inteiro", string: "string", date: "Date", list: "lista", any: "um valor", stringOrNumber: "string ou number" },
+  unclosed: { text: "um texto", quoted: "um nome entre aspas", comment: "um comentário", dollar: "um $tag$" },
+  evaluationBusy: () => "Já há uma avaliação em andamento.",
+  evaluatorSilent: () => "O avaliador não respondeu.",
+  showMore: (page: number, total: number) => `Mostrar mais ${page.toLocaleString("pt-BR")} (de ${total.toLocaleString("pt-BR")})`,
+  noValueRow: () => "sem valor",
 } as const;
 
 /** O texto de uma frase de erro entre aspas simples, para citar um valor. */
 function shown(text: string): string {
   return `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 }
+
+export type VariablesPhrase = Localized<typeof pt>;
+export const phrase = pickCopy({ "pt-BR": pt, en: phraseEn, es: phraseEs });

@@ -1,3 +1,4 @@
+import { locale } from "@/lib/i18n";
 import type { Engine } from "@/components/ui/engine-tag";
 
 import { driversCopy } from "./drivers.copy";
@@ -42,7 +43,7 @@ export function formatMegabytes(bytes: number): string {
 
   const megabytes = bytes / 1048576;
   if (megabytes < 1) return "< 1 MB";
-  return `${megabytes.toLocaleString("pt-BR", { maximumFractionDigits: megabytes < 10 ? 1 : 0 })} MB`;
+  return `${megabytes.toLocaleString(locale, { maximumFractionDigits: megabytes < 10 ? 1 : 0 })} MB`;
 }
 
 export type DriverAction = "install" | "retry" | "cancel" | "remove";

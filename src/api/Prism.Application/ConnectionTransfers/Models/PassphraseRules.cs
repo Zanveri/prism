@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using System.Text;
 
 namespace Prism.Application.ConnectionTransfers.Models;
@@ -9,6 +11,9 @@ namespace Prism.Application.ConnectionTransfers.Models;
 /// </summary>
 internal static class PassphraseRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>PassphraseRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(PassphraseRules));
+
     public const int MinLength = 12;
     public const int MaxLength = 128;
 
@@ -50,18 +55,18 @@ internal static class PassphraseRules
     {
         var normalized = ForExport(passphrase);
         if (normalized.Length == 0)
-            return "Crie uma senha de exportação.";
+            return Texts.Get("ExportEmpty");
 
         if (normalized.Length < MinLength)
-            return "A senha de exportação precisa ter pelo menos 12 caracteres.";
+            return Texts.Get("ExportTooShort");
 
         if (normalized.Length > MaxLength)
-            return "A senha de exportação pode ter até 128 caracteres.";
+            return Texts.Get("ExportTooLong");
 
         if (IsSpace(normalized[0]) || IsSpace(normalized[^1]))
-            return "A senha de exportação não pode começar nem terminar com espaço.";
+            return Texts.Get("ExportEdgeSpace");
 
-        return normalized.Any(char.IsControl) ? "A senha de exportação não pode ter caractere de controle." : null;
+        return normalized.Any(char.IsControl) ? Texts.Get("ExportControl") : null;
     }
 
     /// <summary>RN-TRANSF-010, etapa 2: a senha da importação, sem os espaços das pontas, não é vazia nem passa de 128 caracteres. Nada é derivado antes.</summary>
@@ -69,9 +74,9 @@ internal static class PassphraseRules
     {
         var normalized = ForImport(passphrase);
         if (normalized.Length == 0)
-            return "Informe a senha de exportação.";
+            return Texts.Get("ImportEmpty");
 
-        return normalized.Length > MaxLength ? "A senha de exportação tem até 128 caracteres." : null;
+        return normalized.Length > MaxLength ? Texts.Get("ImportTooLong") : null;
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ import type { BuildModel } from "../_lib/build-model.schema";
 import { buildCopy } from "../_lib/build.copy";
 import { generateChangesDdl } from "../_lib/ddl-changes";
 import { generateFullDdl } from "../_lib/ddl-full";
+import { buildUiCopy } from "../_lib/build-ui.copy";
 
 export type ScopeDialogProps = {
   model: BuildModel;
@@ -22,7 +23,7 @@ function summarizeDdlCommands(sql: string): string {
   if (createTables > 0) parts.push(`${createTables} CREATE TABLE`);
   if (alterTables > 0) parts.push(`${alterTables} ALTER TABLE`);
   if (createIndexes > 0) parts.push(`${createIndexes} CREATE INDEX`);
-  return parts.length > 0 ? parts.join(" · ") : "0 comandos";
+  return parts.length > 0 ? parts.join(" · ") : buildUiCopy.ddlSummary.zeroCommands;
 }
 
 export function ScopeDialog({

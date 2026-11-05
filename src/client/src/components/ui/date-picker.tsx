@@ -5,6 +5,8 @@ import { controlClassName } from "@/components/ui/field";
 import { isNode } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
+import { uiCopy } from "./ui.copy";
+
 import { useHost, useOnHostGone } from "./host-context";
 import { CalendarIcon } from "./icons";
 
@@ -25,30 +27,7 @@ export type CalendarCell = {
   inMonth: boolean;
 };
 
-const monthNames = [
-  "janeiro",
-  "fevereiro",
-  "março",
-  "abril",
-  "maio",
-  "junho",
-  "julho",
-  "agosto",
-  "setembro",
-  "outubro",
-  "novembro",
-  "dezembro",
-] as const;
-
-const weekdayShortLabels = [
-  { key: "dom", label: "D", full: "Domingo" },
-  { key: "seg", label: "S", full: "Segunda-feira" },
-  { key: "ter", label: "T", full: "Terça-feira" },
-  { key: "qua", label: "Q", full: "Quarta-feira" },
-  { key: "qui", label: "Q", full: "Quinta-feira" },
-  { key: "sex", label: "S", full: "Sexta-feira" },
-  { key: "sab", label: "S", full: "Sábado" },
-] as const;
+const { months: monthNames, weekdays: weekdayShortLabels } = uiCopy.datePicker;
 
 const hours = Array.from({ length: 24 }, (_, index) => index);
 const minutes = Array.from({ length: 60 }, (_, index) => index);
@@ -397,7 +376,7 @@ export function DatePicker({
   }
 
   const cells = buildCalendarGrid(viewYear, viewMonth);
-  const monthLabel = `${monthNames[viewMonth - 1]} de ${viewYear}`;
+  const monthLabel = uiCopy.datePicker.monthOfYear(monthNames[viewMonth - 1], viewYear);
 
   return (
     <div className="relative">
@@ -441,7 +420,7 @@ export function DatePicker({
               ref={panelRef}
               id={popoverId}
               role="dialog"
-              aria-label={mode === "datetime" ? "Selecionar data e hora" : "Selecionar data"}
+              aria-label={mode === "datetime" ? uiCopy.datePicker.selectDateTime : uiCopy.datePicker.selectDate}
               data-datepicker-popover="true"
               style={{ position: "fixed", ...position }}
               className="z-50 flex rounded-md border border-border-strong bg-raised p-3 text-xs text-ink shadow-2xl select-none"
@@ -453,7 +432,7 @@ export function DatePicker({
                   <div className="flex items-center gap-0.5">
                     <button
                       type="button"
-                      aria-label="Mês anterior"
+                      aria-label={uiCopy.datePicker.previousMonth}
                       onClick={() => stepMonth(-1)}
                       className="flex size-6 cursor-pointer items-center justify-center rounded text-sm text-muted transition-colors hover:bg-selected hover:text-ink"
                     >
@@ -461,7 +440,7 @@ export function DatePicker({
                     </button>
                     <button
                       type="button"
-                      aria-label="Próximo mês"
+                      aria-label={uiCopy.datePicker.nextMonth}
                       onClick={() => stepMonth(1)}
                       className="flex size-6 cursor-pointer items-center justify-center rounded text-sm text-muted transition-colors hover:bg-selected hover:text-ink"
                     >
@@ -526,7 +505,7 @@ export function DatePicker({
                       onClick={handleClear}
                       className="cursor-pointer rounded px-1.5 py-0.5 text-xs text-muted transition-colors hover:bg-selected hover:text-ink"
                     >
-                      Limpar
+                      {uiCopy.datePicker.clear}
                     </button>
                   ) : (
                     <span />
@@ -536,7 +515,7 @@ export function DatePicker({
                     onClick={handlePickToday}
                     className="cursor-pointer rounded px-1.5 py-0.5 text-xs font-medium text-accent transition-colors hover:bg-selected"
                   >
-                    {mode === "datetime" ? "Agora" : "Hoje"}
+                    {mode === "datetime" ? uiCopy.datePicker.now : uiCopy.datePicker.today}
                   </button>
                 </div>
               </div>
@@ -545,7 +524,7 @@ export function DatePicker({
               {mode === "datetime" ? (
                 <div className="ml-3 flex flex-col border-l border-border pl-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-medium text-subtle">Horário</span>
+                    <span className="text-[11px] font-medium text-subtle">{uiCopy.datePicker.time}</span>
                     <span className="font-mono text-xs font-semibold text-ink">
                       {pad2(parsed?.hour ?? 0)}:{pad2(parsed?.minute ?? 0)}
                     </span>
@@ -554,7 +533,7 @@ export function DatePicker({
                   <div className="grid h-[182px] grid-cols-2 gap-1">
                     <div
                       role="listbox"
-                      aria-label="Horas"
+                      aria-label={uiCopy.datePicker.hours}
                       className="flex flex-col gap-0.5 overflow-y-auto pr-0.5"
                     >
                       {hours.map((hour) => {
@@ -581,7 +560,7 @@ export function DatePicker({
 
                     <div
                       role="listbox"
-                      aria-label="Minutos"
+                      aria-label={uiCopy.datePicker.minutes}
                       className="flex flex-col gap-0.5 overflow-y-auto pr-0.5"
                     >
                       {minutes.map((minute) => {

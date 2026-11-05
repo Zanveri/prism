@@ -39,6 +39,8 @@ import { createWorkspaceHub, saveWorkspaceThroughApi } from "./workspace-hub";
 import type { SavedWorkspace } from "./workspace-messages";
 import { isAppZoom, nextAppZoom, zoomFactor, zoomShortcut, type AppZoom } from "./zoom";
 import { readAppZoom, writeAppZoom, zoomFileName } from "./zoom-file";
+import { isLocale, localeArgument } from "./locale";
+import { localeFileName, readAppLocale, writeAppLocale } from "./locale-file";
 
 // A pasta de dados tem de ser fixada antes de qualquer leitura de `userData`, do `requestSingleInstanceLock` (que
 // a usa) e do `whenReady`: `%APPDATA%\Zanveri\Prism` empacotado e `%APPDATA%\Zanveri\Prism-dev` em desenvolvimento (`data-dir.ts`).
@@ -84,6 +86,10 @@ const closeApproved = new Set<number>();
  */
 const zoomFile = join(app.getPath("userData"), zoomFileName);
 let appZoom: AppZoom = readAppZoom(zoomFile);
+
+/** O idioma do programa (`locale.ts`), lido ao abrir e o mesmo em todas as janelas até fechar: trocar em Configurações grava o da próxima abertura. */
+const localeFile = join(app.getPath("userData"), localeFileName);
+const appLocale = readAppLocale(localeFile);
 
 /** Aplica o zoom em todas as janelas, avisa as telas (a de Configurações mostra o valor) e grava. Gravar que falha só vai para o log: vale até fechar. */
 function changeZoom(next: AppZoom): AppZoom {
@@ -337,6 +343,7 @@ let api: Promise<ApiProcess> | null = null;
 
 function launchApi() {
   const launched = startApi({
+    locale: appLocale,
     // Empacotada, a API vai ao lado do app. Em desenvolvimento ela é compilada e iniciada pelo
     // `dotnet run`; `__dirname` é `out/main`, de onde `src/api` fica três níveis acima.
     // `--artifacts-path` leva `bin` e `obj` desta execução para `src/client/.api-dev`: sem ele a API
@@ -447,6 +454,7 @@ function dialogParent(windowId: number, resultWindow: string | undefined): Brows
  * destino. Nenhum canal recebe um caminho da tela nem devolve um a ela; o arquivo pronto é achado só pelo identificador do trabalho.
  */
 const transferDesk = createTransferDesk({
+  locale: appLocale,
   dataDir: app.getPath("userData"),
   downloadsDir: () => app.getPath("downloads"),
   platform: process.platform,
@@ -469,6 +477,7 @@ const transferDesk = createTransferDesk({
  * lê a cópia pelo identificador. Nenhum canal recebe um caminho da tela nem devolve um a ela.
  */
 const transferSource = createTransferSource({
+  locale: appLocale,
   dataDir: app.getPath("userData"),
   downloadsDir: () => app.getPath("downloads"),
   async showOpenDialog(windowId, options, resultWindow) {
@@ -490,6 +499,7 @@ const transferSource = createTransferSource({
  * identificador da cópia, e a API lê e decifra. Nenhum canal recebe um caminho da tela nem devolve um a ela.
  */
 const dbeaverSource = createDbeaverSource({
+  locale: appLocale,
   dataDir: app.getPath("userData"),
   platform: process.platform,
   env: process.env,
@@ -533,6 +543,14 @@ ipcMain.handle("prism:data-folder", (event) => {
   return app.getPath("userData");
 });
 
+/** O idioma da próxima abertura: só um dos de `locale.ts`. A resposta é o que ficou gravado. */
+ipcMain.handle("prism:locale-set", (event, locale: unknown) => {
+  assertFromApp(event);
+  if (!isLocale(locale)) throw new Error("Idioma desconhecido.");
+  writeAppLocale(localeFile, locale);
+  return locale;
+});
+
 /** O zoom do programa (RN-ZOOM-001): o de agora, e o pedido de outro, que só vale se for um dos passos. A resposta é o que ficou. */
 ipcMain.handle("prism:zoom-get", (event) => {
   assertFromApp(event);
@@ -569,6 +587,7 @@ function startUpdater() {
   const linux = process.platform === "linux";
   const nsisInstalled = process.platform === "win32" && existsSync(join(dirname(process.execPath), `Uninstall ${basename(process.execPath)}`));
   updater = createUpdater({
+    locale: appLocale,
     origin,
     blocked,
     currentVersion: app.getVersion(),
@@ -754,7 +773,7 @@ function createAppWindow(bounds?: Rect) {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
-      additionalArguments: [versionArgument(app.getVersion()), windowArgument(id)],
+      additionalArguments: [versionArgument(app.getVersion()), windowArgument(id), localeArgument(appLocale)],
       zoomFactor: zoomFactor(appZoom),
     },
   });
@@ -1047,7 +1066,7 @@ if (!app.requestSingleInstanceLock()) {
   // das abas de SQL, que nesta fatia não é salvo, se perderia. No macOS fica só o mínimo do sistema
   // (`platform.ts`). Em desenvolvimento o menu padrão fica.
   if (app.isPackaged) {
-    const template = applicationMenuTemplate(process.platform);
+    const template = applicationMenuTemplate(process.platform, appLocale);
     Menu.setApplicationMenu(template === null ? null : Menu.buildFromTemplate(template));
   }
 
@@ -1100,7 +1119,7 @@ if (!app.requestSingleInstanceLock()) {
     // mostra o motivo com "Reiniciar"; um erro de outra parte da abertura vai para o log também.
     return startUp({
       // RN-ZOOM-001: o splash já aparece no zoom do programa, do tamanho que couber na tela.
-      showSplash: () => createSplash({ iconPath, version: app.getVersion(), geometry: splashGeometry(zoomFactor(appZoom), screen.getPrimaryDisplay().workAreaSize) }),
+      showSplash: () => createSplash({ iconPath, version: app.getVersion(), locale: appLocale, geometry: splashGeometry(zoomFactor(appZoom), screen.getPrimaryDisplay().workAreaSize) }),
       startApi: launchApi,
       createMainWindow,
     });

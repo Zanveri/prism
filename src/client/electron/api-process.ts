@@ -4,6 +4,8 @@ import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { prismEndpoints } from "../src/lib/api/prism-endpoints";
+import { apiProcessCopy } from "./api-process.copy";
+import type { Locale } from "./locale";
 
 /**
  * Inicia e encerra o processo da API (seção 3.1 da especificação). Não importa nada do Electron
@@ -44,7 +46,9 @@ export function parseReadyLine(line: string): number | null {
   return port >= 1 && port <= 65535 ? port : null;
 }
 
-export function startApi(options: { command: string; args: string[]; dataDir: string; allowedOrigin: string; readyTimeoutMs?: number }): Promise<ApiProcess> {
+/** `locale`: o idioma desta abertura do app, o das frases da falha, que vão à tela (`api-process.copy.ts`); sem ele, o português. */
+export function startApi(options: { command: string; args: string[]; dataDir: string; allowedOrigin: string; readyTimeoutMs?: number; locale?: Locale }): Promise<ApiProcess> {
+  const text = apiProcessCopy(options.locale);
   // O token de lançamento (RN-API-001): 32 bytes aleatórios, novos a cada partida.
   const token = randomBytes(32).toString("base64url");
 
@@ -91,7 +95,7 @@ export function startApi(options: { command: string; args: string[]; dataDir: st
     // A recusa não espera o filho morrer: se ele não morrer, a tela ainda assim precisa do erro.
     const timer = setTimeout(() => {
       void stop();
-      reject(new Error(withStderr(`A API não anunciou a porta em ${readyTimeoutMs / 1000} s.`)));
+      reject(new Error(withStderr(text.notAnnounced(readyTimeoutMs / 1000))));
     }, readyTimeoutMs);
 
     createInterface({ input: child.stdout }).on("line", (line) => {
@@ -104,7 +108,7 @@ export function startApi(options: { command: string; args: string[]; dataDir: st
 
     child.once("error", (error) => {
       clearTimeout(timer);
-      reject(new Error(`Não foi possível iniciar a API (${options.command}): ${error.message}`));
+      reject(new Error(text.notStarted(options.command, error.message)));
     });
 
     child.once("exit", (code) => {
@@ -112,7 +116,7 @@ export function startApi(options: { command: string; args: string[]; dataDir: st
       // O `exit` chega antes de o stderr ser lido até o fim. Esperar o `close` não serve: ele só
       // vem quando todos os que herdaram o pipe o soltam, e os nós do MSBuild que o `dotnet run`
       // deixa vivos o seguram por minutos. Daí o prazo curto. Depois de pronta, a recusa não faz nada.
-      void Promise.race([stderrEnded, delay(250)]).then(() => reject(new Error(withStderr(`A API saiu com código ${code} antes de anunciar a porta.`))));
+      void Promise.race([stderrEnded, delay(250)]).then(() => reject(new Error(withStderr(text.exitedEarly(code)))));
     });
   });
 }

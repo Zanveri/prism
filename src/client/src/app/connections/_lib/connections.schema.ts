@@ -3,6 +3,10 @@ import { z } from "zod";
 import { engineTags, type Engine } from "@/components/ui/engine-tag";
 import { firstFieldErrors, type FieldErrors, type ParsedForm } from "@/lib/utils/form";
 
+import { connectionsCopy } from "./connections.copy";
+
+const { validation } = connectionsCopy;
+
 /** `""` é "nenhuma" nos campos opcionais do formulário; a API recebe `null`. */
 const emptyToNull = (value: string) => (value === "" ? null : value);
 
@@ -58,7 +62,7 @@ export type Folder = z.infer<typeof folderSchema>;
 
 export const foldersSchema = z.array(folderSchema);
 
-export const engineSchema = z.literal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], { error: "Escolha o banco de dados." });
+export const engineSchema = z.literal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], { error: validation.engine });
 
 /** A configuração de túnel SSH da conexão como a API a devolve (sem a senha ou frase secreta, só `hasSecret`). */
 export const connectionSshSchema = z.object({
@@ -193,7 +197,7 @@ export function engineOption(engine: Engine) {
   return engineOptions.find((option) => option.value === engine) ?? engineOptions[0];
 }
 
-const portMessage = "Informe uma porta de 1 a 65535.";
+const portMessage = validation.port;
 
 /**
  * RN-PASTA-001 e RN-CONN-010: os caracteres de controle (U+0000 a U+001F e U+007F a U+009F) e os de direção do texto (U+200E, U+200F, U+202A a U+202E e U+2066
@@ -221,17 +225,17 @@ export function queryWithoutControl(value: string): boolean {
 }
 
 /** A frase da recusa, com o nome do campo (RN-CONN-010). */
-const controlMessage = (field: string) => `${field} não pode ter caractere de controle nem de direção do texto.`;
+const controlMessage = validation.control;
 
 /** O ambiente do formulário (RN-CONN-010), o mesmo na conexão e na pasta (RN-PASTA-005): o nome em branco e a cor vazia viram `null`. */
 const environmentFields = {
   environmentName: z
     .string()
     .trim()
-    .max(30, "O ambiente pode ter no máximo 30 caracteres.")
-    .refine((value) => withoutControl(value, true), controlMessage("O nome do ambiente"))
+    .max(30, validation.environmentMax)
+    .refine((value) => withoutControl(value, true), controlMessage(validation.fields.environmentName))
     .transform(emptyToNull),
-  environmentColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, "Use uma cor no formato #RRGGBB.").transform(emptyToNull),
+  environmentColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, validation.colorFormat).transform(emptyToNull),
 };
 
 /**
@@ -241,13 +245,13 @@ const environmentFields = {
  */
 const protectionFields = {
   confirmCommands: z
-    .enum(["none", "irreversible", "all"], { error: "Escolha não confirmar, só os comandos irreversíveis ou todos os comandos." })
+    .enum(["none", "irreversible", "all"], { error: validation.confirmCommands })
     .transform((value): Confirmation | null => (value === "none" ? null : value)),
   readOnly: z.enum(["true", "false"]).transform((value) => value === "true"),
 };
 
 /** RN-VERIF-001: a frase do intervalo fora da faixa, a mesma da API (na criação, na alteração e no teste). */
-const verificationIntervalMessage = "A verificação deve ser feita a cada 5 a 3.600 segundos.";
+const verificationIntervalMessage = validation.verificationInterval;
 
 /**
  * A sessão da conexão do formulário (RN-VERIF-001): "Verificar a cada [N] segundos" (`verificationEnabled`, `true` ou `false`, do campo escondido, e o
@@ -266,8 +270,8 @@ const verificationFields = {
   verificationQuery: z
     .string()
     .trim()
-    .max(1000, "A consulta de verificação pode ter no máximo 1.000 caracteres.")
-    .refine(queryWithoutControl, controlMessage("A consulta de verificação"))
+    .max(1000, validation.verificationQueryMax)
+    .refine(queryWithoutControl, controlMessage(validation.fields.verificationQuery))
     .transform(emptyToNull),
 };
 
@@ -281,14 +285,14 @@ const connectionFields = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "Informe o nome da conexão.")
-    .max(80, "O nome pode ter no máximo 80 caracteres.")
-    .refine((value) => withoutControl(value, true), controlMessage("O nome da conexão")),
+    .min(1, validation.connectionNameRequired)
+    .max(80, validation.connectionNameMax)
+    .refine((value) => withoutControl(value, true), controlMessage(validation.fields.connectionName)),
   folderID: z.string().transform(emptyToNull),
-  host: z.string().trim().min(1, "Informe o host.").max(255, "O host pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host")),
+  host: z.string().trim().min(1, validation.hostRequired).max(255, validation.hostMax).refine((value) => withoutControl(value), controlMessage(validation.fields.host)),
   port: z.string().trim().regex(/^\d+$/, portMessage).transform(Number).pipe(z.number().min(1, portMessage).max(65535, portMessage)),
-  database: z.string().trim().min(1, "Informe o banco de dados.").max(128, "O banco de dados pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O banco de dados")),
-  userName: z.string().trim().min(1, "Informe o usuário do banco.").max(128, "O usuário do banco pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O usuário do banco")),
+  database: z.string().trim().min(1, validation.databaseRequired).max(128, validation.databaseMax).refine((value) => withoutControl(value), controlMessage(validation.fields.database)),
+  userName: z.string().trim().min(1, validation.userRequired).max(128, validation.userMax).refine((value) => withoutControl(value), controlMessage(validation.fields.databaseUser)),
   ...environmentFields,
   ...protectionFields,
   ...verificationFields,
@@ -296,10 +300,10 @@ const connectionFields = z.object({
 });
 
 /** A senha do banco tem até 1.024 caracteres, contados como veio (RN-CONN-010): ela não é aparada. */
-const passwordMessage = "A senha do banco pode ter até 1.024 caracteres.";
+const passwordMessage = validation.passwordMax;
 
 /** Na criação a senha é obrigatória. Não é aparada: espaço nas pontas faz parte dela. */
-export const createConnectionSchema = connectionFields.extend({ password: z.string().min(1, "Informe a senha do banco.").max(1024, passwordMessage) });
+export const createConnectionSchema = connectionFields.extend({ password: z.string().min(1, validation.passwordRequired).max(1024, passwordMessage) });
 
 /** Na edição a senha vazia vira `null`, e a API mantém a gravada (RN-CONN-004). */
 export const editConnectionSchema = connectionFields.extend({ password: z.string().max(1024, passwordMessage).transform(emptyToNull) });
@@ -308,7 +312,7 @@ export const editConnectionSchema = connectionFields.extend({ password: z.string
  * RN-TRANSF-015: salvar a edição de uma conexão sem senha gravada (a que a importação trouxe sem ela) exige a senha: não há o que manter, e vazio é "Informe a
  * senha do banco.". O "Testar conexão" usa o `editConnectionSchema`: a senha em branco vai à API, que responde que a conexão não tem senha gravada.
  */
-export const editWithoutPasswordSchema = connectionFields.extend({ password: z.string().min(1, "Informe a senha do banco.").max(1024, passwordMessage) });
+export const editWithoutPasswordSchema = connectionFields.extend({ password: z.string().min(1, validation.passwordRequired).max(1024, passwordMessage) });
 
 /** RN-NAV-009: o diálogo de renomear conexão, só com o nome, na regra do formulário. */
 export const renameConnectionSchema = connectionFields.pick({ name: true });
@@ -341,35 +345,35 @@ export type ConnectionProxyInput = {
   saveCredentials: boolean;
 };
 
-const sshPortMessage = "Informe uma porta SSH de 1 a 65535.";
-const sshKeepAliveMessage = "O intervalo de keep-alive SSH deve ficar entre 0 e 3.600.000 ms.";
+const sshPortMessage = validation.sshPort;
+const sshKeepAliveMessage = validation.sshKeepAlive;
 // O teto é o da API (`ConnectionRules.SshRefusal`).
-const sshTimeoutMessage = "O timeout do túnel SSH deve ficar entre 0 e 600.000 ms.";
-const sshLocalPortMessage = "A porta local do encaminhamento SSH deve ficar entre 0 e 65535.";
-const sshRemotePortMessage = "A porta remota do encaminhamento SSH deve ficar entre 0 e 65535.";
-const proxyPortMessage = "Informe uma porta de proxy de 1 a 65535.";
+const sshTimeoutMessage = validation.sshTimeout;
+const sshLocalPortMessage = validation.sshLocalPort;
+const sshRemotePortMessage = validation.sshRemotePort;
+const proxyPortMessage = validation.proxyPort;
 
 const sshFormFieldsSchema = z
   .object({
-    sshHost: z.string().trim().min(1, "Informe o host SSH.").max(255, "O host SSH pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host SSH")),
+    sshHost: z.string().trim().min(1, validation.sshHostRequired).max(255, validation.sshHostMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sshHost)),
     sshPort: z.string().trim().regex(/^\d+$/, sshPortMessage).transform(Number).pipe(z.number().min(1, sshPortMessage).max(65535, sshPortMessage)),
-    sshUserName: z.string().trim().min(1, "Informe o usuário SSH.").max(128, "O usuário SSH pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O usuário SSH")),
-    sshAuthMethod: z.enum(["password", "privateKey"], { error: "Escolha o método de autenticação SSH (senha ou chave privada)." }),
-    sshPrivateKeyPath: z.string().trim().max(1024, "O caminho da chave privada SSH pode ter até 1.024 caracteres.").refine((value) => withoutControl(value), controlMessage("O caminho da chave privada SSH")),
-    sshSecret: z.string().max(1024, "A senha ou frase secreta SSH pode ter até 1.024 caracteres.").transform(emptyToNull),
+    sshUserName: z.string().trim().min(1, validation.sshUserRequired).max(128, validation.sshUserMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sshUser)),
+    sshAuthMethod: z.enum(["password", "privateKey"], { error: validation.sshAuthMethod }),
+    sshPrivateKeyPath: z.string().trim().max(1024, validation.sshPrivateKeyMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sshPrivateKey)),
+    sshSecret: z.string().max(1024, validation.sshSecretMax).transform(emptyToNull),
     sshSaveCredentials: z.enum(["true", "false"]).transform((value) => value === "true"),
     sshIgnoreHostVerification: z.enum(["true", "false"]).transform((value) => value === "true"),
     sshKeepAliveIntervalMs: z.string().trim().regex(/^\d+$/, sshKeepAliveMessage).transform(Number).pipe(z.number().min(0, sshKeepAliveMessage).max(3600000, sshKeepAliveMessage)),
     sshTunnelTimeoutMs: z.string().trim().regex(/^\d+$/, sshTimeoutMessage).transform(Number).pipe(z.number().min(0, sshTimeoutMessage).max(600000, sshTimeoutMessage)),
-    sshLocalHost: z.string().trim().max(255, "O host local do encaminhamento SSH pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host local do encaminhamento SSH")).transform(emptyToNull),
+    sshLocalHost: z.string().trim().max(255, validation.sshLocalHostMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sshLocalHost)).transform(emptyToNull),
     sshLocalPort: z.string().trim().regex(/^\d+$/, sshLocalPortMessage).transform(Number).pipe(z.number().min(0, sshLocalPortMessage).max(65535, sshLocalPortMessage)),
-    sshRemoteHost: z.string().trim().max(255, "O host remoto do encaminhamento SSH pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host remoto do encaminhamento SSH")).transform(emptyToNull),
+    sshRemoteHost: z.string().trim().max(255, validation.sshRemoteHostMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sshRemoteHost)).transform(emptyToNull),
     sshRemotePort: z.string().trim().regex(/^\d+$/, sshRemotePortMessage).transform(Number).pipe(z.number().min(0, sshRemotePortMessage).max(65535, sshRemotePortMessage)),
-    sshHostKeyFingerprint: z.string().trim().max(255, "A impressão digital do host pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("A impressão digital do host")).transform(emptyToNull),
+    sshHostKeyFingerprint: z.string().trim().max(255, validation.sshFingerprintMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sshFingerprint)).transform(emptyToNull),
   })
   .superRefine((data, ctx) => {
     if (data.sshAuthMethod === "privateKey" && data.sshPrivateKeyPath === "") {
-      ctx.addIssue({ code: "custom", path: ["sshPrivateKeyPath"], message: "Informe o caminho da chave privada SSH." });
+      ctx.addIssue({ code: "custom", path: ["sshPrivateKeyPath"], message: validation.sshPrivateKeyRequired });
     }
   })
   .transform(
@@ -394,10 +398,10 @@ const sshFormFieldsSchema = z
 
 const sslFormFieldsSchema = z
   .object({
-    sslCaCertificatePath: z.string().trim().max(1024, "O caminho do certificado CA pode ter até 1.024 caracteres.").refine((value) => withoutControl(value), controlMessage("O caminho do certificado CA")).transform(emptyToNull),
-    sslClientCertificatePath: z.string().trim().max(1024, "O caminho do certificado de cliente pode ter até 1.024 caracteres.").refine((value) => withoutControl(value), controlMessage("O caminho do certificado de cliente")).transform(emptyToNull),
-    sslClientPrivateKeyPath: z.string().trim().max(1024, "O caminho da chave privada de cliente pode ter até 1.024 caracteres.").refine((value) => withoutControl(value), controlMessage("O caminho da chave privada de cliente")).transform(emptyToNull),
-    sslMode: z.enum(sslModes, { error: "Escolha um modo SSL válido." }),
+    sslCaCertificatePath: z.string().trim().max(1024, validation.sslCaMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sslCa)).transform(emptyToNull),
+    sslClientCertificatePath: z.string().trim().max(1024, validation.sslClientCertificateMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sslClientCertificate)).transform(emptyToNull),
+    sslClientPrivateKeyPath: z.string().trim().max(1024, validation.sslClientKeyMax).refine((value) => withoutControl(value), controlMessage(validation.fields.sslClientKey)).transform(emptyToNull),
+    sslMode: z.enum(sslModes, { error: validation.sslMode }),
   })
   .transform(
     (data): ConnectionSslInput => ({
@@ -410,10 +414,10 @@ const sslFormFieldsSchema = z
 
 const proxyFormFieldsSchema = z
   .object({
-    proxyHost: z.string().trim().min(1, "Informe o host do proxy.").max(255, "O host do proxy pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host do proxy")),
+    proxyHost: z.string().trim().min(1, validation.proxyHostRequired).max(255, validation.proxyHostMax).refine((value) => withoutControl(value), controlMessage(validation.fields.proxyHost)),
     proxyPort: z.string().trim().regex(/^\d+$/, proxyPortMessage).transform(Number).pipe(z.number().min(1, proxyPortMessage).max(65535, proxyPortMessage)),
-    proxyUserName: z.string().trim().max(128, "O usuário do proxy pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O usuário do proxy")).transform(emptyToNull),
-    proxyPassword: z.string().max(1024, "A senha do proxy pode ter até 1.024 caracteres.").transform(emptyToNull),
+    proxyUserName: z.string().trim().max(128, validation.proxyUserMax).refine((value) => withoutControl(value), controlMessage(validation.fields.proxyUser)).transform(emptyToNull),
+    proxyPassword: z.string().max(1024, validation.proxyPasswordMax).transform(emptyToNull),
     proxySavePassword: z.enum(["true", "false"]).transform((value) => value === "true"),
   })
   .transform(
@@ -553,15 +557,15 @@ export function verificationOf(connection: ConnectionVerification): ConnectionVe
 export type ConnectionInput = z.output<typeof editConnectionSchema> & ConnectionNetworkInput;
 
 /** A senha do usuário no diálogo de revelar. Como no login, não se apara nem se impõe regra de criação. */
-export const revealPasswordSchema = z.object({ password: z.string().min(1, "Informe a sua senha do Prism.") });
+export const revealPasswordSchema = z.object({ password: z.string().min(1, validation.userPasswordRequired) });
 
 /** RN-PASTA-001: o nome da pasta, de 1 a 60, sem caractere de controle nem de direção do texto (depois da normalização, que junta os espaços). */
 const folderName = z
   .string()
   .trim()
-  .min(1, "Informe o nome da pasta.")
-  .max(60, "O nome pode ter no máximo 60 caracteres.")
-  .refine((value) => withoutControl(value, true), "O nome da pasta não pode ter caractere de controle nem de direção do texto.");
+  .min(1, validation.folderNameRequired)
+  .max(60, validation.folderNameMax)
+  .refine((value) => withoutControl(value, true), controlMessage(validation.fields.folderName));
 
 /**
  * Criar uma pasta: o nome, onde ela fica (`""` é a raiz), a cor do ícone dela (RN-PASTA-007, no formato da cor do ambiente), o ambiente (RN-PASTA-005) e as

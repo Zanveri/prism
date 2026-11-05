@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { PrismMark } from "@/components/layout/prism-mark";
 import { Button } from "@/components/ui";
 import { CheckUpdatesButton } from "@/components/update/check-updates-button";
+import { gateCopy } from "@/app/_lib/gate.copy";
 import { getBridge } from "@/lib/api/bridge";
 
 const RestartContext = createContext<(() => Promise<void>) | null>(null);
@@ -43,7 +44,7 @@ export function ApiGate({ children }: { children: ReactNode }) {
     // Dentro de uma função `async`, a ponte ausente vira rejeição, como qualquer outra falha.
     async function connect() {
       const bridge = getBridge();
-      stopListening = bridge.onApiExit(() => setState({ status: "failed", message: "O processo da API foi encerrado." }));
+      stopListening = bridge.onApiExit(() => setState({ status: "failed", message: gateCopy.api.exited }));
       await bridge.getApiConfig();
     }
 
@@ -85,7 +86,7 @@ export function ApiGate({ children }: { children: ReactNode }) {
 
       {state.status === "starting" ? (
         <p role="status" className="text-muted">
-          Abrindo o Prism…
+          {gateCopy.api.opening}
         </p>
       ) : (
         <ApiGateError message={state.message} onRestart={() => void restart()} />
@@ -102,11 +103,11 @@ export function ApiGate({ children }: { children: ReactNode }) {
 export function ApiGateError({ message, onRestart }: { message: string; onRestart: () => void }) {
   return (
     <div role="alert" className="flex w-full max-w-[640px] flex-col items-center gap-4">
-      <h1 className="text-lg font-semibold">A API do Prism não está em execução</h1>
+      <h1 className="text-lg font-semibold">{gateCopy.api.title}</h1>
       {/* A mensagem traz o fim do stderr da API: é texto, nunca HTML (RN-SHELL-002). */}
       <p className="max-h-60 w-full overflow-y-auto rounded-md border border-border bg-panel px-3 py-2.5 font-mono text-sm break-words whitespace-pre-wrap text-muted">{message}</p>
       <Button type="button" onClick={onRestart}>
-        Reiniciar
+        {gateCopy.api.restart}
       </Button>
       <CheckUpdatesButton />
     </div>

@@ -1,5 +1,10 @@
 import { formatCount } from "../data-export/data-export.copy";
 
+import { locale, pickCopy, type Localized } from "@/lib/i18n";
+
+import { dataImportCopyEn } from "./data-import.copy.en";
+import { dataImportCopyEs } from "./data-import.copy.es";
+
 /**
  * Os textos da importação de dados e da cópia para outro banco (seção 36 da especificação, RN-IMPORT-001 a 027), em pt-BR. As frases são as da
  * especificação; as que ela não escreve seguem o tom das vizinhas.
@@ -7,16 +12,18 @@ import { formatCount } from "../data-export/data-export.copy";
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
-/** "a e b", "a, b e c": a lista em português. */
+const and = { "pt-BR": "e", en: "and", es: "y" }[locale];
+
+/** "a e b", "a, b e c": a lista, com o "e" do idioma da janela. */
 export function listOf(items: readonly string[]): string {
   if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} e ${items[items.length - 1]}`;
+  return `${items.slice(0, -1).join(", ")} ${and} ${items[items.length - 1]}`;
 }
 
 /** As linhas de um intervalo do arquivo ("nas linhas 20.001 a 30.000"), ou de uma linha só. */
 const rangeOf = (first: number, last: number) => (first === last ? `da linha ${formatCount(first)}` : `das linhas ${formatCount(first)} a ${formatCount(last)}`);
 
-export const dataImportCopy = {
+const pt = {
   // RN-IMPORT-001: as entradas.
   entry: {
     menu: "Importar dados…",
@@ -499,5 +506,13 @@ export const dataImportCopy = {
     loads: (imports: number, copies: number) =>
       imports > 0 && copies > 0 ? "as importações e as cópias" : imports > 0 ? (imports === 1 ? "a importação" : "as importações") : copies === 1 ? "a cópia" : "as cópias",
     copyNoun: "cópia para outro banco",
+    /** O que a saída cancela, como objeto do verbo, com o artigo: no singular e no plural. */
+    objects: { export: ["a exportação", "as exportações"], import: ["a importação", "as importações"], copy: ["a cópia", "as cópias"], mixed: ["a transferência", "as transferências"] } as Record<"export" | "import" | "copy" | "mixed", readonly [string, string]>,
+    /** O verbo do título da pergunta ("Sair com importações em andamento?"). */
+    titleVerbs: { signOut: "Sair", window: "Fechar", app: "Fechar" },
+    copyNounPlural: "cópias para outro banco",
   },
 } as const;
+
+export type DataImportCopy = Localized<typeof pt>;
+export const dataImportCopy = pickCopy({ "pt-BR": pt, en: dataImportCopyEn, es: dataImportCopyEs });

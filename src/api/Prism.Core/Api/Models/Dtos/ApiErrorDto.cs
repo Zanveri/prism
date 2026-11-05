@@ -1,11 +1,16 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using System.Text.Json.Serialization;
+using Prism.Core.Extensions;
+using System.Resources;
 
 namespace Prism.Core.Api.Models.Dtos;
 
 public sealed class ApiErrorDto : ProblemDetails
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ApiErrorDto.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ApiErrorDto));
+
     [JsonIgnore]
     public HttpStatusCode StatusCode { get; private set; }
 
@@ -24,7 +29,7 @@ public sealed class ApiErrorDto : ProblemDetails
         => new(type, title, HttpStatusCode.BadRequest, details, null, null);
 
     public static ApiErrorDto CreateInternalServerError(string details)
-        => new("INTERNAL_SERVER_ERROR", "Erro interno do servidor.", HttpStatusCode.InternalServerError, details, null, null);
+        => new("INTERNAL_SERVER_ERROR", Texts.Get("InternalServerErrorTitle"), HttpStatusCode.InternalServerError, details, null, null);
 
     /// <summary>Identidade ausente ou inválida.</summary>
     public static ApiErrorDto CreateUnauthorized(string title, string type, string details)
