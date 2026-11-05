@@ -47,6 +47,12 @@ public sealed class ScriptsLogTests
         // Gravar por cima, e a falha de disco: uma pasta no lugar do temporário da gravação. O log registra a classe do erro, e nunca a exceção, que traria o caminho.
         var patch = new HttpRequestMessage(HttpMethod.Patch, ScriptsPath) { Content = JsonContent.Create(new { id, sql = MarkedSql + " WHERE 1 = 1" }) };
         Assert.That((await api.Client.SendAsync(patch)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        // Os valores lembrados (RN-VAR-028 e 036): gravar, ler e a recusa, com a marca nos valores.
+        var runValues = new HttpRequestMessage(HttpMethod.Put, $"{ScriptsPath}/{id}/run-values") { Content = JsonContent.Create(new { values = new Dictionary<string, object> { ["cpf"] = new { type = "text", value = $"valor-{Run}" } } }) };
+        Assert.That((await api.Client.SendAsync(runValues)).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.That((await api.Client.GetAsync($"{ScriptsPath}/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var refusedValues = new HttpRequestMessage(HttpMethod.Put, $"{ScriptsPath}/{id}/run-values") { Content = JsonContent.Create(new { values = new Dictionary<string, object> { ["cpf"] = new { type = $"tipo-{Run}", value = $"valor-{Run}" } } }) };
+        Assert.That((await api.Client.SendAsync(refusedValues)).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
         Directory.CreateDirectory(temporary);
         Assert.That((await api.Client.PostAsJsonAsync(ScriptsPath, new { name = $"{MarkedName} 2", sql = MarkedSql })).StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
         Directory.Delete(temporary);

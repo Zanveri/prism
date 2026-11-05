@@ -48,7 +48,7 @@ public sealed class ScriptHandlersTests
         var first = result.Value[0];
         Assert.Equal((alfa.ID, alfa.ConnectionID, alfa.Database, alfa.UpdatedAt), (first.ID, first.ConnectionID, first.Database, first.UpdatedAt));
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, JsonSerializerOptions.Web));
-        Assert.Equal(["id", "name", "connectionID", "database", "folderID", "icon", "color", "updatedAt"], json.RootElement[0].EnumerateObject().Select(property => property.Name));
+        Assert.Equal(["id", "name", "connectionID", "database", "folderID", "icon", "color", "declaresVariables", "updatedAt"], json.RootElement[0].EnumerateObject().Select(property => property.Name));
     }
 
     /// <summary>RN-SCRIPT-006: o ícone e a cor gravados chegam à lista, e o script gravado antes deles volta com os dois nulos (o padrão, sem cor).</summary>

@@ -6,6 +6,7 @@ using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Vault.Services;
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using ILogger = Serilog.ILogger;
 
@@ -24,6 +25,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
     /// <summary>RN-SQL-010: o comando que esperava o fim de uma verificação (RN-VERIF-002) e foi cancelado antes de ir ao banco.</summary>
     private const string CanceledBeforeItRanMessage = "O comando foi cancelado antes de ir ao banco: nada foi executado.";
+
+    /// <summary>RN-VAR-034: a consulta de uma variável é um comando só.</summary>
+    private const string VariableSeveralStatementsMessage = "A consulta de uma variável é um comando só, e o texto tem mais de um; nada foi executado.";
 
     /// <summary>
     /// RN-BUSCA-002: quantos nomes de tabela e de visão o índice da busca traz de um banco, no máximo. A consulta lê um a mais, só para dizer
@@ -343,6 +347,105 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
         return outcome;
     }
+
+    /// <summary>
+    /// RN-VAR-034: a consulta de uma variável, com a vez tomada como um comando. As recusas pelo texto vêm na ordem da regra; depois dela a sessão continua com o
+    /// resultado, os guardados e o comando da contagem de antes (só o cursor fechou), e a transação manual não conta um comando a mais.
+    /// </summary>
+    public Task<Result<FullRows, DatabaseFailure>> ExecuteVariableAsync(Guid sessionID, string sql, IReadOnlyList<QueryParameter> parameters, int maxRows, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(ExecuteVariableAsync), waitsForTurn: false, async session =>
+        {
+            var engine = session.Info.Engine;
+            sql = SqlText.RewriteDoubleQuotedLiterals(sql, DialectOf(session));
+
+            if (ReadOnlySql.HasSeveralStatements(sql, engine))
+                return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, VariableSeveralStatementsMessage);
+
+            if (QueryParameterRules.Refusal(sql, engine, parameters, "params") is { } invalid)
+                return invalid;
+
+            // RN-PROT-005: a mesma lista do somente leitura, em qualquer conexão. No PostgreSQL em Auto-commit o banco também recusa, na transação só de leitura.
+            // O detalhe é o da regra ("...: um DELETE não é."), sem repetir a "leitura" do motivo; o `reason` vai como o somente leitura o escreve.
+            if (ReadOnlySql.Refusal(sql, engine) is { } reason)
+                return new DatabaseFailure(EDatabaseFailure.VariableQueryNotRead, $"A consulta de uma variável tem de ser uma leitura: {(reason.EndsWith(" não é leitura", StringComparison.Ordinal) ? reason[..^" leitura".Length] : reason)}.", Reason: reason);
+
+            if (session.Connection.Transaction == ETransactionState.Failed)
+                return TransactionFailed(session);
+
+            var rows = await InTheTransactionAsync(session, _ => false, () => session.Connection.ReadVariableAsync(sql, parameters, maxRows, cancellationToken));
+
+            // RN-LOG-001 e RN-VAR-036: quantos parâmetros a consulta levou, nunca o valor.
+            if (parameters.Count > 0)
+                _logger.Information("Sessão {SessionID}: {Operation} levou {Parameters} parâmetros.", session.Info.ID, nameof(ExecuteVariableAsync), parameters.Count);
+
+            return rows;
+        }, cancellationToken);
+
+    /// <summary>
+    /// RN-VAR-035: o catálogo da própria sessão e as leituras dos valores, todos na mesma vez, que espera como a do catálogo. O total é uma segunda leitura, com a
+    /// mesma busca, só quando pedido.
+    /// </summary>
+    public Task<Result<ColumnValuesPage, DatabaseFailure>> GetColumnValuesAsync(Guid sessionID, string schema, string table, ColumnValuesRequest request, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(GetColumnValuesAsync), waitsForTurn: true, async session =>
+        {
+            var engine = session.Info.Engine;
+            if (!ColumnValuesSql.IsAvailable(engine))
+                return new DatabaseFailure(EDatabaseFailure.ExecutionFailed, ColumnValuesSql.NotAvailableMessage);
+
+            var columns = await session.Connection.GetColumnsAsync(schema, table, cancellationToken);
+            if (columns.IsFailure)
+                return columns.Error;
+
+            if (ColumnValuesSql.Refusal(columns.Value, engine, request.Column, request.Description) is { } refusal)
+                return refusal;
+
+            var (sql, parameters) = ColumnValuesSql.Values(engine, schema, table, request)!.Value;
+            var read = await InTheTransactionAsync(session, _ => false, () => session.Connection.ReadColumnValuesAsync(sql, parameters, cancellationToken));
+            if (read.IsFailure)
+                return read.Error;
+
+            long? total = null;
+            if (request.Total)
+            {
+                var (countSql, countParameters) = ColumnValuesSql.Total(engine, schema, table, request)!.Value;
+                var counted = await InTheTransactionAsync(session, _ => false, () => session.Connection.ReadColumnValuesAsync(countSql, countParameters, cancellationToken));
+                if (counted.IsFailure)
+                    return counted.Error;
+
+                // O total chega como inteiro nos drivers da IBM e como texto no PostgreSQL (o formato de texto dos comandos da pessoa).
+                total = (long)decimal.Parse(counted.Value.Rows[0][0]!, NumberStyles.Number, CultureInfo.InvariantCulture);
+            }
+
+            return Result.Success<ColumnValuesPage, DatabaseFailure>(ColumnValuesSql.Page(read.Value, request.Limit, total));
+        }, cancellationToken);
+
+    /// <summary>RN-VAR-035: a conferência na vez da sessão, como os valores; o que não converte para o tipo da coluna nem vai ao banco, e falta.</summary>
+    public Task<Result<IReadOnlyList<int>, DatabaseFailure>> CheckColumnValuesAsync(Guid sessionID, string schema, string table, string column, IReadOnlyList<QueryParameter> values, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(CheckColumnValuesAsync), waitsForTurn: true, async session =>
+        {
+            var engine = session.Info.Engine;
+            if (!ColumnValuesSql.IsAvailable(engine))
+                return new DatabaseFailure(EDatabaseFailure.ExecutionFailed, ColumnValuesSql.NotAvailableMessage);
+
+            var columns = await session.Connection.GetColumnsAsync(schema, table, cancellationToken);
+            if (columns.IsFailure)
+                return columns.Error;
+
+            if (ColumnValuesSql.Refusal(columns.Value, engine, column, description: null) is { } refusal)
+                return refusal;
+
+            var check = ColumnValuesSql.Check(engine, schema, table, ColumnValuesSql.Find(columns.Value, column)!, values)!;
+
+            // RN-LOG-001 e RN-VAR-036: quantos valores a conferência levou, nunca o valor.
+            _logger.Information("Sessão {SessionID}: {Operation} conferiu {Values} valores, {Sent} foram ao banco.", session.Info.ID, nameof(CheckColumnValuesAsync), values.Count, check.Parameters.Count);
+
+            if (check.Sql is null)
+                return Result.Success<IReadOnlyList<int>, DatabaseFailure>(ColumnValuesSql.Missing(check, []));
+
+            var found = await InTheTransactionAsync(session, _ => false, () => session.Connection.ReadColumnValuesAsync(check.Sql, check.Parameters, cancellationToken));
+
+            return found.Map(rows => ColumnValuesSql.Missing(check, rows.Rows.Select(row => row[0])));
+        }, cancellationToken);
 
     public string? FilterRefusal(Guid sessionID, string? filter)
         => FilterRefusal(sessionID, filter, withParameters: false);
@@ -945,6 +1048,10 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         {
             QueryPage page => page.Rows.Count,
             QueryOutcome outcome => outcome.Page?.Rows.Count ?? outcome.RowsAffected ?? 0,
+
+            // RN-VAR-036: quantas linhas a consulta de uma variável leu, e quantos valores a rota dos valores devolveu (na conferência, quantos faltam).
+            FullRows rows => rows.Rows.Count,
+            ColumnValuesPage values => values.Values.Count,
             ICollection items => items.Count,
             SchemaDiagramInfo diagram => diagram.Tables.Count,
             long total => total,

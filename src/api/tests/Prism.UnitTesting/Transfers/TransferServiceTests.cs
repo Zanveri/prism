@@ -788,6 +788,8 @@ public sealed partial class TransferServiceTests : IAsyncDisposable
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null) => throw new NotSupportedException();
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null) => throw new NotSupportedException();
+        public Task<Result<FullRows, DatabaseFailure>> ReadVariableAsync(string sql, IReadOnlyList<QueryParameter> parameters, int maxRows, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<FullRows, DatabaseFailure>> ReadColumnValuesAsync(string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CloseCursorAsync() => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(string schema, string kind, CancellationToken cancellationToken) => throw new NotSupportedException();

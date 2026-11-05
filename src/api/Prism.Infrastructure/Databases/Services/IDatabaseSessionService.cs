@@ -164,6 +164,23 @@ public interface IDatabaseSessionService
     /// </summary>
     Task<Result<long, DatabaseFailure>> CountAsync(Guid sessionID, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// RN-VAR-034: a consulta de uma variável, na sessão e na vez dela (`SessionBusy`, como um comando). Antes de ir ao banco: um comando só
+    /// (`MultipleStatementsNotSupported`), os marcadores contra os valores (`ParametersMismatch`, `QueryInvalid` no campo), a leitura pela RN-PROT-005
+    /// (`VariableQueryNotRead`, com o motivo) e a transação com erro (`TransactionFailed`). Fecha o cursor aberto, como todo comando, e não muda mais nada que a
+    /// tela veja: o resultado atual, os guardados e o último comando que devolveu linhas (o da contagem) continuam os mesmos.
+    /// </summary>
+    Task<Result<FullRows, DatabaseFailure>> ExecuteVariableAsync(Guid sessionID, string sql, IReadOnlyList<QueryParameter> parameters, int maxRows, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-VAR-035: os valores diferentes e não nulos de uma coluna, na vez da sessão, como o catálogo. A coluna e a descrição são conferidas no catálogo da própria
+    /// sessão antes de entrar no texto: a tabela que não existe é `ValuesTableNotFound`, e a coluna que não serve, `ValuesInvalid` no campo.
+    /// </summary>
+    Task<Result<ColumnValuesPage, DatabaseFailure>> GetColumnValuesAsync(Guid sessionID, string schema, string table, ColumnValuesRequest request, CancellationToken cancellationToken);
+
+    /// <summary>RN-VAR-035: os índices dos valores que não existem na coluna, na ordem, comparados pelo valor no tipo da coluna; as recusas são as dos valores.</summary>
+    Task<Result<IReadOnlyList<int>, DatabaseFailure>> CheckColumnValuesAsync(Guid sessionID, string schema, string table, string column, IReadOnlyList<QueryParameter> values, CancellationToken cancellationToken);
+
     /// <summary>RN-SQL-010: interrompe o comando e a contagem em andamento na sessão. Não afeta um cursor aberto e parado.</summary>
     UnitResult<DatabaseFailure> Cancel(Guid sessionID);
 

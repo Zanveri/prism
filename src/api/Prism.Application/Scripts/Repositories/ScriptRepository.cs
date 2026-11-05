@@ -58,7 +58,9 @@ internal sealed class ScriptRepository(IVaultService vaultService) : IScriptRepo
             if (NameIsTaken(document, script))
                 return ScriptErrors.AlreadyExists(script.Name);
 
-            var updated = ToRecord(script);
+            // RN-VAR-028: o domínio não tem os valores lembrados, e a alteração (o nome, o SQL, o lugar, a pasta) não os esquece: quem esquece o valor que não
+            // vale mais é a tela, ao abrir o diálogo.
+            var updated = ToRecord(script) with { RunValues = existing.RunValues };
 
             return document with { Scripts = [.. document.Scripts.Select(record => record.ID == id ? updated : record)] };
         }, cancellationToken);
@@ -69,6 +71,15 @@ internal sealed class ScriptRepository(IVaultService vaultService) : IScriptRepo
         // A gravação que deu certo rodou a função, e a função que não recusou achou o script.
         return changed!;
     }
+
+    public Task<UnitResult<ApiErrorDto>> SaveRunValues(Guid id, VaultScriptRunValuesRecord? runValues, CancellationToken cancellationToken)
+        => vaultService.SaveOrRefuse(document =>
+        {
+            if (!document.Scripts.Any(record => record.ID == id))
+                return ScriptErrors.NotFound(id);
+
+            return document with { Scripts = [.. document.Scripts.Select(record => record.ID == id ? record with { RunValues = runValues } : record)] };
+        }, cancellationToken);
 
     public Task<UnitResult<ApiErrorDto>> Delete(Guid id, CancellationToken cancellationToken)
         => vaultService.SaveOrRefuse(document =>

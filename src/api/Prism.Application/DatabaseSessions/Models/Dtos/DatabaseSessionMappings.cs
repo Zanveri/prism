@@ -28,6 +28,13 @@ internal static class DatabaseSessionMappings
     public static QueryResultDto ToDto(this QueryPage source)
         => new() { Columns = [.. source.Columns.Select(column => new QueryColumnDto(column.Name, column.Type, column.Kind))], Rows = source.Rows, HasMore = source.HasMore, ElapsedMs = source.ElapsedMs, TruncatedCells = source.TruncatedCells, TotalRows = source.TotalRows, ResultID = source.ResultID, Editable = source.Editable, CellsWithoutFullValue = source.CellsWithoutFullValue ?? [], FilterApplied = FilterText(source.FilterApplied), Read = source.Read };
 
+    /// <summary>RN-VAR-034: as colunas como na página (sem a origem, que não vai para a tela) e as linhas inteiras.</summary>
+    public static VariableQueryResultDto ToDto(this FullRows source)
+        => new([.. source.Columns.Select(column => new QueryColumnDto(column.Name, column.Type, column.Kind))], source.Rows, source.ElapsedMs);
+
+    public static ColumnValuesDto ToDto(this ColumnValuesPage source)
+        => new(source.Kind, [.. source.Values.Select(value => new ColumnValueDto(value.Value, value.Description, value.Truncated))], source.HasMore, source.Total);
+
     /// <summary>RN-EDIT-002: o tipo de catálogo de cada coluna fica na API, que é quem converte o texto (RN-EDIT-006).</summary>
     public static EditTargetDto ToDto(this EditTarget source)
         => new([.. source.Tables.Select(table => new EditTableDto(table.Schema, table.Name, table.Key, table.Editable, table.Reason, table.Kind, table.KeyColumns))], [.. source.Columns.Select(column => new EditColumnDto(column.Table, column.BaseColumn, column.Editable, column.Reason, column.Nullable, column.Generated))], source.RowOperations, source.OneAtATime);

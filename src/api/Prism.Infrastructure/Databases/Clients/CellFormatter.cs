@@ -52,6 +52,13 @@ internal static class CellFormatter
     public static FullCellValue Full(object value)
         => value is byte[] bytes ? FullCellValue.Binary(bytes) : FullCellValue.Text(ToText(value));
 
+    /// <summary>
+    /// RN-VAR-034 e 035: a célula no texto da grade sem o corte de 10.000 caracteres. O binário sai como na grade (`0x…`, nos primeiros 32 bytes): a consulta de uma
+    /// variável não o aceita (RN-VAR-011), e a tela o recusa pelo `kind`.
+    /// </summary>
+    public static string? Whole(object? value)
+        => value is null or DBNull or byte[] ? Format(value, out _) : ToText(value);
+
     /// <summary>RN-EXPORT-002 e 017: a célula da exportação, inteira e sem o corte da grade: o texto no mesmo formato, ou os bytes do binário.</summary>
     public static ExportCell ForExport(object value)
         => value is byte[] bytes ? ExportCell.FromBytes(bytes) : ExportCell.FromText(ToText(value));

@@ -92,7 +92,22 @@ public enum EDatabaseFailure
     TransactionsNotAvailable,
 
     /// <summary>RN-ISOL-003: o nível de isolamento pedido não existe para o motor da sessão.</summary>
-    IsolationLevelInvalid
+    IsolationLevelInvalid,
+
+    /// <summary>RN-VAR-034: a consulta de uma variável não é uma leitura pela RN-PROT-005; o motivo vai em `Reason`. Nada foi ao banco.</summary>
+    VariableQueryNotRead,
+
+    /// <summary>
+    /// RN-VAR-034: a consulta de uma variável passou de um dos limites (mais de `maxRows` linhas, mais de 100 colunas ou mais de 16 MiB de valores); `Reason` é
+    /// `rows`, `columns` ou `bytes`, e `Limit` o limite. A leitura parou e fechou.
+    /// </summary>
+    VariableQueryTooLarge,
+
+    /// <summary>RN-VAR-035: a coluna ou a descrição dos valores de uma coluna não serve (não é da tabela, é binária ou de objeto grande, é a própria coluna); `Field` é o campo. Nada foi ao banco além do catálogo.</summary>
+    ValuesInvalid,
+
+    /// <summary>RN-VAR-035: a tabela (ou a visão) dos valores de uma coluna não está no catálogo da sessão.</summary>
+    ValuesTableNotFound
 }
 
 /// <summary>
@@ -133,5 +148,7 @@ public enum ECancelOutcome
 ///
 /// No Commit manual (seção 22): `Transaction` é o estado da transação da sessão depois da recusa, e `TransactionUndone` diz que a transação que
 /// estava aberta foi desfeita sem a pessoa pedir (o banco a desfez, ou a sessão caiu). Quem os põe é o registro de sessões.
+///
+/// Na consulta de uma variável (RN-VAR-034): `Limit` é o limite de que ela passou, com o motivo (`rows`, `columns` ou `bytes`) em `Reason`.
 /// </summary>
-public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null, string? ColumnName = null, string? Field = null, int? Markers = null, int? Values = null, TransactionInfo? Transaction = null, bool TransactionUndone = false);
+public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null, string? ColumnName = null, string? Field = null, int? Markers = null, int? Values = null, TransactionInfo? Transaction = null, bool TransactionUndone = false, long? Limit = null);

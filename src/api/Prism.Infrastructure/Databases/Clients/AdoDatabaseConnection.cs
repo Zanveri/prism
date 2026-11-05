@@ -1011,6 +1011,62 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         return total;
     }
 
+    /// <summary>
+    /// RN-VAR-034: a consulta de uma variável, como a leitura de um comando, mas lida inteira e sem deixar nada para o "carregar mais": a transação só de leitura no
+    /// PostgreSQL em Auto-commit (RN-SQL-013), e a transação manual quando há uma (no PostgreSQL, num ponto de salvamento só dela, como a contagem). Os campos do
+    /// cursor da página (as colunas, as linhas por página, o texto) ficam como estavam: o cursor deles já fechou, e o "carregar mais" é o `NoOpenCursor` de sempre.
+    /// Passando de um limite, a leitura para e fecha ali (o que ficou aberto sai pelo descarte, que desfaz a transação da leitura).
+    /// </summary>
+    public async Task<Result<FullRows, DatabaseFailure>> ReadVariableAsync(string sql, IReadOnlyList<QueryParameter> parameters, int maxRows, CancellationToken cancellationToken)
+    {
+        // As recusas pelo texto do `ExecuteAsync`, sem ir ao banco. Quem chama já recusa o que não é leitura, e o controle de transação não é.
+        if (IsTransactionControl(sql))
+            return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, TransactionControlMessage);
+
+        if (HasSeveralStatements(sql))
+            return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
+
+        var read = await RunAsync(nameof(ReadVariableAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var started = Stopwatch.GetTimestamp();
+            await BeginSideReadAsync(readOnlyTransaction: true, token);
+
+            return await ReadFullRowsAsync(await StartUserCommandAsync(sql, parameters, token), started, maxRows, token);
+        }, cancellationToken);
+
+        if (read.IsFailure)
+            return read.Error;
+
+        if (read.Value.IsSuccess)
+            return read.Value.Value;
+
+        // O limite: o leitor ficou aberto no meio, e sai aqui, com a transação da leitura.
+        await DisposeCursorAsync();
+
+        return read.Value.Error;
+    }
+
+    /// <summary>
+    /// RN-VAR-035: uma leitura que o Prism monta (os valores de uma coluna, o total deles, a conferência), com os valores da pessoa como parâmetros, lida até o fim
+    /// no texto da grade sem o corte. É do catálogo: fora de transação em Auto-commit, e dentro da transação manual quando há uma (no PostgreSQL, num ponto de
+    /// salvamento só dela, para o cancelamento e a recusa não a estragarem). A posição do erro não vem: seria a do texto do Prism.
+    /// </summary>
+    public async Task<Result<FullRows, DatabaseFailure>> ReadColumnValuesAsync(string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
+    {
+        var read = await RunAsync(nameof(ReadColumnValuesAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var started = Stopwatch.GetTimestamp();
+            await BeginSideReadAsync(readOnlyTransaction: false, token);
+
+            return await ReadFullRowsAsync(await StartAsync(sql, [], userCommand: true, token, query: parameters), started, maxRows: null, token);
+        }, cancellationToken);
+
+        if (read.IsFailure)
+            return read.Error with { Position = null };
+
+        return read.Value;
+    }
+
     public Task CloseCursorAsync()
         => DisposeCursorAsync();
 
@@ -2318,6 +2374,65 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         _inTransaction = true;
         await NonQueryAsync(beginReadOnlySql, cancellationToken);
     }
+
+    /// <summary>
+    /// RN-VAR-034 e 035: o começo de uma leitura que não é o comando da aba. A consulta de uma variável vai na transação só de leitura (que não abre dentro da
+    /// transação manual); dentro da transação manual do PostgreSQL, as duas vão num ponto de salvamento só delas, que o fim do cursor solta e o descarte desfaz.
+    /// </summary>
+    private async Task BeginSideReadAsync(bool readOnlyTransaction, CancellationToken cancellationToken)
+    {
+        if (readOnlyTransaction)
+            await BeginReadOnlyAsync(cancellationToken);
+
+        if (_manualTransaction is not null && ErrorsSpoilTheTransaction)
+            await SaveAsync(ReadSavepoint, cancellationToken);
+    }
+
+    /// <summary>
+    /// RN-VAR-034 e 035: lê o leitor aberto até o fim, cada célula no texto da grade sem o corte, com as colunas como na página, e fecha o cursor. Com `maxRows`
+    /// (a consulta de uma variável), os limites dela: mais de 100 colunas, a linha depois de `maxRows` e mais de 16 MiB de valores param a leitura com
+    /// `VariableQueryTooLarge`, e quem chama descarta o leitor. Sem ele, a leitura do Prism, que o texto já limita.
+    /// </summary>
+    private async Task<Result<FullRows, DatabaseFailure>> ReadFullRowsAsync(DbDataReader reader, long started, int? maxRows, CancellationToken cancellationToken)
+    {
+        if (maxRows is not null && reader.FieldCount > QueryPaging.MaxVariableColumns)
+            return TooLarge("columns", QueryPaging.MaxVariableColumns, $"A consulta de uma variável tem até {QueryPaging.MaxVariableColumns} colunas, e esta tem {reader.FieldCount}.");
+
+        IReadOnlyList<QueryColumn> columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal)))];
+        var rows = new List<string?[]>();
+        long bytes = 0;
+
+        // A primeira linha pode já estar lida: a rotina do Informix envolvida num `SELECT` (`TryStartUserSelectAsync`).
+        while (_rowPending || await reader.ReadAsync(cancellationToken))
+        {
+            _rowPending = false;
+            if (rows.Count == maxRows)
+                return TooLarge("rows", maxRows.Value, $"A consulta de uma variável lê até {Thousands(maxRows.Value)} linhas, e esta devolveu mais.");
+
+            var row = new string?[columns.Count];
+            for (var column = 0; column < row.Length; column++)
+            {
+                row[column] = CellFormatter.Whole(ReadCell(reader, column, columns[column].Kind));
+                bytes += row[column] is { } text ? Encoding.UTF8.GetByteCount(text) : 0;
+            }
+
+            if (maxRows is not null && bytes > QueryPaging.MaxVariableBytes)
+                return TooLarge("bytes", QueryPaging.MaxVariableBytes, "Os valores da consulta de uma variável passam de 16 MiB.");
+
+            rows.Add(row);
+        }
+
+        await FinishCursorAsync(cancellationToken);
+
+        return new FullRows(columns, rows, ElapsedMs(started));
+    }
+
+    private static DatabaseFailure TooLarge(string reason, long limit, string message)
+        => new(EDatabaseFailure.VariableQueryTooLarge, message, Reason: reason, Limit: limit);
+
+    /// <summary>O número com o ponto dos milhares, como a especificação o escreve (`10.000`).</summary>
+    private static string Thousands(long value)
+        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');
 
     /// <summary>A transação em que os comandos da sessão entram: a do "Salvar" em Auto-commit e da carga, ou a do Commit manual.</summary>
     private DbTransaction? CommandTransaction => _editTransaction ?? _manualTransaction;

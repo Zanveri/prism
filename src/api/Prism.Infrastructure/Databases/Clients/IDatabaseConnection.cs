@@ -91,6 +91,20 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// </summary>
     Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null);
 
+    /// <summary>
+    /// RN-VAR-034: a consulta de uma variável, que quem chama já conferiu (um comando só, os marcadores, a leitura pela RN-PROT-005). Fecha o cursor anterior, como
+    /// todo comando (RN-SQL-007), e lê as linhas inteiras: no PostgreSQL em Auto-commit, na transação só de leitura; com a transação manual aberta, dentro dela.
+    /// Com a linha depois de `maxRows`, mais de 100 colunas ou mais de 16 MiB de valores, para de ler, fecha a leitura e responde `VariableQueryTooLarge`. Não
+    /// deixa cursor aberto.
+    /// </summary>
+    Task<Result<FullRows, DatabaseFailure>> ReadVariableAsync(string sql, IReadOnlyList<QueryParameter> parameters, int maxRows, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-VAR-035: uma leitura que o Prism monta (os valores de uma coluna, o total, a conferência), com os valores da pessoa como parâmetros, lida até o fim no
+    /// texto da grade sem o corte. Fecha o cursor anterior, como o catálogo.
+    /// </summary>
+    Task<Result<FullRows, DatabaseFailure>> ReadColumnValuesAsync(string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken);
+
     /// <summary>Fecha o cursor aberto, se houver, sem esperar o resto das linhas. Não falha.</summary>
     Task CloseCursorAsync();
 

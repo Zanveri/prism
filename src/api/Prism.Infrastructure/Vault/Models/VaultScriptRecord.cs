@@ -10,8 +10,12 @@ namespace Prism.Infrastructure.Vault.Models;
 ///
 /// A pasta de scripts (`FolderID`, RN-SCRIPT-007) veio com o formato 4 (RN-SCRIPT-011), no fim do registro e nula na raiz da seção Scripts: o script gravado
 /// antes abre na raiz.
+///
+/// Os valores lembrados (`RunValues`, RN-VAR-028) vieram com a seção 41 sem subir o formato (RN-VERSAO-005), no fim do registro e nulos no script que nunca
+/// rodou pelo "Executar com valores…": o cofre gravado antes os lê nulos, e a versão anterior que abre o cofre gravado por esta ignora o campo (a leitura do
+/// documento usa as opções padrão do `JsonSerializer`, que pulam o membro desconhecido).
 /// </summary>
-public sealed record VaultScriptRecord(Guid ID, string Name, string Sql, Guid? ConnectionID, string? Database, DateTime CreatedAt, DateTime UpdatedAt, string? Icon = null, string? Color = null, Guid? FolderID = null)
+public sealed record VaultScriptRecord(Guid ID, string Name, string Sql, Guid? ConnectionID, string? Database, DateTime CreatedAt, DateTime UpdatedAt, string? Icon = null, string? Color = null, Guid? FolderID = null, VaultScriptRunValuesRecord? RunValues = null)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria o texto do SQL onde quer que o record fosse parar.</summary>
     public override string ToString()

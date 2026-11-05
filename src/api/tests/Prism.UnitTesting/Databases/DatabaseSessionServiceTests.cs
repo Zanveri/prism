@@ -887,6 +887,42 @@ public sealed partial class DatabaseSessionServiceTests
             return Task.FromResult(Result.Success<long, DatabaseFailure>(99));
         }
 
+        /// <summary>RN-VAR-034: as consultas de variável que chegaram (o texto, os parâmetros e o limite de linhas), na ordem.</summary>
+        public List<(string Sql, IReadOnlyList<QueryParameter> Parameters, int MaxRows)> Variables { get; } = [];
+
+        /// <summary>RN-VAR-035: as leituras dos valores de uma coluna que chegaram (o texto do Prism e os parâmetros), na ordem.</summary>
+        public List<(string Sql, IReadOnlyList<QueryParameter> Parameters)> ValueReads { get; } = [];
+
+        /// <summary>O que a consulta de uma variável e as leituras dos valores respondem, um por chamada; sem ele, nenhuma linha.</summary>
+        public Queue<FullRows> RowsToRead { get; } = new();
+
+        /// <summary>RN-VAR-035: as colunas que o catálogo responde; sem elas, o catálogo não é esperado no teste.</summary>
+        public IReadOnlyList<ColumnInfo>? Columns { get; set; }
+
+        public Task<Result<FullRows, DatabaseFailure>> ReadVariableAsync(string sql, IReadOnlyList<QueryParameter> parameters, int maxRows, CancellationToken cancellationToken)
+        {
+            Variables.Add((sql, parameters, maxRows));
+
+            return ReadFullRows();
+        }
+
+        public Task<Result<FullRows, DatabaseFailure>> ReadColumnValuesAsync(string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
+        {
+            ValueReads.Add((sql, parameters));
+
+            return ReadFullRows();
+        }
+
+        /// <summary>A leitura inteira fecha o cursor, como a da base, e não abre transação.</summary>
+        private Task<Result<FullRows, DatabaseFailure>> ReadFullRows()
+        {
+            HasOpenCursor = false;
+            if (Failure is { } failure)
+                return Task.FromResult(Result.Failure<FullRows, DatabaseFailure>(failure));
+
+            return Task.FromResult(Result.Success<FullRows, DatabaseFailure>(RowsToRead.TryDequeue(out var rows) ? rows : new FullRows([], [], 1)));
+        }
+
         public Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
@@ -905,7 +941,11 @@ public sealed partial class DatabaseSessionServiceTests
         }
 
         public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+        {
+            HasOpenCursor = false;
+
+            return Task.FromResult(Result.Success<IReadOnlyList<ColumnInfo>, DatabaseFailure>(Columns ?? throw new NotSupportedException()));
+        }
 
         public Task<Result<IReadOnlyList<IndexInfo>, DatabaseFailure>> GetIndexesAsync(string schema, string table, CancellationToken cancellationToken)
             => throw new NotSupportedException();
