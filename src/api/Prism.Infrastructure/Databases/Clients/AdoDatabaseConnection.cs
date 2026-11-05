@@ -2725,7 +2725,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             if (exception is AggregateException { InnerExceptions: [OperationCanceledException or DbException] } wrapped)
                 exception = wrapped.InnerExceptions[0];
 
-            var failure = ToFailure(kind, exception);
+            // RN-REDE-007: a chave privada do túnel que não abre é uma recusa, com a frase em português, e não um defeito da conexão.
+            var keyRefusal = ConnectionTunnel.KeyRefusal(exception);
+            var failure = keyRefusal ?? ToFailure(kind, exception);
 
             // RN-IMPORT-016: o lote da carga diz qual dos comandos dele o banco recusou, e assim qual linha.
             if (exception is DbException { BatchCommand: { } failedCommand } && _loadBatch is { } batch && batch.BatchCommands.IndexOf(failedCommand) is >= 0 and var failedRow)
@@ -2746,7 +2748,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             if (exception is OperationCanceledException && failure.SqlState is null)
                 failure = _running && !IsOpen ? failure with { Message = UnknownOutcomeMessage, Outcome = ECancelOutcome.Unknown } : failure with { Message = CanceledMessage, Outcome = ECancelOutcome.Canceled };
 
-            if (exception is DbException or OperationCanceledException)
+            if (keyRefusal is not null)
+                _logger.Information("A chave privada do túnel SSH não abriu em {Operation} ({ExceptionType}).", operation, exception.GetType().Name);
+            else if (exception is DbException or OperationCanceledException)
                 _logger.Write(refusalIsTheAnswer && IsRoutineRefusal ? LogEventLevel.Debug : LogEventLevel.Information, "O banco recusou {Operation} ({ExceptionType}, SQLSTATE {SqlState}).", operation, exception.GetType().Name, failure.SqlState);
             else if (!refusalIsTheAnswer)
                 _logger.Error("A conexão com o banco falhou em {Operation} ({ExceptionType}).{NewLine}{StackTrace}", operation, exception.GetType().Name, Environment.NewLine, exception.StackTrace);

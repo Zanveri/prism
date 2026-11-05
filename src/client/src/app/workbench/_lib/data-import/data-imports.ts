@@ -8,6 +8,7 @@ import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { allowRefusal, type ApiResult } from "@/lib/api/prism-api";
 import { vaultLock } from "@/lib/api/vault-lock";
 
+import { askNetworkSecretFor } from "../credentials-missing";
 import { exportTracker, nextTransferSeq, workbenchMounted } from "../data-export/data-exports";
 import { createTransferExits } from "../data-export/export-exits";
 import { cancelTransfers, forgetTransfer, getTransfer, transfersInProgress } from "../data-export/transfers.service";
@@ -171,7 +172,11 @@ let queryClient: QueryClient | null = null;
 function through<T>(call: () => Promise<ApiResult<T>>, refusals: readonly string[]): Promise<ApiResult<T>> {
   const client = queryClient;
   if (client === null) return call();
-  return throughMutationCache(client, async () => allowRefusal(await call(), ...refusals));
+  return throughMutationCache(client, async () => {
+    const result = allowRefusal(await call(), ...refusals);
+    if (!result.ok) askNetworkSecretFor(result.error);
+    return result;
+  });
 }
 
 /** O estado do assistente para a tabela, com as peças de verdade: a ponte, as rotas, o relógio e o acompanhamento. */

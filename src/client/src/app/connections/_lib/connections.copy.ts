@@ -247,6 +247,7 @@ export const connectionsCopy = {
     proxyPassword: "Senha do proxy",
     required: (label: string) => `Informe a ${label.charAt(0).toLowerCase()}${label.slice(1)}.`,
     forgotten: "Nada é gravado no cofre. Para não ser perguntado de novo, marque “Salvar credenciais” em Editar conexão.",
+    forgottenPassphrase: "Nada é gravado no cofre. Para não ser perguntado de novo, informe a frase em Editar conexão, com “Pedir a frase secreta ao conectar” desmarcado.",
     cancel: "Cancelar",
     connect: "Conectar",
     connecting: "Conectando…",

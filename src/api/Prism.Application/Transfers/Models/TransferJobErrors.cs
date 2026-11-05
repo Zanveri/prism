@@ -27,9 +27,17 @@ internal static class TransferJobErrors
             ? ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", "userName", "Esta conexão não tem usuário gravado. Preencha-o em Editar conexão e exporte de novo.")
             : ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", "password", "Esta conexão não tem senha gravada. Preencha-a em Editar conexão e exporte de novo.");
 
-    /// <summary>RN-REDE-003 e RN-EXPORT-015: o túnel SSH ou o proxy sem o segredo que a conexão não grava (<see cref="ConnectionRules.MissingNetworkSecret"/>), no campo dele.</summary>
-    public static ApiErrorDto NetworkSecretMissing(string field)
-        => ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", char.ToLowerInvariant(field[0]) + field[1..], $"{(field == "SshSecret" ? "A senha (ou frase secreta da chave) do túnel SSH" : "A senha do proxy")} não está gravada nesta conexão. Conecte-se a ela, informe-a quando o Prism pedir, e tente de novo.");
+    /// <summary>
+    /// RN-REDE-003 e 006 e RN-EXPORT-015: o túnel SSH ou o proxy sem o segredo que a conexão não grava (<see cref="ConnectionRules.MissingNetworkSecret"/>), no campo
+    /// dele, com a conexão em `connectionID` (a cópia tem duas): a tela pede o segredo daquela conexão.
+    /// </summary>
+    public static ApiErrorDto NetworkSecretMissing(string field, Guid connectionID)
+    {
+        var error = ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", char.ToLowerInvariant(field[0]) + field[1..], $"{(field == "SshSecret" ? "A senha (ou frase secreta da chave) do túnel SSH" : "A senha do proxy")} não está gravada nesta conexão. Informe-a quando o Prism pedir e tente de novo: sem \"Salvar credenciais\", ela fica só na memória até a conexão ser desconectada ou o Prism ser bloqueado.");
+        error.Extensions["connectionID"] = connectionID;
+
+        return error;
+    }
 
     /// <summary>RN-ARVORE-006: o banco de dados pedido fora da regra da abertura de uma sessão.</summary>
     public static ApiErrorDto DatabaseNameInvalid()

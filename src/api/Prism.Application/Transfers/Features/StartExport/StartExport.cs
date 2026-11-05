@@ -97,8 +97,8 @@ internal sealed class StartExportHandler(IConnectionQueries connectionQueries, I
         var columns = request.Columns!.OrderBy(column => column.Position).Select(column => new ExportColumnChoice(column.Position, column.Name!)).ToList();
         var canonicalFormat = ExportFormats.Canonical(request.Format!);
         var settings = ConnectionRules.SettingsOf(record, source.Database, unsavedSecrets);
-        if (ConnectionRules.MissingNetworkSecret(settings.Ssh, settings.Proxy) is { } secretField)
-            return Result.Failure<TransferStartedDto, ApiErrorDto>(TransferJobErrors.NetworkSecretMissing(secretField));
+        if (TransferConnections.NetworkSecretRefusal(record, settings) is { } secretRefusal)
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(secretRefusal);
 
         var entryId = -1L;
         if (journalRecorder is not null)

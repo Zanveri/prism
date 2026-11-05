@@ -101,7 +101,7 @@ export function NetworkSecretDialog({ connection, field, onConnected, onMissing,
           {server === null || server === undefined ? null : <span className="block font-mono text-xs font-normal text-muted">{`${server.userName ? `${server.userName}@` : ""}${server.host}:${server.port}`}</span>}
         </p>
         <TextField key={attempt} id="network-secret" name="secret" type="password" label={label} autoComplete="off" autoFocus error={error} className="h-11" />
-        <p className="text-xs text-muted">{copy.forgotten}</p>
+        <p className="text-xs text-muted">{label === copy.passphrase ? copy.forgottenPassphrase : copy.forgotten}</p>
       </form>
     </Dialog>
   );

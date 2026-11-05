@@ -57,6 +57,11 @@ internal sealed class PreviewCopyHandler(IConnectionQueries connectionQueries, I
 
         var mapping = request.Mapping is null ? null : ImportRequestRules.MappingOf(request.Mapping);
         var settings = TransferConnections.SettingsOf(targetRecord.Value, target.Database, unsavedSecrets);
+
+        // RN-REDE-006: a cópia vai precisar das duas conexões; o segredo que falta é pedido já na prévia, o da origem primeiro.
+        if ((TransferConnections.NetworkSecretRefusal(sourceRecord.Value, TransferConnections.SettingsOf(sourceRecord.Value, source.Database, unsavedSecrets)) ?? TransferConnections.NetworkSecretRefusal(targetRecord.Value, settings)) is { } secretRefusal)
+            return Result.Failure<CopyPreviewDto, ApiErrorDto>(secretRefusal);
+
         var preview = await importPreviewService.PreviewCopyAsync(new CopyPreviewRequest(settings, target.Schema!, target.Table!, [.. request.Columns.Select(column => column.Name!)], mapping), cancellationToken);
 
         return preview.IsFailure ? ImportErrors.From(preview.Error) : preview.Value.ToDto();

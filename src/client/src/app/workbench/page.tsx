@@ -367,8 +367,9 @@ export function WorkbenchPage() {
           field={secret.field}
           onConnected={() => {
             setSecret(null);
-            // A árvore que pediu conecta de novo, agora com o segredo na memória da API; a aba e a barra do editor repetem quando a pessoa pedir.
-            void queryClient.refetchQueries({ queryKey: ["database-session", secret.connectionId], type: "active" });
+            // A árvore que pediu conecta de novo, agora com o segredo na memória da API, e a busca também ("Buscar nelas também" abre a sessão sem nó na tela: a recusada
+            // fica em erro, sem sessão). A aba e a barra do editor repetem quando a pessoa pedir.
+            void queryClient.refetchQueries({ queryKey: ["database-session", secret.connectionId], predicate: (query) => query.isActive() || (query.state.status === "error" && query.state.data === undefined) });
           }}
           onMissing={(field) => setSecret({ ...secret, field })}
           onClose={() => setSecret(null)}

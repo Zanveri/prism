@@ -90,6 +90,8 @@ internal sealed class StartImportHandler(IConnectionQueries connectionQueries, I
         var (options, _) = ImportReaderOptionsReader.Read(request.Format!, request.Reader, keys: true);
         var (load, _) = ImportRequestRules.Load(request.Load, copy: false);
         var settings = TransferConnections.SettingsOf(record, target.Database, unsavedSecrets);
+        if (TransferConnections.NetworkSecretRefusal(record, settings) is { } secretRefusal)
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(secretRefusal);
 
         var entryId = -1L;
         if (journalRecorder is not null)

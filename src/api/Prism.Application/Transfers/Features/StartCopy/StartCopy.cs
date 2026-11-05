@@ -85,6 +85,9 @@ internal sealed class StartCopyHandler(IConnectionQueries connectionQueries, IVa
 
         var sourceSettings = TransferConnections.SettingsOf(sourceRecord.Value, source.Database, unsavedSecrets);
         var targetSettings = TransferConnections.SettingsOf(targetRecord.Value, target.Database, unsavedSecrets);
+        if ((TransferConnections.NetworkSecretRefusal(sourceRecord.Value, sourceSettings) ?? TransferConnections.NetworkSecretRefusal(targetRecord.Value, targetSettings)) is { } secretRefusal)
+            return Result.Failure<TransferStartedDto, ApiErrorDto>(secretRefusal);
+
         var forcedCount = sourceSettings.Engine is EDatabaseEngine.Db2 or EDatabaseEngine.Informix && TablePlaces.SameServer(sourceSettings, targetSettings);
         var (load, _) = ImportRequestRules.Load(request.Load, copy: true);
 

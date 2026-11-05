@@ -1,5 +1,6 @@
 using Prism.Infrastructure.Databases.Models;
 using Renci.SshNet;
+using Renci.SshNet.Common;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
@@ -112,6 +113,26 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
 
         return value.TrimEnd('=');
     }
+
+    /// <summary>
+    /// RN-REDE-007: a recusa do SSH.NET ao abrir a chave privada, em português, como uma recusa e não como um defeito. A chave cifrada sem a frase secreta é a frase
+    /// que falta (a tela a pede); a frase que não abre a chave é a errada, nos três formatos que o SSH.NET lê (OpenSSH, PEM e PKCS#8, PuTTY). `null` para
+    /// qualquer outra falha, que segue como veio.
+    /// </summary>
+    internal static DatabaseFailure? KeyRefusal(Exception exception)
+        => exception switch
+        {
+            SshPassPhraseNullOrEmptyException => new DatabaseFailure(EDatabaseFailure.NetworkSecretMissing, EncryptedKeyWithoutPassphrase),
+            SshException { Message: var message } when message.StartsWith("The random check bytes of the OpenSSH key do not match", StringComparison.Ordinal)
+                || message == "Invalid passphrase."
+                || message.StartsWith("MAC verification failed for PuTTY key file", StringComparison.Ordinal)
+                => new DatabaseFailure(EDatabaseFailure.ConnectionFailed, WrongPassphrase),
+            _ => null
+        };
+
+    internal const string EncryptedKeyWithoutPassphrase = "A chave privada do túnel SSH é cifrada, e esta conexão não tem a frase secreta dela. Informe-a para conectar.";
+
+    internal const string WrongPassphrase = "A frase secreta não abre a chave privada do túnel SSH. Confira a frase e tente de novo.";
 
     private static string MissingSecret(string what)
         => $"{what} não está gravada nesta conexão. Conecte-se a ela e informe-a quando o Prism pedir: sem \"Salvar credenciais\", ela fica só na memória até a conexão ser desconectada.";

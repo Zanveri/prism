@@ -22,6 +22,20 @@ public sealed class DatabaseSessionErrorsTests
         Assert.Equal(DatabaseMessage, error.Detail);
     }
 
+    /// <summary>RN-REDE-007: a chave privada cifrada sem a frase é o segredo que falta, no campo dele, para a tela pedir a frase (RN-REDE-006).</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK NetworkSecretMissing vira 422 CONNECTION_CREDENTIALS_MISSING no campo SshSecret")]
+    public void From_NetworkSecretMissing_Is422CredentialsMissingOnTheSecretField()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.NetworkSecretMissing, "A chave é cifrada."));
+
+        //Assert
+        Assert.Equal("CONNECTION_CREDENTIALS_MISSING", error.Type);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, error.StatusCode);
+        Assert.Equal(["A chave é cifrada."], ((Dictionary<string, string[]>)error.Extensions["errors"]!)["SshSecret"]);
+    }
+
     [Trait("DatabaseSessionErrors", "From")]
     [Fact(DisplayName = "OK ExecutionFailed vira 422 SQL_EXECUTION_FAILED com a mensagem, o SQLSTATE e a posição")]
     public void From_ExecutionFailed_Is422SqlExecutionFailed_WithSqlStateAndPosition()

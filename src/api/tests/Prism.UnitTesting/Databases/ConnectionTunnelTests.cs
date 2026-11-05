@@ -1,5 +1,6 @@
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using Renci.SshNet.Common;
 
 namespace Prism.UnitTesting.Databases;
 
@@ -28,5 +29,35 @@ public sealed class ConnectionTunnelTests
 
         //Assert
         Assert.Equal(expected, trusted);
+    }
+
+    /// <summary>RN-REDE-007: as recusas do SSH.NET ao abrir a chave privada chegam em português; a chave cifrada sem a frase é o segredo que falta.</summary>
+    [Trait("ConnectionTunnel", "KeyRefusal")]
+    [Theory(DisplayName = "OK a recusa da chave privada vira a frase que falta ou a frase errada, em português")]
+    [InlineData("passphrase", "NetworkSecretMissing")]
+    [InlineData("The random check bytes of the OpenSSH key do not match (1 <-> 2).", "ConnectionFailed")]
+    [InlineData("Invalid passphrase.", "ConnectionFailed")]
+    [InlineData("MAC verification failed for PuTTY key file", "ConnectionFailed")]
+    public void KeyRefusal_ShouldBeOK_TranslatesTheKeyFailures(string message, string kind)
+    {
+        //Arrange
+        Exception exception = message == "passphrase" ? new SshPassPhraseNullOrEmptyException("Private key is encrypted but passphrase is empty.") : new SshException(message);
+
+        //Act
+        var failure = ConnectionTunnel.KeyRefusal(exception);
+
+        //Assert
+        Assert.Equal(Enum.Parse<EDatabaseFailure>(kind), failure?.Kind);
+        Assert.Equal(kind == "NetworkSecretMissing" ? ConnectionTunnel.EncryptedKeyWithoutPassphrase : ConnectionTunnel.WrongPassphrase, failure?.Message);
+    }
+
+    [Trait("ConnectionTunnel", "KeyRefusal")]
+    [Fact(DisplayName = "OK outra falha do SSH segue como veio")]
+    public void KeyRefusal_ShouldBeOK_LeavesOtherFailures()
+    {
+        //Act & Assert
+        Assert.Null(ConnectionTunnel.KeyRefusal(new SshAuthenticationException("Permission denied (publickey).")));
+        Assert.Null(ConnectionTunnel.KeyRefusal(new SshException("Invalid private key file.")));
+        Assert.Null(ConnectionTunnel.KeyRefusal(new InvalidOperationException("Invalid passphrase.")));
     }
 }

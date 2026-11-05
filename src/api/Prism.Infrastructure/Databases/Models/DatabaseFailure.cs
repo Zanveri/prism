@@ -3,6 +3,12 @@ namespace Prism.Infrastructure.Databases.Models;
 public enum EDatabaseFailure
 {
     ConnectionFailed,
+
+    /// <summary>
+    /// RN-REDE-007: a chave privada do túnel SSH é cifrada e a conexão não tem a frase secreta dela, nem gravada nem na memória. Nada foi ao servidor SSH; a tela
+    /// pede a frase (RN-REDE-006).
+    /// </summary>
+    NetworkSecretMissing,
     ExecutionFailed,
     SessionNotFound,
     SessionBusy,

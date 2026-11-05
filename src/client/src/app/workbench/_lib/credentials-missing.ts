@@ -101,6 +101,16 @@ export function createCredentialsRequests(): CredentialsRequests {
 export const credentialsRequests = createCredentialsRequests();
 
 /**
+ * RN-REDE-006: a recusa de um assistente de dados (a prévia e o começo da importação, da cópia e da exportação) por faltar o segredo do túnel ou do proxy, com a
+ * conexão em `connectionID` (a cópia tem duas), pede o segredo daquela conexão. O assistente mostra a recusa; conectado o diálogo, a pessoa tenta de novo.
+ */
+export function askNetworkSecretFor(error: ApiError, requests: CredentialsRequests = credentialsRequests): void {
+  const field = credentialsMissingField(error);
+  const connectionId = error.extensions["connectionID"];
+  if (field !== null && isNetworkSecretField(field) && typeof connectionId === "string") requests.request(connectionId, field);
+}
+
+/**
  * Observa as sessões da árvore no cache (`["database-session", conexão, …]`: o nó da conexão, a Estrutura e o Diagrama, a lista dos bancos da barra do
  * editor) e pede o "Editar conexão" quando uma delas é recusada por faltar o usuário ou a senha. Devolve a função que para de observar.
  */

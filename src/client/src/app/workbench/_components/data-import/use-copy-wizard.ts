@@ -7,6 +7,7 @@ import type { Engine } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { allowRefusal, ApiRequestError, type ApiResult } from "@/lib/api/prism-api";
 
+import { askNetworkSecretFor } from "../../_lib/credentials-missing";
 import { dataExportCopy } from "../../_lib/data-export/data-export.copy";
 import type { ChosenColumn } from "../../_lib/data-export/export-request";
 import type { ExportSource, SourceColumn } from "../../_lib/data-export/export-source";
@@ -217,6 +218,7 @@ export function useCopyWizard({ source, sourceEngine, sourceColumns, chosen, act
     }
     if (run !== generation.current) return;
     if (!result.ok) {
+      askNetworkSecretFor(result.error);
       const refusal = copyPreviewRefusalOf(result.error, { schema: apiTarget.schema, table: apiTarget.table });
       setPreview({ status: "refused", key: previewKey, message: refusal.message, retry: refusal.retry, ...(refusal.driverID === undefined ? {} : { driverID: refusal.driverID }) });
       return;

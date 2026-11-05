@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ConnectionSsh } from "@/app/connections/_lib/connections.schema";
 import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 
-import { isNetworkSecretField } from "../_lib/credentials-missing";
+import { askNetworkSecretFor, createCredentialsRequests, isNetworkSecretField } from "../_lib/credentials-missing";
 import { networkSecretLabel } from "./network-secret-dialog";
 
 const copy = connectionsCopy.networkSecret;
@@ -38,5 +38,17 @@ describe("o pedido do segredo ao conectar (RN-REDE-006)", () => {
     expect(networkSecretLabel({ ssh: ssh("password") }, "sshSecret")).toBe(copy.sshPassword);
     expect(networkSecretLabel({ ssh: ssh("privateKey") }, "proxyPassword")).toBe(copy.proxyPassword);
     expect(copy.required(copy.passphrase)).toBe("Informe a frase secreta da chave SSH.");
+  });
+
+  it("a recusa de um assistente de dados pede o segredo da conexão que a API aponta, e só ele", () => {
+    const requests = createCredentialsRequests();
+    const refusal = (errors: Record<string, string[]>, extensions: Record<string, unknown>) => ({ status: 422, code: "CONNECTION_CREDENTIALS_MISSING", title: "", detail: null, errors, extensions }) as unknown as Parameters<typeof askNetworkSecretFor>[0];
+
+    askNetworkSecretFor(refusal({ password: ["sem senha"] }, { connectionID: "c1" }), requests);
+    expect(requests.pending()).toBeNull();
+    askNetworkSecretFor(refusal({ sshSecret: ["sem frase"] }, {}), requests);
+    expect(requests.pending()).toBeNull();
+    askNetworkSecretFor(refusal({ sshSecret: ["sem frase"] }, { connectionID: "c2" }), requests);
+    expect(requests.pending()).toMatchObject({ connectionId: "c2", field: "sshSecret" });
   });
 });

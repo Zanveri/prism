@@ -30,6 +30,10 @@ internal static class TransferConnections
     public static ConnectionSettings SettingsOf(VaultConnectionRecord record, string? database, IUnsavedSecretsService? unsavedSecrets = null)
         => ConnectionRules.SettingsOf(record, database, unsavedSecrets);
 
+    /// <summary>RN-REDE-003 e 006: a recusa do trabalho cuja conexão não tem o segredo do túnel ou do proxy, antes de qualquer conexão; `null` quando não falta nada.</summary>
+    public static ApiErrorDto? NetworkSecretRefusal(VaultConnectionRecord record, ConnectionSettings settings)
+        => ConnectionRules.MissingNetworkSecret(settings.Ssh, settings.Proxy) is { } field ? TransferJobErrors.NetworkSecretMissing(field, record.ID) : null;
+
     /// <summary>
     /// RN-PROT-006 e RN-IMPORT-014: antes de cada comando, o trabalho lê as proteções da conexão de destino no cofre, como a sessão faz a cada comando (a
     /// própria, uma pasta acima, a conexão movida para dentro de uma pasta somente leitura), e para como a sessão recusaria o comando: a conexão somente

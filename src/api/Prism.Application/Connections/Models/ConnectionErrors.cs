@@ -67,6 +67,10 @@ internal static class ConnectionErrors
     public static ApiErrorDto NetworkSecretMissingToTest(string field)
         => CredentialsMissing(field, $"Informe {char.ToLowerInvariant(NetworkSecretOf(field)[0])}{NetworkSecretOf(field)[1..]} para testar.");
 
+    /// <summary>RN-REDE-007: o segredo que falta descoberto ao conectar (a chave privada cifrada sem a frase), com a frase do túnel.</summary>
+    public static ApiErrorDto NetworkSecretMissing(string field, string message)
+        => CredentialsMissing(field, message);
+
     private static string NetworkSecretOf(string field)
         => field == "SshSecret" ? "A senha (ou frase secreta da chave) do túnel SSH" : "A senha do proxy";
 

@@ -87,6 +87,7 @@ import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { NavigatorToggle } from "@/app/workbench/_components/navigator-toggle";
+import { useNetworkSecretPrompt } from "@/app/workbench/_components/use-network-secret-prompt";
 import {
   closeDatabaseSession,
   getDatabases,
@@ -649,6 +650,8 @@ export function BuildPage() {
 
   const modelsQuery = useQuery(buildModelsQuery);
   const connections = useQuery(connectionsQuery);
+  // RN-REDE-006: a sessão que o Construir abre e que a API recusa por faltar o segredo do túnel ou do proxy pede o segredo e repete.
+  const networkSecret = useNetworkSecretPrompt(connections.data);
   const drivers = useQuery(driversQuery);
   const availableEngines = useMemo(
     () => installedBuildEngines(drivers.data),
@@ -1001,7 +1004,7 @@ export function BuildPage() {
     const requestId = ++previewRequestIdRef.current;
     setSelectedCatalogConnId(connectionId);
     setCatalogError(null);
-    const sessionRes = await openDatabaseSession(connectionId, database);
+    const sessionRes = await networkSecret.withSecret(connectionId, () => openDatabaseSession(connectionId, database));
     if (requestId !== previewRequestIdRef.current) {
       if (sessionRes.ok) await closeDatabaseSession(sessionRes.data.id);
       return;
@@ -1060,7 +1063,7 @@ export function BuildPage() {
       return;
     }
 
-    const sessionRes = await openDatabaseSession(payload.connectionId, payload.database);
+    const sessionRes = await networkSecret.withSecret(payload.connectionId, () => openDatabaseSession(payload.connectionId, payload.database));
     if (!sessionRes.ok) {
       setCatalogError(sessionRes.error.detail ?? sessionRes.error.title);
       return;
@@ -1111,7 +1114,7 @@ export function BuildPage() {
   }) {
     if (!activeModel) return;
     setCatalogError(null);
-    const sessionRes = await openDatabaseSession(payload.connectionId, payload.database);
+    const sessionRes = await networkSecret.withSecret(payload.connectionId, () => openDatabaseSession(payload.connectionId, payload.database));
     if (!sessionRes.ok) {
       setCatalogError(sessionRes.error.detail ?? sessionRes.error.title);
       return;
@@ -1171,9 +1174,8 @@ export function BuildPage() {
       ([schema, tables]) => ({ schema, tables }),
     );
 
-    const sessionRes = await openDatabaseSession(
-      targetBase.connectionId,
-      targetBase.database ?? undefined,
+    const sessionRes = await networkSecret.withSecret(targetBase.connectionId, () =>
+      openDatabaseSession(targetBase.connectionId, targetBase.database ?? undefined),
     );
     if (!sessionRes.ok) {
       toast.error(sessionRes.error.detail ?? sessionRes.error.title);
@@ -1361,6 +1363,7 @@ export function BuildPage() {
 
   return (
     <>
+      {networkSecret.dialog}
       <input
         ref={fileInputRef}
         type="file"

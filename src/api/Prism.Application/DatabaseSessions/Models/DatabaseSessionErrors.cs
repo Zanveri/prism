@@ -1,4 +1,5 @@
 using Prism.Application.Common.Vault;
+using Prism.Application.Connections.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Databases.Models;
@@ -41,6 +42,9 @@ internal static class DatabaseSessionErrors
         => failure.Kind switch
         {
             EDatabaseFailure.ConnectionFailed => ApiErrorDto.CreateUnprocessableEntity("Falha ao conectar no banco de dados.", "DATABASE_CONNECTION_FAILED", failure.Message),
+
+            // RN-REDE-007: a chave cifrada sem a frase secreta é o segredo que falta, no campo dele, como na RN-REDE-003: a tela pede a frase (RN-REDE-006).
+            EDatabaseFailure.NetworkSecretMissing => ConnectionErrors.NetworkSecretMissing("SshSecret", failure.Message),
             EDatabaseFailure.ExecutionFailed => ApiErrorDto.CreateUnprocessableEntity("Falha ao executar o comando.", "SQL_EXECUTION_FAILED", failure.Message, SqlDetails(failure)),
             EDatabaseFailure.SessionNotFound => ApiErrorDto.CreateNotFound("Sessão com o banco não localizada.", "DATABASE_SESSION_NOT_FOUND", failure.Message),
             EDatabaseFailure.SessionBusy => ApiErrorDto.CreateConflict("A sessão está ocupada.", "SESSION_BUSY", failure.Message),

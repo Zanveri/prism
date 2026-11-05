@@ -12,6 +12,7 @@ import { allowRefusal, ApiRequestError } from "@/lib/api/prism-api";
 import { cn } from "@/lib/utils/cn";
 
 import { loadQuestion } from "../../_lib/command-confirmation";
+import { askNetworkSecretFor } from "../../_lib/credentials-missing";
 import { dataExportCopy } from "../../_lib/data-export/data-export.copy";
 import { readExportChoices, writeExportChoices } from "../../_lib/data-export/export-choices";
 import { closeExportWizard, exportTracker, type ExportWizardRequest } from "../../_lib/data-export/data-exports";
@@ -222,6 +223,7 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
     try {
       const result = await throughMutationCache(queryClient, async () => allowRefusal(await startCopy(body), ...copyStartRefusals));
       if (!result.ok) {
+        askNetworkSecretFor(result.error);
         const shown = copyRefusalsOf(result.error);
         setRefusals(shown);
         setStep(stepOfCopyField(shown[0]?.field ?? null));
@@ -284,6 +286,7 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
       const result = await throughMutationCache(queryClient, async () => allowRefusal(await startExport(body), ...startRefusals));
       if (!result.ok) {
         await release();
+        askNetworkSecretFor(result.error);
         const shown = placeRefusals(refusalsOf(result.error), choices.format, engine);
         setRefusals(shown);
         setStep(stepOfField(shown[0]?.field ?? null));

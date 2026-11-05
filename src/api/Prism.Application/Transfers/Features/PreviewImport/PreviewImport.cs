@@ -83,6 +83,9 @@ internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries,
 
         var (options, _) = ImportReaderOptionsReader.Read(request.Format!, request.Reader, keys: true);
         var settings = TransferConnections.SettingsOf(record, target.Database, unsavedSecrets);
+        if (TransferConnections.NetworkSecretRefusal(record, settings) is { } secretRefusal)
+            return Result.Failure<ImportPreviewDto, ApiErrorDto>(secretRefusal);
+
         var mapping = request.Mapping?.Select(entry => new ImportMappingEntry(entry!.Source, entry.Target!)).ToList();
         var preview = await importPreviewService.PreviewAsync(new ImportPreviewRequest(fileID, ImportFormats.Canonical(request.Format!), options!, ImportRequestRules.Formats(request.Values), settings, target.Schema!, target.Table!, mapping), cancellationToken);
 
