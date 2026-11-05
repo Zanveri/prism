@@ -136,6 +136,26 @@ public sealed class DbeaverImportTests : IDisposable
     }
 
     [Trait("DbeaverImport", "Handle")]
+    [Fact(DisplayName = "OK o túnel SSH do DBeaver é gravado na conexão, com a senha do túnel só com \"Levar as senhas\"")]
+    public async Task Import_SshTunnel()
+    {
+        //Arrange and Act
+        await ImportEverythingAsync();
+        var withPasswords = ByName(_fixtures.Document, "USER MIGRATION STOCK MANAGER").Ssh;
+        var pg = ByName(_fixtures.Document, "Pedidos PG").Ssh;
+        var (sourceId, _) = _fixtures.Workspace();
+        _fixtures.Document = _fixtures.Document with { Folders = [], Connections = [] };
+        var preview = (await _fixtures.Preview(sourceId, withPasswords: false)).Value;
+        await _fixtures.Import(sourceId, DbeaverImportFixtures.Importable(preview), withPasswords: false);
+        var withoutPasswords = ByName(_fixtures.Document, "USER MIGRATION STOCK MANAGER").Ssh;
+
+        //Assert
+        Assert.Equal(("bastion.exemplo.invalid", 22, "usuario-do-tunel", "senha-do-tunel-fictícia"), (withPasswords!.Host, withPasswords.Port, withPasswords.UserName, withPasswords.Secret));
+        Assert.Equal(("bastion.exemplo.invalid", "usuario-do-tunel", (string?)null), (withoutPasswords!.Host, withoutPasswords.UserName, withoutPasswords.Secret));
+        Assert.Null(pg);
+    }
+
+    [Trait("DbeaverImport", "Handle")]
     [Fact(DisplayName = "OK \"Levar as senhas\" desligado grava só o usuário")]
     public async Task Import_WithoutPasswords()
     {

@@ -147,6 +147,7 @@ export const dbeaverCopy = {
       informixServer: (server: string | null) => (server === null ? "o servidor Informix" : `o servidor Informix (${server})`),
       sshTunnel: "o túnel SSH",
       proxy: "o proxy",
+      ssl: "o SSL (configure-o em Editar conexão)",
       driverProperties: "as propriedades do driver",
       bootstrap: "os comandos de inicialização, o banco e o esquema padrão",
       autocommitOff: "o auto-commit desligado (as abas novas seguem Configurações › Transações)",

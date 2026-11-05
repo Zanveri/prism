@@ -194,7 +194,10 @@ internal static class DbeaverProjects
         return decrypted.IsSuccess ? decrypted.Value : new Dictionary<string, DbeaverLogin>();
     }
 
-    /// <summary>`{ "&lt;ID&gt;": { "#connection": { "user": "…", "password": "…" }, … } }`. Do nó `#connection`, só `user` e `password`; os nós `network/…` (o túnel SSH) e as entradas `profile:…` são ignorados.</summary>
+    /// <summary>
+    /// `{ "&lt;ID&gt;": { "#connection": { "user": "…", "password": "…" }, "network/ssh_tunnel": { … }, … } }`. Dos nós `#connection`, `network/ssh_tunnel` e
+    /// `network/socks_proxy` (RN-REDE-008), só `user` e `password`; os outros nós e as entradas `profile:…` são ignorados.
+    /// </summary>
     private static IReadOnlyDictionary<string, DbeaverLogin> ReadLogins(JsonElement root)
     {
         var logins = new Dictionary<string, DbeaverLogin>(StringComparer.Ordinal);
@@ -204,8 +207,10 @@ internal static class DbeaverProjects
                 continue;
 
             var node = Child(entry.Value, "#connection");
-            if (node.ValueKind == JsonValueKind.Object)
-                logins[entry.Name] = new DbeaverLogin(Text(node, "user"), Text(node, "password"));
+            var tunnel = LoginOf(Child(entry.Value, "network/ssh_tunnel"));
+            var proxy = LoginOf(Child(entry.Value, "network/socks_proxy"));
+            if (node.ValueKind == JsonValueKind.Object || tunnel is not null || proxy is not null)
+                logins[entry.Name] = new DbeaverLogin(Text(node, "user"), Text(node, "password"), tunnel, proxy);
         }
 
         return logins;
@@ -262,4 +267,7 @@ internal static class DbeaverProjects
 
     private static JsonElement Child(JsonElement element, string name)
         => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) ? value : default;
+
+    private static DbeaverLogin? LoginOf(JsonElement node)
+        => node.ValueKind == JsonValueKind.Object ? new DbeaverLogin(Text(node, "user"), Text(node, "password")) : null;
 }

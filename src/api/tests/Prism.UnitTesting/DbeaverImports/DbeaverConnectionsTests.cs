@@ -318,6 +318,66 @@ public sealed class DbeaverConnectionsTests
     }
 
     [Trait("DbeaverConnections", "Map")]
+    [Fact(DisplayName = "OK o túnel SSH por senha e por chave vem na forma do Prism, com o usuário e a senha do credentials-config")]
+    public void Map_SshTunnel()
+    {
+        //Arrange
+        const string ByPassword = """
+            {"provider":"postgresql","driver":"postgres-jdbc","name":"X","configuration":{"host":"h.exemplo.invalid",
+              "handlers":{"ssh_tunnel":{"type":"TUNNEL","enabled":true,"save-password":true,"properties":{"host":"bastion.exemplo.invalid","port":"2222","authType":"PASSWORD",
+                "aliveInterval":"15000","sshConnectTimeout":10000,"localHost":"127.0.0.1","remoteHost":"pg.interno.invalid","remotePort":"5433","bypassHostVerification":"true"}}}}}
+            """;
+        const string ByKey = """
+            {"provider":"postgresql","driver":"postgres-jdbc","name":"X","configuration":{"host":"h.exemplo.invalid",
+              "handlers":{"ssh_tunnel":{"type":"TUNNEL","enabled":true,"properties":{"host":"bastion.exemplo.invalid","authType":"PUBLIC_KEY","keyPath":"/chaves/id_ed25519"}}}}}
+            """;
+
+        //Act
+        var password = Map(ByPassword, login: new DbeaverLogin("fulano", null, new DbeaverLogin("usuario-do-tunel", "senha-do-tunel-fictícia"))).Ssh!;
+        var key = Map(ByKey, login: new DbeaverLogin(null, null, new DbeaverLogin("usuario-do-tunel", null)));
+
+        //Assert
+        Assert.Equal(("bastion.exemplo.invalid", 2222, "usuario-do-tunel", "password", "senha-do-tunel-fictícia", true), (password.Host, password.Port, password.UserName, password.AuthMethod, password.Secret, password.SaveCredentials));
+        Assert.Equal((15000, 10000, "127.0.0.1", "pg.interno.invalid", 5433, true), (password.KeepAliveIntervalMs, password.TunnelTimeoutMs, password.LocalHost, password.RemoteHost, password.RemotePort, password.IgnoreHostVerification));
+        Assert.Equal((22, "privateKey", "/chaves/id_ed25519", (string?)null, false), (key.Ssh!.Port, key.Ssh.AuthMethod, key.Ssh.PrivateKeyPath, key.Ssh.Secret, key.Ssh.SaveCredentials));
+        Assert.Empty(key.LeftOut);
+    }
+
+    [Trait("DbeaverConnections", "Map")]
+    [Theory(DisplayName = "ERRO o túnel pelo agente SSH, com saltos, sem host ou sem usuário fica de fora")]
+    [InlineData("""{"host":"bastion.exemplo.invalid","authType":"AGENT"}""", "usuario-do-tunel")]
+    [InlineData("""{"host":"bastion.exemplo.invalid","jumpServers":"[{}]"}""", "usuario-do-tunel")]
+    [InlineData("""{"port":"22"}""", "usuario-do-tunel")]
+    [InlineData("""{"host":"bastion.exemplo.invalid"}""", null)]
+    public void Map_SshTunnel_LeftOut(string properties, string? user)
+    {
+        //Act
+        var model = Map("""{"provider":"postgresql","driver":"postgres-jdbc","name":"X","configuration":{"host":"h.exemplo.invalid","handlers":{"ssh_tunnel":{"type":"TUNNEL","enabled":true,"properties":""" + properties + "}}}}",
+            login: new DbeaverLogin(null, null, user is null ? null : new DbeaverLogin(user, "senha-do-tunel-fictícia")));
+
+        //Assert
+        Assert.Null(model.Ssh);
+        Assert.Equal(["sshTunnel"], model.LeftOut);
+    }
+
+    [Trait("DbeaverConnections", "Map")]
+    [Fact(DisplayName = "OK o proxy SOCKS vem com o usuário e a senha do credentials-config, e o SSL fica de fora com o código dele")]
+    public void Map_SocksProxyAndSsl()
+    {
+        //Act
+        var model = Map("""
+            {"provider":"postgresql","driver":"postgres-jdbc","name":"X","configuration":{"host":"h.exemplo.invalid",
+              "handlers":{"socks_proxy":{"type":"PROXY","enabled":true,"properties":{"socks-host":"socks.exemplo.invalid","socks-port":1081}},
+                "postgre_ssl":{"type":"CONFIG","enabled":true,"properties":{"sslMode":"require"}}}}}
+            """, login: new DbeaverLogin(null, null, Proxy: new DbeaverLogin("usuario-do-proxy", "senha-do-proxy-fictícia")));
+
+        //Assert
+        Assert.Equal(("socks.exemplo.invalid", 1081, "usuario-do-proxy", "senha-do-proxy-fictícia", true), (model.Proxy!.Host, model.Proxy.Port, model.Proxy.UserName, model.Proxy.Password, model.Proxy.SaveCredentials));
+        Assert.Null(model.Ssh);
+        Assert.Equal(["ssl"], model.LeftOut);
+    }
+
+    [Trait("DbeaverConnections", "Map")]
     [Fact(DisplayName = "OK o que o DBeaver grava sem importância não é listado: provider-properties só com @dbeaver-, handler desligado, navigator falso, bootstrap vazio")]
     public void Map_LeftOut_IgnoresWhatDoesNotMatter()
     {

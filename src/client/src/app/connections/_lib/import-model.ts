@@ -77,12 +77,16 @@ export function previewSummary(preview: ImportPreview): string {
 export function connectionLine(connection: PreviewConnection): string {
   const address = copy.preview.address(connection.host ?? "", connection.port === null ? "" : String(connection.port), connection.database ?? "");
   const credentials = connection.userName === "" ? copy.preview.noCredentials : `${copy.preview.user(connection.userName)} · ${connection.hasPassword ? copy.preview.withPassword : copy.preview.withoutPassword}`;
-  const network = [
+  return [address, credentials, ...networkParts(connection)].join(" · ");
+}
+
+/** O túnel, o SSL e o proxy que a conexão leva, nessa ordem, para o fim da segunda linha (RN-REDE-004 e 008); sem nenhum, nada. */
+export function networkParts(connection: Pick<PreviewConnection, "ssh" | "ssl" | "proxy">): string[] {
+  return [
     connection.ssh === null ? null : copy.preview.ssh(`${connection.ssh.userName}@${connection.ssh.host}:${connection.ssh.port}`),
     connection.ssl === null ? null : copy.preview.ssl(connection.ssl.sslMode),
     connection.proxy === null ? null : copy.preview.proxy(`${connection.proxy.userName === null ? "" : `${connection.proxy.userName}@`}${connection.proxy.host}:${connection.proxy.port}`),
   ].filter((part) => part !== null);
-  return [address, credentials, ...network].join(" · ");
 }
 
 /** Uma marca à direita da linha, com a explicação na dica (RN-TRANSF-011). `tone` diz a cor: o que não entra, o que muda, ou só informação. */

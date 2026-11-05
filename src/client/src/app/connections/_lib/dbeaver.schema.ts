@@ -46,6 +46,7 @@ export const leftOutCodes = [
   "informixServer",
   "sshTunnel",
   "proxy",
+  "ssl",
   "driverProperties",
   "bootstrap",
   "autocommitOff",

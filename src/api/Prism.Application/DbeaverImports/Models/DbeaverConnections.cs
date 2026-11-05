@@ -1,4 +1,6 @@
 using Prism.Application.Common.Texts;
+using Prism.Application.Connections.Models;
+using Prism.Application.Connections.Models.Dtos;
 using Prism.Application.ConnectionTransfers.Models;
 using Prism.Application.Folders.Models;
 using Prism.Infrastructure.Databases.Models;
@@ -58,7 +60,8 @@ internal static class DbeaverConnections
             password = null;
 
         var engine = EngineOf(provider, driver);
-        var leftOut = LeftOut(connection, configuration, environment, permissionRestricted, authModel, nonNative);
+        var network = Network(Child(configuration, "handlers"), login);
+        var leftOut = LeftOut(connection, configuration, environment, network, permissionRestricted, authModel, nonNative);
 
         var resolved = engine is null ? Unresolved() : ResolveServer(engine.Value, configuration);
         var refusal = IDIsInvalid(id)
@@ -86,7 +89,9 @@ internal static class DbeaverConnections
             nonNative ? TextRules.Cut(authModel!, ShownNameLength) : null,
             engine is null ? [] : leftOut(resolved),
             savePassword,
-            password is not null);
+            password is not null,
+            network.Ssh,
+            network.Proxy);
 
         return model;
     }
@@ -214,26 +219,8 @@ internal static class DbeaverConnections
     /// RN-DBEAVER-013: o que o Prism não grava, na ordem da especificação. Devolve a função porque o servidor Informix só se sabe depois de escolhidos os campos ou
     /// a URL.
     /// </summary>
-    private static Func<ResolvedServer, IReadOnlyList<string>> LeftOut(JsonElement connection, JsonElement configuration, DbeaverEnvironments.Resolved environment, bool permissionRestricted, string? authModel, bool nonNative)
+    private static Func<ResolvedServer, IReadOnlyList<string>> LeftOut(JsonElement connection, JsonElement configuration, DbeaverEnvironments.Resolved environment, NetworkHandlers network, bool permissionRestricted, string? authModel, bool nonNative)
     {
-        var handlers = Child(configuration, "handlers");
-        var tunnel = false;
-        var proxy = false;
-        if (handlers.ValueKind == JsonValueKind.Object)
-            foreach (var handler in handlers.EnumerateObject())
-            {
-                // O DBeaver só grava os ligados; o `enabled` falso explícito não conta.
-                if (handler.Value.ValueKind != JsonValueKind.Object || (handler.Value.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.False))
-                    continue;
-
-                var type = Text(handler.Value, "type");
-                var key = handler.Name.ToLowerInvariant();
-                if (string.Equals(type, "PROXY", StringComparison.OrdinalIgnoreCase) || key.Contains("proxy", StringComparison.Ordinal) || key.Contains("socks", StringComparison.Ordinal))
-                    proxy = true;
-                else
-                    tunnel = true;
-            }
-
         var driverProperties = NotEmpty(Child(configuration, "properties"))
             || (Child(configuration, "provider-properties") is { ValueKind: JsonValueKind.Object } providerProperties && providerProperties.EnumerateObject().Any(property => !property.Name.StartsWith("@dbeaver-", StringComparison.Ordinal)));
 
@@ -250,11 +237,14 @@ internal static class DbeaverConnections
             if (resolved.InformixServer is not null)
                 left.Add(DbeaverLeftOut.InformixServer);
 
-            if (tunnel)
+            if (network.TunnelLeftOut)
                 left.Add(DbeaverLeftOut.SshTunnel);
 
-            if (proxy)
+            if (network.ProxyLeftOut)
                 left.Add(DbeaverLeftOut.Proxy);
+
+            if (network.SslLeftOut)
+                left.Add(DbeaverLeftOut.Ssl);
 
             if (driverProperties)
                 left.Add(DbeaverLeftOut.DriverProperties);
@@ -297,6 +287,101 @@ internal static class DbeaverConnections
 
         return restrictions.ValueKind == JsonValueKind.Array
             && restrictions.EnumerateArray().Any(item => item.ValueKind == JsonValueKind.String && item.GetString() is "edit.data" or "edit.meta" or "edit.execute" or "import.data");
+    }
+
+    /// <summary>
+    /// RN-REDE-008: os `handlers` ligados da conexão (o DBeaver só grava os ligados; o `enabled` falso explícito não conta). O túnel SSH (`ssh_tunnel`, por senha ou
+    /// por chave) e o proxy SOCKS (`socks_proxy`) vêm para o Prism quando passam nas regras do formulário, com o usuário e o segredo do `credentials-config`
+    /// (`network/…`), gravado quando o "Salvar senha" do handler está marcado ou a senha veio. O que não vem fica de fora (RN-DBEAVER-013): o túnel pelo agente SSH, com saltos, sem host
+    /// ou sem usuário, um segundo túnel, o SSL (as propriedades do DBeaver não são as do Prism) e qualquer outro handler, que conta como túnel.
+    /// </summary>
+    private static NetworkHandlers Network(JsonElement handlers, DbeaverLogin? login)
+    {
+        ConnectionSshSettings? ssh = null;
+        ConnectionProxySettings? proxy = null;
+        bool tunnelLeftOut = false, proxyLeftOut = false, sslLeftOut = false;
+        if (handlers.ValueKind != JsonValueKind.Object)
+            return new NetworkHandlers(null, null, false, false, false);
+
+        foreach (var handler in handlers.EnumerateObject())
+        {
+            if (handler.Value.ValueKind != JsonValueKind.Object || (handler.Value.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.False))
+                continue;
+
+            var type = Text(handler.Value, "type");
+            var key = handler.Name.ToLowerInvariant();
+            var properties = Child(handler.Value, "properties");
+            // O "Salvar senha" do handler; o DBeaver só põe a senha no credentials-config quando a salva, então a senha que veio também conta.
+            var savePassword = Flag(handler.Value, "save-password");
+            if (string.Equals(type, "PROXY", StringComparison.OrdinalIgnoreCase) || key.Contains("proxy", StringComparison.Ordinal) || key.Contains("socks", StringComparison.Ordinal))
+            {
+                proxy = proxy is null && key == "socks_proxy" ? ProxyOf(properties, login?.Proxy, savePassword) : null;
+                proxyLeftOut |= proxy is null;
+            }
+            else if (key.Contains("ssl", StringComparison.Ordinal))
+                sslLeftOut = true;
+            else
+            {
+                ssh = ssh is null && key == "ssh_tunnel" ? SshOf(properties, login?.Tunnel, savePassword) : null;
+                tunnelLeftOut |= ssh is null;
+            }
+        }
+
+        return new NetworkHandlers(ssh, proxy, tunnelLeftOut, proxyLeftOut, sslLeftOut);
+    }
+
+    private static ConnectionSshSettings? SshOf(JsonElement properties, DbeaverLogin? login, bool savePassword)
+    {
+        var authType = Text(properties, "authType")?.Trim().ToUpperInvariant() ?? "PASSWORD";
+        if (authType is not ("PASSWORD" or "PUBLIC_KEY") || (properties.ValueKind == JsonValueKind.Object && properties.EnumerateObject().Any(property => property.Name.Contains("jump", StringComparison.OrdinalIgnoreCase))))
+            return null;
+
+        var input = new ConnectionSshInputDto
+        {
+            Host = Blank(Text(properties, "host")) ?? string.Empty,
+            Port = NumberOf(properties, "port") ?? 22,
+            UserName = Blank(login?.User) ?? string.Empty,
+            AuthMethod = authType == "PUBLIC_KEY" ? "privateKey" : "password",
+            PrivateKeyPath = authType == "PUBLIC_KEY" ? Blank(Text(properties, "keyPath")) : null,
+            Secret = NotEmpty(login?.Password),
+            SaveCredentials = savePassword || NotEmpty(login?.Password) is not null,
+            IgnoreHostVerification = Flag(properties, "bypassHostVerification") || Text(properties, "bypassHostVerification") is "true",
+            KeepAliveIntervalMs = NumberOf(properties, "aliveInterval") ?? 0,
+            TunnelTimeoutMs = NumberOf(properties, "sshConnectTimeout") ?? 0,
+            LocalHost = Blank(Text(properties, "localHost")),
+            LocalPort = NumberOf(properties, "localPort") ?? 0,
+            RemoteHost = Blank(Text(properties, "remoteHost")),
+            RemotePort = NumberOf(properties, "remotePort") ?? 0
+        };
+
+        return ConnectionRules.SshRefusal(input) is null ? ConnectionRules.NormalizeSsh(input) : null;
+    }
+
+    private static ConnectionProxySettings? ProxyOf(JsonElement properties, DbeaverLogin? login, bool savePassword)
+    {
+        var input = new ConnectionProxyInputDto
+        {
+            Host = Blank(Text(properties, "socks-host")) ?? string.Empty,
+            Port = NumberOf(properties, "socks-port") ?? 1080,
+            UserName = Blank(login?.User),
+            Password = NotEmpty(login?.Password),
+            SaveCredentials = savePassword || NotEmpty(login?.Password) is not null
+        };
+
+        return ConnectionRules.ProxyRefusal(input) is null ? ConnectionRules.NormalizeProxy(input) : null;
+    }
+
+    /// <summary>Um número inteiro do DBeaver, que grava as propriedades como texto ou como número JSON; nulo sem ele, vazio ou que não é um inteiro sem sinal.</summary>
+    private static int? NumberOf(JsonElement element, string name)
+        => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value)
+            && (value.ValueKind == JsonValueKind.Number ? value.GetRawText() : value.ValueKind == JsonValueKind.String ? value.GetString()?.Trim() : null) is { Length: > 0 } text
+            && int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
+
+    /// <summary>O túnel e o proxy que vêm, e o que fica de fora.</summary>
+    private sealed record NetworkHandlers(ConnectionSshSettings? Ssh, ConnectionProxySettings? Proxy, bool TunnelLeftOut, bool ProxyLeftOut, bool SslLeftOut)
+    {
+        public override string ToString()
+            => nameof(NetworkHandlers);
     }
 
     /// <summary>A porta como o DBeaver a grava, texto ou número JSON.</summary>

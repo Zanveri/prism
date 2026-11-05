@@ -76,7 +76,7 @@ public sealed class DbeaverCopyBuilder(string transfersDirectory)
         return [.. iv, .. encrypted];
     }
 
-    /// <summary>`{ "&lt;ID&gt;": { "#connection": { "user": "…", "password": "…" } } }`; o que é nulo ou vazio não é escrito, como o DBeaver faz. Mais um nó de túnel e uma entrada de perfil, que a API ignora.</summary>
+    /// <summary>`{ "&lt;ID&gt;": { "#connection": { "user": "…", "password": "…" } } }`; o que é nulo ou vazio não é escrito, como o DBeaver faz. Mais o nó do túnel SSH (`network/ssh_tunnel`, que a API lê para a conexão com túnel, RN-REDE-008) e uma entrada de perfil, que a API ignora.</summary>
     public static string CredentialsJson(params (string Id, string? User, string? Password)[] entries)
     {
         var root = new Dictionary<string, object>();
