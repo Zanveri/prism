@@ -66,15 +66,23 @@ export function previewSummary(preview: ImportPreview): string {
     connections: preview.connections.length,
     folders: preview.folders.length,
     withUser: preview.connections.filter((connection) => connection.userName !== "").length,
-    withPassword: preview.connections.filter((connection) => connection.hasPassword).length,
+    withPassword: preview.connections.filter((connection) => connection.hasPassword || connection.ssh?.hasSecret === true || connection.proxy?.hasPassword === true).length,
   });
 }
 
-/** A segunda linha da conexão: o servidor e as credenciais ("informix-prd.exemplo.invalid:9089 / estoque · usuário datafix · com senha"). A senha nunca. */
+/**
+ * A segunda linha da conexão: o servidor, as credenciais e, quando há, o túnel, o SSL e o proxy (RN-REDE-004): "informix-prd.exemplo.invalid:9089 / estoque ·
+ * usuário datafix · com senha · via SSH ops@bastion:22 · SSL verify-full". A senha nunca.
+ */
 export function connectionLine(connection: PreviewConnection): string {
   const address = copy.preview.address(connection.host ?? "", connection.port === null ? "" : String(connection.port), connection.database ?? "");
-  if (connection.userName === "") return `${address} · ${copy.preview.noCredentials}`;
-  return `${address} · ${copy.preview.user(connection.userName)} · ${connection.hasPassword ? copy.preview.withPassword : copy.preview.withoutPassword}`;
+  const credentials = connection.userName === "" ? copy.preview.noCredentials : `${copy.preview.user(connection.userName)} · ${connection.hasPassword ? copy.preview.withPassword : copy.preview.withoutPassword}`;
+  const network = [
+    connection.ssh === null ? null : copy.preview.ssh(`${connection.ssh.userName}@${connection.ssh.host}:${connection.ssh.port}`),
+    connection.ssl === null ? null : copy.preview.ssl(connection.ssl.sslMode),
+    connection.proxy === null ? null : copy.preview.proxy(`${connection.proxy.userName === null ? "" : `${connection.proxy.userName}@`}${connection.proxy.host}:${connection.proxy.port}`),
+  ].filter((part) => part !== null);
+  return [address, credentials, ...network].join(" · ");
 }
 
 /** Uma marca à direita da linha, com a explicação na dica (RN-TRANSF-011). `tone` diz a cor: o que não entra, o que muda, ou só informação. */

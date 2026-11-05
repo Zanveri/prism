@@ -104,6 +104,10 @@ export const previewConnectionSchema = z.object({
   copyName: text,
   strengthened: strengthenedSchema,
   invalid: text,
+  // RN-REDE-004: o túnel, o SSL e o proxy que a conexão traz, sem os segredos (só se vieram).
+  ssh: z.object({ host: z.string(), port: z.number(), userName: z.string(), authMethod: z.string(), hasSecret: z.boolean() }).nullish().transform((value) => value ?? null),
+  ssl: z.object({ sslMode: z.string().nullish().transform((value) => value ?? null) }).nullish().transform((value) => value ?? null),
+  proxy: z.object({ host: z.string(), port: z.number(), userName: z.string().nullish().transform((value) => value ?? null), hasPassword: z.boolean() }).nullish().transform((value) => value ?? null),
   password: z.never().optional(),
 });
 

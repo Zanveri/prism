@@ -76,9 +76,31 @@ public record ImportPreviewConnectionDto
     public ImportStrengthenedDto Strengthened { get; init; } = new();
     public string? Invalid { get; init; }
 
+    /// <summary>RN-REDE-004: o túnel SSH, o SSL e o proxy que a conexão traz, sem os segredos (só se vieram); nulos quando ela não os tem, e na que não pode ser importada.</summary>
+    public ImportPreviewSshDto? Ssh { get; init; }
+    public ImportPreviewSslDto? Ssl { get; init; }
+    public ImportPreviewProxyDto? Proxy { get; init; }
+
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria o host, o usuário e a consulta de verificação.</summary>
     public override string ToString()
         => nameof(ImportPreviewConnectionDto);
+}
+
+/// <summary>RN-REDE-004: o túnel SSH da conexão na prévia: o servidor, o usuário, o método e se o segredo veio, nunca o segredo.</summary>
+public sealed record ImportPreviewSshDto(string Host, int Port, string UserName, string AuthMethod, bool HasSecret)
+{
+    public override string ToString()
+        => nameof(ImportPreviewSshDto);
+}
+
+/// <summary>RN-REDE-004: o SSL da conexão na prévia: o modo (nulo é o do driver).</summary>
+public sealed record ImportPreviewSslDto(string? SslMode);
+
+/// <summary>RN-REDE-004: o proxy SOCKS5 da conexão na prévia: o servidor, o usuário e se a senha veio, nunca a senha.</summary>
+public sealed record ImportPreviewProxyDto(string Host, int Port, string? UserName, bool HasPassword)
+{
+    public override string ToString()
+        => nameof(ImportPreviewProxyDto);
 }
 
 /// <summary>RN-PROT-004 e RN-PASTA-005: o que valia na conexão na origem, o somente leitura, a confirmação (nula é "Não") e o ambiente que ela mostrava.</summary>
