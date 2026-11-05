@@ -60,6 +60,10 @@ export type ValuesQuestion = {
   calculated: string[];
   tab: TabValues;
   reads?: ReadonlyMap<string, ColumnRead>;
+  /** RN-VAR-029: os valores da aba de execução ("Mudar os valores…"), no lugar dos lembrados no cofre. */
+  prefill?: Readonly<Record<string, RunValueEntry>>;
+  /** RN-VAR-027: o diálogo oferece "Executar numa aba nova" (aberto pela aba de execução, ou pelo navegador quando já há uma daquele script). */
+  offerNewTab?: boolean;
 };
 
 /** Um erro do script na pergunta: a linha e a frase (o tipo de coluna que não se resolveu, RN-VAR-004). */

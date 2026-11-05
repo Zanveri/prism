@@ -1091,7 +1091,7 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
     expect(typeof toolbar.onRunScript).toBe("function");
   });
 
-  it("Alt+X com o foco em qualquer ponto da aba é o atalho; o que outro já tratou, e o Alt+Shift+X, não", () => {
+  it("Alt+X com o foco em qualquer ponto da aba é o atalho; o que outro já tratou não; o Shift+Alt+X é o \"Executar com valores…\" (RN-VAR-026), e não o script", () => {
     const { keys } = mount(fakeRunner(rowsState())).show();
 
     const alt = key({ altKey: true });
@@ -1104,7 +1104,7 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
 
     const shifted = key({ altKey: true, shiftKey: true });
     keys(shifted);
-    expect(shifted.preventDefault).not.toHaveBeenCalled();
+    expect(shifted.preventDefault).toHaveBeenCalledOnce();
   });
 
   it("segurar Alt+X não começa o script de novo: só o primeiro evento o começa, e a repetição (`repeat`) só é consumida", () => {

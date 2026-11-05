@@ -6,6 +6,7 @@ import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { AlertIcon, Button, CloseIcon, controlClassName, Dialog, FieldError, UndoIcon, useHost, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { executionTabCopy } from "../_lib/execution-tab.copy";
 import { getScript, saveRunValues } from "../_lib/scripts.service";
 import { columnChoiceOf, missingMessage, missingValues, type Choice, type ChoiceScope } from "../_lib/value-choice";
 import { answersOf, emptyInput, fieldLabel, inputOf, inputOfEntry, pastedItems, rememberedOf, valueOf, type FieldInput, type ValuesQuestion, type VariableField } from "../_lib/variable-fields";
@@ -21,9 +22,17 @@ type ValuesDialogProps = {
   script: { id: string; generic: boolean } | null;
   /** A sessão da árvore da conexão e do banco da aba, para a escolha pela chave (RN-VAR-031); nula na aba sem conexão. */
   scope: ChoiceScope | null;
-  onRun: (answers: ReadonlyMap<number, Value>) => void;
+  onRun: (answers: ReadonlyMap<number, Value>, newTab: boolean) => void;
   onCancel: () => void;
 };
+
+/** Os campos preenchidos com valores guardados (os lembrados, ou os da aba de execução); o que não passa mais na conferência do campo fica de fora, em silêncio. */
+function inputsFrom(fields: readonly VariableField[], values: Readonly<Record<string, unknown>>): (readonly [number, FieldInput])[] {
+  return fields.flatMap((field) => {
+    const input = Object.hasOwn(values, field.name) ? inputOfEntry(values[field.name]) : null;
+    return input !== null && valueOf(field, input).ok ? [[field.index, input] as const] : [];
+  });
+}
 
 /**
  * RN-VAR-021: "Valores para executar", o diálogo do "Executar com valores…" (RN-VAR-027) no modo reduzido: só os campos das declarações sem valor, sem "Onde". O foco
@@ -38,23 +47,23 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
   const connections = useQuery(connectionsQuery);
   const connectionName = connections.data?.find((connection) => connection.id === scope?.connectionId)?.name ?? null;
   // No "Executar com valores…" o campo vem com o padrão do script (o literal preenchido, a expressão vazia); na pergunta, com o valor da vez anterior nesta aba.
-  const [inputs, setInputs] = useState(() => new Map(fields.map((field) => [field.index, full ? (field.fallback.kind === "literal" ? field.fallback.input : emptyInput) : inputOf(question.tab.get(field.name)?.value)] as const)));
-  const [touched, setTouched] = useState<ReadonlySet<number>>(new Set());
+  // RN-VAR-029: no "Mudar os valores…" da aba de execução, os valores dela vêm no lugar dos lembrados, e vão como escritos.
+  const prefill = full ? (question.prefill ?? null) : null;
+  const [inputs, setInputs] = useState(() => new Map([...fields.map((field) => [field.index, full ? (field.fallback.kind === "literal" ? field.fallback.input : emptyInput) : inputOf(question.tab.get(field.name)?.value)] as const), ...(prefill === null ? [] : inputsFrom(fields, prefill))]));
+  const [touched, setTouched] = useState<ReadonlySet<number>>(() => new Set(prefill === null ? [] : inputsFrom(fields, prefill).map(([index]) => index)));
   // RN-VAR-028: os campos que vieram dos valores lembrados ("da última vez"), até a pessoa mexer neles ou voltar ao valor do script.
   const [remembered, setRemembered] = useState<ReadonlySet<number>>(new Set());
   const scriptId = full ? (script?.id ?? null) : null;
+  const recalled = prefill === null ? scriptId : null;
 
   useEffect(() => {
-    if (scriptId === null) return;
+    if (recalled === null) return;
     let live = true;
-    void getScript(scriptId).then((result) => {
+    void getScript(recalled).then((result) => {
       const values = result.ok ? result.data.runValues?.values : undefined;
       if (!live || values === undefined) return;
       // O valor lembrado que não passa mais na conferência do campo (o tipo mudou, a variável saiu do topo) é esquecido em silêncio.
-      const found = fields.flatMap((field) => {
-        const input = Object.hasOwn(values, field.name) ? inputOfEntry(values[field.name]) : null;
-        return input !== null && valueOf(field, input).ok ? [[field.index, input] as const] : [];
-      });
+      const found = inputsFrom(fields, values);
       if (found.length === 0) return;
       setInputs((current) => new Map([...current, ...found]));
       setTouched((current) => new Set([...current, ...found.map(([index]) => index)]));
@@ -63,7 +72,7 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
     return () => {
       live = false;
     };
-  }, [scriptId, fields]);
+  }, [recalled, fields]);
   const [problems, setProblems] = useState<ReadonlyMap<number, string>>(new Map());
   const [warnings, setWarnings] = useState<ReadonlyMap<number, string>>(new Map());
   const [choices, setChoices] = useState<ReadonlyMap<number, Choice>>(new Map());
@@ -142,8 +151,7 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
       .catch(() => {});
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit(newTab: boolean) {
     if (pending) return;
     const read = answersOf(fields, inputs, full ? touched : undefined);
     if (read.problems.size === 0) {
@@ -153,7 +161,7 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
       setWarnings(checked.warnings);
       if (checked.problems.size === 0) {
         remember(read.answers);
-        return onRun(read.answers);
+        return onRun(read.answers, newTab);
       }
       read.problems = checked.problems;
     }
@@ -173,6 +181,11 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
       <Button type="button" variant="secondary" onClick={onCancel}>
         {copy.cancel}
       </Button>
+      {question.offerNewTab === true ? (
+        <Button type="button" variant="secondary" disabled={pending} onClick={() => void submit(true)}>
+          {executionTabCopy.newTab}
+        </Button>
+      ) : null}
       <Button type="submit" form={`${base}-form`} disabled={pending}>
         {copy.run}
       </Button>
@@ -181,7 +194,10 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
 
   return (
     <Dialog open title={full ? copy.fullTitle(title) : copy.title} description={full ? undefined : copy.summary(fields.length)} size={full ? "lg" : "md"} footer={footer} pending={pending} onClose={onCancel}>
-      <form id={`${base}-form`} className="flex flex-col gap-5" onSubmit={(event) => void submit(event)} noValidate>
+      <form id={`${base}-form`} className="flex flex-col gap-5" onSubmit={(event: FormEvent) => {
+          event.preventDefault();
+          void submit(false);
+        }} noValidate>
         {full ? (
           <section className="flex flex-col gap-1.5">
             <h3 className="text-sm font-semibold">{copy.where}</h3>

@@ -17,6 +17,7 @@ import { navigatorMetrics, rowIndent } from "../_lib/navigator-density";
 import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { appearanceChanged, normalizeScriptName, refusalProblem, savedPlaceOfTab, scriptFolderMenu, scriptIconOf, scriptMenu, scriptNameProblem, scriptPlace, type ScriptAction, type ScriptAppearance, type ScriptFolderAction } from "../_lib/saved-scripts";
 import { scriptFoldersQuery } from "../_lib/script-folders.service";
+import { valuesShortcut, valuesShortcutLabel } from "../_lib/script-run";
 import { ancestorIds, buildScriptTree, folderIdOf, folderKey, scriptKey, scriptTreeLabels, scriptTreeMove, scriptTreeRowKey, visibleScriptRows, type ScriptTreeRow } from "../_lib/script-tree";
 import { focusedElement } from "../_lib/tab-focus";
 import { scriptsCopy } from "../_lib/scripts.copy";
@@ -34,14 +35,16 @@ import { useScriptFolderActions } from "./use-script-folder-actions";
 
 const copy = scriptsCopy;
 const treeId = "navigator-scripts";
-const actionLabels: Record<ScriptAction, string> = { open: copy.menu.open, rename: copy.menu.rename, edit: copy.menu.edit, move: copy.menu.move, copySql: copy.menu.copySql, makeGeneric: copy.menu.makeGeneric, bind: copy.menu.bind, delete: copy.menu.delete };
+/** A plataforma, para o atalho do "Executar com valores…" (RN-VAR-026): Shift+Alt+X, ou Shift+Cmd+Option+X no macOS. */
+const platform = typeof navigator === "undefined" ? "" : navigator.platform;
+const actionLabels: Record<ScriptAction, string> = { open: copy.menu.open, runWithValues: copy.menu.runWithValues, rename: copy.menu.rename, edit: copy.menu.edit, move: copy.menu.move, copySql: copy.menu.copySql, makeGeneric: copy.menu.makeGeneric, bind: copy.menu.bind, delete: copy.menu.delete };
 const folderActionLabels: Record<ScriptFolderAction, string> = { newSubfolder: copy.folders.menu.newSubfolder, rename: copy.folders.menu.rename, move: copy.folders.menu.move, delete: copy.folders.menu.delete };
 
 /** O id da linha na página: é por ele que a linha que acabou de ser criada, renomeada ou movida ganha o foco (RN-SCRIPT-008). */
 export const scriptRowDomId = (key: string) => `${treeId}-${key.replace(":", "-")}`;
 
-/** O que a linha pede pelo teclado e pelo duplo clique: Enter (a pasta abre e fecha, o script abre), F2 renomeia, Delete exclui. */
-export type ScriptRowRequest = "enter" | "rename" | "delete";
+/** O que a linha pede pelo teclado e pelo duplo clique: Enter (a pasta abre e fecha, o script abre), F2 renomeia, Delete exclui; Shift+Alt+X, no script, executa com valores. */
+export type ScriptRowRequest = "enter" | "rename" | "delete" | "runWithValues";
 
 type ScriptsTreeViewProps = {
   /** As linhas à vista (`visibleScriptRows`); `undefined` enquanto as listas não chegam. */
@@ -101,6 +104,13 @@ export function ScriptsTreeView({ rows, density = "comfortable", failed, selecte
       if ("toggle" in move) return onToggle(move.toggle);
       onSelect(rows![move.focus].node.key);
       (event.currentTarget.parentElement?.children[move.focus] as HTMLElement | undefined)?.focus();
+      return;
+    }
+
+    // RN-VAR-026: Shift+Alt+X no script escolhido é o "Executar com valores…" do menu dele.
+    if (row.node.kind === "script" && valuesShortcut(event, platform)) {
+      event.preventDefault();
+      if (!event.repeat) onRequest(row, "runWithValues");
       return;
     }
 
@@ -197,7 +207,7 @@ type Menu = { target: ScriptTreeRow | null; point: { x: number; y: number }; ini
 export function ScriptsSection() {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { tabs, openScriptTab, renameScript, forgetScript, setScriptPlace } = useWorkbench();
+  const { tabs, openScriptTab, requestExecution, renameScript, forgetScript, setScriptPlace } = useWorkbench();
   const scripts = useQuery(scriptsQuery);
   const folders = useQuery(scriptFoldersQuery);
   const density = usePreferences().preferences.ui.navigatorDensity;
@@ -279,6 +289,13 @@ export function ScriptsSection() {
     const script = await read(summary);
     if (script === null) return void refresh();
 
+    const place = placeOfScript(script);
+    openScriptTab(script, { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), saved: place.saved }, askedFrom);
+    if (place.missing) toast.warning(copy.toasts.connectionMissing(script.name));
+  }
+
+  /** O lugar em que o script abre: o dele, ou, no genérico, a única conexão conectada; sem ela, nenhum, e a aba pede (RN-SCRIPT-003 e 005). */
+  function placeOfScript(script: Script) {
     const known = queryClient.getQueryData<Connection[]>(connectionsQuery.queryKey);
     // RN-SCRIPT-005: as conectadas deste instante (a sessão da árvore em cache, ou a de uma aba, menos as que a verificação achou sem sessão na API), para
     // o genérico abrir na única que houver.
@@ -288,9 +305,19 @@ export function ScriptsSection() {
       (connectionId) => queryClient.getQueryData(databaseSessionQuery(connectionId).queryKey) !== undefined,
       new Set(notConnectedIds(connectionChecks.snapshot())),
     );
-    const place = scriptPlace(script, known === undefined ? null : new Set(known.map((connection) => connection.id)), connected);
-    openScriptTab(script, { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), saved: place.saved }, askedFrom);
+    return scriptPlace(script, known === undefined ? null : new Set(known.map((connection) => connection.id)), connected);
+  }
+
+  /**
+   * RN-VAR-026 e 029: "Executar com valores…" lê o script gravado e o leva a uma aba de execução, no lugar em que ele abriria; o diálogo (RN-VAR-027) abre nela.
+   * O script não é aberto num editor.
+   */
+  async function runWithValues(summary: ScriptSummary) {
+    const script = await read(summary);
+    if (script === null) return void refresh();
+    const place = placeOfScript(script);
     if (place.missing) toast.warning(copy.toasts.connectionMissing(script.name));
+    requestExecution({ id: script.id, name: script.name, sql: script.sql, generic: script.connectionID === null }, { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }) }, null);
   }
 
   /** A aba deste script nesta janela, se ela tem conexão: é a conexão que "Vincular à conexão da aba" grava (RN-SCRIPT-005). */
@@ -328,6 +355,7 @@ export function ScriptsSection() {
   function act(script: ScriptSummary, action: ScriptAction) {
     setSelectedKey(scriptKey(script.id));
     if (action === "open") void open(script);
+    else if (action === "runWithValues") void runWithValues(script);
     else if (action === "copySql") void copySql(script);
     else if (action === "rename") setRenaming({ script, pending: false, error: null });
     else if (action === "edit") setEditing({ script, pending: false, errors: {} });
@@ -346,6 +374,7 @@ export function ScriptsSection() {
   function request(row: ScriptTreeRow, asked: ScriptRowRequest) {
     const { node } = row;
     if (node.kind === "script") return act(node.script, asked === "enter" ? "open" : asked);
+    if (asked === "runWithValues") return;
     setSelectedKey(node.key);
     if (asked === "enter") return row.expanded === null ? undefined : toggle(node.key);
     actOnFolder(node.folder, asked);
@@ -434,11 +463,11 @@ export function ScriptsSection() {
     }
 
     const { script } = node;
-    return scriptMenu({ generic: script.connectionID === null, bindable: boundTab(script) !== undefined }).map((group) =>
+    return scriptMenu({ generic: script.connectionID === null, bindable: boundTab(script) !== undefined, declaresVariables: script.declaresVariables === true }).map((group) =>
       group.map(({ action, disabled }) => ({
         id: action,
         label: actionLabels[action],
-        ...(action === "open" ? { shortcut: "Enter" } : action === "rename" ? { shortcut: "F2" } : action === "delete" ? { shortcut: "Delete" } : {}),
+        ...(action === "open" ? { shortcut: "Enter" } : action === "runWithValues" ? { shortcut: valuesShortcutLabel(platform).label } : action === "rename" ? { shortcut: "F2" } : action === "delete" ? { shortcut: "Delete" } : {}),
         ...(disabled ? { disabled: true, hint: copy.menu.bindUnavailable } : {}),
         onSelect: () => act(script, action),
       })),
