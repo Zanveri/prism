@@ -494,7 +494,12 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     {
         var builder = new NpgsqlConnectionStringBuilder { Host = EffectiveHost, Port = EffectivePort, Database = settings.Database, Username = settings.UserName, Password = settings.Password, Pooling = false, IncludeErrorDetail = true, IncludeFailedBatchedCommand = true };
         ApplySsl(builder, settings.Ssl);
-        _dataSource = NpgsqlDataSource.Create(builder.ConnectionString);
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(builder.ConnectionString);
+        // Pelo túnel o driver conecta no loopback: o TLS confere o certificado (`verify-full`) e manda o SNI com o host do banco, como na conexão direta.
+        if (TunneledHost is { } tunneledHost)
+            dataSourceBuilder.UseSslClientAuthenticationOptionsCallback(options => options.TargetHost = tunneledHost);
+
+        _dataSource = dataSourceBuilder.Build();
 
         return _dataSource.CreateConnection();
     }

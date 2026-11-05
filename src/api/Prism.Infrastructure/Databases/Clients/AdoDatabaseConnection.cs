@@ -201,6 +201,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     protected int EffectivePort => _tunnel?.BoundPort ?? TunnelSettings?.Port ?? 0;
 
+    /// <summary>Com túnel SSH ou proxy, o host do banco do outro lado, que o TLS confere no certificado no lugar do loopback do túnel; sem túnel, nulo.</summary>
+    protected string? TunneledHost => _tunnel?.TargetHost;
+
     public string ServerVersion { get; private set; } = string.Empty;
 
     public bool IsOpen => !_discarded && _connection?.State == ConnectionState.Open;
