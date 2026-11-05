@@ -2905,15 +2905,18 @@ marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
 - **O `random`** (RN-VAR-010) é o xoshiro128** de Blackman e Vigna, um por execução, com a semente do `crypto.getRandomValues` na produção (`productionRandom()`); os
   testes dão a semente (`new Random([a, b, c, d])`). `int` usa rejeição (uma saída até 2^32; duas, de 53 bits, acima), `float` é `u / 2^32` e `uuid` usa quatro
   saídas com os bits de versão e variante. Não serve de segredo.
-- **As frases provisórias.** O que a gramática lê e esta frente ainda não executa é recusado, na conferência, com estas frases (em `phrase`; saem quando o passo
-  de cada uma entrar): `provisionalQuery` ("A variável de consulta chega numa próxima versão."), `provisionalSample` ("`random.of` chega numa próxima versão."),
-  `provisionalColumnType` ("O tipo de coluna chega numa próxima versão.") e `provisionalNoValue(nome)` ("`nome` não tem valor: escreva `= valor` (a pergunta dos
-  valores chega numa próxima versão)."). `StoredValue.origin` já traz `consulta`, `pergunta` e `diálogo` para quando elas entrarem.
+- **As interfaces e os `type`** (seção 45, RN-VAR-037 a 041) moram em `named-types.ts`: o `TypeResolver` resolve a anotação com os tipos do script (podem vir
+  depois do uso; ciclo, `extends` e nomes vedados são erros do item do tipo), `hasShape` diz se o valor precisa ser posto na forma e `conform` o põe: o objeto
+  escrito recusa o campo a mais, a linha de uma consulta e o valor de outra variável deixam os campos a mais de fora, a coluna casa pelo nome e, sem ele, pela
+  única que casa sem diferenciar maiúsculas (Db2). O `type` é palavra de contexto: `type Nome =` só é item no começo do texto ou depois de uma linha em
+  branco (`script.ts`), e `let type = 1` e `SET type = 'x'` continuam valendo. A tipagem é estrutural (`fits`), e o `unify` de dois objetos junta os campos,
+  com o que falta num dos lados opcional, como no TypeScript. Na troca (`bind.ts`) só a folha vai ao banco: `@c.endereco.cidade` vira um marcador, e `@c`,
+  `@c.endereco` e a lista de objetos são recusados.
 - **O log (RN-VAR-036).** Nenhuma exceção do JavaScript que escape do leitor, do conferidor ou do avaliador chega à pessoa: vira "Erro interno do Prism ao avaliar
   <nome>." (`reportInternalError`), e ao console de desenvolvimento vai só o nome do tipo do erro, nunca a mensagem, o texto do script nem um valor. Nenhum outro arquivo
   da linguagem usa o `console` (um teste confere).
 - **Os testes.** Os casos de tabela são `*.cases.json` escritos à mão a partir da especificação e nunca regerados do código (`reader`, `placement`, `types`,
-  `evaluation`, `functions`, `attacks`, `limits`, `at-names`, `binding`, `positions`), cada um com um `*.cases.test.ts` que os lê por `cases-runner.ts` (que fixa
+  `evaluation`, `functions`, `attacks`, `limits`, `at-names`, `binding`, `positions`, `interfaces`), cada um com um `*.cases.test.ts` que os lê por `cases-runner.ts` (que fixa
   `TZ=America/Sao_Paulo`, porque as datas valem na hora local). `properties.test.ts` sorteia 10.000 textos e árvores por execução, de uma semente nova a cada vez (a de
   `PRISM_PROPERTY_SEED`, se estiver no ambiente) que a mensagem de falha traz. A fixture compartilhada com a API é `src/test-fixtures/variables/markers.json` (a conta
   dos marcadores de cada banco; `markers.fixture.test.ts` a lê; a API tem de contar igual, RN-VAR-017).
@@ -2922,7 +2925,7 @@ marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
   mais de 100 caracteres, o decimal de mais de 31 dígitos no Db2 e no Informix (o driver; "pelo driver" na frase do Informix), a lista de mais de 10.000 valores e os
   valores de mais de 4 MiB. O corpo de `POST queries` vai até 30.000.000 de bytes (`limits.requestBodyBytes`), o das rotas `transfers` (exportação e cópia, `source.params`)
   até 16 MiB (`limits.transferBodyBytes`): quem monta o pedido da exportação confere `requestBodyBytes(sql, params)` contra o segundo. O `timestamp` com fuso só vai no
-  PostgreSQL; o texto exato de um instante que veio do Db2 pode ter até 12 casas, e a API aceita 6 (a consulta da variável, que traz esse texto, ainda não entrou). As
+  PostgreSQL; o texto exato de um instante que veio do Db2 pode ter até 12 casas, e a API aceita 6 (a consulta da variável traz esse texto). As
   recusas voltam como `ApiError`: `QUERY_INVALID` (`errors["params[i].value"]`, `["params[i].type"]` ou `["params"]`, e o `errorCodes` do mesmo campo em `extensions`), na
   exportação `EXPORT_OPTIONS_INVALID` e na cópia `IMPORT_OPTIONS_INVALID` em `source.params[i].value`, `QUERY_PARAMETERS_MISMATCH` com `extensions.markers` e `extensions.values`
   (números; a tela e a API contam igual pela fixture, então ele só vem se o texto mudou no caminho) e `FILTER_INVALID` quando o filtro de um resultado com parâmetros
@@ -2978,6 +2981,20 @@ da pessoa; o que vai ao banco é o comando trocado pelos marcadores (RN-VAR-017)
   provisórias da linguagem. O editor conhece as declarações (a seção "O editor e as variáveis", abaixo) e recebe os valores da aba pela prop `variables`;
   o `runTarget`/`scriptTargets` ainda usam o `statementAt`, então o destaque de execução (RN-SQL-018) de uma declaração avaliada pelo Ctrl+Enter não existe. O Ctrl+Enter chega ao `onRun` mesmo
   com o texto só de declarações (a tecla não consulta `isRunnable`, e `hasStatement` já conta o `let`), e a aba o desvia para o `runItem` quando o texto declara variáveis.
+
+## Os valores pedidos e a aba de execução (seções 41 e 45: RN-VAR-021, 026 a 029, 031, 041)
+
+- **Onde mora**: os campos do diálogo saem do script em `variable-fields.ts` (`fullFieldsOf` monta a pergunta inteira do "Executar com valores…"; o objeto anotado
+  é um campo só, escrito como no script), o diálogo é `values-dialog.tsx` e quem o abre é `use-values-question.ts` (`ask`, `askWith` com `prefill` e
+  `offerNewTab`, `open`). A escolha pela chave é `value-choice.ts`/`value-choice.tsx`, e os valores lembrados no cofre vão pelo `saveRunValues` (RN-VAR-028).
+- **A aba de execução** é uma aba de consulta com `execution` (`ExecutionTarget` em `workbench-model.ts`): sem editor, com `execution-header.tsx` no lugar da
+  barra. O navegador deixa um `pending` na aba (`requestExecution`), e o cabeçalho o atende uma vez (o ref `handled`, por causa do modo estrito); a aba nascida do
+  pedido que tem o diálogo cancelado se fecha. Não entra no espaço de trabalho salvo, o bloqueio apaga os valores dela (`withoutSessions`), vai junto quando a aba
+  muda de janela (`tab-transfer.ts`), e o `renameScript` renomeia as abas de execução do script. Alt+X executa de novo e Shift+Alt+X muda os valores; F6, Ctrl+S,
+  Ctrl+9 e Ctrl+Shift+H não fazem nada nela.
+- **Os textos** estão em `variable-fields.copy.ts` e `execution-tab.copy.ts`, cada um com o `.en.ts` e o `.es.ts`.
+- **Os testes**: `execution-tab.test.ts` (título, reuso, respostas, fichas), `execution-header.test.ts` (o cabeçalho com `createHookRuntime`: o pedido atendido uma
+  vez, o cancelar que fecha, o "Executar de novo" que lê o cofre) e o `describe` da aba de execução em `query-tab.test.ts`.
 
 ## O editor e as variáveis (seção 41: RN-VAR-025, RN-CONFIG-004)
 
