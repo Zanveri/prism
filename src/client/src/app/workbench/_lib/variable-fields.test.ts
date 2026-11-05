@@ -169,3 +169,55 @@ describe("os valores lembrados (RN-VAR-028)", () => {
     expect(remembered).toEqual({ values: { a: { type: "text", value: "curto" } }, tooLarge: ["b"] });
   });
 });
+
+describe("o campo de uma interface (RN-VAR-004 e 027)", () => {
+  const script = "interface Endereco { cidade: string }\ninterface Cliente { id: number; nome?: string; endereco: Endereco; desde: Date }\nlet c: Cliente\nlet l: Cliente[] | null\nselect @c.id;";
+  const objectFields = () => fieldOf(script).fields;
+  const ask = (text: string) => valueOf(objectFields()[0], { ...emptyInput, text });
+
+  it("a interface e a lista dela são um campo de objeto só, pelo tipo do script", () => {
+    expect(objectFields().map((field) => [field.name, field.kind, field.list, field.nullable, field.typeText])).toEqual([
+      ["c", "object", false, false, "Cliente"],
+      ["l", "object", false, true, "Cliente[] | null"],
+    ]);
+    expect(fieldOf(script).errors).toEqual([]);
+  });
+
+  it("o type de um tipo simples continua o campo do tipo", () => {
+    expect(only("type Id = number\nlet id: Id\nselect @id;").kind).toBe("number");
+  });
+
+  it("o texto se lê como o valor do script, e só os valores escritos valem", () => {
+    const read = ask("{ id: 7, endereco: { cidade: 'Lages' }, desde: new Date('2026-10-20') }");
+    expect(read.ok && displayValue(read.value)).toBe("{ id: 7, endereco: { cidade: 'Lages' }, desde: 2026-10-20 }");
+    expect(ask("")).toEqual({ ok: false, message: "Escreva um valor para c." });
+    expect(ask("{ id: 1 + 1 }")).toEqual({ ok: false, message: "Escreva só valores: números, textos, true, false, null, new Date('…'), listas e objetos." });
+    expect(ask("{ id: 7").ok).toBe(false);
+  });
+
+  it("o valor volta ao campo escrito como no script, e se lembra como object", () => {
+    const read = ask("{ id: 7, nome: 'Ana d\\'Ávila', endereco: { cidade: 'Lages' }, desde: new Date('2026-10-20 10:30:00') }");
+    if (!read.ok) throw new Error(read.message);
+    const text = "{ id: 7, nome: 'Ana d\\'Ávila', endereco: { cidade: 'Lages' }, desde: new Date('2026-10-20 10:30:00') }";
+    expect(inputOf(read.value, "object").text).toBe(text);
+    expect(entryOf(read.value)).toEqual({ type: "object", value: text });
+    expect(inputOfEntry({ type: "object", value: text })).toEqual({ ...emptyInput, text });
+  });
+
+  it("a forma quem confere é a execução, com a frase da linguagem", async () => {
+    const { ScriptRun } = await import("./variables/run");
+    const { Random } = await import("./variables/random");
+    const model = read(script);
+    const run = new ScriptRun(model, { engine: 1, random: new Random([1, 2, 3, 4]), clock: () => 0, now: () => 0 }, new Map());
+    const index = model.items.findIndex((item) => item.parsed?.name === "c");
+    const asked = ask("{ id: 7, desde: new Date('2026-10-20') }");
+    if (!asked.ok) throw new Error(asked.message);
+    const result = run.assign(index, asked.value, "pergunta");
+    expect(result.ok ? null : result.error.message).toBe("c não tem o campo endereco, que Cliente pede.");
+  });
+
+  it("as interfaces no topo não escondem o Executar com valores", () => {
+    expect(declaresAtTop(read("interface A { a: number }\ntype B = { b: string }\nlet x: A\nselect @x.a;"))).toBe(true);
+    expect(declaresAtTop(read("interface A { a: number }\nselect 1;"))).toBe(false);
+  });
+});

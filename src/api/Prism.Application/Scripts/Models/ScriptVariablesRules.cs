@@ -40,7 +40,11 @@ internal static class ScriptVariablesRules
         "valueOf", "toLocaleString", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "call", "apply", "bind", "then",
     };
 
-    private static readonly string[] ValueTypes = ["number", "text", "boolean", "date", "timestamp", "sql", "null"];
+    /// <summary>RN-VAR-028 e seção 45: as palavras que abrem uma declaração no topo do script.</summary>
+    private static readonly string[] Keywords = ["let", "const", "interface", "type"];
+
+    /// <summary>RN-VAR-028: o `object` é o valor de uma interface ou de um type de objeto, com o texto escrito como no script (RN-VAR-004, seção 45).</summary>
+    private static readonly string[] ValueTypes = ["number", "text", "boolean", "date", "timestamp", "sql", "object", "null"];
 
     /// <summary>
     /// RN-VAR-003: começa por letra (ou número em letra, `Nl`), `_` ou `$`, e continua com eles, marcas, dígitos e conectores; até 64 caracteres; em NFC, que é como a
@@ -69,8 +73,8 @@ internal static class ScriptVariablesRules
 
     /// <summary>
     /// RN-VAR-028: o script declara variáveis no topo quando, depois dos espaços em branco e dos comentários (`--` e `//` até o fim da linha, `/* … */` e, em
-    /// qualquer banco, `{ … }`), o texto começa por `let` ou `const`, em minúsculas, seguido de espaço, tabulação ou quebra de linha e de um nome (só a forma: o
-    /// começo de um nome). É uma aproximação que só decide se o "Executar com valores…" aparece no menu; o comentário que não fecha é o texto inteiro, e não declara.
+    /// qualquer banco, `{ … }`), o texto começa por `let`, `const`, `interface` ou `type`, em minúsculas, seguido de espaço, tabulação ou quebra de linha e de um
+    /// nome (só a forma: o começo de um nome). A `interface` e o `type` no topo contam como declaração (seção 45): o script que os escreve declara as variáveis deles. É uma aproximação que só decide se o "Executar com valores…" aparece no menu; o comentário que não fecha é o texto inteiro, e não declara.
     /// Os casos estão em `src/test-fixtures/variables/declares.json`, que a tela também lê.
     /// </summary>
     public static bool DeclaresVariables(string sql)
@@ -105,7 +109,10 @@ internal static class ScriptVariablesRules
                 break;
         }
 
-        var keyword = sql.AsSpan(at).StartsWith("let", StringComparison.Ordinal) ? 3 : sql.AsSpan(at).StartsWith("const", StringComparison.Ordinal) ? 5 : 0;
+        var keyword = 0;
+        foreach (var word in Keywords)
+            if (sql.AsSpan(at).StartsWith(word, StringComparison.Ordinal))
+                keyword = word.Length;
         if (keyword == 0)
             return false;
 
@@ -172,7 +179,7 @@ internal static class ScriptVariablesRules
         }
 
         if (!ValueTypes.Contains(type, StringComparer.Ordinal))
-            return [($"{path}.type", "O tipo é number, text, boolean, date, timestamp, sql, null ou list.")];
+            return [($"{path}.type", "O tipo é number, text, boolean, date, timestamp, sql, object, null ou list.")];
 
         if (!HasOnlyTheKeys(entry, "type", "value"))
             return [(path, "Cada valor é um objeto com type e value.")];

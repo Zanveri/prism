@@ -1,10 +1,11 @@
 {
-  "rule": "RN-VAR-028: o declaresVariables da lista dos scripts. Depois dos espaços em branco e dos comentários (-- e // até o fim da linha, /* ... */ sem aninhar e, em qualquer banco, { ... }), o texto começa por let ou const, em minúsculas, seguido de espaço, tabulação ou quebra de linha e de um nome (só a forma do começo: letra, _ ou $). É uma aproximação, que só decide se o \"Executar com valores...\" aparece no menu do script. A API (GET api/user/scripts) e a tela leem este arquivo e têm de decidir igual.",
+  "rule": "RN-VAR-028: o declaresVariables da lista dos scripts. Depois dos espaços em branco e dos comentários (-- e // até o fim da linha, /* ... */ sem aninhar e, em qualquer banco, { ... }), o texto começa por let, const, interface ou type, em minúsculas, seguido de espaço, tabulação ou quebra de linha e de um nome (só a forma do começo: letra, _ ou $). É uma aproximação, que só decide se o \"Executar com valores...\" aparece no menu do script. A API (GET api/user/scripts) e a tela leem este arquivo e têm de decidir igual.",
   "notes": [
     "text: o SQL do script, como está no cofre.",
     "declares: o declaresVariables esperado.",
     "Difere do leitor das declarações (itemShape, RN-VAR-001) de propósito: aqui a quebra de linha depois do let vale como o espaço, o { } é comentário em qualquer banco e a palavra reservada no lugar do nome conta.",
-    "Fora daqui de propósito: os espaços que o JavaScript e o .NET leem diferente (U+0085, U+FEFF)."
+    "Fora daqui de propósito: os espaços que o JavaScript e o .NET leem diferente (U+0085, U+FEFF).",
+    "interface e type no topo contam (seção 45, pedido do dono em 2026-11-05): o script que escreve os tipos no começo declara as variáveis deles logo abaixo."
   ],
   "cases": [
     {
@@ -116,6 +117,51 @@
       "name": "a palavra reservada no lugar do nome conta: só a forma é conferida",
       "text": "let select = 1",
       "declares": true
+    },
+    {
+      "name": "interface no começo",
+      "text": "interface Cliente { id: number }\nlet c: Cliente\nSELECT @c.id",
+      "declares": true
+    },
+    {
+      "name": "type no começo",
+      "text": "type Filtro = { cidade: string }\nconst f: Filtro = { cidade: 'Lages' }",
+      "declares": true
+    },
+    {
+      "name": "o comentário antes da interface",
+      "text": "-- os tipos\ninterface A { a: number }",
+      "declares": true
+    },
+    {
+      "name": "quebra de linha depois do interface",
+      "text": "interface\nA { a: number }",
+      "declares": true
+    },
+    {
+      "name": "interfaces não é interface",
+      "text": "interfaces = 1",
+      "declares": false
+    },
+    {
+      "name": "typeof não é type",
+      "text": "typeof x",
+      "declares": false
+    },
+    {
+      "name": "INTERFACE em maiúsculas é SQL",
+      "text": "INTERFACE A { a: number }",
+      "declares": false
+    },
+    {
+      "name": "Type com a primeira maiúscula é SQL",
+      "text": "Type A = number",
+      "declares": false
+    },
+    {
+      "name": "o type seguido de =",
+      "text": "type = 'x'",
+      "declares": false
     },
     {
       "name": "letx não é let",

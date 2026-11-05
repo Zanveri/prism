@@ -13145,3 +13145,96 @@ O túnel SSH, o SSL e o proxy da conexão ainda não têm todas as regras nesta 
 - As regras do resto do túnel SSH, do SSL e do proxy: os campos e os tetos, o tempo do túnel e o intervalo do keep-alive.
 - Trazer o SSL na importação do DBeaver, que guarda os certificados e o modo em propriedades próprias de cada driver.
 - Repetir sozinho, depois de conectar, a prévia ou o trabalho da importação, da cópia e da exportação recusados por faltar o segredo (hoje a pessoa repete).
+
+## 45. Complemento de 2026-11-05: as interfaces e os `type` nas variáveis
+
+**Pedido do dono em 2026-11-05:** "termina de implementar as variáveis corretamente. Atualmente, não tem nada das FK's que mencionei quando criamos a spec e não funciona variáveis que tem valor atribuido através de resultados de queries e também adicione structs/interfaces, seguindo a semantica do typescript/javascript."
+
+As duas primeiras partes não mudam regra: são as regras da seção 41 que a tela ainda não cumpria. A escolha pela chave estrangeira (RN-VAR-030 e 031: a inferência da coluna que o SQL do script compara com a variável, os valores dela com a descrição e a busca, a conferência dos valores que não existem) e a variável de consulta (RN-VAR-011 e 034: a consulta roda na sessão da aba, na vez dela no script, e o resultado vira o valor pela forma e pela anotação) passaram a ser feitas como estão escritas. A terceira parte é nova, e está abaixo.
+
+### 45.1. O tipo com nome
+
+- **RN-VAR-037.** A `interface` e o `type`. O script declara tipos com a sintaxe e a semântica do TypeScript:
+  `interface Cliente { id: number; nome?: string; email: string | null }` e `type Filtro = { cidade: string }` ou
+  `type Id = number`.
+  - Onde ficam: como a declaração (RN-VAR-001), a `interface` ou o `type Nome =` no começo de uma linha, fora de
+    texto, comentário e nome entre aspas, é um item do script, que termina no `}` que fecha o `{` (ou no fim da linha,
+    no `type` de um tipo simples) e pode levar o `;`. A `interface` termina o comando de cima; o `type Nome =` só é
+    item no começo do texto ou depois de uma linha em branco, porque `type = 'x'` logo abaixo de um `UPDATE t SET` é
+    SQL. `interface` e `type` no meio da linha são SQL, e `type` continua podendo ser nome de variável
+    (`let type = 1`).
+  - Os campos: `nome: tipo`, separados por `;`, por `,` ou pela quebra de linha; `nome?:` é o campo opcional. O tipo
+    de um campo é qualquer anotação (RN-VAR-004): os da linguagem, a lista, o `| null`, o tipo de coluna, outro tipo
+    com nome e o objeto escrito (`faixa: { de: number; ate: number }`). O `sql` não entra ("O tipo sql não entra numa
+    interface nem num type: declare const nome: sql."), nem as chaves vedadas (RN-VAR-014).
+  - `extends`: a `interface` estende uma ou mais interfaces ou `type` de objeto (`interface C extends A, B { … }`),
+    com os campos herdados primeiro. O campo herdado pode ser redeclarado com um tipo que cabe no da base (de
+    `number | null` para `number`); com outro tipo é o erro "B não pode estender A: o campo id tem outro tipo em A.".
+    Estender o que não é objeto é "Uma interface só estende uma interface ou um type de objeto, e Ids é number[].".
+  - Os nomes: os tipos têm um espaço de nomes à parte do das variáveis (`type c = …` e `const c: c` convivem), seguem
+    a RN-VAR-003 e não podem ser os nomes dos tipos da linguagem ("number não pode ser nome de tipo: escolha outro.").
+    O tipo pode ser usado antes de ser declarado no texto, como no TypeScript.
+  - Não existe: genérico ("C<…> não existe: os tipos não levam parâmetros, e a lista se anota number[]."), método,
+    `class`, `new` de um tipo, união além do `| null`, índice (`[k: string]`) e `readonly`. O tipo não tem valor: nada
+    dele se avalia nem vai ao banco.
+  - Os erros, lendo o texto (RN-VAR-012), cada um no item do tipo: o nome repetido ("O tipo A já foi declarado na
+    linha 1."), o campo repetido, o tipo que não existe (a frase da RN-VAR-004, que agora cita "os do script
+    (interface e type)"), o tipo que se refere a si mesmo, direta ou indiretamente ("O tipo A se refere a si mesmo: A →
+    B → A."), e o que passa de 64 níveis de nomes (RN-VAR-013). A declaração que usa um tipo com erro tem o dela: "O
+    tipo Cliente tem um erro (linha 2).".
+
+- **RN-VAR-038.** A anotação de objeto. Altera a RN-VAR-004, em que "Objetos não se anotam": agora a anotação pode ser
+  um tipo com nome (`Cliente`, `Cliente[]`, `Cliente | null`) ou um objeto escrito (`const e: { cidade: string; uf?:
+  string } = …`). A tipagem é estrutural, como no TypeScript:
+  - o valor tem de ter cada campo que o tipo pede, com o tipo dele ("c não tem os campos id e nome, que Cliente
+    pede."; "c.id é number, mas recebeu 'x'."); o opcional que falta fica `null`; o `| null` aceita `null`, mas não
+    pode faltar;
+  - no objeto escrito, o campo a mais é erro, na chave dele ("O campo extra não existe em Cliente."), como a checagem
+    de objeto literal do TypeScript; no valor que vem de outra variável ou de uma consulta, os campos a mais ficam fora
+    do valor;
+  - duas interfaces com a mesma forma se trocam (`const b: B = a`), e o tipo mostrado (RN-VAR-024) é o nome da
+    anotação; o `type` de um tipo simples é o próprio tipo (`type Id = number` mostra `number`), e o do objeto escrito
+    mostra a forma, cortada em 60 caracteres;
+  - ler um campo que o tipo não tem é erro, também na reatribuição e no `@c.extra` (RN-VAR-016).
+
+- **RN-VAR-039.** A consulta na forma de um tipo. Altera a RN-VAR-011: anotada com um objeto (`let alvo: Cliente =
+  query(…)`), a linha é sempre um objeto, também com uma coluna só, e `Cliente[]` é a lista das linhas. As colunas casam
+  com os campos pelo nome; quando o nome exato não está, vale a única coluna com o mesmo nome em outra caixa (as
+  maiúsculas do Db2 e do Informix), e o campo fica com o nome do tipo. A coluna que falta é a frase da RN-VAR-038; a
+  célula nula num campo que não aceita `null` é "A coluna nome de alvo veio nula, e Cliente.nome é string.".
+
+- **RN-VAR-040.** O campo vai ao banco como parâmetro. Completa a RN-VAR-016: `@c.id` e `@c.endereco.cidade` trocam a
+  folha do caminho por um marcador (RN-VAR-032), com o tipo do valor; o campo opcional ausente vai como `NULL`; o campo
+  lista vai no `IN`, um marcador por item (`@c.tags[0]`, `@c.tags[1]`). O objeto inteiro, o campo que é objeto e a
+  lista de objetos não vão ao banco: "c é uma linha (objeto): use um campo, como @c.id.", "c.endereco é uma linha
+  (objeto): use um campo, como @c.endereco.cidade." e "todos é uma lista de linhas, que não vai para o SQL: faça a
+  consulta com uma coluna só.". O campo de um objeto `null` é "c.endereco é null, e não tem o campo cidade.". O
+  caminho para no primeiro valor que não é objeto, e o resto é SQL (`@p.e.x` é `$1.x`).
+
+- **RN-VAR-041.** A pergunta e o "Executar com valores…" de um objeto. Completa a RN-VAR-021 e a 027: a declaração sem
+  valor anotada com uma interface, um `type` de objeto, um objeto escrito ou a lista deles (`let c: Cliente`) é um
+  campo só, uma caixa de texto na fonte do editor, em que se escreve o valor como no script: `{ id: 7, nome: 'Ana',
+  desde: new Date('2026-10-20') }`. Só valem os valores escritos (número, texto, `true`, `false`, `null`, `new
+  Date('…')`, a lista e o objeto deles): "Escreva só valores: números, textos, true, false, null, new Date('…'), listas
+  e objetos."; a forma é conferida na execução, com as frases da RN-VAR-038. O valor da vez anterior e o lembrado voltam
+  escritos do mesmo jeito.
+  - Altera a RN-VAR-028: a entrada lembrada de um objeto, e da lista de objetos, é `{ type: "object", value }`, com o
+    texto escrito como no script; a API confere só a forma, como nas outras, e a mensagem do tipo errado passa a ser "O
+    tipo é number, text, boolean, date, timestamp, sql, object, null ou list.".
+  - Altera a RN-VAR-026 e a 028: as `interface` e os `type` no começo do script não escondem o "Executar com
+    valores…": vale o primeiro item que não é um tipo. O `declaresVariables` da lista dos scripts aceita também
+    `interface` e `type`, em minúsculas, seguidos de espaço e de um nome (a fixture `declares.json`).
+
+### 45.2. Testes
+
+- Os casos das interfaces, escritos à mão, em `src/client/src/app/workbench/_lib/variables/interfaces.cases.json`:
+  onde o tipo é item, o valor na forma do tipo, os erros e a troca dos campos.
+- A linha da consulta na forma do tipo (`query-value.test.ts`) e o campo de objeto do diálogo
+  (`variable-fields.test.ts`).
+- O `declaresVariables` pela fixture `src/test-fixtures/variables/declares.json`, com os casos de `interface` e
+  `type`; e a entrada `object` dos valores lembrados nos testes da API.
+
+### 45.3. Fica para depois
+
+- O diálogo com um campo por campo da interface, no lugar da caixa de texto do objeto.
+- O realce e o autocompletar dos campos de uma interface no editor (`@c.` sugerindo os campos do tipo).
