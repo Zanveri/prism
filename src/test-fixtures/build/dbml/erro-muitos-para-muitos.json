@@ -1,0 +1,25 @@
+{
+  "dbml": "Table public.aluno {\n  id bigint [pk, increment]\n}\n\nTable public.turma {\n  id bigint [pk, increment]\n}\n\nRef: public.aluno.id <> public.turma.id",
+  "before": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "error": {
+    "line": 9,
+    "column": 22,
+    "message": "muitos-para-muitos não vira FK; crie a tabela de ligação"
+  }
+}

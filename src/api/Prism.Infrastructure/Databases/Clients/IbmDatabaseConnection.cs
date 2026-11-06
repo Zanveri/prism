@@ -1,6 +1,7 @@
 #if PRISM_IBM_DRIVER
 using IBM.Data.Db2;
 using IBM.Data.DB2Types;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using System.Data.Common;
 using System.Runtime.InteropServices;
@@ -154,9 +155,9 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
     /// sem o valor, para o host, a senha, o banco e o usuário.
     /// </summary>
     protected override string? SettingsRefusal
-        => new[] { (Value: settings.Host, Field: "no host"), (Value: settings.Password, Field: "na senha"), (Value: settings.Database, Field: "no nome do banco"), (Value: settings.UserName, Field: "no usuário") }
+        => new[] { (Value: settings.Host, Key: "SemicolonInHost"), (Value: settings.Password, Key: "SemicolonInPassword"), (Value: settings.Database, Key: "SemicolonInDatabase"), (Value: settings.UserName, Key: "SemicolonInUserName") }
             .Where(setting => setting.Value.Contains(';'))
-            .Select(setting => $"O driver da IBM não aceita `;` {setting.Field}: é o caractere com que ele separa os dados da conexão.")
+            .Select(setting => Texts.Get(setting.Key))
             .FirstOrDefault();
 
     /// <summary>
@@ -165,8 +166,27 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
     /// aspas do construtor; o servidor de destino é só o host e a porta (RN-CONN-004). Sem pool: cada sessão é dona da própria
     /// conexão.
     /// </summary>
+    protected override ConnectionSettings? TunnelSettings => settings;
+
     protected override DbConnection CreateConnection()
-        => new DB2Connection(new DB2ConnectionStringBuilder { Server = $"{settings.Host}:{settings.Port}", Database = settings.Database, UserID = settings.UserName, Password = settings.Password, Pooling = false, Connect_Timeout = ConnectTimeoutSeconds }.ConnectionString);
+    {
+        var builder = new DB2ConnectionStringBuilder { Server = $"{EffectiveHost}:{EffectivePort}", Database = settings.Database, UserID = settings.UserName, Password = settings.Password, Pooling = false, Connect_Timeout = ConnectTimeoutSeconds };
+        if (settings.Ssl is { } ssl && !string.Equals(ssl.SslMode, "disable", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.Security = "SSL";
+            if (!string.IsNullOrWhiteSpace(ssl.CaCertificatePath))
+                builder["SSLServerCertificate"] = ssl.CaCertificatePath;
+
+            if (!string.IsNullOrWhiteSpace(ssl.ClientCertificatePath))
+                builder["SSLClientKeystoredb"] = ssl.ClientCertificatePath;
+
+            if (!string.IsNullOrWhiteSpace(ssl.ClientKeyPath))
+                builder["SSLClientKeystash"] = ssl.ClientKeyPath;
+        }
+
+        return new DB2Connection(builder.ConnectionString);
+    }
+
 
     /// <summary>
     /// RN-SQL-006. O `;` do fim e o que vem depois dele saem: o driver dividiria o envio ali. As quebras de linha fazem um comentário

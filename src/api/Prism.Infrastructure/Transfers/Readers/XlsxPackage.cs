@@ -17,7 +17,6 @@ internal sealed class XlsxPackage : IDisposable
     public const int MaxEntries = 10000;
     public const int MaxDirectoryBytes = 4 * 1024 * 1024;
 
-    public const string LimitsMessage = "A planilha passa dos limites que o Prism lê de um .xlsx.";
 
     private const uint EndOfDirectorySignature = 0x06054b50;
     private const uint Zip64LocatorSignature = 0x07064b50;
@@ -51,7 +50,7 @@ internal sealed class XlsxPackage : IDisposable
     /// <summary>A entrada, descompactada enquanto é lida, com o teto dela; a que falta é a pasta de trabalho que o Prism não lê.</summary>
     public CountingStream OpenEntry(string name, long limit)
     {
-        var entry = _archive.GetEntry(name) ?? throw Format($"Este arquivo não é um .xlsx que o Prism lê: falta a parte {name}.");
+        var entry = _archive.GetEntry(name) ?? throw Format(ImportText.Say("XlsxMissingPart", name));
         if (entry.Length > limit)
             throw Limits();
 
@@ -62,7 +61,7 @@ internal sealed class XlsxPackage : IDisposable
         => _archive.Dispose();
 
     public static ImportReadException Limits()
-        => new(new ImportReadFailure(EImportReadReason.Limits, LimitsMessage));
+        => new(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say("XlsxLimits")));
 
     public static ImportReadException Format(string message)
         => new(new ImportReadFailure(EImportReadReason.Format, message));
@@ -77,7 +76,7 @@ internal sealed class XlsxPackage : IDisposable
 
         // RN-IMPORT-003: o `.xls` e a planilha com senha são um arquivo composto do OLE, e não um .zip.
         if (read == 4 && head[0] == 0xD0 && head[1] == 0xCF && head[2] == 0x11 && head[3] == 0xE0)
-            throw Format("Este arquivo não é um .xlsx que o Prism lê: é uma planilha do Excel antigo (.xls) ou uma planilha com senha. No Excel, salve-a como .xlsx, sem senha.");
+            throw Format(ImportText.Say("XlsxOld"));
 
         var tailLength = (int)Math.Min(length, EndOfDirectoryLength + ushort.MaxValue);
         var tail = new byte[tailLength];
@@ -95,7 +94,7 @@ internal sealed class XlsxPackage : IDisposable
         }
 
         if (at < 0)
-            throw Format("Este arquivo não é um .xlsx que o Prism lê: ele não é um .zip, como todo .xlsx.");
+            throw Format(ImportText.Say("XlsxNotZip"));
 
         var endOfDirectory = length - tailLength + at;
         long entries = BinaryPrimitives.ReadUInt16LittleEndian(tail.AsSpan(at + 10));
@@ -148,7 +147,7 @@ internal sealed class XlsxPackage : IDisposable
         while (position < directory.Length)
         {
             if (position + DirectoryHeaderLength > directory.Length || BinaryPrimitives.ReadUInt32LittleEndian(directory.AsSpan(position)) != DirectoryHeaderSignature)
-                throw Format("O .xlsx está estragado: o Prism não consegue descompactá-lo. No Excel, salve-o de novo como .xlsx.");
+                throw Format(ImportText.Say("XlsxCorrupt"));
 
             long uncompressed = BinaryPrimitives.ReadUInt32LittleEndian(directory.AsSpan(position + 24));
             var nameLength = BinaryPrimitives.ReadUInt16LittleEndian(directory.AsSpan(position + 28));
@@ -156,7 +155,7 @@ internal sealed class XlsxPackage : IDisposable
             var commentLength = BinaryPrimitives.ReadUInt16LittleEndian(directory.AsSpan(position + 32));
             var next = position + DirectoryHeaderLength + nameLength + extraLength + commentLength;
             if (next > directory.Length)
-                throw Format("O .xlsx está estragado: o Prism não consegue descompactá-lo. No Excel, salve-o de novo como .xlsx.");
+                throw Format(ImportText.Say("XlsxCorrupt"));
 
             var name = Encoding.UTF8.GetString(directory, position + DirectoryHeaderLength, nameLength);
             if (uncompressed == uint.MaxValue)

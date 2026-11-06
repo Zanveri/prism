@@ -128,6 +128,11 @@ describe("o resumo e as linhas (RN-TRANSF-011)", () => {
     expect(connectionLine(connection("c3"))).toBe("pg.exemplo.invalid:5432 / api · sem usuário e senha");
   });
 
+  it("a segunda linha diz o túnel, o SSL e o proxy que a conexão traz (RN-REDE-004)", () => {
+    const tunneled = { ...connection("c3"), ssh: { host: "bastion", port: 22, userName: "ops", authMethod: "privateKey", hasSecret: false }, ssl: { sslMode: "verify-full" }, proxy: { host: "socks", port: 1080, userName: null, hasPassword: false } };
+    expect(connectionLine(tunneled)).toBe("pg.exemplo.invalid:5432 / api · sem usuário e senha · via SSH ops@bastion:22 · SSL verify-full · proxy socks:1080");
+  });
+
   it("o que o leitor de tela ouve na caixa: o caminho, a segunda linha, o motivo e cada marca com a explicação, que na tela só está na dica do mouse", () => {
     const query = { label: tags.ownQuery, hint: "O Prism executa esta consulta sozinho: SELECT 1. Confira antes de importar.", tone: "attention" as const };
     const reason = "Este Prism não conhece o banco MySql.";

@@ -2,11 +2,16 @@ using CSharpFunctionalExtensions;
 using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
+using Prism.Application.Journal;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
+using Prism.Infrastructure.Vault.Services;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -49,6 +54,24 @@ public sealed record ExecuteQueryCommand : IRequest<Result<QueryResultDto, ApiEr
     /// </summary>
     public JsonElement? Params { get; init; }
 
+    /// <summary>
+    /// RN-AUDIT-001 e 002: de onde o comando partiu (`editor`, `script`, `values`, `statement`, `rerun`, `filter`, `auto-refresh`, `other`, `records`, `ddl` ou `build`).
+    /// Ausente ou nulo, vale `other`. Só `editor`, `script`, `values` e `statement` entram na lista do Histórico (`RN-HIST-002`).
+    /// </summary>
+    public string? Origin { get; init; }
+
+    /// <summary>
+    /// RN-AUDIT-001 e RN-HIST-002: quando o comando tinha `@nome` que a tela trocou por `$1`/`?`, o texto antes da troca, para o Histórico
+    /// devolver ao editor o que a pessoa escreveu. Sem variáveis, ausente ou nulo.
+    /// </summary>
+    public string? HistoryText { get; init; }
+
+    /// <summary>RN-AUDIT-001: a pessoa confirmou o aviso de comando irreversível antes desta execução.</summary>
+    public bool Confirmed { get; init; }
+
+    /// <summary>RN-AUDIT-002 e 013: o identificador da execução de um script (Alt+X), comum aos comandos do mesmo script.</summary>
+    public Guid? ScriptRunID { get; init; }
+
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e o SQL do usuário pode ter dado sensível.</summary>
     public override string ToString() => nameof(ExecuteQueryCommand);
 
@@ -57,8 +80,10 @@ public sealed record ExecuteQueryCommand : IRequest<Result<QueryResultDto, ApiEr
         => Keep is { ValueKind: JsonValueKind.Array } keep ? [.. keep.EnumerateArray().Select(entry => entry.GetGuid()).Distinct()] : [];
 }
 
-internal sealed class ExecuteQueryHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService) : IRequestHandler<ExecuteQueryCommand, Result<QueryResultDto, ApiErrorDto>>
+internal sealed class ExecuteQueryHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService? vaultService = null, IJournalRecorder? journalRecorder = null) : IRequestHandler<ExecuteQueryCommand, Result<QueryResultDto, ApiErrorDto>>
 {
+    private static readonly ConcurrentDictionary<Guid, string> LastAutoRefresh = new();
+
     /// <summary>
     /// O validator já recusou o que não é um inteiro da faixa (aqui só há o número ou a falta dele) e o filtro que não se junta ao
     /// comando. Sem filtro (nulo ou só de espaços), o comando vai como veio. RN-PROT-002 e 006: a conexão somente leitura é a do cofre agora,
@@ -73,7 +98,69 @@ internal sealed class ExecuteQueryHandler(IConnectionQueries connectionQueries, 
 
         var pageSize = request.PageSize is { ValueKind: JsonValueKind.Number } size ? size.GetInt32() : QueryPaging.DefaultPageSize;
         var filter = string.IsNullOrWhiteSpace(request.Filter) ? null : request.Filter;
-        var outcome = await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, filter, pageSize, readOnly.Value, request.KeptResults(), QueryParameterRules.Read(request.Params), cancellationToken);
+        var parameters = QueryParameterRules.Read(request.Params);
+        var origin = string.IsNullOrWhiteSpace(request.Origin) ? "other" : request.Origin;
+
+        // RN-AUDIT-002: na atualização automática, a primeira execução com aquele texto e filtro entra no diário; as seguintes com o mesmo texto e filtro não.
+        var shouldRecord = journalRecorder is not null;
+        if (shouldRecord && origin == "auto-refresh")
+        {
+            var autoRefreshKey = $"{request.Sql}\0{filter}";
+            if (LastAutoRefresh.TryGetValue(request.SessionID, out var last) && last == autoRefreshKey)
+                shouldRecord = false;
+            else
+                LastAutoRefresh[request.SessionID] = autoRefreshKey;
+        }
+        else if (shouldRecord)
+        {
+            LastAutoRefresh.TryRemove(request.SessionID, out _);
+        }
+
+        var entryId = -1L;
+        if (shouldRecord)
+        {
+            var sessionInfo = databaseSessionService.InfoOf(request.SessionID);
+            var engine = sessionInfo?.Engine ?? EDatabaseEngine.PostgreSql;
+            var (level, reason, action) = CommandDanger.Classify(request.Sql, engine);
+            var (snapshot, protections) = JournalSnapshots.FromVault(vaultService, sessionInfo?.ConnectionID, sessionInfo, readOnly.Value);
+
+            entryId = journalRecorder!.Begin(new JournalEntryStart(
+                Kind: EJournalKind.Sql,
+                Action: action,
+                Level: level,
+                Reason: reason,
+                Origin: origin,
+                Sql: request.Sql,
+                HistoryText: request.HistoryText,
+                Confirmed: request.Confirmed,
+                SessionId: request.SessionID,
+                ScriptRunId: request.ScriptRunID,
+                Connection: snapshot,
+                Protections: protections));
+        }
+
+        var outcome = await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, filter, pageSize, readOnly.Value, request.KeptResults(), parameters, cancellationToken);
+
+        if (entryId > 0)
+        {
+            if (outcome.IsSuccess)
+            {
+                var executed = outcome.Value;
+                var rows = executed.RowsAffected ?? executed.Page?.TotalRows ?? executed.Page?.Rows.Count;
+                journalRecorder!.Complete(entryId, new JournalEntryEnd(EJournalOutcome.Ok, rows));
+            }
+            else
+            {
+                var errorDto = DatabaseSessionErrors.From(outcome.Error);
+                var journalOutcome = outcome.Error.Outcome == ECancelOutcome.Canceled
+                    ? EJournalOutcome.Cancelled
+                    : outcome.Error.Kind is EDatabaseFailure.ConnectionReadOnly or EDatabaseFailure.FilterInvalid or EDatabaseFailure.ParametersMismatch or EDatabaseFailure.QueryInvalid or EDatabaseFailure.TransactionsNotAvailable or EDatabaseFailure.TransactionFailed
+                        ? EJournalOutcome.Refused
+                        : EJournalOutcome.Error;
+                var sqlState = journalOutcome == EJournalOutcome.Error ? outcome.Error.SqlState : null;
+                journalRecorder!.Complete(entryId, new JournalEntryEnd(journalOutcome, null, errorDto.Type, sqlState, errorDto.Detail));
+            }
+        }
 
         return outcome.Map(executed => executed.ToDto()).MapError(DatabaseSessionErrors.From);
     }

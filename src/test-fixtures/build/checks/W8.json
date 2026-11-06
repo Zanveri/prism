@@ -1,0 +1,31 @@
+{
+  "scope": "full",
+  "notes": [
+    { "code": "W8", "message": "Linha 12: CREATE VIEW ignorado." }
+  ],
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "W8",
+      "severity": "warning",
+      "table": null,
+      "column": null
+    }
+  ]
+}

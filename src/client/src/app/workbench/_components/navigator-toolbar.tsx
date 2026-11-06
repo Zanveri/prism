@@ -10,8 +10,9 @@ import { stripKeyTarget } from "../_lib/tab-strip";
 /** "Recolher tudo": duas setas que se encontram, no traço dos outros ícones (`components/ui/icons.tsx`: 16×16, traço de 1,5, pontas redondas). */
 function CollapseAllIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-none">
-      <path d="M4.5 2.5L8 6l3.5-3.5M4.5 13.5L8 10l3.5 3.5" />
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon="collapse-all" className="flex-none">
+      <path className="icon-part-down" d="M4.5 2.5L8 6l3.5-3.5" />
+      <path className="icon-part-up" d="M4.5 13.5L8 10l3.5 3.5" />
     </svg>
   );
 }

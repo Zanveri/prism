@@ -192,4 +192,9 @@ describe("onde cada recusa do começo aparece (RN-EXPORT-015)", () => {
     ]);
     expect(refusalsOf(apiError("CONNECTION_CREDENTIALS_MISSING", { errors: { Password: ["y"] } }))).toEqual([{ field: null, message: "Esta conexão não tem senha gravada. Preencha-a em Editar conexão e exporte de novo." }]);
   });
+
+  it("o segredo do túnel SSH que a conexão não grava fica no alto com a frase da API, e não com a da senha do banco", () => {
+    const message = "A senha do túnel SSH não está gravada nesta conexão. Informe-a em Editar conexão e exporte de novo.";
+    expect(refusalsOf(apiError("CONNECTION_CREDENTIALS_MISSING", { errors: { sshSecret: [message] } }))).toEqual([{ field: null, message }]);
+  });
 });

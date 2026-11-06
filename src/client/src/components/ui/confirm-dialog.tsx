@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { uiCopy } from "@/components/ui/ui.copy";
 
 export type ConfirmDialogProps = {
   open: boolean;
@@ -30,7 +31,7 @@ export type ConfirmDialogProps = {
  * Pergunta não é feedback — fica até ser respondida; o resultado da ação, esse sim, é aviso
  * (`useToast`).
  */
-export function ConfirmDialog({ open, title, description, children, confirmLabel, cancelLabel = "Cancelar", pendingLabel, tone = "primary", pending = false, onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, description, children, confirmLabel, cancelLabel = uiCopy.cancel, pendingLabel, tone = "primary", pending = false, onConfirm, onCancel }: ConfirmDialogProps) {
   return (
     <Dialog
       open={open}

@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using CSharpFunctionalExtensions;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Queries;
@@ -15,6 +17,9 @@ namespace Prism.Application.DatabaseSessions.Models;
 /// </summary>
 internal static class SessionProtections
 {
+    /// <summary>Os textos, no idioma do pedido: <c>SessionProtections.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(SessionProtections));
+
     /// <summary>
     /// A sessão que não existe não é somente leitura aqui: a operação pedida responde `DATABASE_SESSION_NOT_FOUND` por conta própria. A conexão
     /// excluída (as sessões dela estão sendo fechadas, RN-CONN-014) responde como a sessão que não existe, e o cofre fechado é o 401 de sempre.
@@ -29,7 +34,7 @@ internal static class SessionProtections
             return VaultErrors.From(read.Error);
 
         if (read.Value is not { } readOnly)
-            return DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.SessionNotFound, "A conexão desta sessão foi excluída, e a sessão está sendo fechada."));
+            return DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.SessionNotFound, Texts.Get("ConnectionDeleted")));
 
         return readOnly;
     }

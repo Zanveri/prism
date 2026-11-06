@@ -109,7 +109,8 @@ public sealed class DbeaverImportsTests
         Assert.That(scan.GetProperty("projects").GetArrayLength(), Is.EqualTo(5));
         Assert.That(scan.GetProperty("projects")[0].GetProperty("importable").GetInt32(), Is.EqualTo(11));
         Assert.That(previewResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(previewText, Does.Not.Contain(DbeaverWorkspace.Mark).And.Not.Contain("\"password\""));
+        // A chave `password` e as senhas fictícias; o valor "password" do método do túnel (RN-REDE-008) não é senha.
+        Assert.That(previewText, Does.Not.Contain(DbeaverWorkspace.Mark).And.Not.Contain("\"password\":").And.Not.Contain("senha-"));
         Assert.That(imported.StatusCode, Is.EqualTo(HttpStatusCode.OK), result.ToString());
         Assert.That(result.GetProperty("connectionIDs").GetArrayLength(), Is.EqualTo(11));
         Assert.That(result.GetProperty("updatedIDs").GetArrayLength(), Is.EqualTo(0));

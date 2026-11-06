@@ -136,6 +136,16 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
             return document with { Connections = [.. document.Connections.Where(record => record.ID != id)] };
         }, cancellationToken);
 
+    public Task<UnitResult<ApiErrorDto>> TrustHostKey(Guid id, string sshHost, int sshPort, string fingerprint, CancellationToken cancellationToken)
+        => vaultService.SaveOrRefuse(document =>
+        {
+            // A mesma instância faz o cofre não regravar: a conexão mudou, ou já tem a impressão digital.
+            if (document.Connections.FirstOrDefault(record => record.ID == id)?.Ssh is not { HostKeyFingerprint: null, IgnoreHostVerification: false } ssh || !ConnectionRules.SameServer(ssh.Host, ssh.Port, sshHost, sshPort))
+                return document;
+
+            return document with { Connections = [.. document.Connections.Select(record => record.ID == id ? record with { Ssh = ssh with { HostKeyFingerprint = fingerprint } } : record)] };
+        }, cancellationToken);
+
     /// <summary>RN-CONN-011: o nome é único na pasta (a raiz é um lugar), sem diferenciar maiúsculas. A própria conexão não colide com o nome que já tem.</summary>
     private static bool NameIsTaken(VaultDocument document, Connection connection)
         => NameIsTaken(document, connection.FolderID, connection.ID, connection.Name);

@@ -2,6 +2,7 @@ using Prism.Application.ConnectionTransfers.Models;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Vault.Models;
 using System.Net;
+using System.Text.Json;
 using static Prism.UnitTesting.ConnectionTransfers.TransferFixtures;
 
 namespace Prism.UnitTesting.ConnectionTransfers;
@@ -173,6 +174,67 @@ public sealed class ExportPlannerTests
         Assert.Equal(expectedPassword, exported.Password);
         Assert.Equal(expectedUser is null ? 0 : 1, build.WithUser);
         Assert.Equal(expectedPassword is null ? 0 : 1, build.WithPassword);
+    }
+
+    /// <summary>
+    /// RN-REDE-004: o túnel SSH, o SSL e o proxy vão no arquivo como a conexão os grava e voltam iguais pela importação. O segredo do túnel e a senha do proxy vão
+    /// só junto com a senha do banco ("Usuário e senha"); nas outras escolhas não aparecem no arquivo, e a conexão importada os pede ao conectar (RN-REDE-003).
+    /// </summary>
+    [Trait("ExportPlanner", "Build")]
+    [Theory(DisplayName = "OK o túnel, o SSL e o proxy vão e voltam pela importação, e os segredos deles só com \"Usuário e senha\"")]
+    [InlineData("none", false)]
+    [InlineData("user", false)]
+    [InlineData("userAndPassword", true)]
+    public void Build_ShouldBeOK_NetworkSettingsRoundTrip(string credentials, bool withSecrets)
+    {
+        //Arrange
+        var ssh = new ConnectionSshSettings("bastion.exemplo.invalid", 2222, "ops", "privateKey", "/chaves/id_ed25519", "frase-ficticia-da-chave", KeepAliveIntervalMs: 30000, HostKeyFingerprint: "SHA256:impressao-ficticia");
+        var ssl = new ConnectionSslSettings("/certs/ca.pem", SslMode: "verify-full");
+        var proxy = new ConnectionProxySettings("socks.exemplo.invalid", 1081, "proxy-user", "senha-ficticia-do-proxy");
+        var connection = Connection("DATA FIX") with { Ssh = ssh, Ssl = ssl, Proxy = proxy };
+        var document = Document(connections: [connection]);
+
+        //Act
+        var (_, build) = PlanAndBuild(document, [], [Choice(connection, TransferRules.CredentialsOf(credentials))]);
+        var json = JsonSerializer.Serialize(build.Content, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var read = ImportedFile.Read(JsonDocument.Parse(json).RootElement.Clone());
+        var candidate = ImportAnalysis.Analyze(read.File!).Value.Connections.Single().Candidate!;
+
+        //Assert
+        Assert.Equal(withSecrets, json.Contains("frase-ficticia-da-chave", StringComparison.Ordinal));
+        Assert.Equal(withSecrets, json.Contains("senha-ficticia-do-proxy", StringComparison.Ordinal));
+        Assert.Equal(withSecrets, json.Contains("\"secret\"", StringComparison.Ordinal));
+        Assert.Equal(withSecrets ? ssh : ssh with { Secret = null }, candidate.Ssh);
+        Assert.Equal(ssl, candidate.Ssl);
+        Assert.Equal(withSecrets ? proxy : proxy with { Password = null }, candidate.Proxy);
+    }
+
+    /// <summary>
+    /// RN-REDE-004 e RN-TRANSF-005: a conexão sem a senha do banco gravada e com a do túnel ou a do proxy leva essas com "Usuário e senha", conta como com a
+    /// senha e pede a senha do Prism.
+    /// </summary>
+    [Trait("ExportPlanner", "Build")]
+    [Fact(DisplayName = "OK o segredo do túnel e o do proxy vão com \"Usuário e senha\" sem a senha do banco, e pedem a senha do Prism")]
+    public void Build_ShouldBeOK_NetworkSecretsWithoutTheDatabasePassword()
+    {
+        //Arrange
+        var connection = Connection("DATA FIX", password: string.Empty) with
+        {
+            Ssh = new ConnectionSshSettings("bastion.exemplo.invalid", 22, "ops", Secret: "senha-ficticia-do-tunel"),
+            Proxy = new ConnectionProxySettings("socks.exemplo.invalid", 1080, "proxy-user", "senha-ficticia-do-proxy")
+        };
+        var document = Document(connections: [connection]);
+
+        //Act
+        var (plan, build) = PlanAndBuild(document, [], [Choice(connection, ETransferCredentials.UserAndPassword)]);
+        var only = build.Content.Connections.Single();
+
+        //Assert
+        Assert.True(plan.NeedsUserPassword);
+        Assert.Null(only.Password);
+        Assert.Equal("senha-ficticia-do-tunel", only.Ssh?.Secret);
+        Assert.Equal("senha-ficticia-do-proxy", only.Proxy?.Password);
+        Assert.Equal(1, build.WithPassword);
     }
 
     /// <summary>

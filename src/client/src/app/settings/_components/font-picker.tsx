@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { controlClassName } from "@/components/ui/field";
 import { cn } from "@/lib/utils/cn";
 
-import type { FontRole } from "../_lib/fonts";
+import { fontStack, type FontRole } from "../_lib/fonts";
 import { settingsCopy } from "../_lib/settings.copy";
 import { fontChoices, isInstalled, systemFontsQuery, typedFont, type FontChoice } from "../_lib/system-fonts";
 
@@ -231,7 +231,9 @@ export function FontPicker({ id, label, role, value, onChange, hintId }: FontPic
                         onClick={() => choose(choice.family)}
                         className={cn("flex cursor-pointer items-baseline gap-2 rounded-sm px-2.5 py-2 break-words", index === active ? "bg-selected" : "bg-transparent", choice.family === value ? "font-semibold text-ink" : "text-body")}
                       >
-                        <span className="min-w-0 flex-1">{choice.family}</span>
+                        <span className="min-w-0 flex-1" style={{ fontFamily: fontStack(role, choice.family) }}>
+                          {choice.family}
+                        </span>
                         {group === "app" ? <span className="flex-none text-xs font-normal text-muted">{copy.appFont}</span> : null}
                       </div>
                     ));

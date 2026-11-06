@@ -1,4 +1,4 @@
-import { verificationOf, type Connection, type ConnectionInput } from "./connections.schema";
+import { proxyInputOf, sshInputOf, verificationOf, type Connection, type ConnectionInput } from "./connections.schema";
 
 /**
  * O pedido de mover uma conexão para outra pasta pelo navegador (RN-NAV-003; na tela de Conexões era trocar a pasta no formulário). O
@@ -21,6 +21,9 @@ export function movedConnectionInput(connection: Connection, folderID: string | 
     confirmCommands: connection.confirmCommands,
     readOnly: connection.readOnly,
     ...(connection.useInternalDescriptions !== undefined ? { useInternalDescriptions: connection.useInternalDescriptions } : {}),
+    ...(connection.ssh !== undefined ? { ssh: sshInputOf(connection.ssh) } : {}),
+    ...(connection.ssl !== undefined ? { ssl: connection.ssl } : {}),
+    ...(connection.proxy !== undefined ? { proxy: proxyInputOf(connection.proxy) } : {}),
     ...verificationOf(connection),
   };
 }

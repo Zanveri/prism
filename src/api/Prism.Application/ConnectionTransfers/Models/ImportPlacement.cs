@@ -96,7 +96,7 @@ internal static class ImportPlacement
             // RN-TRANSF-011: desmarcada a caixa "Manter as consultas de verificação do arquivo" (o padrão), a conexão de consulta própria entra com a do banco; a
             // verificação, ligada ou não, e o intervalo continuam os do arquivo.
             var query = keepVerificationQueries ? candidate.VerificationQuery : null;
-            var safeguards = ConnectionSafeguards.From(candidate.ConfirmCommands, candidate.ReadOnly, candidate.VerificationEnabled, candidate.VerificationInterval, query);
+            var safeguards = ConnectionSafeguards.From(candidate.ConfirmCommands, candidate.ReadOnly, candidate.VerificationEnabled, candidate.VerificationInterval, query, ssh: candidate.Ssh, ssl: candidate.Ssl, proxy: candidate.Proxy);
             var connection = Connection.Create(folderID, copyName ?? name, candidate.Engine, candidate.Host, candidate.Port, candidate.Database, candidate.UserName, candidate.Password, candidate.EnvironmentName, candidate.EnvironmentColor, safeguards, now);
             var record = ConnectionRecords.ToRecord(connection);
 

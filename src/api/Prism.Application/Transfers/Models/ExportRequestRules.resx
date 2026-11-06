@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FormatInvalid" xml:space="preserve">
+    <value>O formato deve ser um destes: {0}.</value>
+  </data>
+  <data name="XlsxBom" xml:space="preserve">
+    <value>O XLSX não é texto: não leva BOM.</value>
+  </data>
+  <data name="XlsxZip" xml:space="preserve">
+    <value>O XLSX já é um arquivo compactado.</value>
+  </data>
+  <data name="XlsxClipboard" xml:space="preserve">
+    <value>O XLSX não é texto: não vai para a área de transferência.</value>
+  </data>
+  <data name="ClipboardBom" xml:space="preserve">
+    <value>Com a área de transferência, o texto não leva BOM.</value>
+  </data>
+  <data name="ClipboardZip" xml:space="preserve">
+    <value>Com a área de transferência, o texto não vai num .zip.</value>
+  </data>
+  <data name="EntryNameInvalid" xml:space="preserve">
+    <value>O nome do arquivo dentro do .zip tem de 1 a {0} caracteres, sem / nem \, sem caractere de controle nem marca de direção, e não é . nem ...</value>
+  </data>
+  <data name="EntryNameWithoutZip" xml:space="preserve">
+    <value>O nome do arquivo dentro do .zip só vale com o .zip.</value>
+  </data>
+  <data name="WindowInvalid" xml:space="preserve">
+    <value>O número da janela é um inteiro positivo.</value>
+  </data>
+  <data name="SourceRequired" xml:space="preserve">
+    <value>Informe a origem da exportação.</value>
+  </data>
+  <data name="SchemaNameLength" xml:space="preserve">
+    <value>O esquema tem de 1 a {0} caracteres, sem U+0000.</value>
+  </data>
+  <data name="TableNameLength" xml:space="preserve">
+    <value>A tabela tem de 1 a {0} caracteres, sem U+0000.</value>
+  </data>
+  <data name="SourceNameLength" xml:space="preserve">
+    <value>O nome da origem tem de 1 a {0} caracteres, sem U+0000.</value>
+  </data>
+  <data name="ColumnNameLength" xml:space="preserve">
+    <value>O nome de cada coluna tem de 1 a {0} caracteres, sem U+0000.</value>
+  </data>
+  <data name="ParamsOnlyQuery" xml:space="preserve">
+    <value>Os valores dos marcadores só valem na origem query.</value>
+  </data>
+  <data name="SqlRequired" xml:space="preserve">
+    <value>Informe o comando da origem.</value>
+  </data>
+  <data name="SqlTooLarge" xml:space="preserve">
+    <value>O comando pode ter até 1 MB.</value>
+  </data>
+  <data name="KindInvalid" xml:space="preserve">
+    <value>A origem deve ser table ou query.</value>
+  </data>
+  <data name="ColumnsCount" xml:space="preserve">
+    <value>Marque de 1 a 32.767 colunas.</value>
+  </data>
+  <data name="ColumnsPosition" xml:space="preserve">
+    <value>Cada coluna tem uma posição a partir de 0, sem repetir.</value>
+  </data>
+  <data name="DuplicateColumn" xml:space="preserve">
+    <value>O resultado tem duas colunas chamadas {0}: deixe uma de fora na Extração.</value>
+  </data>
+  <data name="XlsxColumns" xml:space="preserve">
+    <value>Uma planilha do Excel tem no máximo 16.384 colunas: deixe {0} de fora na Extração, ou escolha outro formato.</value>
+  </data>
+</root>

@@ -18,5 +18,12 @@ public sealed record ScriptSummaryDto
     /// <summary>RN-SCRIPT-006: um ícone da lista fechada, nulo no padrão (o documento), e a cor dele, nula no script sem cor.</summary>
     public string? Icon { get; init; }
     public string? Color { get; init; }
+
+    /// <summary>
+    /// RN-VAR-028: se o texto declara variáveis no topo (`ScriptVariablesRules.DeclaresVariables`), o que põe o "Executar com valores…" no menu do script.
+    /// Calculado a cada leitura, pelo SQL do cofre; não é gravado.
+    /// </summary>
+    public bool DeclaresVariables { get; init; }
+
     public DateTime UpdatedAt { get; init; }
 }

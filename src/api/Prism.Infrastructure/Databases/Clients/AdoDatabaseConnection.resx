@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CanceledMessage" xml:space="preserve">
+    <value>O comando foi cancelado.</value>
+  </data>
+  <data name="UnknownOutcomeAdvice" xml:space="preserve">
+    <value>O Prism não sabe se o comando foi concluído: confira no banco antes de executá-lo de novo.</value>
+  </data>
+  <data name="UnknownOutcomeMessage" xml:space="preserve">
+    <value>O banco não respondeu ao cancelamento a tempo, e a sessão foi encerrada. {0}</value>
+  </data>
+  <data name="CanceledWhileReturningRowsMessage" xml:space="preserve">
+    <value>O cancelamento chegou enquanto o comando devolvia as linhas. O que ele gravou até ali está confirmado, e pode ser só uma parte do comando: o Prism não sabe se ele foi concluído. Confira no banco antes de executá-lo de novo.</value>
+  </data>
+  <data name="ConnectionClosedMessage" xml:space="preserve">
+    <value>A conexão com o banco foi encerrada, e o comando não foi enviado. Abra a sessão de novo.</value>
+  </data>
+  <data name="NoOpenCursorMessage" xml:space="preserve">
+    <value>Não há cursor aberto: execute o comando de novo.</value>
+  </data>
+  <data name="UnknownObjectKindMessage" xml:space="preserve">
+    <value>O tipo de objeto pedido não existe: use tables, views, routines ou sequences.</value>
+  </data>
+  <data name="TransactionControlMessage" xml:space="preserve">
+    <value>Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos em Auto-commit, em que cada comando é confirmado quando termina. Para controlar a transação, escolha "Commit manual" na barra do editor: o primeiro comando abre a transação, e "Commit" e "Rollback" (ou COMMIT e ROLLBACK digitados) a encerram.</value>
+  </data>
+  <data name="NeverTransactionControlMessage" xml:space="preserve">
+    <value>A confirmação em duas fases (PREPARE TRANSACTION, COMMIT PREPARED), o AND CHAIN e o COMMIT ou ROLLBACK com mais alguma coisa depois não são aceitos; nada foi enviado. Use COMMIT ou ROLLBACK sozinhos, ou os botões "Commit" e "Rollback".</value>
+  </data>
+  <data name="NotAllowedInTransactionMessage" xml:space="preserve">
+    <value>Este comando não roda dentro de transação, e a recusa do banco estragaria a transação manual da aba; nada foi enviado. Execute-o numa aba em Auto-commit.</value>
+  </data>
+  <data name="ReadOnlyWithTransactionMessage" xml:space="preserve">
+    <value>A conexão passou a somente leitura com uma transação manual aberta nesta aba; nada foi enviado. Encerre a transação com "Commit" ou "Rollback" antes.</value>
+  </data>
+  <data name="RollbackWorkToSavepointMessage" xml:space="preserve">
+    <value>Pelo driver da IBM, ROLLBACK WORK TO SAVEPOINT desfaz a transação inteira, e não só o que veio depois do ponto de salvamento; nada foi enviado. Escreva ROLLBACK TO SAVEPOINT, sem o WORK.</value>
+  </data>
+  <data name="CanceledWhileReturningRowsInTransactionMessage" xml:space="preserve">
+    <value>O cancelamento chegou enquanto o comando devolvia as linhas. O que ele gravou até ali ficou na transação, sem commit, e pode ser só uma parte do comando: o Prism não sabe se ele foi concluído. Confira antes do Commit.</value>
+  </data>
+  <data name="UndoneTransactionMessage" xml:space="preserve">
+    <value>O comando deixou uma transação aberta, e o Prism a desfez: nada do que ele gravou dentro dela ficou. {0}</value>
+  </data>
+  <data name="WritesAfterTheFirstPageMessage" xml:space="preserve">
+    <value>O comando começou como leitura e tentou gravar depois da primeira página; nada foi gravado. Execute-o de novo: ele será executado até o fim.</value>
+  </data>
+  <data name="SeveralStatementsMessage" xml:space="preserve">
+    <value>Cada execução leva um comando só, e o texto enviado tem mais de um; nada foi executado. Envie um de cada vez. Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) é um comando só.</value>
+  </data>
+  <data name="NotCountableMessage" xml:space="preserve">
+    <value>Só uma leitura pode ser contada, e o comando enviado não é uma leitura só; nada foi executado.</value>
+  </data>
+  <data name="NoRowMessage" xml:space="preserve">
+    <value>A linha não existe mais, ou a chave dela mudou: o comando não alterou nenhuma linha.</value>
+  </data>
+  <data name="IsolationLevelInvalid" xml:space="preserve">
+    <value>O nível de isolamento "{0}" não existe para este banco.</value>
+  </data>
+  <data name="TransactionOpenForIsolation" xml:space="preserve">
+    <value>A aba tem uma transação aberta: encerre-a com Commit ou Rollback antes de trocar o nível de isolamento.</value>
+  </data>
+  <data name="NoTransactionLogForIsolation" xml:space="preserve">
+    <value>Este banco não tem log de transação: o único nível de isolamento disponível é Dirty Read.</value>
+  </data>
+  <data name="EditWouldChangeMany" xml:space="preserve">
+    <value>O comando alteraria {0} linhas, e não uma só.</value>
+  </data>
+  <data name="CountReturnedNoRow" xml:space="preserve">
+    <value>A contagem não devolveu nenhuma linha.</value>
+  </data>
+  <data name="SemicolonInHost" xml:space="preserve">
+    <value>O driver da IBM não aceita `;` no host: é o caractere com que ele separa os dados da conexão.</value>
+  </data>
+  <data name="SemicolonInPassword" xml:space="preserve">
+    <value>O driver da IBM não aceita `;` na senha: é o caractere com que ele separa os dados da conexão.</value>
+  </data>
+  <data name="SemicolonInDatabase" xml:space="preserve">
+    <value>O driver da IBM não aceita `;` no nome do banco: é o caractere com que ele separa os dados da conexão.</value>
+  </data>
+  <data name="SemicolonInUserName" xml:space="preserve">
+    <value>O driver da IBM não aceita `;` no usuário: é o caractere com que ele separa os dados da conexão.</value>
+  </data>
+  <data name="VariableQueryTooManyColumns" xml:space="preserve">
+    <value>A consulta de uma variável tem até {0} colunas, e esta tem {1}.</value>
+  </data>
+  <data name="VariableQueryTooManyRows" xml:space="preserve">
+    <value>A consulta de uma variável lê até {0} linhas, e esta devolveu mais.</value>
+  </data>
+  <data name="VariableQueryTooManyBytes" xml:space="preserve">
+    <value>Os valores da consulta de uma variável passam de 16 MiB.</value>
+  </data>
+</root>

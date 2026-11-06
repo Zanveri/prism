@@ -10,19 +10,19 @@ import type { Driver } from "@/app/drivers/_lib/drivers.schema";
 import type { Engine } from "@/components/ui";
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
-import bigqueryLogo from "@/assets/databases/bigquery.svg";
-import clickhouseLogo from "@/assets/databases/clickhouse.svg";
-import databricksLogo from "@/assets/databases/databricks.svg";
+import bigqueryLogo from "@/assets/databases/bigquery.png";
+import clickhouseLogo from "@/assets/databases/clickhouse.png";
+import databricksLogo from "@/assets/databases/databricks.png";
 import db2Logo from "@/assets/databases/db2.png";
-import duckdbLogo from "@/assets/databases/duckdb.svg";
+import duckdbLogo from "@/assets/databases/duckdb.png";
 import firebirdLogo from "@/assets/databases/firebird.png";
 import informixLogo from "@/assets/databases/informix.png";
-import mariadbLogo from "@/assets/databases/mariadb.svg";
-import mysqlLogo from "@/assets/databases/mysql.svg";
+import mariadbLogo from "@/assets/databases/mariadb.png";
+import mysqlLogo from "@/assets/databases/mysql.png";
 import oracleLogo from "@/assets/databases/oracle.png";
 import postgresqlLogo from "@/assets/databases/postgresql.png";
 import sqlServerLogo from "@/assets/databases/sql-server.png";
-import sqliteLogo from "@/assets/databases/sqlite.svg";
+import sqliteLogo from "@/assets/databases/sqlite.png";
 
 import { engineChoices } from "../_lib/engine-choices";
 import { EngineGrid, EngineSummary } from "./engine-grid";
@@ -149,7 +149,7 @@ describe("a grade de bancos do diálogo de nova conexão (RN-NAV-005)", () => {
   });
 });
 
-describe("a marca de cada banco na grade (RN-NAV-005, Ruling 136): a logo do fabricante, ou a ficha de hoje onde não há logo", () => {
+describe("a marca de cada banco na grade (RN-NAV-005, Ruling 136): a logo do fabricante em PNG sem fundo, ou o ícone onde não há logo", () => {
   const soon = (id: string, name: string): Driver => ({ ...base, id, name, state: "comingSoon", version: null, license: null });
   const everything = engineChoices([
     ...catalog.slice(0, 2),
@@ -172,40 +172,28 @@ describe("a marca de cada banco na grade (RN-NAV-005, Ruling 136): a logo do fab
     const option = [...markup.matchAll(/<div[^>]*role="radio"[^>]*>([\s\S]*?)<\/div>/g)].map((match) => match[1]).find((inner) => inner.includes(`>${name}</span>`)) ?? "";
     return option.slice(0, option.indexOf(`>${name}</span>`));
   }
-  const styleOf = (mark: string) => /<span[^>]*aria-hidden="true"[^>]*style="([^"]*)"/.exec(mark)?.[1] ?? "";
 
   it.each([
     ["PostgreSQL", postgresqlLogo, ">PG<"],
     ["Db2", db2Logo, ">DB2<"],
     ["Informix", informixLogo, ">IFX<"],
+    ["SQLite", sqliteLogo, ">SQLITE<"],
+    ["MySQL", mysqlLogo, ">MYSQL<"],
+    ["MariaDB", mariadbLogo, ">MARIA<"],
     ["Microsoft SQL Server", sqlServerLogo, ">MSSQL<"],
     ["Oracle", oracleLogo, ">ORA<"],
     ["Firebird", firebirdLogo, ">FB<"],
-  ])("%s mostra o arquivo do fabricante, sem nome alternativo (o nome está ao lado), e nos temas escuros fica sobre a ficha clara", (name, logo, fallbackTag) => {
+    ["DuckDB", duckdbLogo, ">DUCK<"],
+    ["ClickHouse", clickhouseLogo, ">CH<"],
+    ["Google BigQuery", bigqueryLogo, ">BQ<"],
+    ["Databricks", databricksLogo, ">DBX<"],
+  ])("%s mostra a logo PNG do fabricante sem fundo nem nome alternativo (o nome está ao lado)", (name, logo, fallbackTag) => {
     const mark = markOf(name);
 
     expect(mark).toMatch(new RegExp(`<img[^>]*src="${logo}"`));
     expect(mark).toMatch(/<img[^>]*alt=""/);
     expect(mark).not.toContain(fallbackTag);
-    expect(styleOf(mark)).toContain("background-color:light-dark(transparent, #FFFFFF)");
-  });
-
-  it.each([
-    ["SQLite", sqliteLogo, "#003B57", "light-dark(transparent, #FFFFFF)"],
-    ["MySQL", mysqlLogo, "#4479A1", "light-dark(transparent, #FFFFFF)"],
-    ["MariaDB", mariadbLogo, "#003545", "light-dark(transparent, #FFFFFF)"],
-    ["DuckDB", duckdbLogo, "#FFF000", "light-dark(#1B2027, transparent)"],
-    ["ClickHouse", clickhouseLogo, "#FFCC01", "light-dark(#1B2027, transparent)"],
-    ["Google BigQuery", bigqueryLogo, "#669DF6", "light-dark(#1B2027, transparent)"],
-    ["Databricks", databricksLogo, "#FF3621", "light-dark(#1B2027, #FFFFFF)"],
-  ])("%s: o glifo do arquivo, pintado na cor da marca, e a ficha onde ele some", (name, logo, color, chip) => {
-    const mark = markOf(name);
-
-    // O endereço do arquivo, como a marcação o escreve (o SVG pequeno vira `data:`, com as aspas simples escapadas).
-    expect(mark).toContain(`mask-image:url(&quot;${logo.replaceAll("'", "&#x27;")}&quot;)`);
-    expect(mark).toContain(`background-color:${color}`);
-    expect(styleOf(mark)).toContain(`background-color:${chip}`);
-    expect(mark).not.toContain("<img");
+    expect(mark).not.toContain("background-color");
   });
 
   it("um banco 'em breve' sem logo fica com o desenho genérico de banco de dados", () => {

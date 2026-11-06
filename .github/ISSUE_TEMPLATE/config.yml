@@ -4,6 +4,9 @@
 # The text of the forms is in English; issues may be written in English, Portuguese or Spanish.
 blank_issues_enabled: false
 contact_links:
+  - name: Documentation
+    url: https://zanveri.com/docs/prism
+    about: How Prism works, on the Zanveri website. A mistake in the documentation is reported here, with the Defect form.
   - name: Security vulnerability
     url: https://github.com/Zanveri/prism/security/advisories/new
     about: Report it privately, through GitHub's private vulnerability reporting. Never by issue, comment or pull request (see SECURITY.md).

@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Queries;
+using Prism.Application.Connections.Repositories;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -22,11 +23,11 @@ public sealed record OpenDatabaseSessionCommand : IRequest<Result<DatabaseSessio
     /// <summary>RN-TX-001 e RN-SESSAO-005: a sessão começa no modo da aba, `autoCommit` (o padrão) ou `manual`.</summary>
     public string? TransactionMode { get; init; }
 
-    /// <summary>RN-ISOL-001: só `default` por enquanto.</summary>
+    /// <summary>RN-ISOL-001 e 002: o nível de isolamento inicial da aba (`default` quando não informado).</summary>
     public string? IsolationLevel { get; init; }
 }
 
-internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService) : IRequestHandler<OpenDatabaseSessionCommand, Result<DatabaseSessionDto, ApiErrorDto>>
+internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService, IUnsavedSecretsService? unsavedSecrets = null, IConnectionRepository? connectionRepository = null) : IRequestHandler<OpenDatabaseSessionCommand, Result<DatabaseSessionDto, ApiErrorDto>>
 {
     public async Task<Result<DatabaseSessionDto, ApiErrorDto>> Handle(OpenDatabaseSessionCommand request, CancellationToken cancellationToken)
     {
@@ -50,7 +51,12 @@ internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQu
             return Result.Failure<DatabaseSessionDto, ApiErrorDto>(ConnectionErrors.CredentialsMissingToConnect(userNameMissing: string.IsNullOrWhiteSpace(record.UserName)));
 
         // RN-ARVORE-006: o nome pedido entra só no lugar do banco; host, porta, usuário e senha são os da conexão gravada.
-        var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, request.Database ?? record.Database, record.UserName, record.Password);
+        var settings = ConnectionRules.SettingsOf(record, request.Database, unsavedSecrets);
+
+        // RN-REDE-003: o túnel por senha ou o proxy com usuário sem o segredo ("Salvar credenciais" desmarcado, e nada digitado desde que o cofre abriu) também não chega
+        // ao driver: a recusa diz onde informá-lo, e a tela abre o "Editar conexão" na aba dele.
+        if (ConnectionRules.MissingNetworkSecret(settings.Ssh, settings.Proxy) is { } secretField)
+            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(ConnectionErrors.NetworkSecretMissingToConnect(secretField));
 
         var opened = await databaseSessionService.OpenAsync(record.ID, settings, generation, cancellationToken);
         if (opened.IsFailure)
@@ -67,15 +73,36 @@ internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQu
             return Result.Failure<DatabaseSessionDto, ApiErrorDto>(confirmed.IsFailure ? VaultErrors.From(confirmed.Error) : ConnectionErrors.NotFound(request.ConnectionID));
         }
 
-        // RN-TX-001 e 013: a sessão começa no modo da aba antes de qualquer comando. No banco sem transação o Commit manual é recusado, e a sessão
-        // não fica: a aba passa a Auto-commit e abre outra.
+        // RN-REDE-005: a chave do servidor SSH aceita no primeiro acesso fica gravada na conexão, e o próximo acesso só passa com ela. A gravação que não acontece
+        // (o cofre fechou, outra janela mudou o túnel) não desfaz a sessão: o próximo acesso aceita e grava de novo.
+        if (opened.Value.FirstUseHostKey is { } hostKey && settings.Ssh is { } ssh && connectionRepository is not null)
+            await connectionRepository.TrustHostKey(record.ID, ssh.Host, ssh.Port, hostKey, cancellationToken);
+
+        // RN-TX-001, 013 e RN-ISOL-002, 003: a sessão começa no modo e no nível de isolamento da aba antes de qualquer comando. No banco sem
+        // transação o Commit manual é recusado, e o nível que o banco não aceita também: a sessão não fica, e a aba volta ao aceito.
         var mode = request.TransactionMode == "manual" ? ETransactionMode.Manual : ETransactionMode.AutoCommit;
         var transaction = await databaseSessionService.SetTransactionModeAsync(opened.Value.ID, mode, cancellationToken);
-        if (transaction.IsSuccess)
-            return Result.Success<DatabaseSessionDto, ApiErrorDto>(opened.Value.ToDto() with { Transaction = transaction.Value.ToDto() });
+        if (transaction.IsFailure)
+        {
+            await databaseSessionService.CloseAsync(opened.Value.ID);
 
-        await databaseSessionService.CloseAsync(opened.Value.ID);
+            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(transaction.Error));
+        }
 
-        return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(transaction.Error));
+        var transactionInfo = transaction.Value;
+        if (request.IsolationLevel is { } isolationLevel && isolationLevel != IsolationLevels.Default)
+        {
+            var isolation = await databaseSessionService.SetIsolationLevelAsync(opened.Value.ID, isolationLevel, cancellationToken);
+            if (isolation.IsFailure)
+            {
+                await databaseSessionService.CloseAsync(opened.Value.ID);
+
+                return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(isolation.Error));
+            }
+
+            transactionInfo = isolation.Value;
+        }
+
+        return Result.Success<DatabaseSessionDto, ApiErrorDto>(opened.Value.ToDto() with { Transaction = transactionInfo.ToDto() });
     }
 }

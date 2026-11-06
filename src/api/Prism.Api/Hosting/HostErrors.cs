@@ -2,6 +2,8 @@ using Prism.Application.Common.Vault;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Vault.Models;
 using System.Text.Json;
+using Prism.Core.Extensions;
+using System.Resources;
 
 namespace Prism.Api.Hosting;
 
@@ -11,11 +13,14 @@ namespace Prism.Api.Hosting;
 /// </summary>
 internal static class HostErrors
 {
+    /// <summary>Os textos, no idioma do pedido: <c>HostErrors.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(HostErrors));
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>RN-API-001: sem o token de lançamento, ou com outro, a requisição não passa.</summary>
     public static ApiErrorDto AuthenticationRequired()
-        => ApiErrorDto.CreateUnauthorized("Autenticação necessária.", "AUTHENTICATION_REQUIRED", "A requisição não traz o token de lançamento da API.");
+        => ApiErrorDto.CreateUnauthorized(Texts.Get("AuthenticationRequiredTitle"), "AUTHENTICATION_REQUIRED", Texts.Get("AuthenticationRequiredDetail"));
 
     /// <summary>
     /// RN-API-005: rotas `api/user/...` só respondem com um cofre aberto. É o mesmo erro que os handlers

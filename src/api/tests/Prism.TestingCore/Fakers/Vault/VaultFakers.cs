@@ -26,12 +26,12 @@ public static class VaultFakers
         return new VaultFile(VaultCrypto.Version, CreateKdf(), new VaultSealedBox(faker.Random.Bytes(12), faker.Random.Bytes(32), faker.Random.Bytes(16)), new VaultSealedBox(faker.Random.Bytes(12), faker.Random.Bytes(faker.Random.Int(min: 1, max: 512)), faker.Random.Bytes(16)));
     }
 
-    public static VaultFolderRecord CreateFolder(Guid? iD = null, Guid? parentID = null, string? name = null)
+    public static VaultFolderRecord CreateFolder(Guid? iD = null, Guid? parentID = null, string? name = null, string? environmentName = null, string? environmentColor = null, string? confirmCommands = null, bool? readOnly = null)
     {
         var faker = new Faker("pt_BR");
         var createdAt = faker.Date.Recent().ToUniversalTime();
 
-        return new VaultFolderRecord(iD ?? Guid.CreateVersion7(), parentID, name ?? faker.Random.String2(length: 12), createdAt, createdAt);
+        return new VaultFolderRecord(iD ?? Guid.CreateVersion7(), parentID, name ?? faker.Random.String2(length: 12), createdAt, createdAt, environmentName, environmentColor, null, confirmCommands, readOnly);
     }
 
     /// <summary>Um script salvo (RN-SCRIPT-001 a 004), com o SQL sorteado quando o teste não fixa um; sem conexão quando o teste não dá uma.</summary>
@@ -63,11 +63,11 @@ public static class VaultFakers
     public static VaultWorkspaceRecord CreateWorkspace(int? activeIndex, params VaultWorkspaceTabRecord[] tabs)
         => new(tabs, activeIndex);
 
-    public static VaultConnectionRecord CreateConnection(Guid? folderID = null, string? name = null, string? host = null, string? userName = null, string? password = null, Guid? iD = null, EDatabaseEngine? engine = null)
+    public static VaultConnectionRecord CreateConnection(Guid? folderID = null, string? name = null, string? host = null, string? userName = null, string? password = null, Guid? iD = null, EDatabaseEngine? engine = null, string? database = null, string? environmentName = null, string? environmentColor = null, string? confirmCommands = null, bool? readOnly = null)
     {
         var faker = new Faker("pt_BR");
         var createdAt = faker.Date.Recent().ToUniversalTime();
 
-        return new VaultConnectionRecord(iD ?? Guid.CreateVersion7(), folderID, name ?? faker.Random.String2(length: 12), engine ?? faker.Random.Enum<EDatabaseEngine>(), host ?? faker.Internet.DomainName(), faker.Internet.Port(), faker.Random.String2(length: 8), userName ?? faker.Internet.UserName(), password ?? faker.Internet.Password(), null, null, createdAt, createdAt);
+        return new VaultConnectionRecord(iD ?? Guid.CreateVersion7(), folderID, name ?? faker.Random.String2(length: 12), engine ?? faker.Random.Enum<EDatabaseEngine>(), host ?? faker.Internet.DomainName(), faker.Internet.Port(), database ?? faker.Random.String2(length: 8), userName ?? faker.Internet.UserName(), password ?? faker.Internet.Password(), environmentName, environmentColor, createdAt, createdAt, confirmCommands, readOnly);
     }
 }

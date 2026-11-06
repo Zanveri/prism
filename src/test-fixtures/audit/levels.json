@@ -1,0 +1,501 @@
+{
+  "rule": "RN-AUDIT-005, RN-AUDIT-006, RN-AUDIT-007 e RN-AUDIT-008: nível de perigo, motivo e ação principal de cada comando SQL nos três bancos; a tela confere o nível critical contra o leitor de irreversível.",
+  "cases": [
+    {
+      "name": "PostgreSQL: SELECT simples é leitura",
+      "sql": "SELECT id, total FROM pedido WHERE id = 10",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: SELECT com palavra DELETE dentro de texto continua leitura",
+      "sql": "SELECT * FROM pedido WHERE status = 'DELETE'",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: SELECT com nome entre aspas chamado delete continua leitura",
+      "sql": "SELECT \"delete\" FROM pedido",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: comentário de linha antes de SELECT não altera o nível",
+      "sql": "-- DROP TABLE pedido\nSELECT 1 FROM pedido",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: comentário de bloco aninhado escondendo DROP antes de SELECT",
+      "sql": "/* um /* dois */ DROP TABLE pedido */ SELECT 1",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: bloco $tag$ com DROP dentro de SELECT continua leitura",
+      "sql": "SELECT $$DROP TABLE pedido$$",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: bloco $corpo$ com DELETE sem WHERE dentro de SELECT continua leitura",
+      "sql": "SELECT $corpo$DELETE FROM pedido$corpo$ AS texto",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: WITH de leitura é informativo",
+      "sql": "WITH recentes AS (SELECT id FROM pedido WHERE criado_em > CURRENT_DATE) SELECT * FROM recentes",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "WITH"
+    },
+    {
+      "name": "PostgreSQL: VALUES é leitura",
+      "sql": "VALUES (1, 'ativo'), (2, 'inativo')",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "VALUES"
+    },
+    {
+      "name": "PostgreSQL: TABLE é leitura no PostgreSQL",
+      "sql": "TABLE producao.apontamento",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "TABLE"
+    },
+    {
+      "name": "PostgreSQL: SHOW é leitura no PostgreSQL",
+      "sql": "SHOW search_path",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SHOW"
+    },
+    {
+      "name": "PostgreSQL: EXPLAIN sem ANALYZE de DELETE só planeja e é leitura",
+      "sql": "EXPLAIN DELETE FROM pedido",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "EXPLAIN"
+    },
+    {
+      "name": "PostgreSQL: consulta entre parênteses é leitura",
+      "sql": "(SELECT id FROM pedido LIMIT 5)",
+      "engine": "postgresql",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: INSERT simples é atenção",
+      "sql": "INSERT INTO pedido (id, cliente, total) VALUES (1, 'A', 100)",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "INSERT grava linhas.",
+      "action": "INSERT"
+    },
+    {
+      "name": "PostgreSQL: INSERT com ON CONFLICT DO UPDATE não começa UPDATE solto e é atenção",
+      "sql": "INSERT INTO turno (id, nome) VALUES (1, 'A') ON CONFLICT (id) DO UPDATE SET nome = 'A'",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "INSERT grava linhas.",
+      "action": "INSERT"
+    },
+    {
+      "name": "PostgreSQL: UPDATE com WHERE no nível de fora é atenção",
+      "sql": "UPDATE pedido SET status = 'PAGO' WHERE id = 42",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "UPDATE com WHERE.",
+      "action": "UPDATE"
+    },
+    {
+      "name": "PostgreSQL: DELETE com WHERE no nível de fora é atenção",
+      "sql": "DELETE FROM pedido WHERE id = 42",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "DELETE com WHERE.",
+      "action": "DELETE"
+    },
+    {
+      "name": "PostgreSQL: WITH com DELETE filtrado por WHERE é atenção",
+      "sql": "WITH apagadas AS (DELETE FROM apontamento WHERE turno = 3 RETURNING *) SELECT count(*) FROM apagadas",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "DELETE com WHERE.",
+      "action": "WITH"
+    },
+    {
+      "name": "PostgreSQL: WITH principal com DELETE filtrado por WHERE é atenção",
+      "sql": "WITH velhas AS (SELECT id FROM ordem) DELETE FROM apontamento WHERE ordem IN (SELECT id FROM velhas)",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "DELETE com WHERE.",
+      "action": "WITH"
+    },
+    {
+      "name": "PostgreSQL: MERGE é atenção",
+      "sql": "MERGE INTO estoque e USING remessa r ON e.item = r.item WHEN MATCHED THEN UPDATE SET saldo = e.saldo + r.qtd",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "MERGE grava linhas.",
+      "action": "MERGE"
+    },
+    {
+      "name": "PostgreSQL: CALL é atenção",
+      "sql": "CALL fechar_turno(3)",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "Execução de rotina (CALL).",
+      "action": "CALL"
+    },
+    {
+      "name": "PostgreSQL: SELECT FOR UPDATE é atenção por trava de linha",
+      "sql": "SELECT * FROM pedido WHERE id = 1 FOR UPDATE",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "Leitura com trava de linha.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: SELECT INTO grava tabela e é atenção",
+      "sql": "SELECT id, total INTO backup_pedido FROM pedido",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "SELECT INTO grava numa tabela.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: SELECT com nextval avança sequência e é atenção",
+      "sql": "SELECT nextval('seq_pedido')",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "Avança sequência.",
+      "action": "SELECT"
+    },
+    {
+      "name": "PostgreSQL: EXPLAIN ANALYZE de SELECT é atenção porque executa",
+      "sql": "EXPLAIN ANALYZE SELECT * FROM pedido",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "EXPLAIN com gravação ou execução.",
+      "action": "EXPLAIN ANALYZE"
+    },
+    {
+      "name": "PostgreSQL: comando não reconhecido pelo leitor sobe para atenção",
+      "sql": "PRAGMA integrity_check",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "Comando não reconhecido pelo leitor: classificado como Atenção.",
+      "action": "PRAGMA"
+    },
+    {
+      "name": "PostgreSQL: CREATE TABLE é nível alto",
+      "sql": "CREATE TABLE producao.turno (id INT PRIMARY KEY, nome TEXT NOT NULL)",
+      "engine": "postgresql",
+      "level": "high",
+      "reason": "Criação de estrutura (CREATE TABLE).",
+      "action": "CREATE TABLE"
+    },
+    {
+      "name": "PostgreSQL: CREATE INDEX CONCURRENTLY é nível alto",
+      "sql": "CREATE INDEX CONCURRENTLY ix_pedido_cliente ON pedido (cliente)",
+      "engine": "postgresql",
+      "level": "high",
+      "reason": "Criação de estrutura (CREATE INDEX).",
+      "action": "CREATE INDEX"
+    },
+    {
+      "name": "PostgreSQL: ALTER TABLE ADD COLUMN sem DROP é nível alto",
+      "sql": "ALTER TABLE pedido ADD COLUMN observacao TEXT",
+      "engine": "postgresql",
+      "level": "high",
+      "reason": "Alteração de estrutura (ALTER TABLE).",
+      "action": "ALTER TABLE"
+    },
+    {
+      "name": "PostgreSQL: GRANT é nível alto",
+      "sql": "GRANT SELECT, UPDATE ON pedido TO leitor",
+      "engine": "postgresql",
+      "level": "high",
+      "reason": "Concessão de permissão (GRANT).",
+      "action": "GRANT"
+    },
+    {
+      "name": "PostgreSQL: REVOKE é nível alto",
+      "sql": "REVOKE DELETE ON pedido FROM operador",
+      "engine": "postgresql",
+      "level": "high",
+      "reason": "Revogação de permissão (REVOKE).",
+      "action": "REVOKE"
+    },
+    {
+      "name": "PostgreSQL: COMMENT ON TABLE é nível alto",
+      "sql": "COMMENT ON TABLE pedido IS 'Pedidos de venda'",
+      "engine": "postgresql",
+      "level": "high",
+      "reason": "Comentário no catálogo (COMMENT).",
+      "action": "COMMENT"
+    },
+    {
+      "name": "PostgreSQL: DELETE sem WHERE é crítico",
+      "sql": "DELETE FROM pedido",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de pedido.",
+      "action": "DELETE"
+    },
+    {
+      "name": "PostgreSQL: DELETE FROM ONLY esquema.tabela sem WHERE é crítico",
+      "sql": "DELETE FROM ONLY producao.apontamento",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de producao.apontamento.",
+      "action": "DELETE"
+    },
+    {
+      "name": "PostgreSQL: UPDATE sem WHERE no nível de fora (mesmo com WHERE na subconsulta) é crítico",
+      "sql": "UPDATE ordem SET total = (SELECT SUM(qtd) FROM apontamento a WHERE a.ordem = ordem.id)",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "UPDATE sem WHERE: altera todas as linhas de ordem.",
+      "action": "UPDATE"
+    },
+    {
+      "name": "PostgreSQL: TRUNCATE TABLE é crítico",
+      "sql": "TRUNCATE TABLE producao.apontamento",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "TRUNCATE: apaga todas as linhas de producao.apontamento.",
+      "action": "TRUNCATE"
+    },
+    {
+      "name": "PostgreSQL: DROP TABLE é crítico",
+      "sql": "DROP TABLE producao.apontamento",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DROP: exclui producao.apontamento.",
+      "action": "DROP TABLE"
+    },
+    {
+      "name": "PostgreSQL: DROP MATERIALIZED VIEW IF EXISTS é crítico",
+      "sql": "DROP MATERIALIZED VIEW IF EXISTS mv_turno",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DROP: exclui mv_turno.",
+      "action": "DROP MATERIALIZED VIEW"
+    },
+    {
+      "name": "PostgreSQL: ALTER TABLE DROP COLUMN é crítico",
+      "sql": "ALTER TABLE pedido DROP COLUMN obs",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DROP COLUMN dentro de ALTER TABLE.",
+      "action": "ALTER TABLE"
+    },
+    {
+      "name": "PostgreSQL: ALTER TABLE DROP CONSTRAINT é crítico",
+      "sql": "ALTER TABLE apontamento DROP CONSTRAINT fk_ordem",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DROP dentro de ALTER TABLE.",
+      "action": "ALTER TABLE"
+    },
+    {
+      "name": "PostgreSQL: WITH com DELETE sem WHERE na CTE é crítico",
+      "sql": "WITH apagadas AS (DELETE FROM apontamento RETURNING *) SELECT count(*) FROM apagadas",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de apontamento.",
+      "action": "DELETE"
+    },
+    {
+      "name": "PostgreSQL: WITH seguido de DELETE sem WHERE principal é crítico",
+      "sql": "WITH velhas AS (SELECT id FROM ordem WHERE criada < CURRENT_DATE) DELETE FROM apontamento",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de apontamento.",
+      "action": "DELETE"
+    },
+    {
+      "name": "PostgreSQL: EXPLAIN ANALYZE de DELETE sem WHERE é crítico",
+      "sql": "EXPLAIN ANALYZE DELETE FROM apontamento",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de apontamento.",
+      "action": "DELETE"
+    },
+    {
+      "name": "PostgreSQL: vários comandos separados por ponto e vírgula ficam com o nível mais perigoso",
+      "sql": "SELECT 1; DELETE FROM pedido",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de pedido.",
+      "action": "DELETE"
+    },
+    {
+      "name": "PostgreSQL: vários comandos de leitura e escrita filtrada ficam em atenção",
+      "sql": "SELECT 1; UPDATE pedido SET total = 10 WHERE id = 1",
+      "engine": "postgresql",
+      "level": "warning",
+      "reason": "UPDATE com WHERE.",
+      "action": "UPDATE"
+    },
+    {
+      "name": "PostgreSQL: dúvida de irreversível em coluna sem aspas chamada update logo após parêntese é crítico",
+      "sql": "INSERT INTO ordem (update) VALUES (1)",
+      "engine": "postgresql",
+      "level": "critical",
+      "reason": "UPDATE sem WHERE: altera todas as linhas de uma tabela.",
+      "action": "UPDATE"
+    },
+    {
+      "name": "Db2: SELECT simples no Db2 é leitura",
+      "sql": "SELECT ID, TOTAL FROM PRODUCAO.PEDIDO WHERE ID = 10",
+      "engine": "db2",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "Db2: comentário de bloco aninhado escondendo DELETE antes de VALUES é leitura",
+      "sql": "/* um /* dois */ DELETE FROM apontamento */ VALUES 1",
+      "engine": "db2",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "VALUES"
+    },
+    {
+      "name": "Db2: EXPLAIN PLAN FOR no Db2 grava nas tabelas de explicação e é atenção",
+      "sql": "EXPLAIN PLAN FOR DELETE FROM apontamento",
+      "engine": "db2",
+      "level": "warning",
+      "reason": "EXPLAIN com gravação ou execução.",
+      "action": "EXPLAIN"
+    },
+    {
+      "name": "Db2: FINAL TABLE com UPDATE filtrado por WHERE é atenção",
+      "sql": "SELECT * FROM FINAL TABLE (UPDATE apontamento SET turno = 2 WHERE id = 1)",
+      "engine": "db2",
+      "level": "warning",
+      "reason": "UPDATE com WHERE.",
+      "action": "SELECT"
+    },
+    {
+      "name": "Db2: FINAL TABLE com UPDATE sem WHERE é crítico",
+      "sql": "SELECT * FROM FINAL TABLE (UPDATE apontamento SET turno = 2)",
+      "engine": "db2",
+      "level": "critical",
+      "reason": "UPDATE sem WHERE: altera todas as linhas de apontamento.",
+      "action": "UPDATE"
+    },
+    {
+      "name": "Db2: bloco BEGIN ... END com DELETE sem WHERE é crítico",
+      "sql": "BEGIN\n  DELETE FROM apontamento;\nEND",
+      "engine": "db2",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de apontamento.",
+      "action": "DELETE"
+    },
+    {
+      "name": "Db2: bloco BEGIN ATOMIC com UPDATE filtrado e DROP TABLE é crítico pelo DROP",
+      "sql": "BEGIN ATOMIC\n  UPDATE ordem SET total = 0 WHERE id = 1;\n  DROP TABLE tmp_ordem;\nEND",
+      "engine": "db2",
+      "level": "critical",
+      "reason": "DROP: exclui tmp_ordem.",
+      "action": "DROP TABLE"
+    },
+    {
+      "name": "Db2: RENAME TABLE no Db2 é nível alto",
+      "sql": "RENAME TABLE pedido TO pedido_antigo",
+      "engine": "db2",
+      "level": "high",
+      "reason": "Renomeação de objeto (RENAME).",
+      "action": "RENAME"
+    },
+    {
+      "name": "Db2: DROP INDEX no Db2 é crítico",
+      "sql": "DROP INDEX ix_apontamento_data",
+      "engine": "db2",
+      "level": "critical",
+      "reason": "DROP: exclui ix_apontamento_data.",
+      "action": "DROP INDEX"
+    },
+    {
+      "name": "Informix: SELECT com comentário entre chaves escondendo DROP é leitura",
+      "sql": "{ DROP TABLE apontamento } SELECT 1 FROM systables WHERE tabid = 1",
+      "engine": "informix",
+      "level": "info",
+      "reason": "Leitura.",
+      "action": "SELECT"
+    },
+    {
+      "name": "Informix: UPDATE STATISTICS não é UPDATE de linhas e fica em atenção",
+      "sql": "UPDATE STATISTICS FOR TABLE apontamento",
+      "engine": "informix",
+      "level": "warning",
+      "reason": "Comando de sessão ou manutenção (UPDATE STATISTICS).",
+      "action": "UPDATE STATISTICS"
+    },
+    {
+      "name": "Informix: DELETE WHERE CURRENT OF cursor tem WHERE e fica em atenção",
+      "sql": "DELETE FROM apontamento WHERE CURRENT OF c_apontamento",
+      "engine": "informix",
+      "level": "warning",
+      "reason": "DELETE com WHERE.",
+      "action": "DELETE"
+    },
+    {
+      "name": "Informix: EXECUTE PROCEDURE é atenção",
+      "sql": "EXECUTE PROCEDURE recalcular_saldo(10)",
+      "engine": "informix",
+      "level": "warning",
+      "reason": "Execução de rotina (EXECUTE).",
+      "action": "EXECUTE"
+    },
+    {
+      "name": "Informix: CREATE PROCEDURE com DELETE no corpo não executa o DELETE e é nível alto",
+      "sql": "CREATE PROCEDURE limpar() DELETE FROM apontamento; END PROCEDURE",
+      "engine": "informix",
+      "level": "high",
+      "reason": "Criação de estrutura (CREATE PROCEDURE).",
+      "action": "CREATE PROCEDURE"
+    },
+    {
+      "name": "Informix: DELETE sem palavra FROM e sem WHERE é crítico",
+      "sql": "DELETE apontamento",
+      "engine": "informix",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de apontamento.",
+      "action": "DELETE"
+    },
+    {
+      "name": "Informix: primeiro fecho encerra comentário de bloco e expõe DELETE sem WHERE seguinte",
+      "sql": "/* um /* dois */ DELETE FROM apontamento",
+      "engine": "informix",
+      "level": "critical",
+      "reason": "DELETE sem WHERE: apaga todas as linhas de apontamento.",
+      "action": "DELETE"
+    }
+  ]
+}

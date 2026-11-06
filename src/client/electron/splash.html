@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="{{lang}}">
 <head>
 <meta charset="utf-8">
 <!-- RN-MARCA-005: página estática. Sem script e sem nada de fora; o que muda de um passo para o outro (texto, posição e barra) é CSS que o processo principal insere (splash.ts). -->
@@ -37,9 +37,9 @@ body { overflow: hidden; cursor: default; user-select: none; color: #E6EAF0; fon
 <div class="head">
 <div class="title">
 <span class="name">Prism</span>
-<span class="tagline">Abra, conecte, consulte.</span>
+<span class="tagline">{{tagline}}</span>
 </div>
-<span class="mono version">versão {{version}}</span>
+<span class="mono version">{{version-word}} {{version}}</span>
 </div>
 <div class="foot">
 <div class="step">
@@ -52,7 +52,7 @@ body { overflow: hidden; cursor: default; user-select: none; color: #E6EAF0; fon
 </div>
 </div>
 </div>
-<div class="bar" role="progressbar" aria-label="Inicialização do Prism" aria-valuemin="0" aria-valuemax="100"><div class="bar-fill"></div></div>
+<div class="bar" role="progressbar" aria-label="{{progress-label}}" aria-valuemin="0" aria-valuemax="100"><div class="bar-fill"></div></div>
 </div>
 </body>
 </html>

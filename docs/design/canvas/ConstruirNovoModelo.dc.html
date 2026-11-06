@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Novo modelo</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<header aria-hidden="true" style="display: flex; align-items: center; gap: 8px; min-height: 48px; box-sizing: border-box; padding: 4px 12px; background: #14181D; border-bottom: 1px solid #2A313B; opacity: 0.35">
+<span style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 4px; font-size: 15px; font-weight: 600">Prism</span>
+<span style="margin-left: auto; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 6px; background: #232A33">Construir</span>
+<span style="display: flex; align-items: center; height: 36px; padding: 0 12px; color: #B4BCC8">Configurações</span>
+<span style="display: flex; align-items: center; height: 36px; padding: 0 12px; color: #B4BCC8">marina.costa</span>
+</header>
+<div style="flex: 1; display: flex; justify-content: center; align-items: flex-start; box-sizing: border-box; padding: 40px 16px 56px; background: rgb(6 8 10 / 0.72)">
+<section role="dialog" aria-modal="true" aria-labelledby="novo-modelo-titulo" style="width: 100%; max-width: 680px; box-sizing: border-box; display: flex; flex-direction: column; background: #14181D; border: 1px solid #38414D; border-radius: 10px; box-shadow: 0 24px 64px rgb(0 0 0 / 0.5)">
+<div style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #2A313B">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #B4BCC8"><path d="M7.5 2.5l3.5 3.5 1.25-1.25-3.5-3.5z"></path><path d="M9.25 4.25L4.75 8.75"></path><path d="M2 10h10.5v1.25c-1.3 0-2.25.6-2.25 1.5H11V14H5.5v-1.25h.75c0-.9-.95-1.5-2.25-1.5-1 0-1.7-.45-2-1.25z"></path></svg>
+<h1 id="novo-modelo-titulo" style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Novo modelo</h1>
+<a href="ConstruirModelos.dc.html" aria-label="Fechar (Esc)" style="margin-left: auto; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></a>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 20px; padding: 20px">
+<label style="display: flex; flex-direction: column; gap: 6px; font-weight: 500">Nome do modelo<input type="text" value="manutencao" style="height: 36px; box-sizing: border-box; padding: 0 12px; background: #0E1114; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px"></label>
+
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+<legend style="padding: 0 0 8px; font-weight: 500">Ponto de partida</legend>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button type="button" aria-pressed="{{ isZero }}" onClick="{{ pickZero }}" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; box-sizing: border-box; border: 1px solid {{ zeroLine }}; border-radius: 8px; background: {{ zeroFill }}; color: #E6EAF0; font: inherit; text-align: left; cursor: pointer"><span style="display: flex; align-items: center; gap: 8px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke-dasharray="2 2"></rect><path d="M8 5.5v5M5.5 8h5"></path></svg>Do zero</span><span style="color: #B4BCC8; font-size: 12px; line-height: 18px">Um modelo vazio. Você escolhe o banco de destino e cria cada tabela.</span></button>
+<button type="button" aria-pressed="{{ isBanco }}" onClick="{{ pickBanco }}" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; box-sizing: border-box; border: 1px solid {{ bancoLine }}; border-radius: 8px; background: {{ bancoFill }}; color: #E6EAF0; font: inherit; text-align: left; cursor: pointer"><span style="display: flex; align-items: center; gap: 8px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><ellipse cx="8" cy="4" rx="5" ry="2"></ellipse><path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4"></path><path d="M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"></path></svg>A partir de um banco</span><span style="color: #B4BCC8; font-size: 12px; line-height: 18px">Lê as tabelas de uma conexão para você ligar as novas a elas e alterar as que já existem.</span></button>
+</div>
+</fieldset>
+
+<sc-if value="{{ isZero }}" hint-placeholder-val="{{ false }}">
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+<legend style="padding: 0 0 8px; font-weight: 500">Banco de destino</legend>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<button type="button" aria-pressed="{{ isPg }}" onClick="{{ pickPg }}" style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; box-sizing: border-box; border: 1px solid {{ pgLine }}; border-radius: 6px; background: {{ pgFill }}; color: #E6EAF0; font: inherit; cursor: pointer"><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span>PostgreSQL</button>
+<button type="button" aria-pressed="{{ isDb2 }}" onClick="{{ pickDb2 }}" style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; box-sizing: border-box; border: 1px solid {{ db2Line }}; border-radius: 6px; background: {{ db2Fill }}; color: #E6EAF0; font: inherit; cursor: pointer"><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #5ED3A3; border-radius: 4px; color: #5ED3A3; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">DB2</span>Db2</button>
+<button type="button" aria-pressed="{{ isIfx }}" onClick="{{ pickIfx }}" style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; box-sizing: border-box; border: 1px solid {{ ifxLine }}; border-radius: 6px; background: {{ ifxFill }}; color: #E6EAF0; font: inherit; cursor: pointer"><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #F591B6; border-radius: 4px; color: #F591B6; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">IFX</span>Informix</button>
+</div>
+<p style="margin: 0; color: #B4BCC8; font-size: 12px; line-height: 18px">O destino decide os tipos que o editor sugere, os limites de nome e o DDL gerado. Não muda depois de criado; para outro banco, duplique o modelo.</p>
+</fieldset>
+</sc-if>
+
+<sc-if value="{{ isBanco }}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 12px">
+<label style="display: flex; flex-direction: column; gap: 6px; font-weight: 500">Conexão<button type="button" aria-haspopup="listbox" style="display: flex; align-items: center; gap: 8px; height: 36px; box-sizing: border-box; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; background: #1B2027; color: #E6EAF0; font: inherit; font-weight: 400; text-align: left; cursor: pointer"><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span><span style="flex: 1">MES Produção</span><span style="flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; background: #FF8A7A; color: #14181D; font-size: 11px; line-height: 18px; font-weight: 600">Produção</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #8E99A8"><path d="M4 6l4 4 4-4"></path></svg></button></label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-weight: 500">Banco<select style="height: 36px; padding: 0 8px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; font-weight: 400"><option>mes</option><option>mes_historico</option></select></label>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px"><span id="tabelas-legenda" style="font-weight: 500">Esquemas e tabelas para ler</span><span style="color: #B4BCC8; font-size: 12px">3 de 8 marcadas</span><button type="button" style="margin-left: auto; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: #B4BCC8; font: inherit; font-size: 12px; cursor: pointer">Marcar todas</button><button type="button" style="height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: #B4BCC8; font: inherit; font-size: 12px; cursor: pointer">Desmarcar</button></div>
+<div role="group" aria-labelledby="tabelas-legenda" style="display: flex; flex-direction: column; max-height: 236px; overflow: auto; padding: 6px 0; background: #0E1114; border: 1px solid #2A313B; border-radius: 6px">
+<div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 6px"><button type="button" aria-label="Recolher producao" aria-expanded="true" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; background: transparent; color: #8E99A8; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></button><label style="display: flex; align-items: center; gap: 8px; flex: 1; cursor: pointer"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"></path></svg><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 600">producao</span></label><span style="color: #8E99A8; font-size: 12px">3 de 6 tabelas</span></div>
+<label style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 58px; cursor: pointer"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">apontamento</span></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 58px; cursor: pointer"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">linha</span></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 58px; cursor: pointer"><input type="checkbox" checked style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">maquina</span></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 58px; cursor: pointer"><input type="checkbox" checked style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">operador</span></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 58px; cursor: pointer"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">ordem_producao</span></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 58px; cursor: pointer"><input type="checkbox" checked style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">produto</span></label>
+<div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 6px"><button type="button" aria-label="Expandir public" aria-expanded="false" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; background: transparent; color: #8E99A8; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4"></path></svg></button><label style="display: flex; align-items: center; gap: 8px; flex: 1; cursor: pointer"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"></path></svg><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 600">public</span></label><span style="color: #8E99A8; font-size: 12px">2 tabelas</span></div>
+</div>
+</div>
+
+<p style="margin: 0; padding: 10px 12px; border: 1px dashed #38414D; border-radius: 6px; color: #C9D1DC; font-size: 12px; line-height: 18px">As tabelas marcadas entram como <b style="font-weight: 600; color: #E6EAF0">existentes</b>: recebem FKs das novas e também podem ser alteradas. Ao gerar o DDL, você escolhe se ele traz tudo ou só as diferenças.</p>
+
+<p style="display: flex; align-items: center; gap: 8px; margin: 0; color: #B4BCC8; font-size: 12px; line-height: 18px"><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span>O destino é PostgreSQL, o mesmo banco da conexão.</p>
+</div>
+</sc-if>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: end; padding-top: 16px; border-top: 1px solid #2A313B">
+<label style="display: flex; flex-direction: column; gap: 6px; font-weight: 500">Esquema das tabelas novas<input type="text" value="manutencao" style="height: 36px; box-sizing: border-box; padding: 0 12px; background: #0E1114; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; font-weight: 400"></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 36px; cursor: pointer"><input type="checkbox" checked style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span>Criar o esquema no DDL</span></label>
+<p style="grid-column: 1 / -1; margin: 0; color: #B4BCC8; font-size: 12px; line-height: 18px">No Informix, que não tem esquemas, este campo é o dono das tabelas e o DDL não traz <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">CREATE SCHEMA</span>.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid #2A313B; background: #1B2027; border-radius: 0 0 10px 10px">
+<span style="display: flex; align-items: center; gap: 6px; color: #B4BCC8; font-size: 12px; line-height: 18px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 7.5v3M8 5.25v.01"></path></svg>O Prism só lê o catálogo. Nada muda no banco.</span>
+<a href="ConstruirModelos.dc.html" style="margin-left: auto; display: flex; align-items: center; height: 36px; padding: 0 14px; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; text-decoration: none">Cancelar</a>
+<a href="Construir.dc.html" style="display: flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 6px; background: #F2B644; color: #14181D; font-weight: 600; text-decoration: none">Criar modelo</a>
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"inicio":{"editor":"enum","options":["banco","zero"],"default":"banco"},"$preview":{"width":1440,"height":1040}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { start: null, engine: 'pg' };
+}
+renderVals() {
+const start = this.state.start ?? this.props.inicio ?? 'banco';
+const on = (yes) => ({ line: yes ? '#F2B644' : '#38414D', fill: yes ? '#232A33' : 'transparent' });
+const zero = on(start === 'zero');
+const banco = on(start === 'banco');
+const pg = on(this.state.engine === 'pg');
+const db2 = on(this.state.engine === 'db2');
+const ifx = on(this.state.engine === 'ifx');
+return {
+isZero: start === 'zero', isBanco: start === 'banco',
+zeroLine: zero.line, zeroFill: zero.fill, bancoLine: banco.line, bancoFill: banco.fill,
+pickZero: () => this.setState({ start: 'zero' }), pickBanco: () => this.setState({ start: 'banco' }),
+isPg: this.state.engine === 'pg', isDb2: this.state.engine === 'db2', isIfx: this.state.engine === 'ifx',
+pgLine: pg.line, pgFill: pg.fill, db2Line: db2.line, db2Fill: db2.fill, ifxLine: ifx.line, ifxFill: ifx.fill,
+pickPg: () => this.setState({ engine: 'pg' }), pickDb2: () => this.setState({ engine: 'db2' }), pickIfx: () => this.setState({ engine: 'ifx' }),
+};
+}
+}
+</script>
+</body>
+</html>

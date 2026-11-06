@@ -1,6 +1,7 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
 import { statementHasBody, visitCode } from "../sql-statements";
+import { limits } from "./variables.copy";
 
 /*
  * O `@nome` no SQL (RN-VAR-015 e 016). Quem acha é o leitor do SQL da tela, no banco da aba: o `@` dentro de texto entre aspas simples (também o `E'...'`), de nome
@@ -8,8 +9,13 @@ import { statementHasBody, visitCode } from "../sql-statements";
  * quando o caractere de antes e o de depois deixam (os operadores do PostgreSQL com `@` continuam sendo SQL).
  */
 
-/** Uma variável achada: `start` é a posição do `@` e `end` a do fim do nome. `field` é o `.campo` colado ao nome (`@p.campo`, RN-VAR-016). */
-export type AtReference = { name: string; start: number; end: number; field: { name: string; start: number; end: number } | null };
+/**
+ * Uma variável achada: `start` é a posição do `@` e `end` a do fim do nome. `field` é o `.campo` colado ao nome (`@p.campo`, RN-VAR-016) e `path` são todos os
+ * `.campo` colados um ao outro (`@c.endereco.cidade`: `endereco` e `cidade`), o primeiro sendo `field`. Quantos deles são do valor só a troca sabe (`bind.ts`): o
+ * caminho para onde o valor deixa de ser objeto, e o resto é SQL.
+ */
+export type AtField = { name: string; start: number; end: number };
+export type AtReference = { name: string; start: number; end: number; field: AtField | null; path: readonly AtField[] };
 
 /** Um `@nome` que está onde seria variável e não é: não declarado, ou declarado com outras maiúsculas (a dica do editor, RN-VAR-025). */
 export type AtHint = { kind: "undeclared" | "differentCase" | "operator"; name: string; start: number; end: number; suggestion?: string };
@@ -81,12 +87,14 @@ export function findAtReferences(sql: string, engine: Engine | undefined, declar
       return;
     }
 
-    let field: AtReference["field"] = null;
-    if (sql[end] === ".") {
-      const fieldMatch = nameAt.exec(sql.slice(end + 1, end + 1 + 200));
-      if (fieldMatch !== null) field = { name: fieldMatch[0].normalize("NFC"), start: end + 1, end: end + 1 + fieldMatch[0].length };
+    const path: AtField[] = [];
+    for (let at = end; sql[at] === "." && path.length < limits.depth; ) {
+      const fieldMatch = nameAt.exec(sql.slice(at + 1, at + 1 + 200));
+      if (fieldMatch === null) break;
+      path.push({ name: fieldMatch[0].normalize("NFC"), start: at + 1, end: at + 1 + fieldMatch[0].length });
+      at += 1 + fieldMatch[0].length;
     }
-    references.push({ name, start: position, end, field });
+    references.push({ name, start: position, end, field: path[0] ?? null, path });
   });
   return { references, hints, inBody: false };
 }

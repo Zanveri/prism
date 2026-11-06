@@ -1,5 +1,6 @@
 using Prism.Application.Common.Texts;
 using Prism.Core.Extensions;
+using System.Resources;
 
 namespace Prism.Application.Folders.Models;
 
@@ -9,6 +10,9 @@ namespace Prism.Application.Folders.Models;
 /// </summary>
 internal static class FolderRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>FolderRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(FolderRules));
+
     /// <summary>RN-PASTA-001: de 1 a 60 caracteres, medidos sobre o nome normalizado, que é o que se grava.</summary>
     public const int NameMaxLength = 60;
 
@@ -20,8 +24,8 @@ internal static class FolderRules
     {
         var normalized = name.NormalizeName();
         if (normalized.Length is < 1 or > NameMaxLength)
-            return "O nome da pasta deve ter de 1 a 60 caracteres.";
+            return Texts.Get("NameLength");
 
-        return TextRules.HasControlOrDirection(normalized) ? "O nome da pasta não pode ter caractere de controle nem de direção do texto." : null;
+        return TextRules.HasControlOrDirection(normalized) ? Texts.Get("NameInvalidCharacters") : null;
     }
 }

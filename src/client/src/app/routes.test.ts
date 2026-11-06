@@ -2,16 +2,18 @@ import { isValidElement, type ReactNode } from "react";
 import { Navigate, type RouteObject } from "react-router";
 import { describe, expect, it } from "vitest";
 
+import { RemountOnLock } from "@/app/_components/remount-on-lock";
 import { TabHistory } from "@/app/_components/tab-history";
 import { VaultGuard } from "@/app/_components/vault-guard";
+import { KeepAliveSlot } from "@/app/_components/workbench-slot";
+import { BuildPage } from "@/app/build/page";
 import { LegacyConnectionsRedirect } from "@/app/connections/page";
 import { DriversRedirect } from "@/app/drivers/page";
-import { WorkbenchSlot } from "@/app/_components/workbench-slot";
-import { WorkbenchPage } from "@/app/workbench/page";
-import { SettingsShortcut } from "@/app/settings/_components/settings-shortcut";
 import { FontSync } from "@/app/settings/_components/font-sync";
+import { SettingsShortcut } from "@/app/settings/_components/settings-shortcut";
 import { ThemeSync } from "@/app/settings/_components/theme-sync";
 import { WorkbenchProvider } from "@/app/workbench/_lib/workbench-state";
+import { WorkbenchPage } from "@/app/workbench/page";
 import { pathsConfig } from "@/config/paths.config";
 import { elementsOf } from "@/lib/testing/react-tree";
 
@@ -26,7 +28,7 @@ function walk(list: RouteObject[], ancestors: RouteObject[] = []): Placed[] {
 
 const rendersA = (node: ReactNode, component: unknown) => isValidElement(node) && node.type === component;
 
-describe("rotas: onde o estado da área de trabalho é montado", () => {
+describe("rotas: onde o estado da área de trabalho e do Construir é montado", () => {
   const placed = walk(routes);
   const providers = placed.filter(({ route }) => rendersA(route.element, WorkbenchProvider));
   const childAt = (path: string) => (providers[0].route.children ?? []).find((route) => route.path === path);
@@ -48,20 +50,30 @@ describe("rotas: onde o estado da área de trabalho é montado", () => {
     expect(rendersA(childAt(pathsConfig.drivers)?.element, DriversRedirect)).toBe(true);
   });
 
-  it("a área de trabalho é montada uma vez, dentro do provedor, num WorkbenchSlot que a esconde fora da rota dela, e nenhuma rota a tem como elemento (senão sair da rota a desmontaria)", () => {
-    const [slot] = elementsOf(providers[0].route.element).filter((element) => element.type === WorkbenchSlot);
+  it("a área de trabalho e o Construir são montados dentro do provedor, em KeepAliveSlot fora do RemountOnLock, e nenhuma rota os tem como elemento", () => {
+    const slots = elementsOf(providers[0].route.element).filter((element) => element.type === KeepAliveSlot);
+    const workbenchSlot = slots.find((slot) => (slot.props.path ?? pathsConfig.workbench) === pathsConfig.workbench);
+    const buildSlot = slots.find((slot) => slot.props.path === pathsConfig.build);
+    const [remount] = elementsOf(providers[0].route.element).filter((element) => element.type === RemountOnLock);
+    const underRemount = elementsOf(remount.props.children as ReactNode);
 
-    expect(slot).toBeDefined();
-    expect(elementsOf(slot.props.children as never).some((element) => element.type === WorkbenchPage)).toBe(true);
-    expect(placed.filter(({ route }) => elementsOf(route.element).some((element) => element.type === WorkbenchPage))).toHaveLength(1);
-    expect(placed.filter(({ route }) => rendersA(route.element, WorkbenchPage))).toHaveLength(0);
+    expect(workbenchSlot).toBeDefined();
+    expect(elementsOf(workbenchSlot?.props.children as never).some((element) => element.type === WorkbenchPage)).toBe(true);
+    expect(buildSlot).toBeDefined();
+    expect(buildSlot?.props.mountOnFirstVisit).toBe(true);
+    expect(elementsOf(buildSlot?.props.children as never).some((element) => element.type === BuildPage)).toBe(true);
+    expect(underRemount.some((element) => element.type === KeepAliveSlot || element.type === WorkbenchPage || element.type === BuildPage)).toBe(false);
+    expect(placed.filter(({ route }) => rendersA(route.element, WorkbenchPage) || rendersA(route.element, BuildPage))).toHaveLength(0);
   });
 
-  it("o caminho da área de trabalho continua sendo uma rota (para a navegação e o link da barra), mas sem elemento: quem a mostra é o WorkbenchSlot", () => {
-    const route = (providers[0].route.children ?? []).find((child) => child.path === pathsConfig.workbench);
+  it("os caminhos da área de trabalho e do Construir são rotas sem elemento: quem os mostra é o KeepAliveSlot", () => {
+    const workbenchRoute = (providers[0].route.children ?? []).find((child) => child.path === pathsConfig.workbench);
+    const buildRoute = (providers[0].route.children ?? []).find((child) => child.path === pathsConfig.build);
 
-    expect(route).toBeDefined();
-    expect(route?.element).toBeUndefined();
+    expect(workbenchRoute).toBeDefined();
+    expect(workbenchRoute?.element).toBeUndefined();
+    expect(buildRoute).toBeDefined();
+    expect(buildRoute?.element).toBeUndefined();
   });
 
   it("Configurações (RN-CONFIG-001) fica sob o mesmo provedor: abrir a tela e voltar não apaga as abas", () => {

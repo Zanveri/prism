@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — DDL do modelo</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; scrollbar-color: #38414D #14181D; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; box-sizing: border-box; padding: 4px 12px; background: #14181D; border-bottom: 1px solid #2A313B">
+<div style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 4px; font-size: 15px; font-weight: 600; letter-spacing: 0.01em"><svg width="106" height="40" viewBox="0 40 700 264" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><defs><filter id="prism-mark-glow-ddl" filterUnits="userSpaceOnUse" x="0" y="0" width="720" height="360"><feGaussianBlur stdDeviation="14"></feGaussianBlur></filter><linearGradient id="prism-mark-ifx-ddl" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#F591B6"></stop><stop offset="1" stop-color="#F591B6" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-db2-ddl" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#5ED3A3"></stop><stop offset="1" stop-color="#5ED3A3" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-pg-ddl" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#7DB2FF"></stop><stop offset="1" stop-color="#7DB2FF" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-face-ddl" gradientUnits="userSpaceOnUse" x1="300" y1="44" x2="200" y2="300"><stop offset="0" stop-color="#3D4856"></stop><stop offset="1" stop-color="#1E242C"></stop></linearGradient></defs><g filter="url(#prism-mark-glow-ddl)" opacity="0.6"><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="26"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="#F591B6"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="#5ED3A3"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="#7DB2FF"></path></g><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="14"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="url(#prism-mark-ifx-ddl)"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="url(#prism-mark-db2-ddl)"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="url(#prism-mark-pg-ddl)"></path><path d="M300 50 L440 298 H160 Z" fill="#1A2028"></path><path d="M300 50 L160 298 L292 226 Z" fill="url(#prism-mark-face-ddl)"></path><path d="M160 298 L292 226 L440 298 Z" fill="#11151A"></path><path d="M220 186 L369.8 168 L378.8 184 Z" fill="#F3F5F8" fill-opacity="0.16"></path><path d="M300 50 L440 298 H160 Z" stroke="#E6EAF0" stroke-width="13"></path><circle cx="220" cy="186" r="15" fill="#FFFFFF"></circle><path d="M656 69 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#F591B6" stroke-width="10"></path><ellipse cx="676" cy="69" rx="20" ry="8" fill="#1B2027" stroke="#F591B6" stroke-width="10"></ellipse><path d="M656 145 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#5ED3A3" stroke-width="10"></path><ellipse cx="676" cy="145" rx="20" ry="8" fill="#1B2027" stroke="#5ED3A3" stroke-width="10"></ellipse><path d="M656 221 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#7DB2FF" stroke-width="10"></path><ellipse cx="676" cy="221" rx="20" ry="8" fill="#1B2027" stroke="#7DB2FF" stroke-width="10"></ellipse></svg><span>Prism</span><span style="margin-left: 4px; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; font-weight: 400; letter-spacing: 0; color: #B4BCC8">versão 0.6.0</span><button type="button" style="padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: #B4BCC8; font: inherit; font-size: 12px; font-weight: 400; letter-spacing: 0; cursor: pointer">Verificar atualizações</button></div>
+<button type="button" aria-label="Ocultar tabelas do modelo" aria-pressed="true" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0; border-radius: 6px; background: #232A33; color: #E6EAF0; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"></rect><path d="M6 3v10"></path></svg></button>
+<nav aria-label="Principal" style="margin-left: auto; display: flex; align-items: center; gap: 8px">
+<a href="ConstruirSeletor.dc.html" aria-haspopup="menu" style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px 0 12px; border-radius: 6px; background: #232A33; color: #E6EAF0; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M7.5 2.5l3.5 3.5 1.25-1.25-3.5-3.5z"></path><path d="M9.25 4.25L4.75 8.75"></path><path d="M2 10h10.5v1.25c-1.3 0-2.25.6-2.25 1.5H11V14H5.5v-1.25h.75c0-.9-.95-1.5-2.25-1.5-1 0-1.7-.45-2-1.25z"></path></svg><span>Construir</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #8E99A8"><path d="M4 6l4 4 4-4"></path></svg></a>
+<a href="#configuracoes" style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M3 5h6M12 5h1M3 11h1M7 11h6"></path><circle cx="10.5" cy="5" r="1.5"></circle><circle cx="5.5" cy="11" r="1.5"></circle></svg><span>Configurações</span></a>
+</nav>
+<span style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 4.8-1"></path></svg><span>marina.costa</span></span>
+<button type="button" style="display: flex; align-items: center; height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: #B4BCC8; font: inherit; cursor: pointer">Sair</button>
+<span style="display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 12px; color: #8E99A8">powered by <b style="font-weight: 600; letter-spacing: 0.01em; color: #B4BCC8">Zanveri</b></span>
+</header>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap">
+<aside aria-label="Tabelas do modelo" style="flex: 1 1 272px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; background: #14181D; border-right: 1px solid #2A313B">
+<div style="display: flex; align-items: center; padding: 8px 8px 8px 12px; min-height: 32px"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #B4BCC8">Tabelas do modelo</span></div>
+<div style="display: flex; flex-direction: column; padding-bottom: 12px">
+<div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #8E99A8"><path d="M4 6l4 4 4-4"></path></svg><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">manutencao</span><span style="display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border: 1px solid #38414D; border-radius: 4px; color: #B4BCC8; font-size: 11px; font-weight: 500">novo esquema</span><span style="margin-left: auto; color: #8E99A8; font-size: 12px; font-weight: 400">3</span></div>
+<a href="Construir.dc.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 32px; color: #C9D1DC; text-decoration: none; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">ordem_manutencao<span title="1 aviso" style="margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #F2B644"></span></a>
+<a href="Construir.dc.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 32px; color: #C9D1DC; text-decoration: none; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">plano_manutencao<span title="1 aviso" style="margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #F2B644"></span></a>
+<a href="Construir.dc.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 32px; color: #C9D1DC; text-decoration: none; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">peca_trocada<span title="2 avisos" style="margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #F2B644"></span></a>
+<div style="display: flex; align-items: center; gap: 6px; height: 30px; margin-top: 4px; padding: 0 12px 0 10px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #8E99A8"><path d="M4 6l4 4 4-4"></path></svg><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">producao</span><span style="display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border: 1px dashed #8E99A8; border-radius: 4px; color: #B4BCC8; font-size: 11px; font-weight: 500">existente</span><span style="margin-left: auto; color: #8E99A8; font-size: 12px; font-weight: 400">3</span></div>
+<a href="Construir.dc.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 32px; color: #B4BCC8; text-decoration: none; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">maquina<span style="display: inline-flex; align-items: center; height: 16px; padding: 0 5px; border: 1px solid #F2B644; border-radius: 4px; color: #F2B644; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 10px; font-weight: 600">alterada</span></a>
+<span style="display: flex; align-items: center; height: 30px; padding: 0 12px 0 32px; color: #B4BCC8; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">operador</span>
+<span style="display: flex; align-items: center; height: 30px; padding: 0 12px 0 32px; color: #B4BCC8; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">produto</span>
+</div>
+</aside>
+
+<div style="flex: 999 1 720px; min-width: 0; display: flex; flex-direction: column">
+<nav aria-label="Modelos abertos" style="display: flex; flex-wrap: wrap; align-items: stretch; gap: 2px; padding: 0 8px; background: #0E1114; border-bottom: 1px solid #2A313B">
+<a href="Construir.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; background: #14181D; border-bottom: 2px solid {{accent}}; color: #E6EAF0; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M7.5 2.5l3.5 3.5 1.25-1.25-3.5-3.5z"></path><path d="M9.25 4.25L4.75 8.75"></path><path d="M2 10h10.5v1.25c-1.3 0-2.25.6-2.25 1.5H11V14H5.5v-1.25h.75c0-.9-.95-1.5-2.25-1.5-1 0-1.7-.45-2-1.25z"></path></svg><span>manutencao</span><span style="flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; background: #FF8A7A; color: #14181D; font-size: 11px; line-height: 18px; font-weight: 600">Produção</span></a>
+<a href="ConstruirModelos.dc.html" style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; border-bottom: 2px solid transparent; color: #B4BCC8; text-decoration: none"><span>vendas-v2</span></a>
+</nav>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; background: #14181D; border-bottom: 1px solid #2A313B">
+<a href="Construir.dc.html" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px 0 6px; border-radius: 6px; color: #E6EAF0; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M10 4L6 8l4 4"></path></svg><span>Voltar ao diagrama</span></a>
+<h1 style="margin: 0 4px; font-size: 14px; line-height: 20px; font-weight: 600">DDL de <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">manutencao</span></h1>
+<span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span>
+<div role="radiogroup" aria-label="O que o DDL traz" style="display: flex; gap: 2px; margin-left: 8px; padding: 2px; border: 1px solid #2A313B; border-radius: 6px; background: #0E1114">
+<button type="button" role="radio" aria-checked="{{ isChanges }}" onClick="{{ pickChanges }}" style="height: 26px; padding: 0 10px; border: 0; border-radius: 4px; background: {{ changesFill }}; color: {{ changesInk }}; font: inherit; font-size: 12px; font-weight: {{ changesWeight }}; cursor: pointer">Só as diferenças</button>
+<button type="button" role="radio" aria-checked="{{ isFull }}" onClick="{{ pickFull }}" style="height: 26px; padding: 0 10px; border: 0; border-radius: 4px; background: {{ fullFill }}; color: {{ fullInk }}; font: inherit; font-size: 12px; font-weight: {{ fullWeight }}; cursor: pointer">Tudo</button>
+</div>
+<span style="color: #B4BCC8; font-size: 12px">{{ summary }}</span>
+<button type="button" style="margin-left: auto; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"></rect><path d="M11 5V3.5A1 1 0 0 0 10 2.5H3.5a1 1 0 0 0-1 1V10a1 1 0 0 0 1 1H5"></path></svg><span>Copiar</span></button>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10"></path></svg><span>Salvar .sql</span></button>
+<button type="button" title="Abre uma aba de consulta com este script. Nada roda até você executar." style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: {{accent}}; color: #14181D; font: inherit; font-weight: 600; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="2" y="3" width="12" height="10" rx="1.5"></rect><path d="M6 3v10"></path></svg><span>Abrir na Área de trabalho</span></button>
+</div>
+<div role="group" aria-label="Opções do DDL" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; padding: 8px 12px; border-bottom: 1px solid #2A313B; font-size: 12px; color: #C9D1DC">
+<span style="display: flex; align-items: center; gap: 10px"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #B4BCC8">CREATE SCHEMA</span><label style="display: flex; align-items: center; gap: 6px; cursor: pointer"><input type="checkbox" checked style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">manutencao</span></label><label title="producao já existe em MES Produção / mes" style="display: flex; align-items: center; gap: 6px; cursor: pointer"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">producao</span></label></span>
+<label style="display: flex; align-items: center; gap: 8px; cursor: pointer"><input type="checkbox" checked style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span>Nomes das restrições</span></label>
+<label style="display: flex; align-items: center; gap: 8px; cursor: pointer"><input type="checkbox" checked style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span>Comentários</span></label>
+<label style="display: flex; align-items: center; gap: 8px; cursor: pointer"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span>FKs em <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">ALTER TABLE</span> no fim</span></label>
+<label style="display: flex; align-items: center; gap: 8px; cursor: pointer"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #F2B644"><span><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">DROP</span> das novas antes de criar</span></label>
+</div>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap">
+<div aria-label="DDL gerado, somente leitura" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 12px 16px 16px 0; overflow-x: auto; background: #0E1114; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; line-height: 20px; white-space: pre; color: #C9D1DC">
+<sc-for list="{{ lines }}" as="line" hint-placeholder-count="60">
+<div style="display: flex; gap: 12px; background: {{ line.bg }}"><span style="flex: none; width: 36px; text-align: right; color: {{ line.numColor }}; font-weight: {{ line.numWeight }}">{{ line.n }}</span><span><sc-for list="{{ line.segs }}" as="seg" hint-placeholder-count="3"><span style="color: {{ seg.c }}; font-style: {{ seg.i }}">{{ seg.t }}</span></sc-for></span></div>
+</sc-for>
+</div>
+
+<aside aria-labelledby="problemas-titulo" style="flex: 1 1 340px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; padding: 16px; background: #14181D; border-left: 1px solid #2A313B">
+<div style="display: flex; align-items: center; gap: 8px"><h2 id="problemas-titulo" style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600">Problemas</h2><span style="color: #B4BCC8; font-size: 12px">{{ warningsLabel }} · nenhum erro</span></div>
+<p style="margin: 0; color: #B4BCC8; font-size: 12px; line-height: 18px">Avisos não impedem o DDL. Um erro, como uma FK para uma coluna que não existe, impede: o DDL só sai depois de corrigido.</p>
+
+<section aria-label="Aviso em peca_trocada" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; background: #1B2027; border: 1px solid #2A313B; border-radius: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #F2B644"><path d="M8 2.5l6 10.5H2z"></path><path d="M8 7v2.5M8 11.25v.01"></path></svg><span style="font-weight: 600">Tipos diferentes na FK</span><span style="margin-left: auto; color: #B4BCC8; font-size: 12px">linha {{ typeLine }}</span></div>
+<p style="margin: 0; color: #C9D1DC; font-size: 12px; line-height: 18px"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">peca_trocada.produto_id</span> é <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">integer</span> e aponta para <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">producao.produto.id</span>, que é <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">bigint</span>. Um id acima de 2.147.483.647 não caberia.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button type="button" style="height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: #232A33; color: #E6EAF0; font: inherit; font-size: 12px; cursor: pointer">Trocar para <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">bigint</span></button><a href="Construir.dc.html" style="display: flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; text-decoration: none; font-size: 12px">Ir para a coluna</a></div>
+</section>
+
+<section aria-label="Aviso de FKs sem índice" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; background: #1B2027; border: 1px solid #2A313B; border-radius: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #F2B644"><path d="M8 2.5l6 10.5H2z"></path><path d="M8 7v2.5M8 11.25v.01"></path></svg><span style="font-weight: 600">FKs sem índice</span><span style="margin-left: auto; color: #B4BCC8; font-size: 12px">3 tabelas</span></div>
+<p style="margin: 0; color: #C9D1DC; font-size: 12px; line-height: 18px">Estas colunas de FK não começam nenhum índice. Buscar por elas, ou excluir a linha referenciada, lê a tabela inteira.</p>
+<ul style="margin: 0; padding: 0 0 0 16px; color: #C9D1DC; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; line-height: 18px"><li>ordem_manutencao (plano_id), (aberta_por)</li><li>plano_manutencao (maquina_id)</li><li>peca_trocada (ordem_id), (produto_id)</li></ul>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button type="button" style="height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: #232A33; color: #E6EAF0; font: inherit; font-size: 12px; cursor: pointer">Criar os 5 índices</button><button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #B4BCC8; font: inherit; font-size: 12px; cursor: pointer">Ignorar neste modelo</button></div>
+</section>
+
+<sc-if value="{{ isFull }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Aviso em producao.maquina" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; background: #1B2027; border: 1px solid #2A313B; border-radius: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #F2B644"><path d="M8 2.5l6 10.5H2z"></path><path d="M8 7v2.5M8 11.25v.01"></path></svg><span style="font-weight: 600">FK para tabela fora do modelo</span><span style="margin-left: auto; color: #B4BCC8; font-size: 12px">linha {{ outsideLine }}</span></div>
+<p style="margin: 0; color: #C9D1DC; font-size: 12px; line-height: 18px"><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">producao.maquina</span> aponta para <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">producao.linha</span>, que não está no modelo. No banco de destino, ela precisa existir antes deste script.</p>
+<div style="display: flex"><a href="ConstruirNovoModelo.dc.html" style="display: flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; text-decoration: none; font-size: 12px">Ler producao.linha do banco</a></div>
+</section>
+<section aria-label="Sobre o DDL completo" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2A313B; border-radius: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #B4BCC8"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 7.5v3M8 5.25v.01"></path></svg><span style="font-weight: 600">Tudo é para outro banco</span></div>
+<p style="margin: 0; color: #C9D1DC; font-size: 12px; line-height: 18px">As três existentes já estão em MES Produção / mes: lá, este script falha no primeiro <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">CREATE</span>. Ao abrir na Área de trabalho, o Prism pergunta a conexão.</p>
+</section>
+</sc-if>
+
+<sc-if value="{{ isChanges }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Sobre a conexão de destino" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2A313B; border-radius: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #B4BCC8"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 7.5v3M8 5.25v.01"></path></svg><span style="font-weight: 600">A base é de Produção</span><span style="flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; background: #FF8A7A; color: #14181D; font-size: 11px; line-height: 18px; font-weight: 600">Produção</span></div>
+<p style="margin: 0; color: #C9D1DC; font-size: 12px; line-height: 18px">"Abrir na Área de trabalho" põe o script numa aba nova de MES Produção / mes. Nada roda até você executar, e a confirmação de comando irreversível vale como em qualquer aba.</p>
+</section>
+</sc-if>
+
+<section aria-label="Sobre a leitura do banco" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2A313B; border-radius: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #B4BCC8"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5V5h-2.5"></path></svg><span style="font-weight: 600">Existentes lidas em 29/10/2026 14:10</span></div>
+<p style="margin: 0; color: #C9D1DC; font-size: 12px; line-height: 18px">As diferenças são contra essa leitura. Se alguém mudou <span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">producao</span> depois, releia antes de rodar: o que você mudou no modelo fica.</p>
+<div style="display: flex"><button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; font-size: 12px; cursor: pointer">Reler do banco</button></div>
+</section>
+</aside>
+</div>
+</div>
+</div>
+
+<footer style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; min-height: 28px; box-sizing: border-box; padding: 4px 12px; background: #14181D; border-top: 1px solid #2A313B; color: #B4BCC8; font-size: 12px; line-height: 18px">
+<span style="display: flex; align-items: center; gap: 6px"><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span><span>Modelo manutencao · existentes lidas de MES Produção / mes em 29/10/2026 14:10</span></span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="flex: none; width: 8px; height: 8px; border-radius: 50%; background: #F2B644"></span>{{ warningsLabel }}</span>
+<span style="margin-left: auto; display: flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 4.8-1"></path></svg><span>Cofre de marina.costa aberto</span></span>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F2B644","options":["#F2B644","#7DB2FF","#5ED3A3","#F591B6"]},"escopo":{"editor":"enum","options":["diferencas","tudo"],"default":"diferencas"},"$preview":{"width":1440,"height":1640}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { scope: null };
+}
+renderVals() {
+const accent = this.props.accent ?? '#F2B644';
+const scope = this.state.scope ?? (this.props.escopo === 'tudo' ? 'full' : 'changes');
+const full = scope === 'full';
+const colors = { k: '#7DB2FF', s: '#5ED3A3', n: '#F2B644', f: '#F591B6', c: '#8E99A8' };
+const head = full ? [
+['c:-- Modelo manutencao · PostgreSQL · gerado pelo Prism 0.6.0 em 29/10/2026 14:32'],
+['c:-- Tudo: o esquema inteiro, do zero, com as existentes como estão no modelo.'],
+['c:-- Em MES Produção / mes falha no primeiro CREATE: as existentes já estão lá.'],
+[], ['k:CREATE SCHEMA', ' manutencao;'], [],
+['k:CREATE TABLE', ' producao.maquina ('],
+['  id                bigint ', 'k:GENERATED ALWAYS AS IDENTITY', ','],
+['  linha_id          bigint ', 'k:NOT NULL', ','],
+['  tag               varchar(', 'n:12', ') ', 'k:NOT NULL', ','],
+['  modelo            varchar(', 'n:60', '),'],
+['  instalada_em      date,'],
+['  ultima_revisao_em date,'],
+['  ', 'k:CONSTRAINT', ' maquina_pkey ', 'k:PRIMARY KEY', ' (id),'],
+['  ', 'k:CONSTRAINT', ' maquina_linha_id_fkey ', 'k:FOREIGN KEY', ' (linha_id)'],
+['    ', 'k:REFERENCES', ' producao.linha (id)'],
+[');'], [],
+['k:CREATE TABLE', ' producao.operador ('],
+['  id        bigint ', 'k:GENERATED ALWAYS AS IDENTITY', ','],
+['  matricula varchar(', 'n:12', ') ', 'k:NOT NULL', ','],
+['  nome      varchar(', 'n:80', ') ', 'k:NOT NULL', ','],
+['  turno     char(', 'n:1', '),'],
+['  ', 'k:CONSTRAINT', ' operador_pkey ', 'k:PRIMARY KEY', ' (id)'],
+[');'], [],
+['k:CREATE TABLE', ' producao.produto ('],
+['  id        bigint ', 'k:GENERATED ALWAYS AS IDENTITY', ','],
+['  codigo    varchar(', 'n:20', ') ', 'k:NOT NULL', ','],
+['  descricao varchar(', 'n:120', ') ', 'k:NOT NULL', ','],
+['  unidade   char(', 'n:2', ') ', 'k:NOT NULL', ','],
+['  ativo     boolean ', 'k:NOT NULL DEFAULT true', ','],
+['  ', 'k:CONSTRAINT', ' produto_pkey ', 'k:PRIMARY KEY', ' (id)'],
+[');'], [],
+] : [
+['c:-- Modelo manutencao · PostgreSQL · gerado pelo Prism 0.6.0 em 29/10/2026 14:32'],
+['c:-- Só as diferenças em relação a MES Produção / mes, lida em 29/10/2026 14:10.'],
+['c:-- Sem mudança, e por isso fora daqui: producao.operador e producao.produto.'],
+[], ['k:CREATE SCHEMA', ' manutencao;'], [],
+['k:ALTER TABLE', ' producao.maquina ', 'k:ADD COLUMN', ' ultima_revisao_em date;'],
+[],
+];
+const body = [
+['k:CREATE TABLE', ' manutencao.plano_manutencao ('],
+['  id                 bigint ', 'k:GENERATED ALWAYS AS IDENTITY', ','],
+['  maquina_id         bigint ', 'k:NOT NULL', ','],
+['  descricao          varchar(', 'n:120', ') ', 'k:NOT NULL', ','],
+['  periodicidade_dias integer ', 'k:NOT NULL', ','],
+['  ativo              boolean ', 'k:NOT NULL DEFAULT true', ','],
+['  ', 'k:CONSTRAINT', ' pk_plano_manutencao ', 'k:PRIMARY KEY', ' (id),'],
+['  ', 'k:CONSTRAINT', ' fk_plano_manutencao_maquina ', 'k:FOREIGN KEY', ' (maquina_id)'],
+['    ', 'k:REFERENCES', ' producao.maquina (id)'],
+[');'], [],
+['k:CREATE TABLE', ' manutencao.ordem_manutencao ('],
+['  id         bigint ', 'k:GENERATED ALWAYS AS IDENTITY', ','],
+['  maquina_id bigint ', 'k:NOT NULL', ','],
+['  plano_id   bigint,'],
+['  aberta_por bigint ', 'k:NOT NULL', ','],
+['  tipo       varchar(', 'n:12', ') ', 'k:NOT NULL DEFAULT', ' ', "s:'corretiva'", ','],
+['  status     varchar(', 'n:12', ') ', 'k:NOT NULL DEFAULT', ' ', "s:'aberta'", ','],
+['  aberta_em  timestamptz ', 'k:NOT NULL DEFAULT', ' ', 'f:now', '(),'],
+['  fechada_em timestamptz,'],
+['  ', 'k:CONSTRAINT', ' pk_ordem_manutencao ', 'k:PRIMARY KEY', ' (id),'],
+['  ', 'k:CONSTRAINT', ' ck_ordem_manutencao_tipo ', 'k:CHECK', ' (tipo ', 'k:IN', ' (', "s:'corretiva'", ', ', "s:'preventiva'", ')),'],
+['  ', 'k:CONSTRAINT', ' fk_ordem_manutencao_maquina ', 'k:FOREIGN KEY', ' (maquina_id)'],
+['    ', 'k:REFERENCES', ' producao.maquina (id),'],
+['  ', 'k:CONSTRAINT', ' fk_ordem_manutencao_plano ', 'k:FOREIGN KEY', ' (plano_id)'],
+['    ', 'k:REFERENCES', ' manutencao.plano_manutencao (id) ', 'k:ON DELETE SET NULL', ','],
+['  ', 'k:CONSTRAINT', ' fk_ordem_manutencao_operador ', 'k:FOREIGN KEY', ' (aberta_por)'],
+['    ', 'k:REFERENCES', ' producao.operador (id)'],
+[');'], [],
+['k:CREATE TABLE', ' manutencao.peca_trocada ('],
+['  id         bigint ', 'k:GENERATED ALWAYS AS IDENTITY', ','],
+['  ordem_id   bigint ', 'k:NOT NULL', ','],
+['  produto_id integer ', 'k:NOT NULL', ','],
+['  quantidade numeric(', 'n:12', ',', 'n:3', ') ', 'k:NOT NULL', ','],
+['  custo      numeric(', 'n:12', ',', 'n:2', '),'],
+['  ', 'k:CONSTRAINT', ' pk_peca_trocada ', 'k:PRIMARY KEY', ' (id),'],
+['  ', 'k:CONSTRAINT', ' fk_peca_trocada_ordem ', 'k:FOREIGN KEY', ' (ordem_id)'],
+['    ', 'k:REFERENCES', ' manutencao.ordem_manutencao (id) ', 'k:ON DELETE CASCADE', ','],
+['  ', 'k:CONSTRAINT', ' fk_peca_trocada_produto ', 'k:FOREIGN KEY', ' (produto_id)'],
+['    ', 'k:REFERENCES', ' producao.produto (id)'],
+[');'], [],
+['k:CREATE INDEX', ' ix_ordem_manutencao_maquina'],
+['  ', 'k:ON', ' manutencao.ordem_manutencao (maquina_id, aberta_em);'],
+['k:CREATE INDEX', ' ix_ordem_manutencao_status'],
+['  ', 'k:ON', ' manutencao.ordem_manutencao (status);'],
+[],
+['k:COMMENT ON TABLE', ' manutencao.ordem_manutencao'],
+['  ', 'k:IS', ' ', "s:'Ordem de serviço de manutenção de uma máquina'", ';'],
+['k:COMMENT ON COLUMN', ' manutencao.ordem_manutencao.tipo'],
+['  ', 'k:IS', ' ', "s:'Corretiva quando a máquina parou; preventiva quando veio do plano'", ';'],
+];
+const raw = head.concat(body);
+const flagged = (parts) => parts.join('').includes('produto_id integer') || (full && parts.join('').includes('maquina_linha_id_fkey'));
+const lines = raw.map((parts, index) => {
+const warn = flagged(parts);
+return {
+n: index + 1,
+bg: warn ? 'color-mix(in srgb, #F2B644 10%, transparent)' : 'transparent',
+numColor: warn ? '#F2B644' : '#8E99A8',
+numWeight: warn ? 600 : 400,
+segs: parts.map((part) => {
+const tag = /^[ksnfc]:/.test(part) ? part[0] : null;
+return { t: tag ? part.slice(2) : part, c: tag ? colors[tag] : '#C9D1DC', i: tag === 'c' ? 'italic' : 'normal' };
+}),
+};
+});
+const lineOf = (text) => raw.findIndex((parts) => parts.join('').includes(text)) + 1;
+const pill = (on) => ({ fill: on ? '#232A33' : 'transparent', ink: on ? '#E6EAF0' : '#B4BCC8', weight: on ? 600 : 400 });
+const changesPill = pill(!full);
+const fullPill = pill(full);
+return {
+accent,
+lines,
+isChanges: !full, isFull: full,
+changesFill: changesPill.fill, changesInk: changesPill.ink, changesWeight: changesPill.weight,
+fullFill: fullPill.fill, fullInk: fullPill.ink, fullWeight: fullPill.weight,
+pickChanges: () => this.setState({ scope: 'changes' }),
+pickFull: () => this.setState({ scope: 'full' }),
+summary: full ? '6 CREATE TABLE · 2 índices · ' + raw.length + ' linhas' : '1 ALTER TABLE · 3 CREATE TABLE · 2 índices · ' + raw.length + ' linhas',
+warningsLabel: full ? '3 avisos' : '2 avisos',
+typeLine: lineOf('produto_id integer'),
+outsideLine: lineOf('maquina_linha_id_fkey'),
+};
+}
+}
+</script>
+</body>
+</html>

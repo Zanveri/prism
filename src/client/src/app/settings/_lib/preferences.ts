@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isolationLevels, transactionModes } from "@/app/workbench/_lib/transaction";
+
 import { appFonts, fontNameSchema } from "./fonts";
 
 /**
@@ -8,7 +10,7 @@ import { appFonts, fontNameSchema } from "./fonts";
  * aqui; quem apagar o `localStorage` perde só o gosto, e a tela volta ao padrão.
  *
  * Quem só lê usa `usePreferences()` e o nome do campo como está aqui, em grupos: `preferences.theme`, `preferences.ui.fontFamily`, `preferences.ui.navigatorDensity`,
- * `preferences.editor.fontSize`, `preferences.results.nullText`, `preferences.security.lockAfterMinutes`.
+ * `preferences.editor.fontSize`, `preferences.results.nullText`, `preferences.transactions.mode`, `preferences.security.lockAfterMinutes`.
  */
 
 /**
@@ -134,6 +136,12 @@ const fields = {
     /** RN-CONFIG-010: o lugar do resultado das abas de consulta novas. */
     resultPlace: z.enum(resultPlacePreferences),
   },
+  transactions: {
+    /** RN-CONFIG-007: o modo de transação padrão das abas novas. */
+    mode: z.enum(transactionModes),
+    /** RN-ISOL-006: o nível de isolamento padrão das abas novas. */
+    isolationLevel: z.enum(isolationLevels),
+  },
   security: {
     /** RN-SEG-001: bloquear o Prism depois de um tempo sem uso. */
     lockEnabled: z.boolean(),
@@ -146,6 +154,7 @@ const strict = z.object({
   ui: z.object(fields.ui),
   editor: z.object(fields.editor),
   results: z.object(fields.results),
+  transactions: z.object(fields.transactions),
   security: z.object(fields.security),
 });
 
@@ -182,6 +191,7 @@ export const defaultPreferences: Preferences = freeze({
     formatStyle: "expanded",
   },
   results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100, resultPlace: "panel" },
+  transactions: { mode: "autoCommit", isolationLevel: "default" },
   security: { lockEnabled: true, lockAfterMinutes: 10 },
 } as const satisfies Preferences);
 
@@ -238,6 +248,7 @@ export function parsePreferences(raw: string | null): Preferences {
     ui: readGroup(fields.ui, defaultPreferences.ui, source.ui),
     editor: readGroup(fields.editor, defaultPreferences.editor, source.editor),
     results: readGroup(fields.results, defaultPreferences.results, source.results),
+    transactions: readGroup(fields.transactions, defaultPreferences.transactions, source.transactions),
     security: readGroup(fields.security, defaultPreferences.security, source.security),
   };
 }

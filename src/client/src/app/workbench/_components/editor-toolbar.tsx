@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 
-import { Button, PlayIcon, PlayScriptIcon, StopIcon } from "@/components/ui";
+import { Button, HistoryIcon, PlayIcon, PlayScriptIcon, PlayValuesIcon, StopIcon } from "@/components/ui";
+import { cn } from "@/lib/utils/cn";
 
+import { historyCopy } from "../_lib/history.copy";
 import { scriptRunCopy } from "../_lib/script-run.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
@@ -19,6 +21,12 @@ type EditorToolbarProps = {
   /** O atalho do script como a plataforma o escreve (`scriptShortcutLabel`): Alt+X, ou Cmd+Option+X no macOS. */
   scriptShortcut: { label: string; aria: string };
   onCancel: () => void;
+  /** RN-VAR-026: o "Executar com valores…", só quando o texto do editor declara variáveis no topo; sem ele, o botão não aparece. */
+  onRunWithValues?: () => void;
+  valuesShortcut?: { label: string; aria: string };
+  /** RN-HIST-001: abre e fecha o painel do Histórico (`Ctrl+Shift+H`), depois de "Executar script". */
+  historyOpen?: boolean;
+  onToggleHistory?: () => void;
   /** RN-ARVORE-008: a conexão da aba, e a troca dela (`ConnectionPicker`), antes do banco. */
   connection?: ReactNode;
   /** RN-ARVORE-007: o banco em que a aba roda, e a troca dele (`DatabasePicker`); nulo na aba sem conexão, que pede uma antes. */
@@ -28,11 +36,26 @@ type EditorToolbarProps = {
 };
 
 /**
- * A barra do editor: Executar, Executar script e Cancelar (seção 9 da especificação, RN-SQL-019), a conexão da aba (RN-ARVORE-008), o banco dela
+ * A barra do editor: Executar, Executar script, Histórico e Cancelar (seção 9 da especificação, RN-SQL-019, RN-HIST-001), a conexão da aba (RN-ARVORE-008), o banco dela
  * (RN-ARVORE-007) e a transação (RN-TX-001). Enquanto um comando (ou um script) roda, os dois botões de executar dão lugar a "Cancelar", e por isso a tela nunca pede um segundo
  * comando à mesma sessão (`SESSION_BUSY`, RN-SESSAO-002).
  */
-export function EditorToolbar({ busy, cancelling, runnable, onRun, onRunScript, scriptShortcut, onCancel, connection, database, transaction }: EditorToolbarProps) {
+export function EditorToolbar({
+  busy,
+  cancelling,
+  runnable,
+  onRun,
+  onRunScript,
+  scriptShortcut,
+  onCancel,
+  onRunWithValues,
+  valuesShortcut,
+  historyOpen = false,
+  onToggleHistory,
+  connection,
+  database,
+  transaction
+}: EditorToolbarProps) {
   return (
     <div role="toolbar" aria-label={copy.toolbar} className="flex flex-none flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-2">
       {busy ? (
@@ -52,7 +75,35 @@ export function EditorToolbar({ busy, cancelling, runnable, onRun, onRunScript, 
             <span>{scriptRunCopy.editor.run}</span>
             <kbd className="font-mono text-[11px] font-medium text-muted">{scriptShortcut.label}</kbd>
           </Button>
+          {onRunWithValues === undefined || valuesShortcut === undefined ? null : (
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              onClick={onRunWithValues}
+              aria-label={scriptRunCopy.editor.withValues}
+              title={scriptRunCopy.editor.withValuesTitle(valuesShortcut.label)}
+              aria-keyshortcuts={valuesShortcut.aria}
+            >
+              <PlayValuesIcon />
+            </Button>
+          )}
         </>
+      )}
+      {onToggleHistory !== undefined && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="compact"
+          aria-pressed={historyOpen}
+          aria-keyshortcuts="Control+Shift+H"
+          title={historyCopy.toolbarTooltip}
+          onClick={onToggleHistory}
+          className={cn("px-3", historyOpen && "border-accent/60 bg-selected text-fg")}
+        >
+          <HistoryIcon />
+          <span>{historyCopy.toolbarButton}</span>
+        </Button>
       )}
       {connection}
       {database}

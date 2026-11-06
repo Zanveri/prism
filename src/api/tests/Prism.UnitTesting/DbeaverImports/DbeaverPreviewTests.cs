@@ -167,7 +167,7 @@ public sealed class DbeaverPreviewTests : IDisposable
         Assert.Empty(pg.LeftOut);
         Assert.Equal((EDatabaseEngine.Db2, 50000, "all", "Produção", "#FACFCF", "Production"), (db2.Engine, db2.Port, db2.Effective!.ConfirmCommands, db2.Effective.EnvironmentName, db2.Effective.EnvironmentColor, db2.DbeaverType));
         Assert.Equal((EDatabaseEngine.Informix, 55080, 55080, "far_ewm_001_dev_tcp", (int?)null), (informix.Engine, informix.Port, informix.DbeaverPort, informix.Server, informix.DrdaPort));
-        Assert.Equal(["informixServer", "sshTunnel", "confirmDataChange"], informix.LeftOut);
+        Assert.Equal(["informixServer", "confirmDataChange"], informix.LeftOut);
         Assert.Equal(("QA Homologação", "#6496C8"), (informix.Effective!.EnvironmentName, informix.Effective.EnvironmentColor));
         Assert.Equal((true, "Restrito"), (restricted.Effective!.ReadOnly, restricted.Effective.EnvironmentName));
         Assert.Equal(["permissions"], restricted.LeftOut);
@@ -207,7 +207,8 @@ public sealed class DbeaverPreviewTests : IDisposable
         //Assert
         Assert.DoesNotContain(DbeaverWorkspace.Mark, json);
         Assert.DoesNotContain("senha-", json);
-        Assert.DoesNotContain("\"password\"", json);
+        // A chave `password`; o valor "password" do método do túnel (RN-REDE-008) não é senha.
+        Assert.DoesNotContain("\"password\":", json);
         Assert.Equal(nameof(DbeaverPreviewDto), preview.ToString());
         Assert.Equal(nameof(DbeaverPreviewConnectionDto), preview.Connections[0].ToString());
     }

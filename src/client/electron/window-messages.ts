@@ -188,6 +188,16 @@ export const tabTransferSchema = z.object({
         folderId: z.uuid().optional(),
       })
       .optional(),
+    /** RN-VAR-029: a aba de execução leva o script, os valores da última execução (pelo nome, conferidos de novo ao executar) e a hora; o pedido pendente não vai. */
+    execution: z
+      .object({
+        scriptId: z.uuid(),
+        name: z.string().min(1).max(200),
+        generic: z.boolean(),
+        values: z.record(z.string().min(1).max(10_000), z.unknown()).nullable(),
+        ranAt: z.number().int().nonnegative().nullable(),
+      })
+      .optional(),
   }),
   /** A seleção do editor (o cursor é a seleção vazia), em posições do texto. */
   editor: z.object({ anchor: count, head: count }).nullable(),

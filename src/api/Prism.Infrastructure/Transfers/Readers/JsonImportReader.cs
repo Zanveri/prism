@@ -18,7 +18,6 @@ namespace Prism.Infrastructure.Transfers.Readers;
 /// </summary>
 internal sealed class JsonImportReader(Stream stream, JsonImportOptions options, ILogger logger) : ImportReader(stream, logger)
 {
-    private const string ShapeMessage = "O JSON não é uma lista de objetos, nem um objeto com uma lista de objetos dentro.";
 
     private Tokens _tokens = null!;
     private Dictionary<string, int> _positions = new(StringComparer.Ordinal);
@@ -35,7 +34,7 @@ internal sealed class JsonImportReader(Stream stream, JsonImportOptions options,
     {
         var line = (exception.LineNumber ?? 0) + 1;
 
-        return new ImportReadFailure(EImportReadReason.Format, $"O arquivo não é um JSON válido: erro na linha {ImportText.Thousands(line)}, byte {ImportText.Thousands((exception.BytePositionInLine ?? 0) + 1)} da linha.", line);
+        return new ImportReadFailure(EImportReadReason.Format, ImportText.Say("JsonMalformed", ImportText.Thousands(line), ImportText.Thousands((exception.BytePositionInLine ?? 0) + 1)), line);
     }
 
     protected override void Begin(CancellationToken cancellationToken)
@@ -76,7 +75,7 @@ internal sealed class JsonImportReader(Stream stream, JsonImportOptions options,
         {
             SkipValue();
 
-            return new ImportRecord(_item, values, new ImportProblem($"O item {ImportText.Thousands(_item)} da lista não é um objeto."), false);
+            return new ImportRecord(_item, values, new ImportProblem(ImportText.Say("JsonItemNotObject", ImportText.Thousands(_item))), false);
         }
 
         ImportProblem? problem = null;
@@ -88,12 +87,12 @@ internal sealed class JsonImportReader(Stream stream, JsonImportOptions options,
             var value = ReadValue(key);
             rowBytes += value.Text is null ? 0 : ImportText.Utf8Length(value.Text);
             if (rowBytes > MaxRowBytes)
-                throw RowTooLarge($"O item {ImportText.Thousands(_item)} da lista", feminine: false, _item);
+                throw RowTooLarge("RowTooLargeItem", _item);
 
             if (!seen.Add(key))
-                problem ??= new ImportProblem($"O item {ImportText.Thousands(_item)} da lista tem a chave {key} duas vezes.");
+                problem ??= new ImportProblem(ImportText.Say("JsonKeyTwice", ImportText.Thousands(_item), key));
             else if (!_positions.TryGetValue(key, out var position))
-                problem ??= new ImportProblem($"O item {ImportText.Thousands(_item)} da lista tem a chave {key}, que não estava no arquivo quando ele foi lido.");
+                problem ??= new ImportProblem(ImportText.Say("JsonKeyUnknown", ImportText.Thousands(_item), key));
             else
                 values[position] = value;
         }
@@ -191,13 +190,13 @@ internal sealed class JsonImportReader(Stream stream, JsonImportOptions options,
         if (_tokens.Type is JsonTokenType.StartObject or JsonTokenType.StartArray)
         {
             var raw = _tokens.SkipRaw(MaxValueBytes);
-            value = raw is null ? throw ValueTooLarge(Place(), _item, key) : new ImportValue(raw, EImportValueSource.Json);
+            value = raw is null ? throw ValueTooLarge("ValueTooLargeItem", _item, key) : new ImportValue(raw, EImportValueSource.Json);
         }
         else
         {
             // RN-IMPORT-008: o texto ou o número sem escape acima de 64 MiB no arquivo passa do limite já ali, sem virar um `string`.
             if (_tokens.Oversized)
-                throw ValueTooLarge(Place(), _item, key);
+                throw ValueTooLarge("ValueTooLargeItem", _item, key);
 
             value = _tokens.Type switch
             {
@@ -210,7 +209,7 @@ internal sealed class JsonImportReader(Stream stream, JsonImportOptions options,
         }
 
         if (value.Text is { } text && ImportText.Utf8Length(text) > MaxValueBytes)
-            throw ValueTooLarge(Place(), _item, key);
+            throw ValueTooLarge("ValueTooLargeItem", _item, key);
 
         return value;
     }
@@ -222,11 +221,8 @@ internal sealed class JsonImportReader(Stream stream, JsonImportOptions options,
             _tokens.SkipRaw(null);
     }
 
-    private string Place()
-        => $"do item {ImportText.Thousands(_item)} da lista";
-
     private static ImportReadException Shape()
-        => new(new ImportReadFailure(EImportReadReason.Format, ShapeMessage));
+        => new(new ImportReadFailure(EImportReadReason.Format, ImportText.Say("JsonShape")));
 
     /// <summary>
     /// Os tokens do arquivo, um por vez: o <see cref="Utf8JsonReader"/> é recriado a cada token sobre o espaço, com o estado do anterior, e o espaço é
@@ -357,7 +353,7 @@ internal sealed class JsonImportReader(Stream stream, JsonImportOptions options,
             if (_end == _buffer.Length)
             {
                 if (_buffer.Length >= MaxTokenBytes)
-                    throw new ImportReadException(new ImportReadFailure(EImportReadReason.Limits, "Um valor do arquivo passa de 64 MiB, e o Prism não o importa.", _line, ValueTooLarge: true));
+                    throw new ImportReadException(new ImportReadFailure(EImportReadReason.Limits, ImportText.Say("JsonValueTooLarge"), _line, ValueTooLarge: true));
 
                 Array.Resize(ref _buffer, (int)Math.Min((long)_buffer.Length * 2, MaxTokenBytes));
             }
@@ -380,7 +376,7 @@ internal sealed class JsonImportReader(Stream stream, JsonImportOptions options,
                 _line += _buffer.AsSpan(_validated, bytesRead).Count((byte)'\n');
                 _validated += bytesRead;
                 if (status == OperationStatus.InvalidData)
-                    throw new ImportReadException(new ImportReadFailure(EImportReadReason.Encoding, $"O JSON não é UTF-8 válido: erro na linha {ImportText.Thousands(_line)} do arquivo.", _line));
+                    throw new ImportReadException(new ImportReadFailure(EImportReadReason.Encoding, ImportText.Say("JsonEncoding", ImportText.Thousands(_line)), _line));
 
                 if (status != OperationStatus.DestinationTooSmall)
                     break;

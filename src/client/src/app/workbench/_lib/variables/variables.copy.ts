@@ -1,3 +1,7 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+import { phraseEn } from "./variables.copy.en";
+import { phraseEs } from "./variables.copy.es";
+
 /*
  * As frases da linguagem das variáveis (seção 41). Cada função é uma frase da especificação, palavra por palavra, ou a mais próxima dela quando a especificação só
  * diz o que a frase tem de dizer. Nenhuma traz texto do JavaScript da tela (a pilha, o nome de uma classe, um `[object Object]`, RN-VAR-012).
@@ -26,12 +30,15 @@ export const limits = {
   decimalDigits: 31,
   numberCharacters: 100,
   tabValuesBytes: 128 * 1024 * 1024,
+  /** A consulta de uma variável (RN-VAR-013 e 034): as linhas e as colunas que a API lê antes de recusar. */
+  queryRows: 10_000,
+  queryColumns: 100,
 } as const;
 
 /** O número de `n` com milhares separados por ponto, como a especificação escreve os limites. */
 const group = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
-export const phrase = {
+const pt = {
   // Os limites (RN-VAR-013).
   tooManyDeclarations: () => `O script passou de ${group(limits.declarationsPerScript)} declarações.`,
   nameTooLong: () => `O nome pode ter até ${limits.nameLength} caracteres.`,
@@ -97,9 +104,10 @@ export const phrase = {
   mixedNullish: () => "?? não se mistura com && nem com || sem parênteses.",
   unaryBeforePower: () => "Use parênteses: (-x) ** 2 ou -(x ** 2).",
   looseEquality: () => "Use === ou !==: o == do JavaScript converte os tipos antes de comparar.",
-  unknownType: (type: string) => `O tipo ${type} não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna).`,
+  unknownType: (type: string) =>
+    `O tipo ${type} não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null, o de uma coluna (tabela.coluna) e os do script (interface e type).`,
+  noGenerics: (type: string) => `${type}<…> não existe: os tipos não levam parâmetros, e a lista se anota number[].`,
   listOfList: () => "Lista de lista não existe aqui: anote uma lista de valores simples.",
-  objectNotAnnotated: () => "Objetos não se anotam: o tipo vem da consulta.",
   memberNotInType: (member: string, type: string) => `${member} não existe em ${type}.`,
   memberForbidden: (member: string) => `${member} não pode ser lido.`,
   keyForbidden: (key: string) => `${key} não pode ser chave de objeto.`,
@@ -142,11 +150,50 @@ export const phrase = {
   sqlUnbalanced: (name: string) => `O valor de ${name} (sql) não tem os parênteses equilibrados e engoliria o resto do comando.`,
   sqlVariableInExpression: (name: string) => `${name} é sql, e uma variável sql só entra no SQL (@${name}).`,
 
-  // As provisórias (RN-VAR-011, 010, 004 e 021): saem quando o passo de cada uma entrar.
-  provisionalQuery: () => "A variável de consulta chega numa próxima versão.",
-  provisionalSample: () => "`random.of` chega numa próxima versão.",
-  provisionalColumnType: () => "O tipo de coluna chega numa próxima versão.",
-  provisionalNoValue: (name: string) => `\`${name}\` não tem valor: escreva \`= valor\` (a pergunta dos valores chega numa próxima versão).`,
+  // As interfaces e os `type` (RN-VAR-002 a 004): a forma conferida contra os valores, com a semântica do TypeScript.
+  typeNameReserved: (name: string) => `${name} não pode ser nome de tipo: escolha outro.`,
+  expectedTypeName: () => "Esperava o nome do tipo.",
+  expectedOpenBrace: (name: string) => `Esperava { depois de ${name}: interface ${name} { campo: tipo }.`,
+  expectedColonInMember: (name: string) => `Esperava : depois do campo ${name}, como ${name}: string.`,
+  duplicateMember: (name: string) => `O campo ${name} aparece duas vezes.`,
+  sqlNotInType: () => "O tipo sql não entra numa interface nem num type: declare const nome: sql.",
+  expectedEndOfType: (name: string, found: string) => `Esperava ; ou o fim da linha depois do tipo ${name}, e veio ${found}.`,
+  typeAlreadyDeclared: (name: string, line: number) => `O tipo ${name} já foi declarado na linha ${line}.`,
+  typeCycle: (path: readonly string[]) => `O tipo ${path[0]} se refere a si mesmo: ${path.join(" → ")}.`,
+  typeTooDeep: (name: string) => `O tipo ${name} passou de ${limits.depth} níveis de tipos com nome.`,
+  extendsNotObject: (base: string, type: string) => `Uma interface só estende uma interface ou um type de objeto, e ${base} é ${type}.`,
+  extendsConflict: (name: string, base: string, field: string) => `${name} não pode estender ${base}: o campo ${field} tem outro tipo em ${base}.`,
+  typeHasError: (name: string, line: number) => `O tipo ${name} tem um erro (linha ${line}).`,
+  excessField: (field: string, type: string) => `O campo ${field} não existe em ${type}.`,
+  missingFields: (name: string, fields: readonly string[], type: string) =>
+    fields.length === 1 ? `${name} não tem o campo ${fields[0]}, que ${type} pede.` : `${name} não tem os campos ${fields.slice(0, -1).join(", ")} e ${fields[fields.length - 1]}, que ${type} pede.`,
+  queryNullColumn: (column: string, name: string, type: string, field: string, fieldType: string) => `A coluna ${column} de ${name} veio nula, e ${type}.${field} é ${fieldType}.`,
+
+  // O `random.of` (RN-VAR-010): `written` é a chamada como está no script, `random.of(cliente.id)` ou `random.of(cliente.id, 10)`.
+  sampleEmpty: (written: string) => `${written}: a coluna não tem valores.`,
+  sampleTooFew: (written: string, total: number) => `${written}: a coluna só tem ${total === 1 ? "1 valor" : `${group(total)} valores`}.`,
+  sampleCountInvalid: (shown: string) => `random.of: quantos tem de ser um inteiro de 1 a 100, e recebeu ${shown}.`,
+  sampleTruncated: (written: string) => `${written}: o valor sorteado passa de 10.000 caracteres e não vem inteiro do banco.`,
+  sampleChanged: (written: string) => `${written}: a coluna mudou durante o sorteio; execute de novo.`,
+  sampleNotEvaluatedHere: (name: string) => `O random.of de ${name} roda no banco, na vez dele no script.`,
+
+  // O tipo de uma coluna (RN-VAR-004).
+  columnMissing: (written: string) => `A coluna ${written} não existe.`,
+  columnIsList: (column: string) => `A coluna ${column} é uma lista do banco, e o tipo de coluna não guarda lista.`,
+  /** A coluna que a execução não leu antes de avaliar: o executor da aba lê todas as do que vai (RN-VAR-019). */
+  columnNotRead: (written: string) => `O tipo da coluna ${written} não foi lido do catálogo.`,
+
+  // A variável de consulta (RN-VAR-011 e 013).
+  queryTooManyRows: (name: string, rows: number, type: string) => `A consulta de ${name} devolveu ${group(rows)} linhas, e ${name} é ${type}: anote ${type}[] para uma lista.`,
+  queryBinaryColumn: (column: string) => `A coluna ${column} é binária, e variável não guarda binário.`,
+  queryNotJsNumber: (value: string, column: string) => `O valor ${value} da coluna ${column} não é um número do JavaScript.`,
+  queryDuplicateColumn: (name: string, column: string) => `A consulta de ${name} tem duas colunas chamadas ${column}: dê um apelido a uma delas.`,
+  queryForbiddenColumn: (column: string) => `A coluna ${column} não pode ser campo de uma variável: dê outro apelido a ela.`,
+  queryTooLarge: (name: string, reason: "rows" | "columns" | "bytes") =>
+    `A consulta de ${name} passou de ${reason === "rows" ? `${group(limits.queryRows)} linhas` : reason === "columns" ? `${limits.queryColumns} colunas` : "16 MiB"}.`,
+  queryNotEvaluatedHere: (name: string) => `A consulta de ${name} roda no banco, na vez dela no script.`,
+  /** O Worker foi pedido a avaliar uma declaração sem valor: quem pergunta os valores (RN-VAR-021) não a mandou. */
+  answerMissing: (name: string) => `${name} não tem valor: escreva o valor na pergunta.`,
 
   // Os operadores (RN-VAR-008).
   plusOperands: (shown: string) => `+ soma números ou junta textos; ${shown} não é nenhum dos dois.`,
@@ -206,9 +253,22 @@ export const phrase = {
   valueNotInText: (name: string, type: string) => `${name} é ${type}, que não vai para o SQL.`,
   sentWithoutLiteral: (markers: string) => `-- Sem literal (ficam como marcador): ${markers}`,
   sentSqlNote: (name: string) => `sql: @${name} (texto entrou no comando)`,
+
+  // As partes que entram em outras frases e as do painel e do avaliador.
+  computedKey: "A chave calculada",
+  shortForm: (key: string) => `A forma curta { ${key} }`,
+  paramKinds: { number: "number", numberAny: "number", integer: "um número inteiro", string: "string", date: "Date", list: "lista", any: "um valor", stringOrNumber: "string ou number" },
+  unclosed: { text: "um texto", quoted: "um nome entre aspas", comment: "um comentário", dollar: "um $tag$" },
+  evaluationBusy: () => "Já há uma avaliação em andamento.",
+  evaluatorSilent: () => "O avaliador não respondeu.",
+  showMore: (page: number, total: number) => `Mostrar mais ${page.toLocaleString("pt-BR")} (de ${total.toLocaleString("pt-BR")})`,
+  noValueRow: () => "sem valor",
 } as const;
 
 /** O texto de uma frase de erro entre aspas simples, para citar um valor. */
 function shown(text: string): string {
   return `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 }
+
+export type VariablesPhrase = Localized<typeof pt>;
+export const phrase = pickCopy({ "pt-BR": pt, en: phraseEn, es: phraseEs });

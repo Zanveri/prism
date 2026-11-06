@@ -1,5 +1,6 @@
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Transfers.Models;
+using System.Globalization;
 
 namespace Prism.Infrastructure.Transfers.Services;
 
@@ -25,11 +26,17 @@ internal sealed class Transfer(Guid id, ETransferKind kind, Guid connectionID, l
 
     public long StartedTimestamp { get; } = startedTimestamp;
 
+    /// <summary>O idioma do pedido que criou o trabalho: o temporizador que o encerra por falta de progresso não é um pedido e diz a frase nele.</summary>
+    public CultureInfo Culture { get; } = CultureInfo.CurrentUICulture;
+
     /// <summary>RN-IMPORT-014 e 027: a conexão de destino da importação (a mesma de `ConnectionID`) e da cópia; nula na exportação.</summary>
     public Guid? TargetConnectionID { get; init; }
 
     /// <summary>RN-IMPORT-014: a tabela de destino da importação e da cópia, pela regra da própria origem (a tabela ocupada); nula na exportação.</summary>
     public (ConnectionSettings Settings, string Schema, string Table)? Target { get; init; }
+
+    /// <summary>RN-AUDIT-002: o identificador do registro aberto no diário quando o trabalho começou, ou -1 se não há registro pendente.</summary>
+    public long JournalEntryID { get; set; } = -1;
 
     public ETransferState State { get; set; } = ETransferState.Running;
 

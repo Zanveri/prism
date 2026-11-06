@@ -4,9 +4,12 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prism.Application.Connections.Queries;
 using Prism.Infrastructure.Vault.Models;
 using Prism.Infrastructure.Vault.Services;
+using Prism.IntegrationTesting.Api.Support;
+using Prism.IntegrationTesting.Configurations;
 using Prism.TestingCore.Fakers.Users;
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -274,7 +277,7 @@ public sealed class ConnectionsTests
         Assert.That(listRaw, Does.Not.Contain(DatabasePassword));
         Assert.That(detailRaw, Does.Not.Contain(DatabasePassword));
         Assert.That(list.Select(IdOf), Is.EqualTo(new[] { IdOf(alfa), IdOf(beta) }));
-        Assert.That(list[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "folderID", "name", "engine", "host", "port", "database", "userName", "hasPassword", "environmentName", "environmentColor", "confirmCommands", "readOnly", "verificationEnabled", "verificationInterval", "verificationQuery", "useInternalDescriptions", "protections", "createdAt", "updatedAt" }));
+        Assert.That(list[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "folderID", "name", "engine", "host", "port", "database", "userName", "hasPassword", "environmentName", "environmentColor", "confirmCommands", "readOnly", "verificationEnabled", "verificationInterval", "verificationQuery", "useInternalDescriptions", "ssh", "ssl", "proxy", "protections", "createdAt", "updatedAt" }));
         Assert.That(list.All(item => item.GetProperty("hasPassword").GetBoolean()), Is.True);
         Assert.That(JsonDocument.Parse(detailRaw).RootElement.GetRawText(), Is.EqualTo(list[1].GetRawText()));
     }
@@ -810,7 +813,7 @@ public sealed class ConnectionsTests
         // Uma segunda gravação, para o `.bak` também ter conteúdo.
         await CreateConnectionAsync(host, Body(name: "Outra"));
 
-        var files = Directory.GetFiles(host.DataDirectory, "*", SearchOption.AllDirectories);
+        var files = Directory.GetFiles(Path.Combine(host.DataDirectory, "vaults"), "*", SearchOption.AllDirectories);
 
         Assert.That(files.Select(Path.GetFileName), Is.EquivalentTo(new[] { "marina.costa.vault.json", "marina.costa.vault.json.bak" }));
 
@@ -972,6 +975,394 @@ public sealed class ConnectionsTests
 
         await AssertProblemAsync(response, HttpStatusCode.Unauthorized, "VAULT_LOCKED");
         Assert.That(await IsUnlockedAsync(host), Is.False);
+    }
+
+    [Test]
+    public async Task Create_Update_Duplicate_AndVault_WithSshSslAndProxy_NeverLeakSecrets()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var userPassword = UserFakers.RandomPassword();
+        await host.CreateUserAsync("marina.costa", userPassword);
+        const string sshSecret = "marca-do-segredo-ssh-9X";
+        const string proxyPassword = "marca-da-senha-proxy-8Z";
+
+        var createBody = Body(name: "Túnel Seguro");
+        createBody["ssh"] = new Dictionary<string, object?>
+        {
+            ["host"] = " bastion.interno ",
+            ["port"] = 2222,
+            ["userName"] = " tunel_user ",
+            ["authMethod"] = "password",
+            ["secret"] = sshSecret,
+            ["saveCredentials"] = true,
+            ["ignoreHostVerification"] = true,
+            ["keepAliveIntervalMs"] = 15000,
+            ["tunnelTimeoutMs"] = 10000
+        };
+        createBody["ssl"] = new Dictionary<string, object?>
+        {
+            ["sslMode"] = "require",
+            ["caCertificatePath"] = " /etc/ssl/ca.pem "
+        };
+        createBody["proxy"] = new Dictionary<string, object?>
+        {
+            ["host"] = " socks.interno ",
+            ["port"] = 1080,
+            ["userName"] = " proxy_user ",
+            ["password"] = proxyPassword,
+            ["saveCredentials"] = true
+        };
+
+        var createResponse = await PostConnectionAsync(host, createBody);
+        var createRaw = await createResponse.Content.ReadAsStringAsync();
+        var created = JsonDocument.Parse(createRaw).RootElement;
+
+        Assert.That(createResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created), createRaw);
+        Assert.That(createRaw, Does.Not.Contain(sshSecret));
+        Assert.That(createRaw, Does.Not.Contain(proxyPassword));
+        Assert.That(created.GetProperty("ssh").GetProperty("host").GetString(), Is.EqualTo("bastion.interno"));
+        Assert.That(created.GetProperty("ssh").GetProperty("port").GetInt32(), Is.EqualTo(2222));
+        Assert.That(created.GetProperty("ssh").GetProperty("userName").GetString(), Is.EqualTo("tunel_user"));
+        Assert.That(created.GetProperty("ssh").GetProperty("hasSecret").GetBoolean(), Is.True);
+        Assert.That(created.GetProperty("ssl").GetProperty("sslMode").GetString(), Is.EqualTo("require"));
+        Assert.That(created.GetProperty("ssl").GetProperty("caCertificatePath").GetString(), Is.EqualTo("/etc/ssl/ca.pem"));
+        Assert.That(created.GetProperty("proxy").GetProperty("host").GetString(), Is.EqualTo("socks.interno"));
+        Assert.That(created.GetProperty("proxy").GetProperty("hasPassword").GetBoolean(), Is.True);
+
+        var updateBody = Body(name: "Túnel Seguro 2", password: null);
+        updateBody["ssh"] = new Dictionary<string, object?>
+        {
+            ["host"] = "bastion.interno",
+            ["port"] = 2222,
+            ["userName"] = "tunel_user",
+            ["authMethod"] = "password",
+            ["secret"] = null,
+            ["saveCredentials"] = true
+        };
+        updateBody["proxy"] = new Dictionary<string, object?>
+        {
+            ["host"] = "socks.interno",
+            ["port"] = 1080,
+            ["userName"] = "proxy_user",
+            ["password"] = null,
+            ["saveCredentials"] = true
+        };
+
+        var updateResponse = await UpdateConnectionAsync(host, IdOf(created), updateBody);
+        var updated = await ReadJsonAsync(updateResponse);
+        Assert.That(updateResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(updated.GetProperty("ssh").GetProperty("hasSecret").GetBoolean(), Is.True);
+        Assert.That(updated.GetProperty("proxy").GetProperty("hasPassword").GetBoolean(), Is.True);
+
+        var duplicateResponse = await DuplicateAsync(host, IdOf(created));
+        var duplicateRaw = await duplicateResponse.Content.ReadAsStringAsync();
+        var duplicated = JsonDocument.Parse(duplicateRaw).RootElement;
+        Assert.That(duplicateResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        Assert.That(duplicateRaw, Does.Not.Contain(sshSecret));
+        Assert.That(duplicateRaw, Does.Not.Contain(proxyPassword));
+        Assert.That(duplicated.GetProperty("ssh").GetProperty("hasSecret").GetBoolean(), Is.True);
+        Assert.That(duplicated.GetProperty("proxy").GetProperty("hasPassword").GetBoolean(), Is.True);
+
+        foreach (var path in Directory.GetFiles(Path.Combine(host.DataDirectory, "vaults"), "*", SearchOption.AllDirectories))
+        {
+            var raw = await File.ReadAllBytesAsync(path);
+            Assert.That(raw.AsSpan().IndexOf(Encoding.UTF8.GetBytes(sshSecret)), Is.LessThan(0));
+            Assert.That(raw.AsSpan().IndexOf(Encoding.UTF8.GetBytes(proxyPassword)), Is.LessThan(0));
+        }
+    }
+
+    /// <summary>
+    /// RN-REDE-001 (a RN-CONN-004 e a RN-CONN-013 no túnel e no proxy): o segredo SSH e a senha do proxy gravados só vão ao servidor para o qual foram gravados, e a recusa vem
+    /// antes de qualquer conexão. Os campos de `ssh`, `ssl` e `proxy` têm os nomes que a tela lê (`connections.schema.ts`): com outro nome a listagem inteira
+    /// deixa de abrir lá. E "Salvar senha" desmarcado não grava a senha do proxy.
+    /// </summary>
+    [Test]
+    public async Task SshAndProxySecrets_StayOnTheirServer_AndTheNetworkFieldsKeepTheNamesTheScreenReads()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+
+        static Dictionary<string, object?> Ssh(string sshHost, string? secret = null)
+            => new() { ["host"] = sshHost, ["port"] = 22, ["userName"] = "tunel", ["authMethod"] = "password", ["secret"] = secret, ["saveCredentials"] = true };
+
+        static Dictionary<string, object?> Proxy(string proxyHost, string? password = null, bool saveCredentials = true)
+            => new() { ["host"] = proxyHost, ["port"] = 1080, ["userName"] = "proxy_user", ["password"] = password, ["saveCredentials"] = saveCredentials };
+
+        static Dictionary<string, object?> WithNetwork(Dictionary<string, object?> body, Dictionary<string, object?> ssh, Dictionary<string, object?> proxy)
+        {
+            body["ssh"] = ssh;
+            body["proxy"] = proxy;
+
+            return body;
+        }
+
+        static async Task AssertRefusedOnAsync(HttpResponseMessage response, string field, string message)
+        {
+            var problem = await ReadJsonAsync(response);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity), problem.ToString());
+            Assert.That(problem.GetProperty("type").GetString(), Is.EqualTo("CONNECTION_INVALID"));
+            Assert.That(problem.GetProperty("errors").GetProperty(field)[0].GetString(), Is.EqualTo(message));
+        }
+
+        const string sshRefusal = "Ao mudar o host ou a porta do túnel SSH, informe a senha ou a frase secreta de novo.";
+        const string proxyRefusal = "Ao mudar o host ou a porta do proxy, informe a senha dele de novo.";
+
+        var createBody = WithNetwork(Body(), Ssh("bastion.interno", secret: "segredo-ssh"), Proxy("socks.interno", password: "senha-proxy"));
+        createBody["ssl"] = new Dictionary<string, object?> { ["clientKeyPath"] = "/certs/client.key", ["sslMode"] = "" };
+        var created = await CreateConnectionAsync(host, createBody);
+        var id = IdOf(created);
+
+        Assert.That(created.GetProperty("ssh").EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "host", "port", "userName", "authMethod", "privateKeyPath", "hasSecret", "saveCredentials", "ignoreHostVerification", "keepAliveIntervalMs", "tunnelTimeoutMs", "localHost", "localPort", "remoteHost", "remotePort", "hostKeyFingerprint" }));
+        Assert.That(created.GetProperty("ssl").GetRawText(), Is.EqualTo("""{"caCertificatePath":null,"clientCertificatePath":null,"clientKeyPath":"/certs/client.key","sslMode":null}"""));
+        Assert.That(created.GetProperty("proxy").GetRawText(), Is.EqualTo("""{"host":"socks.interno","port":1080,"userName":"proxy_user","hasPassword":true,"saveCredentials":true}"""));
+
+        // O teste com o `id` e sem a senha do banco (a do cofre) não leva o segredo gravado a outro servidor SSH nem a outro proxy.
+        var testOtherSsh = WithNetwork(Body(password: null), Ssh("outro-bastion.interno"), Proxy("socks.interno"));
+        testOtherSsh["id"] = id;
+        await AssertRefusedOnAsync(await host.Client.PostAsJsonAsync($"{ConnectionsPath}/test", testOtherSsh), "Ssh", sshRefusal);
+
+        var testOtherProxy = WithNetwork(Body(password: null), Ssh("bastion.interno"), Proxy("outro-socks.interno"));
+        testOtherProxy["id"] = id;
+        await AssertRefusedOnAsync(await host.Client.PostAsJsonAsync($"{ConnectionsPath}/test", testOtherProxy), "Proxy", proxyRefusal);
+
+        // A alteração também não.
+        await AssertRefusedOnAsync(await UpdateConnectionAsync(host, id, WithNetwork(Body(password: null), Ssh("outro-bastion.interno"), Proxy("socks.interno"))), "Ssh", sshRefusal);
+        await AssertRefusedOnAsync(await UpdateConnectionAsync(host, id, WithNetwork(Body(password: null), Ssh("bastion.interno"), Proxy("outro-socks.interno"))), "Proxy", proxyRefusal);
+
+        // No mesmo servidor, o segredo omitido continua o gravado; "Salvar senha" desmarcado apaga a do proxy.
+        var kept = await UpdateConnectionAsync(host, id, WithNetwork(Body(password: null), Ssh("bastion.interno"), Proxy("socks.interno", saveCredentials: false)));
+        var keptBody = await ReadJsonAsync(kept);
+        Assert.That(kept.StatusCode, Is.EqualTo(HttpStatusCode.OK), keptBody.ToString());
+        Assert.That(keptBody.GetProperty("ssh").GetProperty("hasSecret").GetBoolean(), Is.True);
+        Assert.That(keptBody.GetProperty("proxy").GetProperty("hasPassword").GetBoolean(), Is.False);
+    }
+
+    /// <summary>
+    /// RN-REDE-002 e 003: "Salvar credenciais" desmarcado no proxy, a senha não vai ao cofre, fica na memória da API para conectar e some quando o cofre fecha. Sem ela a
+    /// abertura e o teste são recusados no campo dela (antes, o SSH.NET respondia "Value cannot be null"); digitada no "Editar conexão", a conexão abre de novo.
+    /// </summary>
+    [Test]
+    public async Task UnsavedProxyPassword_OpensFromMemory_IsRefusedOnItsFieldAfterTheVaultCloses_AndOpensOnceTypedAgain()
+    {
+        const string proxyPassword = "SenhaProxySegura99!";
+        var pg = await PostgresSingleton.GetSettingsAsync();
+        await using var socksServer = Socks5LoopbackServer.Start("proxy_operador", proxyPassword);
+        await using var host = await ApiHost.StartAsync();
+        var userPassword = UserFakers.RandomPassword();
+        await host.CreateUserAsync("marina.costa", userPassword);
+
+        Dictionary<string, object?> WithProxy(Dictionary<string, object?> body, string? password)
+        {
+            body["proxy"] = new Dictionary<string, object?> { ["host"] = "127.0.0.1", ["port"] = socksServer.Port, ["userName"] = "proxy_operador", ["password"] = password, ["saveCredentials"] = false };
+
+            return body;
+        }
+
+        Dictionary<string, object?> Postgres(string? password)
+            => Body(engine: (int)pg.Engine, host: pg.Host, port: pg.Port, database: pg.Database, userName: pg.UserName, password: password);
+
+        static async Task AssertMissingProxyPasswordAsync(HttpResponseMessage response)
+        {
+            var problem = await ReadJsonAsync(response);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity), problem.ToString());
+            Assert.That(problem.GetProperty("type").GetString(), Is.EqualTo("CONNECTION_CREDENTIALS_MISSING"));
+            Assert.That(problem.GetProperty("errors").TryGetProperty("ProxyPassword", out _), Is.True, problem.ToString());
+        }
+
+        var created = await CreateConnectionAsync(host, WithProxy(Postgres(pg.Password), proxyPassword));
+        var id = IdOf(created);
+        Assert.That(created.GetProperty("proxy").GetProperty("hasPassword").GetBoolean(), Is.False);
+
+        // 1. Na mesma execução, a senha digitada ao criar abre a sessão.
+        await host.Client.ExecuteAsync(await host.Client.OpenSessionAsync(id), "SELECT 1");
+
+        // 2. O cofre fechou e abriu de novo: a senha saiu da memória, e a abertura e o teste dizem qual campo falta.
+        (await host.Client.DeleteAsync("/api/public/sessions")).EnsureSuccessStatusCode();
+        (await host.Client.PostAsJsonAsync("/api/public/sessions", new { userName = "marina.costa", password = userPassword })).EnsureSuccessStatusCode();
+        await AssertMissingProxyPasswordAsync(await host.Client.OpenSessionRawAsync(id));
+        var test = WithProxy(Postgres(null), null);
+        test["id"] = id;
+        await AssertMissingProxyPasswordAsync(await host.Client.PostAsJsonAsync($"{ConnectionsPath}/test", test));
+
+        // 3. Digitada no "Editar conexão", sem gravar, a conexão abre de novo.
+        var updated = await UpdateConnectionAsync(host, id, WithProxy(Postgres(null), proxyPassword));
+        var updatedBody = await ReadJsonAsync(updated);
+        Assert.That(updated.StatusCode, Is.EqualTo(HttpStatusCode.OK), updatedBody.ToString());
+        Assert.That(updatedBody.GetProperty("proxy").GetProperty("hasPassword").GetBoolean(), Is.False);
+        await host.Client.ExecuteAsync(await host.Client.OpenSessionAsync(id), "SELECT 1");
+    }
+
+    [Test]
+    public async Task Test_ThroughStandaloneSocks5Proxy_ConnectsToPostgres_AndRefusesWrongProxyPassword()
+    {
+        var pg = await PostgresSingleton.GetSettingsAsync();
+        await using var socksServer = Socks5LoopbackServer.Start("proxy_operador", "SenhaProxySegura99!");
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+
+        // 1. Proxy SOCKS5 com senha errada falha com 422 DATABASE_CONNECTION_FAILED:
+        var wrongProxyTest = await host.Client.PostAsJsonAsync($"{ConnectionsPath}/test", new
+        {
+            engine = (int)pg.Engine,
+            host = pg.Host,
+            port = pg.Port,
+            database = pg.Database,
+            userName = pg.UserName,
+            password = pg.Password,
+            proxy = new
+            {
+                host = "127.0.0.1",
+                port = socksServer.Port,
+                userName = "proxy_operador",
+                password = "senha-errada"
+            }
+        });
+        await AssertProblemAsync(wrongProxyTest, HttpStatusCode.UnprocessableEntity, "DATABASE_CONNECTION_FAILED");
+
+        // 2. Proxy SOCKS5 com credenciais válidas passa no teste (204); a sessão pelo proxy está no teste de "Salvar credenciais" desmarcado, acima:
+        var okProxyTest = await host.Client.PostAsJsonAsync($"{ConnectionsPath}/test", new
+        {
+            engine = (int)pg.Engine,
+            host = pg.Host,
+            port = pg.Port,
+            database = pg.Database,
+            userName = pg.UserName,
+            password = pg.Password,
+            proxy = new
+            {
+                host = "127.0.0.1",
+                port = socksServer.Port,
+                userName = "proxy_operador",
+                password = "SenhaProxySegura99!"
+            }
+        });
+        Assert.That(okProxyTest.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), await okProxyTest.Content.ReadAsStringAsync());
+    }
+
+    private sealed class Socks5LoopbackServer : IAsyncDisposable
+    {
+        private readonly TcpListener _listener;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly Task _acceptLoop;
+        private readonly string _expectedUser;
+        private readonly string _expectedPassword;
+
+        public int Port { get; }
+
+        private Socks5LoopbackServer(TcpListener listener, string expectedUser, string expectedPassword)
+        {
+            _listener = listener;
+            _expectedUser = expectedUser;
+            _expectedPassword = expectedPassword;
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
+            _acceptLoop = AcceptLoopAsync(_cts.Token);
+        }
+
+        public static Socks5LoopbackServer Start(string expectedUser, string expectedPassword)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            return new Socks5LoopbackServer(listener, expectedUser, expectedPassword);
+        }
+
+        private async Task AcceptLoopAsync(CancellationToken ct)
+        {
+            try
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    var client = await _listener.AcceptTcpClientAsync(ct);
+                    _ = HandleClientAsync(client, ct);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
+        {
+            using (client)
+            await using (var stream = client.GetStream())
+            {
+                var greeting = new byte[2];
+                await stream.ReadExactlyAsync(greeting, ct);
+                var methods = new byte[greeting[1]];
+                await stream.ReadExactlyAsync(methods, ct);
+
+                // Escolhe Username/Password (0x02):
+                await stream.WriteAsync(new byte[] { 0x05, 0x02 }, ct);
+
+                var authHeader = new byte[2];
+                await stream.ReadExactlyAsync(authHeader, ct);
+                var userBytes = new byte[authHeader[1]];
+                await stream.ReadExactlyAsync(userBytes, ct);
+                var passLen = new byte[1];
+                await stream.ReadExactlyAsync(passLen, ct);
+                var passBytes = new byte[passLen[0]];
+                await stream.ReadExactlyAsync(passBytes, ct);
+
+                if (Encoding.UTF8.GetString(userBytes) != _expectedUser || Encoding.UTF8.GetString(passBytes) != _expectedPassword)
+                {
+                    await stream.WriteAsync(new byte[] { 0x01, 0x01 }, ct);
+                    return;
+                }
+
+                await stream.WriteAsync(new byte[] { 0x01, 0x00 }, ct);
+
+                var reqHeader = new byte[4];
+                await stream.ReadExactlyAsync(reqHeader, ct);
+                string targetHost;
+                if (reqHeader[3] == 0x01)
+                {
+                    var ipBytes = new byte[4];
+                    await stream.ReadExactlyAsync(ipBytes, ct);
+                    targetHost = new IPAddress(ipBytes).ToString();
+                }
+                else if (reqHeader[3] == 0x03)
+                {
+                    var domLen = new byte[1];
+                    await stream.ReadExactlyAsync(domLen, ct);
+                    var domBytes = new byte[domLen[0]];
+                    await stream.ReadExactlyAsync(domBytes, ct);
+                    targetHost = Encoding.ASCII.GetString(domBytes);
+                }
+                else
+                {
+                    var ip6Bytes = new byte[16];
+                    await stream.ReadExactlyAsync(ip6Bytes, ct);
+                    targetHost = new IPAddress(ip6Bytes).ToString();
+                }
+
+                var portBytes = new byte[2];
+                await stream.ReadExactlyAsync(portBytes, ct);
+                var targetPort = (portBytes[0] << 8) | portBytes[1];
+
+                using var upstream = new TcpClient();
+                await upstream.ConnectAsync(targetHost, targetPort, ct);
+                await using var upstreamStream = upstream.GetStream();
+
+                await stream.WriteAsync(new byte[] { 0x05, 0x00, 0x00, 0x01, 127, 0, 0, 1, 0, 0 }, ct);
+
+                var c2s = stream.CopyToAsync(upstreamStream, ct);
+                var s2c = upstreamStream.CopyToAsync(stream, ct);
+                await Task.WhenAny(c2s, s2c);
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _cts.CancelAsync();
+            _listener.Stop();
+            try
+            {
+                await _acceptLoop;
+            }
+            catch
+            {
+            }
+            _cts.Dispose();
+        }
     }
 
     /// <summary>

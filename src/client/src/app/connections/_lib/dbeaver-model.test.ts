@@ -255,6 +255,16 @@ describe("a segunda linha da conexão (RN-DBEAVER-015)", () => {
     expect(connectionLine(connection, null)).toBe("ifx-dev.exemplo.invalid:55080 / estoque · servidor ifx_dev_tcp · usuário fulano · com senha");
     expect(connectionLine(connection, 9089)).toBe("ifx-dev.exemplo.invalid:9089 / estoque · servidor ifx_dev_tcp · usuário fulano · com senha");
   });
+
+  it("o túnel e o proxy que vêm do DBeaver no fim da linha (RN-REDE-008)", () => {
+    const [connection] = previewOf([
+      row("c1", {
+        ssh: { host: "bastion.exemplo.invalid", port: 22, userName: "ops", authMethod: "password", hasSecret: true },
+        proxy: { host: "socks.exemplo.invalid", port: 1080, userName: null, hasPassword: false },
+      }),
+    ]).connections;
+    expect(connectionLine(connection, null)).toBe("pg-dev.exemplo.invalid:5432 / pedidos · usuário fulano · com senha · via SSH ops@bastion.exemplo.invalid:22 · proxy socks.exemplo.invalid:1080");
+  });
 });
 
 describe("as marcas da conexão e da pasta (RN-DBEAVER-011, 012, 013 e 015)", () => {
@@ -281,10 +291,10 @@ describe("as marcas da conexão e da pasta (RN-DBEAVER-011, 012, 013 e 015)", ()
   });
 
   it("\"ficou de fora\" lista o que ficou, na ordem, com o aviso do túnel e do proxy", () => {
-    const tags = labelsOf(previewOf([informixRow("c1", { leftOut: ["informixServer", "sshTunnel", "proxy", "driverProperties", "bootstrap", "autocommitOff", "events", "authModel", "confirmDataChange", "permissions", "navigatorFilters"] })]), "c1", 9089);
+    const tags = labelsOf(previewOf([informixRow("c1", { leftOut: ["informixServer", "sshTunnel", "proxy", "ssl", "driverProperties", "bootstrap", "autocommitOff", "events", "authModel", "confirmDataChange", "permissions", "navigatorFilters"] })]), "c1", 9089);
     expect(tags.map((tag) => tag.label)).toEqual(["ficou de fora"]);
     expect(tags[0].hint).toBe(
-      "Ficou de fora: o servidor Informix (ifx_dev_tcp); o túnel SSH; o proxy; as propriedades do driver; os comandos de inicialização, o banco e o esquema padrão; o auto-commit desligado (as abas novas seguem Configurações › Transações); os comandos antes e depois de conectar; o login do DBeaver; a confirmação antes de salvar as edições; as restrições de permissão (viraram somente leitura); os filtros do navegador. Sem o túnel ou o proxy, a conexão pode não alcançar o servidor.",
+      "Ficou de fora: o servidor Informix (ifx_dev_tcp); o túnel SSH; o proxy; o SSL (configure-o em Editar conexão); as propriedades do driver; os comandos de inicialização, o banco e o esquema padrão; o auto-commit desligado (as abas novas seguem Configurações › Transações); os comandos antes e depois de conectar; o login do DBeaver; a confirmação antes de salvar as edições; as restrições de permissão (viraram somente leitura); os filtros do navegador. Sem o túnel ou o proxy, a conexão pode não alcançar o servidor.",
     );
     // Sem túnel nem proxy, a frase não aparece.
     expect(labelsOf(previewOf([row("c1", { leftOut: ["driverProperties"] })]), "c1")[0].hint).toBe("Ficou de fora: as propriedades do driver.");

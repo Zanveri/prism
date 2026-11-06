@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils/cn";
 import { HostProvider } from "./host-context";
 import { createToastApi, type ToastApi } from "./toast-api";
 import { dismissToast, type ToastItem, type ToastTone } from "./toast-queue";
+import { uiCopy } from "./ui.copy";
 
 export type { ToastAction } from "./toast-queue";
 
@@ -133,7 +134,7 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: str
       className="pointer-events-auto w-full animate-toast-in overflow-hidden rounded-lg border border-border-strong bg-raised shadow-2xl motion-reduce:animate-none"
     >
       <div className="flex items-start gap-2.5 py-3 pr-3 pl-4">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={cn("mt-[3px] flex-none", tone.text)}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon={toast.tone === "success" ? "check" : "alert"} className={cn("mt-[3px] flex-none", tone.text)}>
           {tone.icon}
         </svg>
 
@@ -156,7 +157,7 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: str
           )}
         </div>
 
-        <button type="button" aria-label="Fechar aviso" title="Fechar aviso" onClick={() => onDismiss(toast.id)} className="-mt-1 flex size-7 flex-none cursor-pointer items-center justify-center rounded-md text-base leading-none text-subtle transition-colors hover:bg-selected hover:text-ink">
+        <button type="button" aria-label={uiCopy.toast.close} title={uiCopy.toast.close} onClick={() => onDismiss(toast.id)} className="-mt-1 flex size-7 flex-none cursor-pointer items-center justify-center rounded-md text-base leading-none text-subtle transition-colors hover:bg-selected hover:text-ink">
           ×
         </button>
       </div>

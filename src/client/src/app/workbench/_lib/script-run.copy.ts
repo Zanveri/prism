@@ -1,16 +1,24 @@
 import { formatCount, formatElapsed } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+import { scriptRunCopyEn } from "./script-run.copy.en";
+import { scriptRunCopyEs } from "./script-run.copy.es";
 
 /** " na aba consulta-1.sql", ou nada quando não se sabe o nome da aba. */
 const inTab = (tab: string | null) => (tab === null ? "" : ` na aba ${tab}`);
 
 /** Os textos do "Executar script" (seção 31, RN-SQL-019 a 022): o botão, as abas do resultado, as Estatísticas, a pergunta de erro e os avisos do fim. */
-export const scriptRunCopy = {
+const pt = {
   editor: {
     run: "Executar script",
     // O atalho escrito no botão e na dica (RN-SQL-019): Alt+X, como no DBeaver; no macOS, Cmd+Option+X, porque o Option+X escreve um caractere.
     shortcut: "Alt+X",
     shortcutMac: "Cmd+Option+X",
     title: (shortcut: string) => `Executa os comandos da seleção ou, sem seleção, do texto inteiro, um depois do outro (${shortcut})`,
+    // RN-VAR-026: o "Executar com valores…", ao lado do "Executar script"; o atalho é o do script com Shift.
+    withValues: "Executar com valores…",
+    withValuesTitle: (shortcut: string) => `Executar com valores… (${shortcut})`,
+    withValuesShortcut: "Shift+Alt+X",
+    withValuesShortcutMac: "Shift+Cmd+Option+X",
   },
 
   tabs: {
@@ -92,3 +100,6 @@ export const scriptRunCopy = {
     cancelled: (tab: string | null, ok: number, total: number) => `Script cancelado${inTab(tab)}: ${ok.toLocaleString("pt-BR")} de ${formatCount(total, "comando executado", "comandos executados")}.`,
   },
 } as const;
+
+export type ScriptRunCopy = Localized<typeof pt>;
+export const scriptRunCopy = pickCopy({ "pt-BR": pt, en: scriptRunCopyEn, es: scriptRunCopyEs });

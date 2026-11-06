@@ -1,16 +1,51 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 
+import type { Engine } from "@/components/ui/engine-tag";
+
 import { transactionCopy } from "./transaction.copy";
 
-export type TransactionMode = "autoCommit" | "manual";
+export const transactionModes = ["autoCommit", "manual"] as const;
+export type TransactionMode = (typeof transactionModes)[number];
+
+/** RN-ISOL-001: todos os níveis de isolamento que a API aceita, na união dos três bancos. */
+export const isolationLevels = [
+  "default",
+  "readUncommitted",
+  "readCommitted",
+  "committedReadLastCommitted",
+  "cursorStability",
+  "repeatableRead",
+  "readStability",
+  "serializable",
+] as const;
+export type IsolationLevel = (typeof isolationLevels)[number];
+
+export const isolationLevelSchema = z.enum(isolationLevels);
+
+const levelsByEngine: Partial<Record<Engine, readonly IsolationLevel[]>> = {
+  1: ["default", "readUncommitted", "readCommitted", "repeatableRead", "serializable"],
+  2: ["default", "readUncommitted", "cursorStability", "readStability", "repeatableRead"],
+  3: ["default", "readUncommitted", "readCommitted", "committedReadLastCommitted", "cursorStability", "repeatableRead"],
+};
+
+/** RN-ISOL-001: os níveis que o banco da conexão tem, na ordem do menos estrito ao mais estrito, depois de "Padrão do banco". */
+export function engineIsolationLevels(engine: Engine | undefined): readonly IsolationLevel[] {
+  return engine === undefined ? ["default"] : (levelsByEngine[engine] ?? ["default", "readUncommitted", "readCommitted", "repeatableRead", "serializable"]);
+}
+
+/** RN-ISOL-006: quando o nível padrão das preferências não existe no banco da aba, a aba abre em "Padrão do banco". */
+export function normalizeIsolationLevel(level: IsolationLevel, engine: Engine | undefined): IsolationLevel {
+  return engineIsolationLevels(engine).includes(level) ? level : "default";
+}
 
 /**
  * Seção 22 da especificação ("Rotas e respostas"): o estado da transação da sessão que a API devolve com a sessão aberta, com cada resultado, com o Commit e
- * o Rollback, e nas extensões das recusas. `isolationLevel` é sempre `default` por enquanto, e a tela não o lê.
+ * o Rollback, e nas extensões das recusas.
  */
 export const transactionSchema = z.object({
-  mode: z.enum(["autoCommit", "manual"]),
+  mode: z.enum(transactionModes),
+  isolationLevel: isolationLevelSchema.optional().default("default"),
   open: z.boolean(),
   failed: z.boolean(),
   commands: z.number().int(),
@@ -26,19 +61,35 @@ export function transactionOf(value: unknown): TransactionWire | null {
 }
 
 /**
- * RN-TX-001 a 003: a transação da aba como a tela a mostra. `openedAt` em milissegundos; `available` falso no banco sem log de transação (RN-TX-013), em que o
- * Commit manual fica desabilitado; `pending` enquanto o Commit, o Rollback ou a troca de modo estão a caminho.
+ * RN-TX-001 a 003 e RN-ISOL-001: a transação da aba como a tela a mostra. `openedAt` em milissegundos; `available` falso no banco sem log de transação (RN-TX-013), em que o
+ * Commit manual e o nível de isolamento ficam desabilitados; `pending` enquanto o Commit, o Rollback ou a troca de modo ou de nível estão a caminho.
  */
-export type TabTransaction = { mode: TransactionMode; open: boolean; failed: boolean; commands: number; openedAt: number | null; available: boolean; pending: boolean };
+export type TabTransaction = {
+  mode: TransactionMode;
+  isolationLevel: IsolationLevel;
+  open: boolean;
+  failed: boolean;
+  commands: number;
+  openedAt: number | null;
+  available: boolean;
+  pending: boolean;
+};
 
 export const closedTransaction = { open: false, failed: false, commands: 0, openedAt: null } as const;
 
-export const initialTransaction: TabTransaction = { mode: "autoCommit", ...closedTransaction, available: true, pending: false };
+export const initialTransaction: TabTransaction = { mode: "autoCommit", isolationLevel: "default", ...closedTransaction, available: true, pending: false };
 
 /** O que a resposta da API diz da transação, no estado da aba. */
 export function fromWire(wire: TransactionWire): Partial<TabTransaction> {
   const openedAt = wire.openedAt == null ? null : Date.parse(wire.openedAt);
-  return { mode: wire.mode, open: wire.open, failed: wire.failed, commands: wire.open ? wire.commands : 0, openedAt: wire.open && Number.isFinite(openedAt) ? openedAt : null };
+  return {
+    mode: wire.mode,
+    isolationLevel: wire.isolationLevel,
+    open: wire.open,
+    failed: wire.failed,
+    commands: wire.open ? wire.commands : 0,
+    openedAt: wire.open && Number.isFinite(openedAt) ? openedAt : null,
+  };
 }
 
 export type TransactionStore = {
@@ -47,8 +98,8 @@ export type TransactionStore = {
   set: (patch: Partial<TabTransaction>) => void;
 };
 
-export function createTransactionStore(): TransactionStore {
-  let state = initialTransaction;
+export function createTransactionStore(initial?: Partial<Pick<TabTransaction, "mode" | "isolationLevel">>): TransactionStore {
+  let state: TabTransaction = initial === undefined ? initialTransaction : { ...initialTransaction, ...initial };
   const listeners = new Set<() => void>();
 
   return {
@@ -78,13 +129,14 @@ export function withUncommitted(text: string, transaction: TabTransaction): stri
 /** RN-TX-003: passados 10 minutos com a transação aberta, o texto passa ao tom de atenção, porque as travas dela seguram outras sessões. */
 const longTransactionMinutes = 10;
 
-/** RN-TX-003: o texto da barra de status e o tom dele. `now` em milissegundos. */
+/** RN-TX-003 e RN-ISOL-002: o texto da barra de status e o tom dele. `now` em milissegundos. */
 export function transactionStatus(transaction: TabTransaction, now: number): { text: string; tone: "normal" | "warning" | "error" } {
   const copy = transactionCopy.status;
-  if (transaction.mode === "autoCommit") return { text: copy.autoCommit, tone: "normal" };
-  if (!transaction.open) return { text: copy.idle, tone: "normal" };
-  if (transaction.failed) return { text: copy.failed, tone: "error" };
+  const level = transactionCopy.editor.levels[transaction.isolationLevel];
+  const mode = transaction.mode === "autoCommit" ? transactionCopy.editor.autoCommit : transactionCopy.editor.manual;
+  if (!transaction.open) return { text: transaction.mode === "autoCommit" ? copy.autoCommit(level) : copy.idle(level), tone: "normal" };
+  if (transaction.failed) return { text: copy.failed(level, mode), tone: "error" };
 
   const minutes = transaction.openedAt === null ? 0 : Math.max(0, Math.floor((now - transaction.openedAt) / 60_000));
-  return { text: copy.open(transaction.commands, minutes), tone: minutes >= longTransactionMinutes ? "warning" : "normal" };
+  return { text: copy.open(transaction.commands, minutes, level, mode), tone: minutes >= longTransactionMinutes ? "warning" : "normal" };
 }

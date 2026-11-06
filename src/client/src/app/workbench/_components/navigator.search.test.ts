@@ -780,6 +780,28 @@ describe("'Buscar nelas também': abre a sessão da árvore de cada conexão de 
     expect(statusLine()!.failures).toEqual([]);
   });
 
+  it("a recusa por faltar o segredo do túnel fecha o nó só na tela: a sessão continua observada, e abrir o nó de novo busca de novo (RN-REDE-006)", () => {
+    const key = navKey({ type: "connection", connectionId: "c4" });
+    rt.expanded = new Set([key, navKey({ type: "database", connectionId: "c4" })]);
+    const refetch = vi.spyOn(rt.queryClient, "refetchQueries").mockResolvedValue();
+    rt.errors.set(JSON.stringify(databaseSessionKey("c4")), new ApiRequestError({ status: 422, code: "CONNECTION_CREDENTIALS_MISSING", title: "Falta o segredo.", detail: null, errors: { sshSecret: ["Informe a frase."] }, extensions: {} }));
+    render();
+
+    expect(rt.setNodeOpen).not.toHaveBeenCalled();
+    list().onToggle({ kind: "connection", key } as NavNode);
+    expect(refetch).toHaveBeenCalledWith({ queryKey: databaseSessionKey("c4"), exact: true });
+    expect(rt.setNodeOpen).not.toHaveBeenCalled();
+  });
+
+  it("a recusa por faltar a senha do banco fecha o nó de vez (RN-TRANSF-016)", () => {
+    const key = navKey({ type: "connection", connectionId: "c4" });
+    rt.expanded = new Set([key]);
+    rt.errors.set(JSON.stringify(databaseSessionKey("c4")), new ApiRequestError({ status: 422, code: "CONNECTION_CREDENTIALS_MISSING", title: "Falta a senha.", detail: null, errors: { password: ["Informe a senha."] }, extensions: {} }));
+    render();
+
+    expect(rt.setNodeOpen).toHaveBeenCalledWith(key, false);
+  });
+
   it("a conexão que a verificação achou sem sessão na API fica de fora, e o botão abre uma sessão nova no lugar da morta", async () => {
     threeConnected();
     rt.checks = new Map([["c3", { kind: "notConnected" }]]);

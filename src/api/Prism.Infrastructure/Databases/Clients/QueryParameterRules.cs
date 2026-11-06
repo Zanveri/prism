@@ -1,5 +1,7 @@
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using System.Globalization;
+using System.Resources;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -13,6 +15,9 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 public static partial class QueryParameterRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>QueryParameterRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(QueryParameterRules));
+
     /// <summary>RN-VAR-013 e 032: as entradas da lista.</summary>
     public const int MaxCount = 10_000;
 
@@ -48,10 +53,10 @@ public static partial class QueryParameterRules
 
         var list = parameters.Value;
         if (list.ValueKind != JsonValueKind.Array)
-            return [(field, "Informe os valores como uma lista de { type, value }.")];
+            return [(field, Texts.Get("ListShape"))];
 
         if (list.GetArrayLength() > MaxCount)
-            return [(field, "O comando leva até 10.000 valores.")];
+            return [(field, Texts.Get("TooManyValues"))];
 
         var refusals = new List<(string, string)>();
         long bytes = 0;
@@ -61,7 +66,7 @@ public static partial class QueryParameterRules
             var path = $"{field}[{index++}]";
             if (entry.ValueKind != JsonValueKind.Object || !HasOnlyTheTwoKeys(entry))
             {
-                refusals.Add((path, "Cada valor é um objeto com type e value."));
+                refusals.Add((path, Texts.Get("EntryShape")));
                 continue;
             }
 
@@ -70,7 +75,7 @@ public static partial class QueryParameterRules
             var type = typeElement.ValueKind == JsonValueKind.String && TryGetText(typeElement, out var typeName) ? TypeNames.AsSpan().IndexOf(typeName) : -1;
             if (type < 0)
             {
-                refusals.Add(($"{path}.type", "O tipo é text, number, boolean, date ou timestamp."));
+                refusals.Add(($"{path}.type", Texts.Get("TypeInvalid")));
                 continue;
             }
 
@@ -79,14 +84,14 @@ public static partial class QueryParameterRules
 
             if (valueElement.ValueKind != JsonValueKind.String)
             {
-                refusals.Add(($"{path}.value", "O valor é um texto, ou nulo."));
+                refusals.Add(($"{path}.value", Texts.Get("ValueNotText")));
                 continue;
             }
 
             // A metade de um par UTF-16 e o UTF-8 inválido chegam como o JSON os escreveu, e ler o texto lança: é a recusa do campo, e nunca o 500.
             if (!TryGetText(valueElement, out var value))
             {
-                refusals.Add(($"{path}.value", "O texto tem metade de um par UTF-16 ou UTF-8 inválido, que o banco não guarda."));
+                refusals.Add(($"{path}.value", Texts.Get("TextBrokenEncoding")));
                 continue;
             }
 
@@ -97,7 +102,7 @@ public static partial class QueryParameterRules
         }
 
         if (bytes > MaxBytes)
-            refusals.Add((field, "Os valores do comando passam de 4 MiB."));
+            refusals.Add((field, Texts.Get("ValuesTooBig")));
 
         return refusals;
     }
@@ -150,7 +155,7 @@ public static partial class QueryParameterRules
         if (engine is not (EDatabaseEngine.Db2 or EDatabaseEngine.Informix))
             return null;
 
-        var name = engine == EDatabaseEngine.Db2 ? "o Db2" : "o Informix";
+        var name = engine == EDatabaseEngine.Db2 ? "Db2" : "Informix";
         for (var index = 0; index < parameters.Count; index++)
         {
             var parameter = parameters[index];
@@ -158,7 +163,7 @@ public static partial class QueryParameterRules
                 continue;
 
             if (parameter.Type == EQueryParameterType.Timestamp && TimestampForm().Match(parameter.Value).Groups[4].Success)
-                return ($"{field}[{index}].value", $"O instante com fuso só vale no PostgreSQL; {name} guarda o instante sem fuso.");
+                return ($"{field}[{index}].value", Texts.Get("TimestampZoneOnlyPostgres", name));
 
             if (parameter.Type != EQueryParameterType.Number)
                 continue;
@@ -166,9 +171,9 @@ public static partial class QueryParameterRules
             switch (Classify(parameter.Value))
             {
                 case ENumberClass.Decimal when DecimalDigits(parameter.Value) is var digits and > MaxDecimalDigits:
-                    return ($"{field}[{index}].value", $"O número tem {digits} dígitos, e {name} guarda até {MaxDecimalDigits}{(engine == EDatabaseEngine.Informix ? " pelo driver" : string.Empty)}.");
+                    return ($"{field}[{index}].value", Texts.Get(engine == EDatabaseEngine.Informix ? "NumberDigitsDriver" : "NumberDigits", digits, name, MaxDecimalDigits));
                 case ENumberClass.Double when !double.IsFinite(double.Parse(parameter.Value, NumberStyles.Float, CultureInfo.InvariantCulture)):
-                    return ($"{field}[{index}].value", $"O número passa do que {name} guarda em um DOUBLE.");
+                    return ($"{field}[{index}].value", Texts.Get("NumberDouble", name));
             }
         }
 
@@ -176,7 +181,7 @@ public static partial class QueryParameterRules
     }
 
     /// <summary>RN-VAR-032 e RN-GRADE-011: o filtro do resultado de um comando com `params` não leva marcador, porque os marcadores e os valores ficam na ordem do comando.</summary>
-    public const string FilterMarker = "O filtro não pode ter marcador de parâmetro ($1 ou ?).";
+    public static string FilterMarker => Texts.Get(nameof(FilterMarker));
 
     /// <summary>O filtro tem marcador de parâmetro (`$n` no PostgreSQL, `?` no Db2 e no Informix), fora de texto, de nome entre aspas e de comentário?</summary>
     public static bool FilterHasMarker(string filter, EDatabaseEngine engine)
@@ -246,28 +251,28 @@ public static partial class QueryParameterRules
     private static string? FormRefusal(EQueryParameterType type, string value)
         => type switch
         {
-            EQueryParameterType.Number => value.Length > MaxNumberCharacters || !NumberForm().IsMatch(value) ? "O número é escrito como 12, -3.5 ou 1e10, com até 100 caracteres." : null,
-            EQueryParameterType.Boolean => value is "true" or "false" ? null : "O booleano é true ou false.",
-            EQueryParameterType.Date => IsDate(value) ? null : "A data é aaaa-mm-dd, e tem de existir.",
-            EQueryParameterType.Timestamp => IsTimestamp(value) ? null : "O instante é aaaa-mm-dd hh:mm:ss, com até 6 casas depois de um ponto e, no PostgreSQL, o fuso no fim.",
+            EQueryParameterType.Number => value.Length > MaxNumberCharacters || !NumberForm().IsMatch(value) ? Texts.Get("NumberForm") : null,
+            EQueryParameterType.Boolean => value is "true" or "false" ? null : Texts.Get("BooleanForm"),
+            EQueryParameterType.Date => IsDate(value) ? null : Texts.Get("DateForm"),
+            EQueryParameterType.Timestamp => IsTimestamp(value) ? null : Texts.Get("TimestampForm"),
             _ => TextRefusal(value)
         };
 
     private static string? TextRefusal(string value)
     {
         if (value.Length > MaxTextCharacters)
-            return "O texto pode ter até 1.000.000 de caracteres.";
+            return Texts.Get("TextTooLong");
 
         for (var index = 0; index < value.Length; index++)
         {
             var character = value[index];
             if (character == '\0')
-                return "O texto não pode ter o caractere U+0000.";
+                return Texts.Get("TextHasNul");
 
             if (char.IsHighSurrogate(character) && index + 1 < value.Length && char.IsLowSurrogate(value[index + 1]))
                 index++;
             else if (char.IsSurrogate(character))
-                return "O texto tem metade de um par UTF-16, que o banco não guarda.";
+                return Texts.Get("TextHalfPair");
         }
 
         return null;

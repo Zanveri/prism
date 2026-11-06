@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CanceledBeforeItRanMessage" xml:space="preserve">
+    <value>O comando foi cancelado antes de ir ao banco: nada foi executado.</value>
+  </data>
+  <data name="VaultChanged" xml:space="preserve">
+    <value>O cofre mudou enquanto a sessão era aberta.</value>
+  </data>
+  <data name="NoTransactionLogManualCommit" xml:space="preserve">
+    <value>Este banco não tem log de transação: cada comando é gravado quando termina, e não há Commit manual.</value>
+  </data>
+  <data name="ResultNotFoundForCopy" xml:space="preserve">
+    <value>O resultado não existe mais: a sessão executou outro comando depois dele. Execute o comando de novo para copiar.</value>
+  </data>
+  <data name="NoQueryToCount" xml:space="preserve">
+    <value>Nenhum comando desta sessão devolveu linhas para contar.</value>
+  </data>
+  <data name="TransactionOpenForAutoCommit" xml:space="preserve">
+    <value>A aba tem uma transação aberta: encerre-a com Commit ou Rollback antes de passar para Auto-commit.</value>
+  </data>
+  <data name="TransactionOpenForIsolation" xml:space="preserve">
+    <value>A aba tem uma transação aberta: encerre-a com Commit ou Rollback antes de trocar o nível de isolamento.</value>
+  </data>
+  <data name="NoOpenTransaction" xml:space="preserve">
+    <value>Não há transação aberta nesta aba.</value>
+  </data>
+  <data name="TransactionFailed" xml:space="preserve">
+    <value>A transação tem um erro: desfaça com Rollback. Até lá o banco não aceita outro comando nesta aba.</value>
+  </data>
+  <data name="SessionNotFound" xml:space="preserve">
+    <value>A sessão com o banco não existe ou já foi fechada.</value>
+  </data>
+  <data name="ResultNoLongerKept" xml:space="preserve">
+    <value>O resultado não está mais guardado na sessão: outro comando foi executado nela depois dele. Execute o comando de novo para editar.</value>
+  </data>
+  <data name="SchemaMayHaveChanged" xml:space="preserve">
+    <value>Um comando executado depois deste resultado (como um SET ou um CALL) pode ter trocado o esquema atual da sessão, e {0}, escrita sem esquema, pode ser outra tabela agora. Nada foi gravado; escreva o esquema no comando (esquema.tabela), ou execute-o de novo.</value>
+  </data>
+  <data name="ReadsAnotherTable" xml:space="preserve">
+    <value>O comando agora lê outra tabela ({0}.{1}, e não {2}.{3}): o esquema atual da sessão mudou desde a consulta. Nada foi gravado; execute o comando de novo.</value>
+  </data>
+  <data name="TableChanged" xml:space="preserve">
+    <value>A tabela {0} mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo.</value>
+  </data>
+  <data name="PlatformUnsupported" xml:space="preserve">
+    <value>O Prism para {0} ainda não conecta em Db2 e Informix: a IBM não publica o driver para ela.</value>
+  </data>
+  <data name="CanceledBeforeItsTurn" xml:space="preserve">
+    <value>A operação foi cancelada antes de chegar a vez dela na sessão.</value>
+  </data>
+  <data name="SessionBusy" xml:space="preserve">
+    <value>A sessão está ocupada com outro comando.</value>
+  </data>
+  <data name="VariableSeveralStatementsMessage" xml:space="preserve">
+    <value>A consulta de uma variável é um comando só, e o texto tem mais de um; nada foi executado.</value>
+  </data>
+  <data name="VariableQueryNotRead" xml:space="preserve">
+    <value>A consulta de uma variável tem de ser uma leitura: {0}.</value>
+  </data>
+  <data name="NotAReadEnding" xml:space="preserve">
+    <value> não é leitura</value>
+  </data>
+  <data name="NotAReadShortEnding" xml:space="preserve">
+    <value> não é</value>
+  </data>
+</root>

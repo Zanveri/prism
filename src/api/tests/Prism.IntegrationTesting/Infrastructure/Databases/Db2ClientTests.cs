@@ -183,7 +183,7 @@ public sealed class Db2ClientTests : IbmClientContractTests
         var seen = await ReadFromAnotherConnectionAsync($"SELECT COUNT(*) FROM {table} WHERE versao = 3");
 
         var refused = new List<EDatabaseFailure>();
-        foreach (var sql in new[] { "COMMIT", "ROLLBACK", "COMMIT WORK", "SAVEPOINT ponto ON ROLLBACK RETAIN CURSORS", "RELEASE SAVEPOINT ponto", "RELEASE TO SAVEPOINT ponto", "ROLLBACK TO SAVEPOINT ponto", "BEGIN", "BEGIN WORK", "/* abre /* de novo */ */ BEGIN TRANSACTION" })
+        foreach (var sql in new[] { "COMMIT PREPARED 'x'", "ROLLBACK PREPARED 'x'", "COMMIT AND CHAIN", "ROLLBACK AND CHAIN", "PREPARE TRANSACTION 'x'", "ROLLBACK WORK TO SAVEPOINT ponto", "/* abre /* de novo */ */ COMMIT AND CHAIN" })
             refused.Add((await connection.ExecuteAsync(sql, CancellationToken.None)).Error.Kind);
 
         var afterwards = await connection.ExecuteAsync($"UPDATE {table} SET versao = 4 WHERE numero = 1004", CancellationToken.None);
@@ -389,7 +389,7 @@ public sealed class Db2ClientTests : IbmClientContractTests
 
         var read = await connection.ExecuteAsync("SELECT /* um /* dentro */ do outro */ COUNT(*) FROM loja.cliente", CancellationToken.None);
         var unbalanced = await connection.ExecuteAsync("SELECT /* um /* dentro */ COUNT(*) FROM loja.cliente", CancellationToken.None);
-        var commit = await connection.ExecuteAsync("/* um /* dentro */ do outro */ COMMIT", CancellationToken.None);
+        var commit = await connection.ExecuteAsync("/* um /* dentro */ do outro */ COMMIT AND CHAIN", CancellationToken.None);
 
         Assert.That(read.IsSuccess, Is.True, read.IsFailure ? read.Error.Message : null);
         Assert.That(read.Value.Page!.Rows[0][0], Is.EqualTo("10"));

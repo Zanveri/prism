@@ -133,7 +133,7 @@ export function WorkbenchTabs() {
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
   const handleOpenSchema = useCallback((connectionId: string, target: { schema: string; view?: SchemaView; database?: string }) => latestOpenSchema.current(connectionId, target), []);
   // RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL", nos Registros e no resultado.
-  const handleOpenQuery = useCallback((connectionId: string, sql: string, database?: string) => latestOpenQuery.current(connectionId, sql, database), []);
+  const handleOpenQuery = useCallback((connectionId: string | null, sql: string, database?: string) => latestOpenQuery.current(connectionId, sql, database), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
   const handleSwitchConnection = useCallback((tabId: string, connectionId: string) => latestSwitchConnection.current(tabId, connectionId), []);
 

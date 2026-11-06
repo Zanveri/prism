@@ -36,7 +36,8 @@ public sealed record ImportJob(
     string Table,
     IReadOnlyList<ImportMappingEntry> Mapping,
     LoadSettings Load,
-    Func<CancellationToken, Task<ETransferCancelReason?>> TargetStop)
+    Func<CancellationToken, Task<ETransferCancelReason?>> TargetStop,
+    long JournalEntryID = -1)
 {
     public override string ToString()
         => nameof(ImportJob);
@@ -65,7 +66,8 @@ public sealed record CopyJob(
     long VaultGeneration,
     long WindowID,
     Func<CancellationToken, Task<ETransferCancelReason?>> TargetStop,
-    IReadOnlyList<QueryParameter>? Parameters = null)
+    IReadOnlyList<QueryParameter>? Parameters = null,
+    long JournalEntryID = -1)
 {
     public override string ToString()
         => nameof(CopyJob);

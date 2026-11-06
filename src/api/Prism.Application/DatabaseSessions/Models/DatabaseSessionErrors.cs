@@ -1,4 +1,7 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using Prism.Application.Common.Vault;
+using Prism.Application.Connections.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Databases.Models;
@@ -18,6 +21,9 @@ namespace Prism.Application.DatabaseSessions.Models;
 /// </summary>
 internal static class DatabaseSessionErrors
 {
+    /// <summary>Os textos, no idioma do pedido: <c>DatabaseSessionErrors.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DatabaseSessionErrors));
+
     public static ApiErrorDto From(DatabaseFailure failure)
         => WithTheTransaction(Of(failure), failure);
 
@@ -40,47 +46,60 @@ internal static class DatabaseSessionErrors
     private static ApiErrorDto Of(DatabaseFailure failure)
         => failure.Kind switch
         {
-            EDatabaseFailure.ConnectionFailed => ApiErrorDto.CreateUnprocessableEntity("Falha ao conectar no banco de dados.", "DATABASE_CONNECTION_FAILED", failure.Message),
-            EDatabaseFailure.ExecutionFailed => ApiErrorDto.CreateUnprocessableEntity("Falha ao executar o comando.", "SQL_EXECUTION_FAILED", failure.Message, SqlDetails(failure)),
-            EDatabaseFailure.SessionNotFound => ApiErrorDto.CreateNotFound("Sessão com o banco não localizada.", "DATABASE_SESSION_NOT_FOUND", failure.Message),
-            EDatabaseFailure.SessionBusy => ApiErrorDto.CreateConflict("A sessão está ocupada.", "SESSION_BUSY", failure.Message),
-            EDatabaseFailure.NoOpenCursor => ApiErrorDto.CreateConflict("Não há resultado aberto.", "NO_OPEN_CURSOR", failure.Message),
-            EDatabaseFailure.NoQueryToCount => ApiErrorDto.CreateConflict("Não há consulta para contar.", "NO_QUERY_TO_COUNT", failure.Message),
-            EDatabaseFailure.TransactionControlNotSupported => ApiErrorDto.CreateUnprocessableEntity("Controle de transação não é aceito.", "TRANSACTION_CONTROL_NOT_SUPPORTED", failure.Message, ExecutedDetails(failure)),
-            EDatabaseFailure.MultipleStatementsNotSupported => ApiErrorDto.CreateUnprocessableEntity("Só um comando por execução.", "MULTIPLE_STATEMENTS_NOT_SUPPORTED", failure.Message),
+            EDatabaseFailure.ConnectionFailed => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("ConnectionFailedTitle"), "DATABASE_CONNECTION_FAILED", failure.Message),
 
-            // Seção 22 (RN-TX-004, 005, 009 e 013): nada foi ao banco.
-            EDatabaseFailure.TransactionFailed => ApiErrorDto.CreateConflict("A transação tem um erro.", "TRANSACTION_FAILED", failure.Message),
-            EDatabaseFailure.CommandNotAllowedInTransaction => ApiErrorDto.CreateUnprocessableEntity("O comando não roda dentro de transação.", "COMMAND_NOT_ALLOWED_IN_TRANSACTION", failure.Message),
-            EDatabaseFailure.NoOpenTransaction => ApiErrorDto.CreateConflict("Não há transação aberta.", "NO_OPEN_TRANSACTION", failure.Message),
-            EDatabaseFailure.TransactionOpen => ApiErrorDto.CreateConflict("Há uma transação aberta.", "TRANSACTION_OPEN", failure.Message),
-            EDatabaseFailure.TransactionsNotAvailable => ApiErrorDto.CreateUnprocessableEntity("O banco não tem transação.", "TRANSACTIONS_NOT_AVAILABLE", failure.Message),
+            // RN-REDE-007: a chave cifrada sem a frase secreta é o segredo que falta, no campo dele, como na RN-REDE-003: a tela pede a frase (RN-REDE-006).
+            EDatabaseFailure.NetworkSecretMissing => ConnectionErrors.NetworkSecretMissing("SshSecret", failure.Message),
+            EDatabaseFailure.ExecutionFailed => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("ExecutionFailedTitle"), "SQL_EXECUTION_FAILED", failure.Message, SqlDetails(failure)),
+            EDatabaseFailure.SessionNotFound => ApiErrorDto.CreateNotFound(Texts.Get("SessionNotFoundTitle"), "DATABASE_SESSION_NOT_FOUND", failure.Message),
+            EDatabaseFailure.SessionBusy => ApiErrorDto.CreateConflict(Texts.Get("SessionBusyTitle"), "SESSION_BUSY", failure.Message),
+            EDatabaseFailure.NoOpenCursor => ApiErrorDto.CreateConflict(Texts.Get("NoOpenCursorTitle"), "NO_OPEN_CURSOR", failure.Message),
+            EDatabaseFailure.NoQueryToCount => ApiErrorDto.CreateConflict(Texts.Get("NoQueryToCountTitle"), "NO_QUERY_TO_COUNT", failure.Message),
+            EDatabaseFailure.TransactionControlNotSupported => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("TransactionControlNotSupportedTitle"), "TRANSACTION_CONTROL_NOT_SUPPORTED", failure.Message, ExecutedDetails(failure)),
+            EDatabaseFailure.MultipleStatementsNotSupported => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("MultipleStatementsNotSupportedTitle"), "MULTIPLE_STATEMENTS_NOT_SUPPORTED", failure.Message),
+
+            // Seção 22 (RN-TX-004, 005, 009 e 013; RN-ISOL-003): nada foi ao banco.
+            EDatabaseFailure.TransactionFailed => ApiErrorDto.CreateConflict(Texts.Get("TransactionFailedTitle"), "TRANSACTION_FAILED", failure.Message),
+            EDatabaseFailure.CommandNotAllowedInTransaction => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("CommandNotAllowedInTransactionTitle"), "COMMAND_NOT_ALLOWED_IN_TRANSACTION", failure.Message),
+            EDatabaseFailure.NoOpenTransaction => ApiErrorDto.CreateConflict(Texts.Get("NoOpenTransactionTitle"), "NO_OPEN_TRANSACTION", failure.Message),
+            EDatabaseFailure.TransactionOpen => ApiErrorDto.CreateConflict(Texts.Get("TransactionOpenTitle"), "TRANSACTION_OPEN", failure.Message),
+            EDatabaseFailure.TransactionsNotAvailable => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("TransactionsNotAvailableTitle"), "TRANSACTIONS_NOT_AVAILABLE", failure.Message),
+            EDatabaseFailure.IsolationLevelInvalid => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("IsolationLevelInvalidTitle"), "ISOLATION_LEVEL_INVALID", failure.Message),
 
             // RN-DRIVER-006: o detalhe diz o nome do driver que falta, e a extensão `driverID` leva a tela até a linha dele ("Instalar driver").
-            EDatabaseFailure.DriverNotInstalled => ApiErrorDto.CreateUnprocessableEntity("Driver não instalado.", "DRIVER_NOT_INSTALLED", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["driverID"] = failure.DriverID }),
+            EDatabaseFailure.DriverNotInstalled => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("DriverNotInstalledTitle"), "DRIVER_NOT_INSTALLED", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["driverID"] = failure.DriverID }),
 
             // RN-EDIT-002, 005 e 006: a recusa da edição aponta o que a tela destaca: o motivo, a alteração, a coluna e as linhas.
-            EDatabaseFailure.ResultChanged => ApiErrorDto.CreateConflict("O resultado mudou.", "RESULT_CHANGED", failure.Message),
-            EDatabaseFailure.ResultNotEditable => ApiErrorDto.CreateUnprocessableEntity("O resultado é só leitura.", "RESULT_NOT_EDITABLE", failure.Message, EditDetails(failure)),
-            EDatabaseFailure.EditInvalid => ApiErrorDto.CreateUnprocessableEntity("A alteração não se aplica.", "EDIT_INVALID", failure.Message, EditDetails(failure)),
-            EDatabaseFailure.EditRowMismatch => ApiErrorDto.CreateUnprocessableEntity("O comando não afetou exatamente uma linha.", "EDIT_ROW_MISMATCH", failure.Message, EditDetails(failure)),
+            EDatabaseFailure.ResultChanged => ApiErrorDto.CreateConflict(Texts.Get("ResultChangedTitle"), "RESULT_CHANGED", failure.Message),
+            EDatabaseFailure.ResultNotEditable => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("ResultNotEditableTitle"), "RESULT_NOT_EDITABLE", failure.Message, EditDetails(failure)),
+            EDatabaseFailure.EditInvalid => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("EditInvalidTitle"), "EDIT_INVALID", failure.Message, EditDetails(failure)),
+            EDatabaseFailure.EditRowMismatch => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("EditRowMismatchTitle"), "EDIT_ROW_MISMATCH", failure.Message, EditDetails(failure)),
 
             // RN-EDIT-018 e 023: a tela decide pelo código, e mostra o `reason` como veio.
-            EDatabaseFailure.EditAllRowsNotSupported => ApiErrorDto.CreateUnprocessableEntity("A coluna inteira não se altera neste resultado.", "EDIT_ALL_ROWS_NOT_SUPPORTED", failure.Message, EditDetails(failure)),
+            EDatabaseFailure.EditAllRowsNotSupported => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("EditAllRowsNotSupportedTitle"), "EDIT_ALL_ROWS_NOT_SUPPORTED", failure.Message, EditDetails(failure)),
 
             // RN-SQL-017: o valor completo das células cortadas.
-            EDatabaseFailure.ResultNotFound => ApiErrorDto.CreateNotFound("Resultado não localizado.", "RESULT_NOT_FOUND", failure.Message),
-            EDatabaseFailure.CellsInvalid => ApiErrorDto.CreateUnprocessableEntity("Células inválidas.", "CELLS_INVALID", failure.Message),
+            EDatabaseFailure.ResultNotFound => ApiErrorDto.CreateNotFound(Texts.Get("ResultNotFoundTitle"), "RESULT_NOT_FOUND", failure.Message),
+            EDatabaseFailure.CellsInvalid => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("CellsInvalidTitle"), "CELLS_INVALID", failure.Message),
 
             // RN-GRADE-011: pela rota, o validator recusa antes, com o mesmo código, no campo `Filter`; esta é a do registro de sessões.
-            EDatabaseFailure.FilterInvalid => ApiErrorDto.CreateUnprocessableEntity("Filtro inválido.", "FILTER_INVALID", failure.Message),
+            EDatabaseFailure.FilterInvalid => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("FilterInvalidTitle"), "FILTER_INVALID", failure.Message),
 
             // RN-VAR-032: o valor dos `params` que o banco não guarda, no campo dele; e os marcadores que não batem com os valores (`markers` e `values`).
-            EDatabaseFailure.QueryInvalid => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "QUERY_INVALID", failure.Field ?? "params", failure.Message),
-            EDatabaseFailure.ParametersMismatch => ApiErrorDto.CreateUnprocessableEntity("Os marcadores não batem com os valores.", "QUERY_PARAMETERS_MISMATCH", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["markers"] = failure.Markers, ["values"] = failure.Values }),
+            EDatabaseFailure.QueryInvalid => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("QueryInvalidTitle"), "QUERY_INVALID", failure.Field ?? "params", failure.Message),
+            EDatabaseFailure.ParametersMismatch => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("ParametersMismatchTitle"), "QUERY_PARAMETERS_MISMATCH", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["markers"] = failure.Markers, ["values"] = failure.Values }),
+
+            // RN-VAR-034: a consulta de uma variável que não é uma leitura (o motivo no detalhe e em `reason`, como na exportação), e a que passou de um limite
+            // (`reason` em `rows`, `columns` ou `bytes`, e `limit`).
+            EDatabaseFailure.VariableQueryNotRead => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("VariableQueryNotReadTitle"), "VARIABLE_QUERY_NOT_READ", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = failure.Reason }),
+            EDatabaseFailure.VariableQueryTooLarge => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("VariableQueryTooLargeTitle"), "VARIABLE_QUERY_TOO_LARGE", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = failure.Reason, ["limit"] = failure.Limit }),
+
+            // RN-VAR-035: a coluna ou a descrição que o catálogo da sessão recusa vem na forma do erro de campo, como a do validator; a tabela que não existe é 404.
+            EDatabaseFailure.ValuesInvalid => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("ValuesInvalidTitle"), "VALUES_INVALID", failure.Field ?? "column", failure.Message),
+            EDatabaseFailure.ValuesTableNotFound => ApiErrorDto.CreateNotFound(Texts.Get("ValuesTableNotFoundTitle"), "VALUES_TABLE_NOT_FOUND", failure.Message),
 
             // RN-PROT-002: nada foi ao banco, e o resultado anterior continua (sem `executed`).
-            EDatabaseFailure.ConnectionReadOnly => ApiErrorDto.CreateUnprocessableEntity("Conexão somente leitura.", "CONNECTION_READ_ONLY", failure.Message),
+            EDatabaseFailure.ConnectionReadOnly => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("ConnectionReadOnlyTitle"), "CONNECTION_READ_ONLY", failure.Message),
 
             // O cofre aberto mudou enquanto a sessão abria: para quem chamou, é o cofre que ele usava que fechou.
             EDatabaseFailure.VaultChanged => VaultErrors.From(EVaultError.Locked),

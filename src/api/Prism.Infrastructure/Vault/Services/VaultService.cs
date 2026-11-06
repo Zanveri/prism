@@ -16,7 +16,7 @@ namespace Prism.Infrastructure.Vault.Services;
 /// A geração da chave do cofre (RN-COFRE-003). Em produção é o <see cref="VaultCrypto.NewKey"/>; entra pelo construtor para o teste ver o buffer da chave
 /// nova que uma troca de senha que falhou gerou e conferir que ele foi zerado.
 /// </param>
-/// <param name="logger">Os registros do serviço são só dois avisos, da troca de senha e da cura do `.bak` (ver <see cref="ChangePassword"/> e <see cref="HealBackup"/>): sem senha, sem nome de usuário e sem exceção (RN-LOG-001).</param>
+/// <param name="logger">Os registros do serviço são só dois avisos, da troca de senha e da cura do `.bak` (ver <see cref="ChangePasswordAsync"/> e <see cref="HealBackup"/>): sem senha, sem nome de usuário e sem exceção (RN-LOG-001).</param>
 internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOptions> options, Func<string, VaultKdf, byte[]> deriveKey, Func<byte[]> newKey, ILogger logger) : IVaultService, IDisposable
 {
     /// <summary>RN-CONN-003: o quinto erro seguido de senha fecha o cofre.</summary>
@@ -37,6 +37,7 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
 
     private int _failedVerifications;
     private bool _closedSinceLastRelease;
+    private bool _openedSinceLastRelease;
     private long _generation;
 
     public bool IsUnlocked => _open is not null;
@@ -46,6 +47,10 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     public string? UserName => _open?.UserName;
 
     public event Action? Locked;
+
+    public event Action? Unlocked;
+
+    public event Action? FifthFailedVerification;
 
     public Task<UnitResult<EVaultError>> CreateAsync(string userName, string password, CancellationToken cancellationToken)
         => Exclusive(() => Create(userName, password, cancellationToken), cancellationToken);
@@ -59,8 +64,8 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     public Task<UnitResult<EVaultError>> SaveAsync(Func<VaultDocument, VaultDocument> change, CancellationToken cancellationToken)
         => Exclusive(() => Save(change, cancellationToken), cancellationToken);
 
-    public Task<UnitResult<EVaultError>> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken)
-        => Exclusive(() => ChangePassword(currentPassword, newPassword, cancellationToken), cancellationToken);
+    public Task<UnitResult<EVaultError>> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken, Func<byte[], CancellationToken, Task<bool>>? beforeSave = null, Func<CancellationToken, Task>? onSaveFailed = null)
+        => ExclusiveAsync(() => ChangePassword(currentPassword, newPassword, cancellationToken, beforeSave, onSaveFailed), cancellationToken);
 
     public Task<Result<EPasswordCheck, EVaultError>> SaveWithPasswordAsync(Func<VaultDocument, VaultDocument> change, Func<VaultDocument, VaultDocument, bool> needsPassword, string? password, CancellationToken cancellationToken)
         => Exclusive(() => SaveWithPassword(change, needsPassword, password, cancellationToken), cancellationToken);
@@ -98,6 +103,13 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         return RunAndRelease(work);
     }
 
+    private async Task<T> ExclusiveAsync<T>(Func<Task<T>> work, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+
+        return await RunAndReleaseAsync(work);
+    }
+
     /// <summary>
     /// Roda com o semáforo já tomado e sai pelo `Leave`. É `using`, e não uma chamada solta no fim: se
     /// `work` lançar (um defeito, não uma falha prevista), a saída acontece do mesmo jeito, e o serviço
@@ -109,8 +121,14 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
             return work();
     }
 
+    private async Task<T> RunAndReleaseAsync<T>(Func<Task<T>> work)
+    {
+        using (new Exit(this))
+            return await work();
+    }
+
     /// <summary>
-    /// A saída de toda operação: libera o semáforo e só então avisa quem assina `Locked`, para um
+    /// A saída de toda operação: libera o semáforo e só então avisa quem assina `Locked` e `Unlocked`, para um
     /// assinante que chame o serviço de volta não encontrar o semáforo preso. Vale também quando o
     /// trabalho termina em exceção: o `Unlock` fecha o cofre anterior antes de tentar, e quem assina
     /// fecha as sessões com os bancos por este aviso (RN-COFRE-008), então ele sai na mesma chamada em
@@ -119,11 +137,16 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     private void Leave()
     {
         var closed = _closedSinceLastRelease;
+        var opened = _openedSinceLastRelease;
         _closedSinceLastRelease = false;
+        _openedSinceLastRelease = false;
         _gate.Release();
 
         if (closed)
             Locked?.Invoke();
+
+        if (opened)
+            Unlocked?.Invoke();
     }
 
     private UnitResult<EVaultError> Create(string userName, string password, CancellationToken cancellationToken)
@@ -145,12 +168,14 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         var wrappedKey = VaultCrypto.Seal(passwordKey, key, associatedData);
         CryptographicOperations.ZeroMemory(passwordKey);
 
-        var document = new VaultDocument(userName, [], [], [], VaultWorkspaceRecord.Empty, []);
+        var journal = new VaultJournalRecord(VaultCrypto.NewKey(), DateTimeOffset.UtcNow);
+        var document = new VaultDocument(userName, [], [], [], VaultWorkspaceRecord.Empty, [], Journal: journal);
         var file = new VaultFile(VaultCrypto.Version, kdf, wrappedKey, Seal(key, document, associatedData));
 
         if (client.Write(userName, file, cancellationToken).IsFailure)
         {
             CryptographicOperations.ZeroMemory(key);
+            CryptographicOperations.ZeroMemory(journal.Key);
 
             return EVaultError.Unavailable;
         }
@@ -220,6 +245,8 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         var migrated = file.Version < VaultCrypto.Version;
         if (migrated)
             (file, document) = Migrate(userName, file, passwordKey, key.Value, document, cancellationToken);
+        else if (document.Journal is null)
+            (file, document, migrated) = EnsureJournal(userName, file, key.Value, document, associatedData, cancellationToken);
 
         CryptographicOperations.ZeroMemory(passwordKey);
 
@@ -232,9 +259,9 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     }
 
     /// <summary>
-    /// RN-VERSAO-005, RN-SCRIPT-002, RN-ABAS-006 e RN-SCRIPT-011: a migração de um cofre de formato mais antigo, ao abrir, com o semáforo tomado e a senha já
+    /// RN-VERSAO-005, RN-SCRIPT-002, RN-ABAS-006, RN-SCRIPT-011 e RN-DIARIO-002: a migração de um cofre de formato mais antigo, ao abrir, com o semáforo tomado e a senha já
     /// conferida. O documento passa pelo <see cref="VaultMigration.Upgrade"/> (do 1 para o 2, a lista de scripts vazia; do 2 para o 3, a área de trabalho vazia;
-    /// do 3 para o 4, a lista de pastas de scripts vazia), e o arquivo
+    /// do 3 para o 4, a lista de pastas de scripts vazia), ganha a chave do diário se ainda não tinha, e o arquivo
     /// é regravado no formato atual: a mesma senha, o mesmo sal e os mesmos parâmetros, e a mesma chave do cofre, embrulhada de novo e com o conteúdo cifrado de novo, porque o número do formato faz parte do dado autenticado
     /// das duas cifras (RN-COFRE-003 e 004). A gravação é a de sempre (RN-COFRE-005): atômica, e o arquivo de antes vai para o `.bak`.
     ///
@@ -246,6 +273,9 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     {
         var associatedData = VaultCrypto.AssociatedData(VaultCrypto.Version, file.Kdf);
         var upgraded = VaultMigration.Upgrade(document, file.Version);
+        if (upgraded.Journal is null)
+            upgraded = upgraded with { Journal = new VaultJournalRecord(VaultCrypto.NewKey(), DateTimeOffset.UtcNow) };
+
         var migrated = new VaultFile(VaultCrypto.Version, file.Kdf, VaultCrypto.Seal(passwordKey, key, associatedData), Seal(key, upgraded, associatedData));
 
         var written = client.Write(userName, migrated, cancellationToken);
@@ -253,6 +283,18 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
             _logger.Warning("O cofre do formato {Format} não pôde ser regravado no formato {CurrentFormat} na entrada ({Failure:l}); a próxima gravação o regrava.", file.Version, VaultCrypto.Version, written.Error.ToString());
 
         return (migrated, upgraded);
+    }
+
+    /// <summary>RN-DIARIO-002: garante que um cofre já no formato atual mas ainda sem `Journal` receba e persista sua chave na primeira abertura.</summary>
+    private (VaultFile File, VaultDocument Document, bool Written) EnsureJournal(string userName, VaultFile file, byte[] key, VaultDocument document, byte[] associatedData, CancellationToken cancellationToken)
+    {
+        var withJournal = document with { Journal = new VaultJournalRecord(VaultCrypto.NewKey(), DateTimeOffset.UtcNow) };
+        var updated = file with { Payload = Seal(key, withJournal, associatedData) };
+        var written = client.Write(userName, updated, cancellationToken);
+        if (written.IsFailure)
+            _logger.Warning("A chave do diário não pôde ser gravada no cofre na entrada ({Failure:l}); a próxima gravação a persiste.", written.Error.ToString());
+
+        return (updated, withJournal, written.IsSuccess);
     }
 
     /// <summary>
@@ -304,7 +346,7 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     }
 
     /// <summary>
-    /// RN-COFRE-013. Tudo com o semáforo tomado: a conferência, o documento e a gravação são do mesmo cofre aberto, e nenhuma gravação comum se
+    /// RN-COFRE-013 e RN-DIARIO-004. Tudo com o semáforo tomado: a conferência, o documento, o rekey do diário e a gravação são do mesmo cofre aberto, e nenhuma gravação comum se
     /// intercala. A troca RECIFRA o cofre (RN-COFRE-003): a chave do cofre é outra, o conteúdo é cifrado com ela (nonce novo, e o cabeçalho novo como dado
     /// autenticado, RN-COFRE-004), e ela é embrulhada com a chave derivada da senha nova. Nada vale antes de a gravação terminar: se ela falha, o
     /// `_open` continua o de antes, com a chave e o cabeçalho antigos, e o arquivo também (o `Write` do client só troca o principal inteiro). A chave
@@ -312,7 +354,7 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     /// tomá-lo, então uma gravação comum que entra logo depois da troca usa a chave nova. Depois da primeira gravação vem uma SEGUNDA do mesmo arquivo,
     /// para o `.bak` ficar igual ao principal novo; a falha só dela não desfaz a troca.
     /// </summary>
-    private UnitResult<EVaultError> ChangePassword(string currentPassword, string newPassword, CancellationToken cancellationToken)
+    private async Task<UnitResult<EVaultError>> ChangePassword(string currentPassword, string newPassword, CancellationToken cancellationToken, Func<byte[], CancellationToken, Task<bool>>? beforeSave, Func<CancellationToken, Task>? onSaveFailed)
     {
         var open = _open;
         if (open is null)
@@ -330,6 +372,14 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         if (string.Equals(currentPassword, newPassword, StringComparison.Ordinal))
             return EVaultError.PasswordUnchanged;
 
+        var newJournalKey = VaultCrypto.NewKey();
+        if (beforeSave is not null && !await beforeSave(newJournalKey, cancellationToken))
+        {
+            CryptographicOperations.ZeroMemory(newJournalKey);
+
+            return EVaultError.Unavailable;
+        }
+
         // RN-COFRE-003 e 013: chave do cofre nova, do mesmo gerador da criação. Quem tem a senha antiga e uma cópia antiga do arquivo tira dela a chave
         // ANTIGA, que não decifra nada do que for gravado daqui para a frente. E RN-COFRE-002 e 013: sal novo e parâmetros nunca mais fracos que os do arquivo
         // (campo a campo, o maior entre o do arquivo e o das opções): um cofre criado com parâmetros mais fracos passa a ter os atuais, e um criado com parâmetros
@@ -341,21 +391,29 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         var wrappedKey = VaultCrypto.Seal(passwordKey, key, associatedData);
         CryptographicOperations.ZeroMemory(passwordKey);
 
-        var file = open.File with { Kdf = kdf, WrappedKey = wrappedKey, Payload = Seal(key, open.Document, associatedData) };
+        var oldJournalKey = open.Document.Journal?.Key;
+        var updatedDocument = open.Document with { Journal = new VaultJournalRecord(newJournalKey, DateTimeOffset.UtcNow) };
+        var file = open.File with { Kdf = kdf, WrappedKey = wrappedKey, Payload = Seal(key, updatedDocument, associatedData) };
 
         // Gravação de sempre (RN-COFRE-005): atômica, e a versão anterior vai para o `.bak`. Se ela falha, a chave nova nunca chega ao `_open`: o disco e a
         // memória seguem com a chave e a senha antigas.
         if (client.Write(open.UserName, file, cancellationToken).IsFailure)
         {
             CryptographicOperations.ZeroMemory(key);
+            if (onSaveFailed is not null)
+                await onSaveFailed(cancellationToken);
+
+            CryptographicOperations.ZeroMemory(newJournalKey);
 
             return EVaultError.Unavailable;
         }
 
-        // A geração e o aviso `Locked` ficam como estão: o cofre aberto é o mesmo, com o mesmo documento, e as sessões com os bancos não caem. A chave
+        // A geração e o aviso `Locked` ficam como estão: o cofre aberto é o mesmo, e as sessões com os bancos não caem. A chave
         // antiga é zerada só depois de o `_open` valer com a nova. A troca já valeu aqui, no disco e na memória.
-        _open = open with { Key = key, File = file };
+        _open = open with { Key = key, File = file, Document = updatedDocument };
         CryptographicOperations.ZeroMemory(open.Key);
+        if (oldJournalKey is not null)
+            CryptographicOperations.ZeroMemory(oldJournalKey);
 
         // RN-COFRE-013: a segunda gravação do MESMO arquivo. O `File.Replace` dela deixa o `.bak` igual ao principal novo; sem ela o `.bak` seria o principal
         // de antes, com a chave e o embrulho antigos, e se o principal sumisse (RN-COFRE-005 promove o `.bak`) a senha antiga voltaria a abrir o cofre. Se
@@ -387,10 +445,11 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
             return true;
         }
 
-        // RN-CONN-003: o quinto erro seguido fecha o cofre, e a resposta passa a ser a de cofre fechado.
+        // RN-CONN-003 e RN-AUDIT-004: o quinto erro seguido é gravado no diário antes de o cofre fechar, e a resposta passa a ser a de cofre fechado.
         if (++_failedVerifications < MaxFailedVerifications)
             return false;
 
+        FifthFailedVerification?.Invoke();
         Close();
 
         return EVaultError.Locked;
@@ -412,6 +471,7 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     {
         _open = open;
         Interlocked.Increment(ref _generation);
+        _openedSinceLastRelease = true;
     }
 
     private UnitResult<EVaultError> Save(Func<VaultDocument, VaultDocument> change, CancellationToken cancellationToken)

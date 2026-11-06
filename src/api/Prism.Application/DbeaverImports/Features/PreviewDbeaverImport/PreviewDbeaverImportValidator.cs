@@ -12,7 +12,7 @@ public sealed class PreviewDbeaverImportValidator : AbstractValidator<PreviewDbe
     public PreviewDbeaverImportValidator()
     {
         RuleFor(request => request.SourceId).MustBeASourceId();
-        RuleFor(request => request.WithPasswords).Must(DbeaverRequests.WithPasswordsIsValid).WithMessage("“Levar as senhas” é verdadeiro ou falso.").WithErrorCode("IMPORT_INVALID");
-        RuleFor(request => request.DrdaPorts).Must(DbeaverRequests.DrdaPortsAreValid).WithMessage("Cada porta DRDA é de 1 a 65535, de um servidor do DBeaver que não se repete, e são até 2.000.").WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.WithPasswords).Must(DbeaverRequests.WithPasswordsIsValid).WithMessage(_ => DbeaverErrors.WithPasswordsInvalidMessage).WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.DrdaPorts).Must(DbeaverRequests.DrdaPortsAreValid).WithMessage(_ => DbeaverErrors.DrdaPortsInvalidMessage).WithErrorCode("IMPORT_INVALID");
     }
 }

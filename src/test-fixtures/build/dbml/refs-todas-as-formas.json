@@ -1,0 +1,120 @@
+{
+  "dbml": "Table public.cliente {\n  id bigint [pk, increment]\n  documento varchar(20) [not null, unique]\n}\n\nTable public.perfil {\n  id bigint [pk, increment]\n  cliente_id bigint [not null, ref: - public.cliente.id]\n}\n\nTable public.pedido {\n  id bigint [pk, increment]\n  cliente_id bigint [not null]\n  empresa_id integer [not null]\n  codigo integer [not null]\n\n  Indexes {\n    (empresa_id, codigo) [unique, name: 'uq_pedido_emp_cod']\n  }\n}\n\nTable public.item_pedido {\n  id bigint [pk, increment]\n  pedido_id bigint [not null]\n  empresa_id integer [not null]\n  codigo integer [not null]\n}\n\nRef fk_pedido_cliente_custom: public.pedido.cliente_id > public.cliente.id [delete: restrict, update: cascade]\nRef: public.pedido.id < public.item_pedido.pedido_id [delete: cascade]\nRef fk_item_emp_cod: public.item_pedido.(empresa_id, codigo) > public.pedido.(empresa_id, codigo)",
+  "before": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "cliente",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "documento", "exactName": false, "originName": null, "type": "varchar(20)", "nullable": false, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [{ "name": null, "columns": ["documento"] }],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "public",
+        "name": "perfil",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "cliente_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [{ "name": null, "columns": ["cliente_id"] }],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          { "name": null, "columns": ["cliente_id"], "target": { "schema": "public", "table": "cliente", "columns": ["id"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "public",
+        "name": "pedido",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "cliente_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "empresa_id", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "codigo", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [
+          { "name": "uq_pedido_emp_cod", "columns": ["empresa_id", "codigo"], "unique": true }
+        ],
+        "foreignKeys": [
+          { "name": "fk_pedido_cliente_custom", "columns": ["cliente_id"], "target": { "schema": "public", "table": "cliente", "columns": ["id"] }, "onDelete": "restrict", "onUpdate": "cascade" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "public",
+        "name": "item_pedido",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "pedido_id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "empresa_id", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null },
+          { "name": "codigo", "exactName": false, "originName": null, "type": "integer", "nullable": false, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          { "name": null, "columns": ["pedido_id"], "target": { "schema": "public", "table": "pedido", "columns": ["id"] }, "onDelete": "cascade", "onUpdate": "noAction" },
+          { "name": "fk_item_emp_cod", "columns": ["empresa_id", "codigo"], "target": { "schema": "public", "table": "pedido", "columns": ["empresa_id", "codigo"] }, "onDelete": "noAction", "onUpdate": "noAction" }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "warnings": []
+}

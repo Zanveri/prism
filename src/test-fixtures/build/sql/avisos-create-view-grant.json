@@ -1,0 +1,78 @@
+{
+  "engine": "postgresql",
+  "sql": "CREATE TABLE manutencao.setor (\n  id   bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n  nome varchar(60) NOT NULL\n);\n\nCREATE VIEW manutencao.v_setor AS\n  SELECT id, nome FROM manutencao.setor;\n\nGRANT SELECT ON manutencao.setor TO leitura;",
+  "before": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [{ "name": "manutencao", "create": true }],
+    "base": null,
+    "tables": [],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [{ "name": "manutencao", "create": true }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "manutencao",
+        "name": "setor",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "nome",
+            "exactName": false,
+            "originName": null,
+            "type": "varchar(60)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "warnings": [
+    { "line": 6, "message": "linha 6: CREATE VIEW ignorado" },
+    { "line": 9, "message": "linha 9: GRANT ignorado" }
+  ]
+}

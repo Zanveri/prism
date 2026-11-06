@@ -330,7 +330,7 @@ public sealed partial class DatabaseSessionServiceTests
         clock.Advance(TimeSpan.FromMinutes(1));
 
         //Act
-        var refused = await service.ExecuteAsync(session.ID, "COMMIT", CancellationToken.None);
+        var refused = await service.ExecuteAsync(session.ID, "COMMIT PREPARED 'x'", CancellationToken.None);
         clock.Advance(TimeSpan.FromMinutes(4) - TimeSpan.FromMilliseconds(1));
         var closedBeforeFiveMinutes = _connection.CloseCursorCalls;
         clock.Advance(TimeSpan.FromMilliseconds(1));
@@ -359,7 +359,7 @@ public sealed partial class DatabaseSessionServiceTests
         _clock.Advance(TimeSpan.FromMinutes(5));
 
         //Act
-        var refused = await service.ExecuteAsync(session.ID, "COMMIT", CancellationToken.None);
+        var refused = await service.ExecuteAsync(session.ID, "COMMIT PREPARED 'x'", CancellationToken.None);
 
         //Assert
         Assert.Equal(EDatabaseFailure.TransactionControlNotSupported, refused.Error.Kind);
@@ -746,6 +746,8 @@ public sealed partial class DatabaseSessionServiceTests
         /// <summary>RN-TX-002: o Commit manual de mentira: o comando que chega à conexão com ele ligado abre a transação, e o Commit e o Rollback a encerram.</summary>
         public bool ManualCommit { get; set; }
 
+        public string IsolationLevel { get; set; } = IsolationLevels.Default;
+
         public ETransactionState Transaction { get; set; }
 
         /// <summary>RN-TX-013: o que a conexão responde sobre o banco ter transação.</summary>
@@ -756,6 +758,12 @@ public sealed partial class DatabaseSessionServiceTests
 
         public Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken)
             => Task.FromResult(Result.Success<bool, DatabaseFailure>(TransactionsAvailable));
+
+        public Task<UnitResult<DatabaseFailure>> SetIsolationLevelAsync(string isolationLevel, CancellationToken cancellationToken)
+        {
+            IsolationLevel = isolationLevel;
+            return Task.FromResult(UnitResult.Success<DatabaseFailure>());
+        }
 
         public Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken)
             => End("commit");
@@ -879,6 +887,42 @@ public sealed partial class DatabaseSessionServiceTests
             return Task.FromResult(Result.Success<long, DatabaseFailure>(99));
         }
 
+        /// <summary>RN-VAR-034: as consultas de variável que chegaram (o texto, os parâmetros e o limite de linhas), na ordem.</summary>
+        public List<(string Sql, IReadOnlyList<QueryParameter> Parameters, int MaxRows)> Variables { get; } = [];
+
+        /// <summary>RN-VAR-035: as leituras dos valores de uma coluna que chegaram (o texto do Prism e os parâmetros), na ordem.</summary>
+        public List<(string Sql, IReadOnlyList<QueryParameter> Parameters)> ValueReads { get; } = [];
+
+        /// <summary>O que a consulta de uma variável e as leituras dos valores respondem, um por chamada; sem ele, nenhuma linha.</summary>
+        public Queue<FullRows> RowsToRead { get; } = new();
+
+        /// <summary>RN-VAR-035: as colunas que o catálogo responde; sem elas, o catálogo não é esperado no teste.</summary>
+        public IReadOnlyList<ColumnInfo>? Columns { get; set; }
+
+        public Task<Result<FullRows, DatabaseFailure>> ReadVariableAsync(string sql, IReadOnlyList<QueryParameter> parameters, int maxRows, CancellationToken cancellationToken)
+        {
+            Variables.Add((sql, parameters, maxRows));
+
+            return ReadFullRows();
+        }
+
+        public Task<Result<FullRows, DatabaseFailure>> ReadColumnValuesAsync(string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
+        {
+            ValueReads.Add((sql, parameters));
+
+            return ReadFullRows();
+        }
+
+        /// <summary>A leitura inteira fecha o cursor, como a da base, e não abre transação.</summary>
+        private Task<Result<FullRows, DatabaseFailure>> ReadFullRows()
+        {
+            HasOpenCursor = false;
+            if (Failure is { } failure)
+                return Task.FromResult(Result.Failure<FullRows, DatabaseFailure>(failure));
+
+            return Task.FromResult(Result.Success<FullRows, DatabaseFailure>(RowsToRead.TryDequeue(out var rows) ? rows : new FullRows([], [], 1)));
+        }
+
         public Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
@@ -897,7 +941,11 @@ public sealed partial class DatabaseSessionServiceTests
         }
 
         public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+        {
+            HasOpenCursor = false;
+
+            return Task.FromResult(Result.Success<IReadOnlyList<ColumnInfo>, DatabaseFailure>(Columns ?? throw new NotSupportedException()));
+        }
 
         public Task<Result<IReadOnlyList<IndexInfo>, DatabaseFailure>> GetIndexesAsync(string schema, string table, CancellationToken cancellationToken)
             => throw new NotSupportedException();

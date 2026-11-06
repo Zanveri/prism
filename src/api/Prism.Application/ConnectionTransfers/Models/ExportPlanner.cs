@@ -50,7 +50,7 @@ internal static class ExportPlanner
         if (included.Count > TransferLimits.MaxFolders || chosen.Count > TransferLimits.MaxConnections || included.Any(id => Depth(folders, id, depths) > TransferLimits.MaxDepth))
             return TransferErrors.ExportLimitsExceeded();
 
-        var needsUserPassword = chosen.Any(choice => choice.Credentials == ETransferCredentials.UserAndPassword && !string.IsNullOrWhiteSpace(choice.Record.UserName) && !string.IsNullOrEmpty(choice.Record.Password));
+        var needsUserPassword = chosen.Any(choice => choice.Credentials == ETransferCredentials.UserAndPassword && !string.IsNullOrWhiteSpace(choice.Record.UserName) && HasSavedSecret(choice.Record));
 
         var orderedFolders = InTreeOrder(folders, included);
         var position = orderedFolders.Select((folder, index) => (folder.ID, index)).ToDictionary(entry => entry.ID, entry => entry.index);
@@ -87,7 +87,12 @@ internal static class ExportPlanner
             var record = choice.Record;
             var hasUser = !string.IsNullOrWhiteSpace(record.UserName);
             var userName = choice.Credentials != ETransferCredentials.None && hasUser ? record.UserName : null;
-            var password = choice.Credentials == ETransferCredentials.UserAndPassword && hasUser && !string.IsNullOrEmpty(record.Password) ? record.Password : null;
+            var secrets = choice.Credentials == ETransferCredentials.UserAndPassword && hasUser;
+            var password = secrets && !string.IsNullOrEmpty(record.Password) ? record.Password : null;
+            // RN-REDE-004: o segredo do túnel e a senha do proxy vão com "Usuário e senha", como a senha do banco, tenha a conexão a senha do banco ou não; só os
+            // gravados (o que ficou na memória não vai).
+            var ssh = record.Ssh is { } tunnel ? tunnel with { Secret = secrets && !string.IsNullOrEmpty(tunnel.Secret) ? tunnel.Secret : null } : null;
+            var proxy = record.Proxy is { } socks ? socks with { Password = secrets && !string.IsNullOrEmpty(socks.Password) ? socks.Password : null } : null;
             var protections = ProtectionRules.Of(folders, record.FolderID, record.ReadOnly == true, record.ConfirmCommands);
             var environment = EnvironmentRules.ShownBy(folders, record.FolderID, record.EnvironmentName, record.EnvironmentColor);
 
@@ -95,7 +100,7 @@ internal static class ExportPlanner
                 $"c{index + 1}", ParentKeyOf(keys, record.FolderID), record.Name, record.Engine.ToString(), record.Host, record.Port, record.Database, userName, password,
                 record.EnvironmentName, record.EnvironmentColor, ProtectionRules.NormalizeConfirmation(record.ConfirmCommands), record.ReadOnly == true,
                 record.VerificationEnabled ?? true, record.VerificationInterval ?? ConnectionRules.VerificationIntervalDefault, record.VerificationQuery,
-                new TransferConnectionEffective(protections.ReadOnly, protections.ConfirmCommands, environment?.Name, environment?.Color));
+                new TransferConnectionEffective(protections.ReadOnly, protections.ConfirmCommands, environment?.Name, environment?.Color), ssh, record.Ssl, proxy);
         }).ToList();
 
         return new ExportBuild(
@@ -103,12 +108,16 @@ internal static class ExportPlanner
             fileFolders.Count,
             fileConnections.Count,
             fileConnections.Count(connection => connection.UserName is not null),
-            fileConnections.Count(connection => connection.Password is not null),
+            fileConnections.Count(connection => connection.Password is not null || connection.Ssh?.Secret is not null || connection.Proxy?.Password is not null),
             [.. plan.Folders.Select(folder => folder.ID)],
             [.. plan.Connections.Select(choice => choice.Record.ID)]);
     }
 
     /// <summary>A chave da pasta de cima no arquivo; nula é a raiz (e a pasta cujo pai sumiu do cofre, que não deveria existir, vai para a raiz do arquivo).</summary>
+    /// <summary>RN-TRANSF-005 e RN-REDE-004: a conexão tem um segredo gravado que "Usuário e senha" leva: a senha do banco, a do túnel SSH ou a do proxy.</summary>
+    private static bool HasSavedSecret(VaultConnectionRecord record)
+        => !string.IsNullOrEmpty(record.Password) || !string.IsNullOrEmpty(record.Ssh?.Secret) || !string.IsNullOrEmpty(record.Proxy?.Password);
+
     private static string? ParentKeyOf(IReadOnlyDictionary<Guid, string> keys, Guid? parentID)
         => parentID is { } id && keys.TryGetValue(id, out var key) ? key : null;
 

@@ -13,13 +13,13 @@ public sealed class ImportFromDbeaverValidator : AbstractValidator<ImportFromDbe
 {
     public ImportFromDbeaverValidator()
     {
-        RuleFor(request => request.Items).Must(items => items is { Count: > 0 }).WithMessage(TransferErrors.ImportEmptyMessage).WithErrorCode("IMPORT_EMPTY");
+        RuleFor(request => request.Items).Must(items => items is { Count: > 0 }).WithMessage(_ => TransferErrors.ImportEmptyMessage).WithErrorCode("IMPORT_EMPTY");
         RuleFor(request => request.SourceId).MustBeASourceId();
-        RuleFor(request => request.WithPasswords).Must(DbeaverRequests.WithPasswordsIsValid).WithMessage("“Levar as senhas” é verdadeiro ou falso.").WithErrorCode("IMPORT_INVALID");
-        RuleFor(request => request.DrdaPorts).Must(DbeaverRequests.DrdaPortsAreValid).WithMessage("Cada porta DRDA é de 1 a 65535, de um servidor do DBeaver que não se repete, e são até 2.000.").WithErrorCode("IMPORT_INVALID");
-        RuleFor(request => request.Items).Must(items => items is null || items.Count <= TransferLimits.MaxImportItems).WithMessage("Marque até 4.000 itens por importação.").WithErrorCode("IMPORT_INVALID");
-        RuleFor(request => request.Items).Must(items => items is null || (items.All(key => key is not null) && items.Distinct(StringComparer.Ordinal).Count() == items.Count)).WithMessage("Cada item é marcado uma vez só.").WithErrorCode("IMPORT_INVALID");
-        RuleFor(request => request.OnConflict).Must(TransferRules.ConflictIsValid).WithMessage("Escolha importar com outro nome ou não importar.").WithErrorCode("IMPORT_INVALID");
-        RuleFor(request => request.Overwrite).Must(DbeaverRequests.OverwriteIsValid).WithMessage("Cada conexão a sobrescrever é marcada uma vez só, até 2.000.").WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.WithPasswords).Must(DbeaverRequests.WithPasswordsIsValid).WithMessage(_ => DbeaverErrors.WithPasswordsInvalidMessage).WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.DrdaPorts).Must(DbeaverRequests.DrdaPortsAreValid).WithMessage(_ => DbeaverErrors.DrdaPortsInvalidMessage).WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.Items).Must(items => items is null || items.Count <= TransferLimits.MaxImportItems).WithMessage(_ => TransferErrors.ImportItemsLimitMessage).WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.Items).Must(items => items is null || (items.All(key => key is not null) && items.Distinct(StringComparer.Ordinal).Count() == items.Count)).WithMessage(_ => TransferErrors.ImportItemsDuplicateMessage).WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.OnConflict).Must(TransferRules.ConflictIsValid).WithMessage(_ => TransferErrors.ImportConflictInvalidMessage).WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.Overwrite).Must(DbeaverRequests.OverwriteIsValid).WithMessage(_ => DbeaverErrors.OverwriteInvalidMessage).WithErrorCode("IMPORT_INVALID");
     }
 }

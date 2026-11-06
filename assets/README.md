@@ -41,8 +41,7 @@ A regra da marca:
 
 O teste `src/client/src/components/layout/brand-assets.test.ts` confere que `prism-logo.svg` é o desenho do splash
 (elemento por elemento, com o violeta no lugar do rosa, do verde e do azul de antes: RN-MARCA-001, alterada em 2026-10-29) e
-que a variante clara só difere nas cores. As cópias em `site/` (`prism-logo.svg`, `prism-logo-light.svg` e `favicon.svg`, que é
-o `src/client/build/icon.svg`) são os mesmos arquivos, byte a byte.
+que a variante clara só difere nas cores.
 
 ## A marca da Zanveri (`zanveri/`)
 

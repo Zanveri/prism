@@ -1,0 +1,148 @@
+{
+  "scope": "full",
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [
+      { "name": "manutencao", "create": true },
+      { "name": "producao", "create": false }
+    ],
+    "base": null,
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "operador",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": "id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "matricula",
+            "exactName": false,
+            "originName": "matricula",
+            "type": "varchar(12)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "operador_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "operador",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            {
+              "name": "id",
+              "exactName": false,
+              "originName": "id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": "always",
+              "comment": null
+            },
+            {
+              "name": "matricula",
+              "exactName": false,
+              "originName": "matricula",
+              "type": "varchar(12)",
+              "nullable": false,
+              "default": null,
+              "identity": null,
+              "comment": null
+            }
+          ],
+          "primaryKey": { "name": "operador_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      },
+      {
+        "schema": "manutencao",
+        "name": "cracha",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "operador_matricula",
+            "exactName": false,
+            "originName": null,
+            "type": "varchar(12)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [
+          {
+            "name": "ix_cracha_matricula",
+            "columns": ["operador_matricula"],
+            "unique": false
+          }
+        ],
+        "foreignKeys": [
+          {
+            "name": null,
+            "columns": ["operador_matricula"],
+            "target": { "schema": "producao", "table": "operador", "columns": ["matricula"] },
+            "onDelete": "noAction",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "W6",
+      "severity": "warning",
+      "table": "manutencao.cracha",
+      "column": "operador_matricula"
+    }
+  ]
+}

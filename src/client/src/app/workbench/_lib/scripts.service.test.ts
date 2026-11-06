@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { changeScriptPlace, createScriptOrRefuse, deleteScript, editScriptOrRefuse, getScript, listScripts, moveScript, renameScriptOrRefuse, overwriteScriptOrRefuse } from "./scripts.service";
+import { changeScriptPlace, createScriptOrRefuse, deleteScript, editScriptOrRefuse, getScript, listScripts, moveScript, renameScriptOrRefuse, overwriteScriptOrRefuse, saveRunValues } from "./scripts.service";
 
 const base = "http://127.0.0.1:51234";
 const bridge = { getApiConfig: async () => ({ baseUrl: base, token: "token-de-teste" }), onApiExit: () => () => {}, restartApi: async () => {} };
@@ -121,6 +121,23 @@ describe("as rotas dos scripts (seção 23)", () => {
     fetchAnswers(json([{ ...summary, icon: "foguete", color: "#7DB2FF" }]));
 
     expect(await listScripts()).toMatchObject({ ok: true, data: [{ icon: "foguete", color: "#7DB2FF" }] });
+  });
+
+  it("os valores lembrados (RN-VAR-028): o PUT de run-values, e o item os devolve; a lista diz se o script declara variáveis", async () => {
+    const fake = fetchAnswers(new Response(null, { status: 204 }));
+    const values = { cliente_id: { type: "number" as const, value: "7" } };
+    expect(await saveRunValues(id, { values, connectionID: null, database: null })).toEqual({ ok: true, data: undefined });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts/${id}/run-values`, method: "PUT", body: { values, connectionID: null, database: null } });
+
+    fetchAnswers(json({ ...summary, sql: "let x = 1", runValues: { values, connectionID: null, database: null, savedAt: "2026-11-05T12:00:00Z" } }));
+    expect(await getScript(id)).toMatchObject({ ok: true, data: { runValues: { values } } });
+    fetchAnswers(json([{ ...summary, declaresVariables: true }]));
+    expect(await listScripts()).toMatchObject({ ok: true, data: [{ declaresVariables: true }] });
+  });
+
+  it("a gravação dos valores lembrados que a API recusa volta como valor: só avisa, e a execução segue", async () => {
+    fetchAnswers(refusal(422, "SCRIPT_RUN_VALUES_INVALID"));
+    expect(await saveRunValues(id, { values: {}, connectionID: null, database: null })).toMatchObject({ ok: false, error: { code: "SCRIPT_RUN_VALUES_INVALID" } });
   });
 
   it("excluir é o DELETE do item, e o 204 é sucesso", async () => {

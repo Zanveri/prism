@@ -153,4 +153,60 @@ describe("o diálogo de conexão sobre a área de trabalho (RN-NAV-004 e 005)", 
     expect(markup).toContain('<input type="hidden" name="confirmCommands" value="none"/>');
     expect(markup).toContain('<input type="hidden" name="readOnly" value="false"/>');
   });
+
+  it("mostra a barra de abas com Principal e '+ SSH, SSL, ...' quando nenhuma aba de rede está ativa, e abre as abas SSH, SSL e Proxy quando gravadas na conexão", () => {
+    const semRede = render({ mode: "edit", connection: mes });
+    expect(semRede).toContain(">Principal<");
+    expect(semRede).toContain("SSH, SSL, ...");
+    expect(semRede).toContain('<input type="hidden" name="sshEnabled" value="false"/>');
+    expect(semRede).toContain('<input type="hidden" name="sslEnabled" value="false"/>');
+    expect(semRede).toContain('<input type="hidden" name="proxyEnabled" value="false"/>');
+
+    const comRede = render({
+      mode: "edit",
+      connection: {
+        ...mes,
+        ssh: {
+          host: "bastion.exemplo.local",
+          port: 2222,
+          userName: "pedro",
+          authMethod: "privateKey",
+          privateKeyPath: "/chaves/id_ed25519",
+          hasSecret: true,
+          saveCredentials: true,
+          ignoreHostVerification: true,
+          keepAliveIntervalMs: 15000,
+          tunnelTimeoutMs: 10000,
+          localHost: "127.0.0.1",
+          localPort: 54321,
+          remoteHost: null,
+          remotePort: 0,
+          hostKeyFingerprint: "SHA256:ohD8VZEXGWo6Ez8GSEJQ9WpafgLFsOfLOtGGQCQo6Og",
+        },
+        ssl: {
+          caCertificatePath: "/certs/ca.pem",
+          clientCertificatePath: "/certs/client.crt",
+          clientKeyPath: "/certs/client.key",
+          sslMode: "verify-full",
+        },
+        proxy: {
+          host: "socks.exemplo.local",
+          port: 1080,
+          userName: "proxy_user",
+          hasPassword: true,
+          saveCredentials: true,
+        },
+      },
+    });
+
+    expect(comRede).toContain('<input type="hidden" name="sshEnabled" value="true"/>');
+    expect(comRede).toContain('<input type="hidden" name="sslEnabled" value="true"/>');
+    expect(comRede).toContain('<input type="hidden" name="proxyEnabled" value="true"/>');
+    expect(comRede).toContain('value="bastion.exemplo.local"');
+    expect(comRede).toContain('value="/chaves/id_ed25519"');
+    expect(comRede).toContain('value="SHA256:ohD8VZEXGWo6Ez8GSEJQ9WpafgLFsOfLOtGGQCQo6Og"');
+    expect(comRede).toContain('value="/certs/ca.pem"');
+    expect(comRede).toContain('value="/certs/client.key"');
+    expect(comRede).toContain('value="socks.exemplo.local"');
+  });
 });

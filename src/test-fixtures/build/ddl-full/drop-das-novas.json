@@ -1,0 +1,105 @@
+{
+  "context": {
+    "modelName": "catalogo",
+    "prismVersion": "0.6.0",
+    "generatedAt": "29/10/2026 14:32",
+    "baseLabel": null
+  },
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "categoria",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "nome",
+            "exactName": false,
+            "originName": null,
+            "type": "varchar(60)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "public",
+        "name": "item",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "categoria_id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          {
+            "name": null,
+            "columns": ["categoria_id"],
+            "target": { "schema": "public", "table": "categoria", "columns": ["id"] },
+            "onDelete": "cascade",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": true
+    },
+    "ignoredWarnings": []
+  },
+  "expected": "-- Modelo catalogo · PostgreSQL · gerado pelo Prism 0.6.0 em 29/10/2026 14:32\n-- Tudo: o esquema inteiro, do zero.\n\nDROP TABLE IF EXISTS public.item;\nDROP TABLE IF EXISTS public.categoria;\n\nCREATE TABLE public.categoria (\n  id   bigint GENERATED ALWAYS AS IDENTITY,\n  nome varchar(60) NOT NULL,\n  CONSTRAINT pk_categoria PRIMARY KEY (id)\n);\n\nCREATE TABLE public.item (\n  id           bigint GENERATED ALWAYS AS IDENTITY,\n  categoria_id bigint NOT NULL,\n  CONSTRAINT pk_item PRIMARY KEY (id),\n  CONSTRAINT fk_item_categoria FOREIGN KEY (categoria_id)\n    REFERENCES public.categoria (id) ON DELETE CASCADE\n);"
+}

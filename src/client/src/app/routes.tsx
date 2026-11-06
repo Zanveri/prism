@@ -3,7 +3,8 @@ import { Navigate, Outlet, type RouteObject } from "react-router";
 import { RemountOnLock } from "@/app/_components/remount-on-lock";
 import { TabHistory } from "@/app/_components/tab-history";
 import { VaultGuard } from "@/app/_components/vault-guard";
-import { WorkbenchSlot } from "@/app/_components/workbench-slot";
+import { KeepAliveSlot, WorkbenchSlot } from "@/app/_components/workbench-slot";
+import { BuildPage } from "@/app/build/page";
 import { LegacyConnectionsRedirect } from "@/app/connections/page";
 import { DriversRedirect } from "@/app/drivers/page";
 import { FontSync } from "@/app/settings/_components/font-sync";
@@ -58,6 +59,9 @@ export const routes: RouteObject[] = [
             <WorkbenchSlot>
               <WorkbenchPage />
             </WorkbenchSlot>
+            <KeepAliveSlot path={pathsConfig.build} mountOnFirstVisit>
+              <BuildPage />
+            </KeepAliveSlot>
             <RemountOnLock>
               <Outlet />
             </RemountOnLock>
@@ -72,6 +76,7 @@ export const routes: RouteObject[] = [
           { path: pathsConfig.settings, element: <Navigate to={settingsTo()} replace /> },
           { path: pathsConfig.settingsSection, element: <SettingsPage /> },
           { path: pathsConfig.workbench },
+          { path: pathsConfig.build },
         ],
       },
     ],

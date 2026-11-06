@@ -1,5 +1,7 @@
 using CSharpFunctionalExtensions;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 
 namespace Prism.Infrastructure.Databases.Clients;
 
@@ -16,16 +18,16 @@ public enum EExportSqlRefusal
     NotRead
 }
 
-/// <summary>A recusa do comando da exportação: o tipo e o motivo, que vai para o detalhe (no `NotRead`, o motivo da RN-PROT-005, "um DELETE não é leitura").</summary>
-public sealed record ExportSqlRefusal(EExportSqlRefusal Kind, string Reason);
-
 /// <summary>
 /// RN-EXPORT-002 e 016: o comando que a exportação executa, montado e conferido antes do 202, pelo dialeto do banco da conexão e sem ir ao banco. É público,
 /// como o `ReadOnlySql`, porque quem começa a exportação é a Application.
 /// </summary>
 public static class ExportSql
 {
-    private const string SeveralStatementsMessage = "Cada exportação executa um comando só, e o texto enviado tem mais de um; nada foi executado.";
+    /// <summary>Os textos, no idioma do pedido: <c>ExportSql.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ExportSql));
+
+    private static string SeveralStatementsMessage => Texts.Get(nameof(SeveralStatementsMessage));
 
     /// <summary>
     /// Os Registros e o resultado: o comando como foi executado, com o filtro do resultado junto como no `queries` (RN-GRADE-011). Mais de um comando,
@@ -67,3 +69,6 @@ public static class ExportSql
     private static string Quote(string name)
         => $"\"{name.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 }
+
+/// <summary>A recusa do comando da exportação: o tipo e o motivo, que vai para o detalhe (no `NotRead`, o motivo da RN-PROT-005, "um DELETE não é leitura").</summary>
+public sealed record ExportSqlRefusal(EExportSqlRefusal Kind, string Reason);

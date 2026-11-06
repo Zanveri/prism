@@ -1,7 +1,7 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
 import { matchingParenthesis } from "../sql-statements";
-import type { ChainLevel, ChainOperator, ColumnRef, Declaration, Node, ParsedItem, Reassignment, Spreadable, TypeAnnotation } from "./ast";
+import type { ChainLevel, ChainOperator, ColumnRef, Declaration, Node, ParsedItem, Reassignment, Spreadable, TypeAnnotation, TypeDeclaration, TypeMember } from "./ast";
 import { closedNames, directFunctions, environmentNames, namespaceMembers, reservedWords, unsupportedOperatorWords, unsupportedWords } from "./catalog";
 import { locate, VariableError } from "./errors";
 import { Lexer, type Token } from "./lexer";
@@ -43,7 +43,35 @@ export function declaredNameRefusal(raw: string): string | null {
   return null;
 }
 
-type Shape = "declaration" | "reassignment";
+/**
+ * Confere o nome de uma `interface` ou de um `type` (RN-VAR-002 e 003): as regras do nome de variável e, como no TypeScript, nenhum dos tipos da linguagem nem
+ * `null`. Os nomes de tipo ficam num espaço de nomes à parte do das variáveis: `Cliente` pode ser uma interface e uma variável.
+ */
+export function typeNameRefusal(raw: string): string | null {
+  const name = normalizeName(raw);
+  if (baseTypes.has(name) || name === "null") return phrase.typeNameReserved(name);
+  const refusal = declaredNameRefusal(name);
+  return refusal === phrase.reservedName(name) ? phrase.typeNameReserved(name) : refusal;
+}
+
+type Shape = "declaration" | "reassignment" | "type";
+
+/**
+ * O tipo com nome que começa em `start` (RN-VAR-002): `interface` e um nome, seguido de `{` ou de `extends` (numa posição de item, `interface` e um nome bastam, como
+ * o `let`); e `type`, um nome e `=`, só numa posição de item. `type` não é palavra da linguagem: `type = 'x'` é a reatribuição de uma variável `type`, e no meio de um
+ * comando (`UPDATE t SET` e, na linha de baixo, `type = 'x'`) a linha é SQL.
+ */
+function typeShape(source: string, start: number, atItem: boolean): boolean {
+  const word = /^(interface|type)[ \t]+/.exec(source.slice(start, start + 12));
+  if (word === null || (word[1] === "type" && !atItem)) return false;
+  let at = start + word[0].length;
+  const match = nameAtPattern.exec(source.slice(at, at + 200));
+  if (match === null) return false;
+  at += match[0].length;
+  while (source[at] === " " || source[at] === "\t") at++;
+  if (word[1] === "type") return source[at] === "=" && source[at + 1] !== "=" && source[at + 1] !== ">";
+  return atItem || source[at] === "{" || /^extends(?![\p{ID_Continue}$])/u.test(source.slice(at, at + 8));
+}
 
 /**
  * O nome como a forma de um item o lê (`itemShape`): o que o analisador léxico leria como nome, e também o que ele recusa dentro de um (o escape `\u` e os caracteres
@@ -53,10 +81,11 @@ const nameAtPattern = /^(?:[\p{ID_Start}_$]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\
 
 /**
  * O que o texto em `start` parece ser, só pela forma, sem ler o resto (RN-VAR-001): `let` ou `const` em minúsculas, um espaço, um nome e então `=`, `:` ou o fim da
- * declaração (`;`, a quebra de linha, o fim do texto ou um comentário); ou um nome seguido de `=` (e não de `==`). Nulo quando é SQL. `atItem` diz que o texto está
- * numa posição de item, onde `let` e um nome bastam.
+ * declaração (`;`, a quebra de linha, o fim do texto ou um comentário); um tipo com nome (`typeShape`); ou um nome seguido de `=` (e não de `==`). Nulo quando é SQL.
+ * `atItem` diz que o texto está numa posição de item, onde `let` e um nome bastam.
  */
 export function itemShape(source: string, start: number, atItem = false): Shape | null {
+  if (typeShape(source, start, atItem)) return "type";
   const head = source.slice(start, start + 6);
   const keyword = head.startsWith("let") && !/^let[\p{ID_Continue}$]/u.test(head) ? 3 : head.startsWith("const") && !/^const[\p{ID_Continue}$]/u.test(head) ? 5 : 0;
 
@@ -183,12 +212,104 @@ class Parser {
     return normalizeName(token.text);
   }
 
-  parseItem(): ParsedItem {
+  parseItem(): ParsedItem | TypeDeclaration {
     const first = this.tok;
     if (first.type !== "name") throw this.unexpected(phrase.expectedName());
 
     if (first.text === "let" || first.text === "const") return this.parseDeclaration(first.text === "let");
+    if ((first.text === "interface" || first.text === "type") && typeShape(this.source, first.start, true)) return this.parseTypeDeclaration(first.text === "interface");
     return this.parseReassignment();
+  }
+
+  /** O nome dado por uma `interface` ou por um `type` (RN-VAR-003). */
+  private typeName(): { name: string; start: number } {
+    const token = this.tok;
+    if (token.type !== "name") throw new VariableError(phrase.expectedTypeName(), this.atEnd() ? this.previousEnd : token.start);
+    const refusal = typeNameRefusal(token.text);
+    if (refusal !== null) throw new VariableError(refusal, token.start);
+    this.advance();
+    return { name: normalizeName(token.text), start: token.start };
+  }
+
+  /** `interface Nome [ extends A, B ] { campos }` e `type Nome = tipo` (RN-VAR-002). */
+  private parseTypeDeclaration(isInterface: boolean): TypeDeclaration {
+    const keyword = this.tok;
+    this.advance();
+    const { name, start: nameStart } = this.typeName();
+    this.name = name;
+    this.lexer.declarationName = name;
+
+    if (!isInterface) {
+      // O `=` já foi visto pela forma do item (`typeShape`).
+      this.advance(true);
+      const type = this.parseType();
+      if (type.base === "sql") throw new VariableError(phrase.sqlNotInType(), type.start);
+      this.finish(name, phrase.expectedEndOfType);
+      return { kind: "alias", name, nameStart, extends: [], members: [], type, start: keyword.start, end: this.previousEnd };
+    }
+
+    const bases: { name: string; start: number }[] = [];
+    if (this.isName("extends")) {
+      this.advance(true);
+      for (;;) {
+        bases.push(this.typeReference());
+        if (!this.is(",")) break;
+        this.advance(true);
+      }
+    }
+    if (this.is("<")) throw this.unexpected(phrase.noGenerics(name));
+    if (!this.is("{")) throw this.unexpected(phrase.expectedOpenBrace(name));
+    const members = this.parseMembers();
+    this.finish(name, phrase.expectedEndOfType);
+    return { kind: "interface", name, nameStart, extends: bases, members, type: null, start: keyword.start, end: this.previousEnd };
+  }
+
+  /** O nome de um tipo citado (no `extends`): o tipo se resolve depois, contra os do script. */
+  private typeReference(): { name: string; start: number } {
+    const token = this.tok;
+    if (token.type !== "name") throw this.unexpected(phrase.expectedTypeName());
+    this.advance();
+    return { name: normalizeName(token.text), start: token.start };
+  }
+
+  /**
+   * Os campos entre `{` e `}`, com `tok` no `{` (RN-VAR-002): `nome: tipo` e `nome?: tipo`, separados por `;`, `,` ou pela quebra de linha, como no TypeScript. A
+   * chave é um nome ou um texto entre aspas, como no objeto escrito. O `sql` não é campo (continua só no `const` do topo).
+   */
+  private parseMembers(): TypeMember[] {
+    const opener = this.tok;
+    const line = this.lineOf(opener.start);
+    const members: TypeMember[] = [];
+    const seen = new Set<string>();
+    this.depth++;
+    this.advance(true);
+    while (!this.is("}")) {
+      const key = this.tok;
+      if (key.type === "end") throw new VariableError(phrase.expectedCloseBrace(line), this.previousEnd);
+      let name: string;
+      if (key.type === "name") name = key.text;
+      else if (key.type === "string") name = key.cooked ?? "";
+      else throw this.unexpected(phrase.expectedFieldName());
+      if (forbiddenMembers.has(name)) throw new VariableError(phrase.keyForbidden(name), key.start);
+      if (seen.has(name)) throw new VariableError(phrase.duplicateMember(name), key.start);
+      seen.add(name);
+      if (members.length === limits.objectFields) throw new VariableError(phrase.objectTooBig(), key.start);
+
+      this.advance();
+      const optional = this.is("?");
+      if (optional) this.advance();
+      if (!this.is(":")) throw this.unexpected(phrase.expectedColonInMember(name));
+      this.advance(true);
+      const type = this.nest(() => this.parseType());
+      if (type.base === "sql") throw new VariableError(phrase.sqlNotInType(), type.start);
+      members.push({ name, nameStart: key.start, optional, type });
+
+      if (this.is(";") || this.is(",")) this.advance(true);
+      else if (!this.is("}") && !this.tok.newline) throw this.unexpected(phrase.expectedCloseBrace(line));
+    }
+    this.depth--;
+    this.advance();
+    return members;
   }
 
   private parseDeclaration(mutable: boolean): Declaration {
@@ -235,15 +356,15 @@ class Parser {
   }
 
   /** O fim do item: o `;` (que vai com ele) ou a quebra de linha (RN-VAR-001); qualquer outra coisa na mesma linha é um erro. */
-  private finish(name: string): void {
+  private finish(name: string, expected: (name: string, found: string) => string = phrase.expectedEnd): void {
     if (this.is(";")) {
       this.advance();
       // O que sobra na linha depois do `;` não é da declaração (um comentário vai com ela, em `declarationEnd`).
       return;
     }
     if (this.atEnd()) return;
-    if (this.is(",")) throw new VariableError(phrase.oneVariablePerLet(), this.tok.start);
-    throw this.unexpected(phrase.expectedEnd(name, describe(this.tok)));
+    if (this.is(",") && expected === phrase.expectedEnd) throw new VariableError(phrase.oneVariablePerLet(), this.tok.start);
+    throw this.unexpected(expected(name, describe(this.tok)));
   }
 
   // -------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -268,25 +389,38 @@ class Parser {
     return { schema, table, column, text: parts.join("."), start, end };
   }
 
+  /**
+   * `tipo = tipo-simples [ "|" "null" ]`, com `tipo-base = "number" | "string" | "boolean" | "Date" | "sql" | coluna | nome-de-tipo | "{" campos "}"` (RN-VAR-002
+   * e 004). O nome sem ponto que não é um tipo da linguagem (`Cliente`, e também `any`) é o de uma interface ou de um `type`: se ele existe, a conferência diz
+   * (`named-types.ts`), porque o tipo pode ser declarado depois de usado, como no TypeScript.
+   */
   private parseType(): TypeAnnotation {
     const first = this.tok;
-    if (first.type === "punct" && first.text === "{") throw new VariableError(phrase.objectNotAnnotated(), first.start);
     // Depois do `:` a gramática espera um tipo: o que vier no lugar dele (um `=`, o fim) é "Esperava o tipo", e não o erro do operador (RN-VAR-012).
-    if (first.type !== "name" && !(first.type === "string" && first.text.startsWith('"'))) throw new VariableError(phrase.expectedType(), first.type === "end" ? this.previousEnd : first.start);
+    if (first.type !== "name" && !(first.type === "string" && first.text.startsWith('"')) && !(first.type === "punct" && first.text === "{"))
+      throw new VariableError(phrase.expectedType(), first.type === "end" ? this.previousEnd : first.start);
 
     let base: TypeAnnotation["base"];
     let column: ColumnRef | null = null;
+    let named: TypeAnnotation["named"];
+    let members: TypeMember[] | undefined;
     const next = this.source[first.end];
 
-    if (first.type === "name" && baseTypes.has(first.text) && next !== ".") {
+    if (first.type === "punct") {
+      members = this.parseMembers();
+      base = "object";
+    } else if (first.type === "name" && baseTypes.has(first.text) && next !== ".") {
       base = first.text as TypeAnnotation["base"];
       this.advance();
     } else if (first.type === "string" || next === ".") {
       column = this.parseColumn();
       base = "column";
     } else {
-      // Um nome sem ponto que não é um tipo (`any`, `object`, `pedido`): o tipo não existe.
-      throw new VariableError(phrase.unknownType(first.text), first.start);
+      named = { name: normalizeName(first.text), start: first.start };
+      base = "named";
+      this.advance();
+      // Os genéricos não existem aqui (`Array<number>`, `Lista<T>`).
+      if (this.is("<")) throw new VariableError(phrase.noGenerics(first.text), first.start);
     }
 
     let list = false;
@@ -307,7 +441,17 @@ class Parser {
     }
 
     const end = this.previousEnd;
-    return { base, column, list, nullable, text: this.source.slice(first.start, end).trim(), start: first.start, end };
+    return {
+      base,
+      column,
+      ...(named === undefined ? {} : { named }),
+      ...(members === undefined ? {} : { members }),
+      list,
+      nullable,
+      text: this.source.slice(first.start, end).trim().replace(/\s+/g, " "),
+      start: first.start,
+      end,
+    };
   }
 
   // -------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -586,12 +730,12 @@ class Parser {
       let key: string;
       if (keyToken.type === "name") key = keyToken.text;
       else if (keyToken.type === "string") key = keyToken.cooked ?? "";
-      else if (keyToken.type === "punct" && keyToken.text === "[") throw new VariableError(phrase.noVarOrFunctionHere("A chave calculada"), keyToken.start);
+      else if (keyToken.type === "punct" && keyToken.text === "[") throw new VariableError(phrase.noVarOrFunctionHere(phrase.computedKey), keyToken.start);
       else throw this.unexpected(phrase.expectedFieldName());
       if (forbiddenMembers.has(key)) throw new VariableError(phrase.keyForbidden(key), keyToken.start);
 
       this.advance();
-      if (!this.is(":")) throw this.unexpected(this.is(",") || this.is("}") ? phrase.noVarOrFunctionHere(`A forma curta { ${key} }`) : phrase.expectedColonInObject());
+      if (!this.is(":")) throw this.unexpected(this.is(",") || this.is("}") ? phrase.noVarOrFunctionHere(phrase.shortForm(key)) : phrase.expectedColonInObject());
       this.advance(true);
       pairs.push({ key, keyStart: keyToken.start, value: this.parseExpression() });
     });
@@ -695,18 +839,18 @@ class Parser {
   }
 }
 
-export type ParseResult = { item: ParsedItem; end: number };
+export type ParseResult = { item: ParsedItem | TypeDeclaration; end: number };
 
 /**
- * Lê o item (declaração ou reatribuição) que começa em `from` no script `source`, depois dos espaços e dos comentários, e devolve a árvore e onde ele acaba: depois
- * do `;` e dos comentários que sobram na mesma linha (RN-VAR-001). Lança `VariableError` com a frase e a posição; as posições são as do script inteiro.
+ * Lê o item (declaração, reatribuição ou tipo com nome) que começa em `from` no script `source`, depois dos espaços e dos comentários, e devolve a árvore e onde ele
+ * acaba: depois do `;` e dos comentários que sobram na mesma linha (RN-VAR-001). Lança `VariableError` com a frase e a posição; as posições são as do script inteiro.
  */
 export function parseItem(source: string, from: number, engine?: Engine): ParseResult {
   const parser = new Parser(source, from, source.length, engine, 0, 0, from, "");
   const item = parser.parseItem();
 
   const bytes = new TextEncoder().encode(source.slice(item.start, item.end)).length - parser.queryChars;
-  if (bytes > limits.declarationBytes) throw new VariableError(phrase.declarationTooBig(item.kind === "declaration" || item.kind === "reassignment" ? item.name : ""), item.start);
+  if (bytes > limits.declarationBytes) throw new VariableError(phrase.declarationTooBig(item.name), item.start);
   return { item, end: declarationEnd(source, item.end) };
 }
 

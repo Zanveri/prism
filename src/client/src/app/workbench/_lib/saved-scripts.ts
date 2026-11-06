@@ -184,17 +184,18 @@ export function refusalProblem(code: string, name: string): ScriptNameProblem | 
   return null;
 }
 
-export type ScriptAction = "open" | "rename" | "edit" | "move" | "copySql" | "makeGeneric" | "bind" | "delete";
+export type ScriptAction = "open" | "runWithValues" | "rename" | "edit" | "move" | "copySql" | "makeGeneric" | "bind" | "delete";
 
 /**
  * RN-SCRIPT-003: o menu de um script na seção "Scripts", em grupos (entre dois grupos, um separador). Quem dá o rótulo e executa é a seção. RN-SCRIPT-005: o
  * script com conexão oferece "Tornar genérico"; o genérico, "Vincular à conexão da aba", que só vale com o script aberto numa aba que tenha conexão (`bindable`):
  * sem ela, o item fica apagado e diz por quê. RN-SCRIPT-006: "Editar script…", logo depois do "Renomear", muda o nome, o ícone e a cor. RN-SCRIPT-009: "Mover
- * para…", logo depois do "Editar script…", leva o script a outra pasta.
+ * para…", logo depois do "Editar script…", leva o script a outra pasta. RN-VAR-026: "Executar com valores…", logo depois de "Abrir", só no script que declara
+ * variáveis no topo (`declaresVariables`, da API).
  */
-export function scriptMenu(script: { generic: boolean; bindable: boolean }): { action: ScriptAction; disabled?: true }[][] {
+export function scriptMenu(script: { generic: boolean; bindable: boolean; declaresVariables?: boolean }): { action: ScriptAction; disabled?: true }[][] {
   const place = script.generic ? { action: "bind" as const, ...(script.bindable ? {} : { disabled: true as const }) } : { action: "makeGeneric" as const };
-  return [[{ action: "open" }], [{ action: "rename" }, { action: "edit" }, { action: "move" }, { action: "copySql" }, place], [{ action: "delete" }]];
+  return [[{ action: "open" }, ...(script.declaresVariables === true ? [{ action: "runWithValues" as const }] : [])], [{ action: "rename" }, { action: "edit" }, { action: "move" }, { action: "copySql" }, place], [{ action: "delete" }]];
 }
 
 export type ScriptFolderAction = "newSubfolder" | "rename" | "move" | "delete";

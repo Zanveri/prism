@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ConnectionFailedTitle" xml:space="preserve">
+    <value>Falha ao conectar no banco de dados.</value>
+  </data>
+  <data name="ExecutionFailedTitle" xml:space="preserve">
+    <value>Falha ao executar o comando.</value>
+  </data>
+  <data name="SessionNotFoundTitle" xml:space="preserve">
+    <value>Sessão com o banco não localizada.</value>
+  </data>
+  <data name="SessionBusyTitle" xml:space="preserve">
+    <value>A sessão está ocupada.</value>
+  </data>
+  <data name="NoOpenCursorTitle" xml:space="preserve">
+    <value>Não há resultado aberto.</value>
+  </data>
+  <data name="NoQueryToCountTitle" xml:space="preserve">
+    <value>Não há consulta para contar.</value>
+  </data>
+  <data name="TransactionControlNotSupportedTitle" xml:space="preserve">
+    <value>Controle de transação não é aceito.</value>
+  </data>
+  <data name="MultipleStatementsNotSupportedTitle" xml:space="preserve">
+    <value>Só um comando por execução.</value>
+  </data>
+  <data name="TransactionFailedTitle" xml:space="preserve">
+    <value>A transação tem um erro.</value>
+  </data>
+  <data name="CommandNotAllowedInTransactionTitle" xml:space="preserve">
+    <value>O comando não roda dentro de transação.</value>
+  </data>
+  <data name="NoOpenTransactionTitle" xml:space="preserve">
+    <value>Não há transação aberta.</value>
+  </data>
+  <data name="TransactionOpenTitle" xml:space="preserve">
+    <value>Há uma transação aberta.</value>
+  </data>
+  <data name="TransactionsNotAvailableTitle" xml:space="preserve">
+    <value>O banco não tem transação.</value>
+  </data>
+  <data name="IsolationLevelInvalidTitle" xml:space="preserve">
+    <value>Nível de isolamento inválido.</value>
+  </data>
+  <data name="DriverNotInstalledTitle" xml:space="preserve">
+    <value>Driver não instalado.</value>
+  </data>
+  <data name="ResultChangedTitle" xml:space="preserve">
+    <value>O resultado mudou.</value>
+  </data>
+  <data name="ResultNotEditableTitle" xml:space="preserve">
+    <value>O resultado é só leitura.</value>
+  </data>
+  <data name="EditInvalidTitle" xml:space="preserve">
+    <value>A alteração não se aplica.</value>
+  </data>
+  <data name="EditRowMismatchTitle" xml:space="preserve">
+    <value>O comando não afetou exatamente uma linha.</value>
+  </data>
+  <data name="EditAllRowsNotSupportedTitle" xml:space="preserve">
+    <value>A coluna inteira não se altera neste resultado.</value>
+  </data>
+  <data name="ResultNotFoundTitle" xml:space="preserve">
+    <value>Resultado não localizado.</value>
+  </data>
+  <data name="CellsInvalidTitle" xml:space="preserve">
+    <value>Células inválidas.</value>
+  </data>
+  <data name="FilterInvalidTitle" xml:space="preserve">
+    <value>Filtro inválido.</value>
+  </data>
+  <data name="QueryInvalidTitle" xml:space="preserve">
+    <value>Erro ao enviar dados para a API.</value>
+  </data>
+  <data name="ParametersMismatchTitle" xml:space="preserve">
+    <value>Os marcadores não batem com os valores.</value>
+  </data>
+  <data name="ConnectionReadOnlyTitle" xml:space="preserve">
+    <value>Conexão somente leitura.</value>
+  </data>
+  <data name="VariableQueryNotReadTitle" xml:space="preserve">
+    <value>A consulta da variável não é uma leitura.</value>
+  </data>
+  <data name="VariableQueryTooLargeTitle" xml:space="preserve">
+    <value>A consulta da variável passou do limite.</value>
+  </data>
+  <data name="ValuesInvalidTitle" xml:space="preserve">
+    <value>Erro ao enviar dados para a API.</value>
+  </data>
+  <data name="ValuesTableNotFoundTitle" xml:space="preserve">
+    <value>Tabela não localizada.</value>
+  </data>
+</root>

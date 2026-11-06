@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="VerificationIntervalMessage" xml:space="preserve">
+    <value>La verificación debe hacerse cada 5 a 3.600 segundos.</value>
+  </data>
+  <data name="NameLength" xml:space="preserve">
+    <value>El nombre de la conexión debe tener de 1 a 80 caracteres.</value>
+  </data>
+  <data name="NameControl" xml:space="preserve">
+    <value>El nombre de la conexión no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="HostRequired" xml:space="preserve">
+    <value>Indica el host.</value>
+  </data>
+  <data name="HostLength" xml:space="preserve">
+    <value>El host puede tener hasta 255 caracteres.</value>
+  </data>
+  <data name="HostControl" xml:space="preserve">
+    <value>El host no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="PortRange" xml:space="preserve">
+    <value>Indica un puerto de 1 a 65535.</value>
+  </data>
+  <data name="DatabaseRequired" xml:space="preserve">
+    <value>Indica la base de datos.</value>
+  </data>
+  <data name="DatabaseLength" xml:space="preserve">
+    <value>La base de datos puede tener hasta 128 caracteres.</value>
+  </data>
+  <data name="DatabaseControl" xml:space="preserve">
+    <value>La base de datos no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Indica el usuario de la base de datos.</value>
+  </data>
+  <data name="UserNameLength" xml:space="preserve">
+    <value>El usuario de la base de datos puede tener hasta 128 caracteres.</value>
+  </data>
+  <data name="UserNameControl" xml:space="preserve">
+    <value>El usuario de la base de datos no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="PasswordLength" xml:space="preserve">
+    <value>La contraseña de la base de datos puede tener hasta 1.024 caracteres.</value>
+  </data>
+  <data name="VerificationQueryLength" xml:space="preserve">
+    <value>La consulta de verificación puede tener como máximo 1.000 caracteres.</value>
+  </data>
+  <data name="VerificationQueryControl" xml:space="preserve">
+    <value>La consulta de verificación no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="VerificationQueryNotReadOnly" xml:space="preserve">
+    <value>La consulta de verificación debe ser una sola lectura: {0}.</value>
+  </data>
+  <data name="SshHostLength" xml:space="preserve">
+    <value>El host del túnel SSH puede tener hasta 255 caracteres.</value>
+  </data>
+  <data name="SshHostControl" xml:space="preserve">
+    <value>El host del túnel SSH no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SshUserNameLength" xml:space="preserve">
+    <value>El usuario del túnel SSH puede tener hasta 128 caracteres.</value>
+  </data>
+  <data name="SshUserNameControl" xml:space="preserve">
+    <value>El usuario del túnel SSH no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SshPrivateKeyPathLength" xml:space="preserve">
+    <value>La ruta de la clave privada SSH puede tener hasta 1.024 caracteres.</value>
+  </data>
+  <data name="SshPrivateKeyPathControl" xml:space="preserve">
+    <value>La ruta de la clave privada SSH no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SshLocalHostLength" xml:space="preserve">
+    <value>El host local del túnel SSH puede tener hasta 255 caracteres.</value>
+  </data>
+  <data name="SshLocalHostControl" xml:space="preserve">
+    <value>El host local del túnel SSH no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SshRemoteHostLength" xml:space="preserve">
+    <value>El host remoto del túnel SSH puede tener hasta 255 caracteres.</value>
+  </data>
+  <data name="SshRemoteHostControl" xml:space="preserve">
+    <value>El host remoto del túnel SSH no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SshHostKeyFingerprintLength" xml:space="preserve">
+    <value>La huella digital de la clave del servidor SSH puede tener hasta 255 caracteres.</value>
+  </data>
+  <data name="SshHostKeyFingerprintControl" xml:space="preserve">
+    <value>La huella digital de la clave del servidor SSH no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SslCaCertificatePathLength" xml:space="preserve">
+    <value>La ruta del certificado CA puede tener hasta 1.024 caracteres.</value>
+  </data>
+  <data name="SslCaCertificatePathControl" xml:space="preserve">
+    <value>La ruta del certificado CA no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SslClientCertificatePathLength" xml:space="preserve">
+    <value>La ruta del certificado de cliente puede tener hasta 1.024 caracteres.</value>
+  </data>
+  <data name="SslClientCertificatePathControl" xml:space="preserve">
+    <value>La ruta del certificado de cliente no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SslClientKeyPathLength" xml:space="preserve">
+    <value>La ruta de la clave privada de cliente puede tener hasta 1.024 caracteres.</value>
+  </data>
+  <data name="SslClientKeyPathControl" xml:space="preserve">
+    <value>La ruta de la clave privada de cliente no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="ProxyHostLength" xml:space="preserve">
+    <value>El host del proxy SOCKS puede tener hasta 255 caracteres.</value>
+  </data>
+  <data name="ProxyHostControl" xml:space="preserve">
+    <value>El host del proxy SOCKS no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="ProxyUserNameLength" xml:space="preserve">
+    <value>El usuario del proxy SOCKS puede tener hasta 128 caracteres.</value>
+  </data>
+  <data name="ProxyUserNameControl" xml:space="preserve">
+    <value>El usuario del proxy SOCKS no puede tener caracteres de control ni de dirección del texto.</value>
+  </data>
+  <data name="SshHostRequired" xml:space="preserve">
+    <value>Indica el host del túnel SSH.</value>
+  </data>
+  <data name="SshPortRange" xml:space="preserve">
+    <value>Indica un puerto SSH de 1 a 65535.</value>
+  </data>
+  <data name="SshUserNameRequired" xml:space="preserve">
+    <value>Indica el usuario del túnel SSH.</value>
+  </data>
+  <data name="SshAuthMethodInvalid" xml:space="preserve">
+    <value>Elige el método de autenticación SSH: contraseña o clave privada.</value>
+  </data>
+  <data name="SshPrivateKeyPathRequired" xml:space="preserve">
+    <value>Indica la ruta de la clave privada SSH.</value>
+  </data>
+  <data name="SshSecretLength" xml:space="preserve">
+    <value>La contraseña o frase de contraseña SSH puede tener hasta 1.024 caracteres.</value>
+  </data>
+  <data name="SshKeepAliveRange" xml:space="preserve">
+    <value>El intervalo de keep-alive SSH debe ser de 0 a 3.600.000 ms.</value>
+  </data>
+  <data name="SshTimeoutRange" xml:space="preserve">
+    <value>El tiempo de espera de conexión del túnel SSH debe ser de 0 a 600.000 ms.</value>
+  </data>
+  <data name="SshLocalPortRange" xml:space="preserve">
+    <value>Indica un puerto local de 0 a 65535.</value>
+  </data>
+  <data name="SshRemotePortRange" xml:space="preserve">
+    <value>Indica un puerto remoto de 0 a 65535.</value>
+  </data>
+  <data name="SslModeInvalid" xml:space="preserve">
+    <value>Elige un modo SSL válido.</value>
+  </data>
+  <data name="ProxyHostRequired" xml:space="preserve">
+    <value>Indica el host del proxy SOCKS.</value>
+  </data>
+  <data name="ProxyPortRange" xml:space="preserve">
+    <value>Indica un puerto del proxy SOCKS de 1 a 65535.</value>
+  </data>
+  <data name="ProxyPasswordLength" xml:space="preserve">
+    <value>La contraseña del proxy SOCKS puede tener hasta 1.024 caracteres.</value>
+  </data>
+</root>

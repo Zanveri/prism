@@ -1013,7 +1013,7 @@ public sealed class PostgresClientTests : DatabaseClientContractTests
     {
         await using var connection = await OpenAsync();
 
-        var outcome = await connection.ExecuteAsync("-- abre\rBEGIN", CancellationToken.None);
+        var outcome = await connection.ExecuteAsync("-- abre\rCOMMIT PREPARED 'x'", CancellationToken.None);
         var pending = await ReadFromAnotherConnectionAsync(PendingWorkQuery);
 
         Assert.That(outcome.IsFailure, Is.True);

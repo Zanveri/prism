@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Configurações, Auditoria</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#7DB2FF}a:hover{color:#A9CBFF}
+</style>
+</helmet>
+<div style="height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+
+<header style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 56px; box-sizing: border-box; padding: 8px 16px 8px 24px; background: #14181D; border-bottom: 1px solid #2A313B">
+<h1 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Configurações</h1>
+<span style="display: flex; align-items: center; gap: 8px; color: #B4BCC8"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>marina.costa</span>
+<a href="Historico.dc.html" style="margin-left: auto; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; text-decoration: none">Voltar à área de trabalho</a>
+</header>
+
+<div style="flex: 1 1 0; min-height: 0; display: flex; flex-wrap: wrap">
+<nav aria-label="Seções das configurações" style="flex: 0 1 220px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 16px 12px; background: #14181D; border-right: 1px solid #2A313B">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="10">
+<a href="#" aria-current="{{n.current}}" style="{{n.style}}">{{n.label}}</a>
+</sc-for>
+</nav>
+
+<main style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column">
+<div style="flex: none; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24px; padding: 20px 24px 14px">
+<div style="flex: 1 1 420px; min-width: 0">
+<h2 style="margin: 0; display: flex; align-items: center; gap: 10px; font-size: 18px; line-height: 26px; font-weight: 600"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#7DB2FF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2 3.5 4.5v5c0 4 2.8 7 6.5 8.5 3.7-1.5 6.5-4.5 6.5-8.5v-5Z"></path><path d="m7 10 2 2 4-4"></path></svg>Auditoria</h2>
+<p style="margin: 4px 0 0; color: #B4BCC8; max-width: 70ch">Tudo o que foi executado e as ações da conta, cifrado no diário de marina.costa. Só quem entra com esta conta vê.</p>
+</div>
+<div style="display: flex; gap: 20px; color: #B4BCC8; font-size: 12px">
+<span><strong style="display: block; color: #E6EAF0; font-size: 16px; font-weight: 600">48.213</strong>registros</span>
+<span><strong style="display: block; color: #E6EAF0; font-size: 16px; font-weight: 600">01/08/2026</strong>mais antigo</span>
+<span><strong style="display: block; color: #E6EAF0; font-size: 16px; font-weight: 600">90 dias</strong>guarda · 31 MB</span>
+</div>
+</div>
+
+<div role="search" aria-label="Filtros da auditoria" style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 24px 12px">
+<label style="flex: 1 1 260px; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#8E99A8" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="m10.5 10.5 3 3"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Buscar</span><input type="search" placeholder="Buscar no comando, na mensagem, na conexão…" style="flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: 0; color: #E6EAF0; font: inherit"></label>
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="6">
+<button type="button" aria-haspopup="listbox" style="{{f.style}}"><span style="color: #8E99A8">{{f.label}}</span><span>{{f.value}}</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4.5 3 3 3-3"></path></svg></button>
+</sc-for>
+<button type="button" style="height: 34px; padding: 0 10px; background: transparent; border: 0; color: #7DB2FF; font: inherit">Limpar filtros</button>
+</div>
+
+<div style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 24px 12px; font-size: 12px; color: #B4BCC8">
+<span>Ativos:</span>
+<span style="display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; background: #3A1F1C; border-radius: 12px; color: #FF8A7A; font-weight: 600">Produção<button type="button" aria-label="Tirar o filtro Produção" style="display: flex; padding: 0; background: transparent; border: 0; color: inherit"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m2 2 6 6M8 2 2 8"></path></svg></button></span>
+<span style="display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; background: #232A33; border-radius: 12px; color: #E6EAF0">Alto e Crítico<button type="button" aria-label="Tirar o filtro de nível" style="display: flex; padding: 0; background: transparent; border: 0; color: inherit"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m2 2 6 6M8 2 2 8"></path></svg></button></span>
+<span style="display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; background: #232A33; border-radius: 12px; color: #E6EAF0">7 dias</span>
+<span style="margin-left: auto">37 registros encontrados</span>
+</div>
+
+<div style="flex: 1 1 0; min-height: 0; display: flex; flex-wrap: wrap; border-top: 1px solid #2A313B">
+<div style="flex: 999 1 560px; min-width: 0; overflow: auto">
+<table style="width: 100%; border-collapse: collapse">
+<thead>
+<tr style="position: sticky; top: 0; background: #14181D; color: #B4BCC8; text-align: left; font-size: 12px">
+<th scope="col" style="padding: 8px 12px 8px 24px; font-weight: 500; white-space: nowrap">Data e hora</th>
+<th scope="col" style="padding: 8px 12px; font-weight: 500">Nível</th>
+<th scope="col" style="padding: 8px 12px; font-weight: 500">Evento</th>
+<th scope="col" style="padding: 8px 12px; font-weight: 500">Conexão</th>
+<th scope="col" style="padding: 8px 12px; font-weight: 500">Ambiente</th>
+<th scope="col" style="padding: 8px 12px; font-weight: 500">Resultado</th>
+<th scope="col" style="padding: 8px 12px; font-weight: 500; text-align: right">Duração</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="10">
+<tr aria-selected="{{r.selected}}" style="{{r.rowStyle}}">
+<td style="padding: 8px 12px 8px 24px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; white-space: nowrap; color: #C9D1DC">{{r.at}}</td>
+<td style="padding: 8px 12px"><span style="{{r.levelStyle}}"><span aria-hidden="true">{{r.levelMark}}</span>{{r.level}}</span></td>
+<td style="padding: 8px 12px; min-width: 220px"><span style="font-weight: 500">{{r.event}}</span> <span style="color: #8E99A8">{{r.detail}}</span></td>
+<td style="padding: 8px 12px; white-space: nowrap">{{r.conn}}<span style="display: block; font-size: 12px; color: #8E99A8">{{r.db}}</span></td>
+<td style="padding: 8px 12px"><span style="padding: 1px 6px; border-radius: 4px; background: #3A1F1C; color: #FF8A7A; font-size: 11px; font-weight: 600">{{r.env}}</span></td>
+<td style="padding: 8px 12px; white-space: nowrap; color: {{r.outColor}}">{{r.outcome}}</td>
+<td style="padding: 8px 12px; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #B4BCC8">{{r.dur}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+
+<aside aria-label="Detalhe do registro" style="flex: 1 1 380px; max-width: 420px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px; background: #14181D; border-left: 1px solid #2A313B; overflow: auto">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 4px; background: #3A1F1C; color: #FF8A7A; font-size: 12px; font-weight: 600"><span aria-hidden="true">◆</span>Crítico</span>
+<span style="color: #8E99A8">nº 48.190</span>
+<button type="button" aria-label="Fechar o detalhe" style="margin-left: auto; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; background: transparent; border: 0; border-radius: 6px; color: #B4BCC8"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 3 8 8M11 3l-8 8"></path></svg></button>
+</div>
+<div>
+<h3 style="margin: 0; font-size: 15px; line-height: 22px; font-weight: 600">DELETE · 1.204 linhas afetadas</h3>
+<p style="margin: 2px 0 0; color: #B4BCC8">DELETE sem WHERE: apaga todas as linhas de producao.apontamento_tmp.</p>
+</div>
+<dl style="margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: 12px">
+<dt style="color: #8E99A8">Quando</dt><dd style="margin: 0">30/10/2026 13:48:07 → 13:48:08 (1,2 s)</dd>
+<dt style="color: #8E99A8">Conexão</dt><dd style="margin: 0">MES Produção · PostgreSQL · mes_prod</dd>
+<dt style="color: #8E99A8">Pasta</dt><dd style="margin: 0">Fábrica</dd>
+<dt style="color: #8E99A8">Ambiente</dt><dd style="margin: 0"><span style="padding: 1px 6px; border-radius: 4px; background: #3A1F1C; color: #FF8A7A; font-size: 11px; font-weight: 600">Produção</span> herdado de Fábrica</dd>
+<dt style="color: #8E99A8">Origem</dt><dd style="margin: 0">Editor (Ctrl+Enter)</dd>
+<dt style="color: #8E99A8">Proteções</dt><dd style="margin: 0">Confirmar: só irreversíveis · Somente leitura: não</dd>
+<dt style="color: #8E99A8">Confirmação</dt><dd style="margin: 0; color: #F2B644">Passou: “Executar mesmo assim”</dd>
+<dt style="color: #8E99A8">Resultado</dt><dd style="margin: 0; color: #5ED3A3">Concluído · Auto-commit</dd>
+</dl>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 12px; color: #8E99A8">Comando enviado</span><button type="button" style="margin-left: auto; height: 28px; padding: 0 10px; background: transparent; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit; font-size: 12px">Copiar</button><button type="button" style="height: 28px; padding: 0 10px; background: transparent; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit; font-size: 12px">Abrir no editor</button></div>
+<pre style="margin: 0; padding: 10px 12px; background: #0E1114; border: 1px solid #2A313B; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 18px; color: #C9D1DC; white-space: pre-wrap"><span style="color: #7DB2FF">DELETE FROM</span> producao.apontamento_tmp;</pre>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #1B2027; border: 1px solid #2A313B; border-radius: 8px">
+<div style="display: flex; align-items: center; gap: 10px">
+<label for="aud-guarda" style="font-weight: 500">Guardar os registros por</label>
+<select id="aud-guarda" style="margin-left: auto; height: 32px; padding: 0 8px; background: #0E1114; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit"><option>30 dias</option><option selected="">90 dias</option><option>180 dias</option><option>1 ano</option><option>Sempre</option></select>
+</div>
+<p style="margin: 0; font-size: 12px; color: #8E99A8">A escolha fica dentro do diário cifrado: ninguém sem a conta consegue encurtá-la.</p>
+<button type="button" style="align-self: flex-start; height: 32px; padding: 0 12px; background: transparent; border: 1px solid #6B3530; border-radius: 6px; color: #FF8A7A; font: inherit">Apagar registros…</button>
+</div>
+</aside>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const navBase = 'display: flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 6px; text-decoration: none;';
+    const nav = ['Conta', 'Importar', 'Aparência', 'Editor SQL', 'Resultados', 'Transações', 'Segurança', 'Auditoria', 'Atualizações', 'Drivers', 'Plugins', 'Sobre'].map((label) => ({
+      label, current: label === 'Auditoria' ? 'page' : 'false',
+      style: navBase + (label === 'Auditoria' ? ' background: #232A33; color: #E6EAF0; font-weight: 600;' : ' color: #B4BCC8;')
+    }));
+    const fBase = 'display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit;';
+    const fOn = fBase + ' border-color: #7DB2FF;';
+    const filters = [
+      { label: 'Período', value: '7 dias', style: fOn },
+      { label: 'Conexões', value: 'Todas', style: fBase },
+      { label: 'Ambientes', value: 'Produção', style: fOn },
+      { label: 'Nível', value: 'Alto, Crítico', style: fOn },
+      { label: 'Tipo', value: 'Todos', style: fBase },
+      { label: 'Resultado', value: 'Todos', style: fBase }
+    ];
+    const lv = {
+      Crítico: { mark: '◆', style: 'background: #3A1F1C; color: #FF8A7A;' },
+      Alto: { mark: '▲', style: 'background: #3A2A18; color: #F5A65B;' }
+    };
+    const out = { Concluído: '#5ED3A3', Erro: '#FF8A7A', Recusado: '#F2B644', Interrompido: '#8E99A8' };
+    const row = (at, level, event, detail, conn, db, outcome, dur, selected) => ({
+      at, level, event, detail, conn, db, outcome, dur, env: 'Produção',
+      levelMark: lv[level].mark,
+      levelStyle: 'display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 7px; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; ' + lv[level].style,
+      outColor: out[outcome], selected: selected ? 'true' : 'false',
+      rowStyle: 'border-bottom: 1px solid #1B2027;' + (selected ? ' background: #1E2C40; box-shadow: inset 2px 0 0 #7DB2FF;' : '')
+    });
+    return {
+      nav, filters,
+      rows: [
+        row('30/10 14:12:44', 'Alto', 'Senha da conexão revelada', '', 'MES Produção', 'conta', 'Concluído', '—'),
+        row('30/10 13:48:07', 'Crítico', 'DELETE', '· 1.204 linhas · sem WHERE', 'MES Produção', 'mes_prod', 'Concluído', '1,2 s', true),
+        row('30/10 11:05:19', 'Alto', 'ALTER TABLE', '· ADD COLUMN turno_ext', 'MES Produção', 'mes_prod', 'Concluído', '310 ms'),
+        row('30/10 09:41:02', 'Crítico', 'TRUNCATE', '· producao.log_coleta', 'ERP Informix', 'erp', 'Recusado', '—'),
+        row('29/10 18:20:55', 'Alto', 'Somente leitura desligado', '', 'ERP Informix', 'conexão', 'Concluído', '—'),
+        row('29/10 16:02:31', 'Crítico', 'DROP INDEX', '· ix_apont_ordem', 'MES Produção', 'mes_prod', 'Erro', '45 ms'),
+        row('29/10 10:14:08', 'Alto', 'GRANT', '· SELECT a bi_leitura', 'MES Produção', 'mes_prod', 'Concluído', '22 ms'),
+        row('28/10 17:55:40', 'Alto', 'Salvar da coluna inteira', '· status em 8.410 linhas', 'MES Produção', 'mes_prod', 'Concluído', '2,8 s'),
+        row('28/10 15:30:12', 'Crítico', 'UPDATE', '· sem WHERE · cancelado no meio', 'MES Produção', 'mes_prod', 'Interrompido', '12 s'),
+        row('28/10 09:12:03', 'Alto', 'Confirmação afrouxada', '· Todos → Só irreversíveis', 'MES Produção', 'conexão', 'Concluído', '—')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

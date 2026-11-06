@@ -14,7 +14,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 
 ```
 electron/        main.ts, preload.ts, api-process.ts, dbeaver-source.ts e dbeaver-messages.ts (a procura e a cópia do DBeaver), app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
-src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
+src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot/KeepAliveSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, build, drivers, settings)
 src/components/  ui/ (primitivos + index.ts; e tooltip.ts, a dica do app no lugar da do sistema, ligada pelo main.tsx), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
 src/lib/api/     prism-api.ts, prism-endpoints.ts, query-client.ts, bridge.ts, vault-lock.ts (o estado de bloqueio e a barreira dos pedidos), workspace-sync.ts ("grave as abas agora", antes de o cofre fechar)
@@ -358,6 +358,62 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   primeiro campo recusado; `TextField` (rótulo, campo e erro) faz a fiação de `aria-invalid` e
   `aria-describedby` (o erro tem o id `<id>-error`). Os quatro formulários (login, criar usuário,
   conexão e pasta) usam as duas peças; `apiFieldErrors` leva o `errors` de um 422 ao mesmo lugar.
+
+## Idiomas
+
+Fora da especificação (não há `RN-*` para isto): português (padrão), inglês e espanhol.
+
+- **Onde mora**: `electron/locale.ts` (a lista `locales`, os nomes, `Localized`, `pickCopy`; puro, a tela também o importa) e `locale-file.ts`
+  (`locale.json` na pasta de dados, como o `zoom.json`: desta instalação, e não do usuário, porque a entrada já abre nele). O processo principal o
+  lê ao abrir e o põe em `additionalArguments`; o preload o expõe em `window.prism.locale`; `src/lib/i18n.ts` dá o `locale` desta janela. Trocar em
+  Configurações › Aparência grava o da **próxima abertura**: os textos são escolhidos uma vez, ao carregar o módulo, e por isso
+  `const copy = xCopy.y` no topo de um componente continua valendo.
+- **Cada `x.copy.ts`** tem o objeto em português (`const pt = { ... } as const`), o tipo `export type XCopy = Localized<typeof pt>` e
+  `export const xCopy = pickCopy({ "pt-BR": pt, en: xCopyEn, es: xCopyEs })`; as traduções ficam ao lado, em `x.copy.en.ts` e `x.copy.es.ts`, tipadas
+  com `XCopy`. Uma chave a mais ou a menos não compila: o `pnpm typecheck` é a conferência. Os comentários ficam só no português.
+- **Texto de tela nunca fica solto num componente**: vai para o `*.copy.ts` da pasta, com as três línguas. A exceção é o que é contrato e não frase:
+  o que a API, uma fixture de `src/test-fixtures` ou um analisador compara (o que a pessoa escreve e o programa lê, como as palavras da linguagem das
+  variáveis), nomes de produto (Prism, DBeaver, Informix, Db2, PostgreSQL), SQL e códigos. Isso é igual nas três.
+- **Números e datas** de frase usam a etiqueta do idioma do texto: o `formatCount` e o `formatElapsed` já seguem o `locale`; nas traduções,
+  `toLocaleString("en")` e `toLocaleString("es")`. Ordenar e comparar nomes (`Intl.Collator`, `toLocaleLowerCase`) continua em `pt-BR`.
+- **Os testes rodam em português** (não há `window.prism`), e as fixtures continuam o contrato em português.
+- **Um idioma novo**: entra em `locales` e em `localeNames`; o `pnpm typecheck` aponta cada `*.copy.ts` sem ele; cada um ganha o `x.copy.<id>.ts`.
+  O plural é o de `formatCount` (1 é singular): um idioma com outras regras de plural pede `Intl.PluralRules`.
+- **A API escreve no idioma da tela**: o `apiRequest` manda `Accept-Language` com o `locale` (sem ele, o Electron mandaria o do sistema), e a API
+  responde títulos, detalhes e validação nele (seção `## Idiomas` de `src/api/AGENTS.md`). Por isso a tela nunca compara o texto de uma recusa: decide
+  pelo código. O texto gravado no diário é histórico e fica em português.
+- **O processo principal** não tem `window.prism`: o `main.ts` lê o `locale.json` ao abrir e passa o `locale` a quem manda frase à tela
+  (`createUpdater`, `createTransferDesk`, `createTransferSource`, `createDbeaverSource`, `startApi` e o menu Editar do macOS). Os textos ficam em
+  `electron/*.copy.ts` e `electron/update/update-messages.copy.ts`, como funções do idioma (`fileTransferCopy(locale)`), porque o módulo é
+  carregado antes de o idioma ser lido; sem o `locale`, o português. O splash tem os textos dele em `splash.ts`, por idioma. O log e os erros
+  internos, que não chegam à tela, ficam em português.
+- **Ficam em português de propósito**, por serem contrato: o conteúdo dos arquivos exportados e do SQL/DDL gerado (comentários, "Resultado"), os nomes de tipo da linguagem das variáveis
+  (`Date (dia)`) e as variáveis do nome de arquivo (`${tabela}`).
+
+O glossário, para os idiomas não divergirem de um módulo para outro (inglês e espanhol, em sentença: só a primeira letra maiúscula, como no
+português; espanhol com "tú"):
+
+| Português | English | Español |
+| --- | --- | --- |
+| cofre | vault | caja fuerte |
+| diário / auditoria | journal / audit | diario / auditoría |
+| área de trabalho | workspace | área de trabajo |
+| Construir (modo) | Build | Construir |
+| conexão / pasta / ambiente | connection / folder / environment | conexión / carpeta / entorno |
+| sessão / aba / janela | session / tab / window | sesión / pestaña / ventana |
+| navegador / árvore | navigator / tree | navegador / árbol |
+| banco (de dados) / esquema / tabela / visão | database / schema / table / view | base de datos / esquema / tabla / vista |
+| coluna / linha / registro / célula / grade | column / row / record / cell / grid | columna / fila / registro / celda / cuadrícula |
+| executar / consulta / comando / script | run / query / statement / script | ejecutar / consulta / sentencia / script |
+| transação / confirmar (commit) / desfazer (rollback) | transaction / commit / roll back | transacción / confirmar / revertir |
+| variável / marcador / parâmetro | variable / marker / parameter | variable / marcador / parámetro |
+| somente leitura | read-only | solo lectura |
+| exportar / importar / copiar como | export / import / copy as | exportar / importar / copiar como |
+| Configurações / Aparência / Sobre | Settings / Appearance / About | Configuración / Apariencia / Acerca de |
+| entrar / sair / bloquear | sign in / sign out / lock | iniciar sesión / cerrar sesión / bloquear |
+| usuário / senha | user / password | usuario / contraseña |
+| driver / plugin / atualização | driver / plugin / update | driver / plugin / actualización |
+| salvar / cancelar / fechar / excluir | save / cancel / close / delete | guardar / cancelar / cerrar / eliminar |
 
 ## Avisos e mensagens
 
@@ -1774,7 +1830,8 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   Enter e Espaço (o clique do botão), Esc e Tab fecham, e clique fora, rolar e trocar o foco da janela também. `placeMenu` (abre com
   o canto no ponto, ou do outro lado dele quando não cabe, e nunca sai da janela) e `nextItemIndex` são puras e testadas, e os itens
   e os separadores são uma view sem hooks (`ContextMenuItems`) que o teste renderiza: o item desabilitado sai com `aria-disabled` e o
-  clique nele não chama nada. Abre por botão direito, Shift+F10 e tecla de menu (no pé da linha, com o foco no primeiro item).
+  clique nele não chama nada. O `badge` do item é um selo curto logo depois do rótulo (`StatusBadge` de tom `warning`): o "beta" do
+  Construir no seletor de modo (RN-CONSTRUIR-001). Abre por botão direito, Shift+F10 e tecla de menu (no pé da linha, com o foco no primeiro item).
   **A tecla de menu ainda gera um `contextmenu` no keyup** (o Shift+F10 não gera), em cima do menu que ela abriu, e o `preventDefault`
   do keydown não o impede: por isso um menu aberto pelo teclado ignora o `contextmenu` do ponteiro que vier enquanto estiver aberto
   (`ignoresContextMenu`, pura), e a linha só toma o foco quando o menu vai abrir (o `onContextMenu` dela devolve se vai: um pedido
@@ -2849,15 +2906,18 @@ marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
 - **O `random`** (RN-VAR-010) é o xoshiro128** de Blackman e Vigna, um por execução, com a semente do `crypto.getRandomValues` na produção (`productionRandom()`); os
   testes dão a semente (`new Random([a, b, c, d])`). `int` usa rejeição (uma saída até 2^32; duas, de 53 bits, acima), `float` é `u / 2^32` e `uuid` usa quatro
   saídas com os bits de versão e variante. Não serve de segredo.
-- **As frases provisórias.** O que a gramática lê e esta frente ainda não executa é recusado, na conferência, com estas frases (em `phrase`; saem quando o passo
-  de cada uma entrar): `provisionalQuery` ("A variável de consulta chega numa próxima versão."), `provisionalSample` ("`random.of` chega numa próxima versão."),
-  `provisionalColumnType` ("O tipo de coluna chega numa próxima versão.") e `provisionalNoValue(nome)` ("`nome` não tem valor: escreva `= valor` (a pergunta dos
-  valores chega numa próxima versão)."). `StoredValue.origin` já traz `consulta`, `pergunta` e `diálogo` para quando elas entrarem.
+- **As interfaces e os `type`** (seção 45, RN-VAR-037 a 041) moram em `named-types.ts`: o `TypeResolver` resolve a anotação com os tipos do script (podem vir
+  depois do uso; ciclo, `extends` e nomes vedados são erros do item do tipo), `hasShape` diz se o valor precisa ser posto na forma e `conform` o põe: o objeto
+  escrito recusa o campo a mais, a linha de uma consulta e o valor de outra variável deixam os campos a mais de fora, a coluna casa pelo nome e, sem ele, pela
+  única que casa sem diferenciar maiúsculas (Db2). O `type` é palavra de contexto: `type Nome =` só é item no começo do texto ou depois de uma linha em
+  branco (`script.ts`), e `let type = 1` e `SET type = 'x'` continuam valendo. A tipagem é estrutural (`fits`), e o `unify` de dois objetos junta os campos,
+  com o que falta num dos lados opcional, como no TypeScript. Na troca (`bind.ts`) só a folha vai ao banco: `@c.endereco.cidade` vira um marcador, e `@c`,
+  `@c.endereco` e a lista de objetos são recusados.
 - **O log (RN-VAR-036).** Nenhuma exceção do JavaScript que escape do leitor, do conferidor ou do avaliador chega à pessoa: vira "Erro interno do Prism ao avaliar
   <nome>." (`reportInternalError`), e ao console de desenvolvimento vai só o nome do tipo do erro, nunca a mensagem, o texto do script nem um valor. Nenhum outro arquivo
   da linguagem usa o `console` (um teste confere).
 - **Os testes.** Os casos de tabela são `*.cases.json` escritos à mão a partir da especificação e nunca regerados do código (`reader`, `placement`, `types`,
-  `evaluation`, `functions`, `attacks`, `limits`, `at-names`, `binding`, `positions`), cada um com um `*.cases.test.ts` que os lê por `cases-runner.ts` (que fixa
+  `evaluation`, `functions`, `attacks`, `limits`, `at-names`, `binding`, `positions`, `interfaces`), cada um com um `*.cases.test.ts` que os lê por `cases-runner.ts` (que fixa
   `TZ=America/Sao_Paulo`, porque as datas valem na hora local). `properties.test.ts` sorteia 10.000 textos e árvores por execução, de uma semente nova a cada vez (a de
   `PRISM_PROPERTY_SEED`, se estiver no ambiente) que a mensagem de falha traz. A fixture compartilhada com a API é `src/test-fixtures/variables/markers.json` (a conta
   dos marcadores de cada banco; `markers.fixture.test.ts` a lê; a API tem de contar igual, RN-VAR-017).
@@ -2866,7 +2926,7 @@ marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
   mais de 100 caracteres, o decimal de mais de 31 dígitos no Db2 e no Informix (o driver; "pelo driver" na frase do Informix), a lista de mais de 10.000 valores e os
   valores de mais de 4 MiB. O corpo de `POST queries` vai até 30.000.000 de bytes (`limits.requestBodyBytes`), o das rotas `transfers` (exportação e cópia, `source.params`)
   até 16 MiB (`limits.transferBodyBytes`): quem monta o pedido da exportação confere `requestBodyBytes(sql, params)` contra o segundo. O `timestamp` com fuso só vai no
-  PostgreSQL; o texto exato de um instante que veio do Db2 pode ter até 12 casas, e a API aceita 6 (a consulta da variável, que traz esse texto, ainda não entrou). As
+  PostgreSQL; o texto exato de um instante que veio do Db2 pode ter até 12 casas, e a API aceita 6 (a consulta da variável traz esse texto). As
   recusas voltam como `ApiError`: `QUERY_INVALID` (`errors["params[i].value"]`, `["params[i].type"]` ou `["params"]`, e o `errorCodes` do mesmo campo em `extensions`), na
   exportação `EXPORT_OPTIONS_INVALID` e na cópia `IMPORT_OPTIONS_INVALID` em `source.params[i].value`, `QUERY_PARAMETERS_MISMATCH` com `extensions.markers` e `extensions.values`
   (números; a tela e a API contam igual pela fixture, então ele só vem se o texto mudou no caminho) e `FILTER_INVALID` quando o filtro de um resultado com parâmetros
@@ -2923,6 +2983,21 @@ da pessoa; o que vai ao banco é o comando trocado pelos marcadores (RN-VAR-017)
   o `runTarget`/`scriptTargets` ainda usam o `statementAt`, então o destaque de execução (RN-SQL-018) de uma declaração avaliada pelo Ctrl+Enter não existe. O Ctrl+Enter chega ao `onRun` mesmo
   com o texto só de declarações (a tecla não consulta `isRunnable`, e `hasStatement` já conta o `let`), e a aba o desvia para o `runItem` quando o texto declara variáveis.
 
+## Os valores pedidos e a aba de execução (seções 41 e 45: RN-VAR-021, 026 a 029, 031, 041)
+
+- **Onde mora**: os campos do diálogo saem do script em `variable-fields.ts` (`fullFieldsOf` monta a pergunta inteira do "Executar com valores…"; o objeto anotado
+  que não é lista nem `| null` tem `members`, um campo por membro, e o `FieldInput` dele guarda os dos membros em `members`, pelo nome: `expanded` reparte o
+  texto lembrado, `changedInput` muda um membro e `valueOf` compõe o objeto, com a frase na chave do membro (`key`)), o diálogo é `values-dialog.tsx` e quem o abre é `use-values-question.ts` (`ask`, `askWith` com `prefill` e
+  `offerNewTab`, `open`). A escolha pela chave é `value-choice.ts`/`value-choice.tsx`, e os valores lembrados no cofre vão pelo `saveRunValues` (RN-VAR-028).
+- **A aba de execução** é uma aba de consulta com `execution` (`ExecutionTarget` em `workbench-model.ts`): sem editor, com `execution-header.tsx` no lugar da
+  barra. O navegador deixa um `pending` na aba (`requestExecution`), e o cabeçalho o atende uma vez (o ref `handled`, por causa do modo estrito); a aba nascida do
+  pedido que tem o diálogo cancelado se fecha. Não entra no espaço de trabalho salvo, o bloqueio apaga os valores dela (`withoutSessions`), vai junto quando a aba
+  muda de janela (`tab-transfer.ts`), e o `renameScript` renomeia as abas de execução do script. Alt+X executa de novo e Shift+Alt+X muda os valores; F6, Ctrl+S,
+  Ctrl+9 e Ctrl+Shift+H não fazem nada nela.
+- **Os textos** estão em `variable-fields.copy.ts` e `execution-tab.copy.ts`, cada um com o `.en.ts` e o `.es.ts`.
+- **Os testes**: `execution-tab.test.ts` (título, reuso, respostas, fichas), `execution-header.test.ts` (o cabeçalho com `createHookRuntime`: o pedido atendido uma
+  vez, o cancelar que fecha, o "Executar de novo" que lê o cofre) e o `describe` da aba de execução em `query-tab.test.ts`.
+
 ## O editor e as variáveis (seção 41: RN-VAR-025, RN-CONFIG-004)
 
 Parte 9, frente 4: o editor lê o script com a linguagem acima e pinta, confere, avisa e completa. Não executa nem avalia nada que fale com o banco.
@@ -2932,6 +3007,9 @@ Parte 9, frente 4: o editor lê o script com a linguagem acima e pinta, confere,
   (`AnalysisScheduler`), a dica do ponteiro (`hoverAt`) e o valor no fim da linha. `variables-completion.ts` é o autocompletar. `variables-editor.copy.ts` tem as frases das dicas
   (as dos erros são as da linguagem, `variables/variables.copy.ts`). `sql-keyword-case.ts` ganhou a regra das declarações. `sql-completion.ts` aceita `variables` (as fontes e a pergunta
   que cala as palavras-chave e os nomes da árvore onde o SQL não completa).
+- **Os campos de uma interface no editor (RN-VAR-040).** `membersAt` (`variables/named-types.ts`) dá os campos do tipo anotado no fim de um caminho. Com ele, a
+  marca do `@c.endereco.cidade` vai até o último campo que o tipo tem (o resto fica SQL), e `@c.` no SQL e `c.` no valor completam os campos, com o SQL calado
+  ali. O objeto sem anotação não completa: a forma dele só se sabe na execução.
 - **A prop.** `SqlEditor` recebe `variables?: VariablesStore` (`variables-extension.ts`): `{ snapshot(): ReadonlyMap<string, { type: string; value: string; stale: boolean }>; subscribe(listener: () => void): () => void }`.
   É o armazém dos valores da aba (frente 3, RN-VAR-023); o editor só lê. A chave é o nome da variável. `type` é o tipo como o painel o escreve (`number`, `string[]`, `Date (dia)`, `number | null`:
   o autocompletar deduz daí os métodos); `value` é o texto do valor como o painel o escreve (`7`, `'Ana'`, `[1, 2, 3]`), que o editor só corta (200 caracteres na dica do ponteiro, 60 com `…` no
@@ -4263,6 +4341,11 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que
   nenhuma escolha muda (a mensagem do banco, as etiquetas, a Estrutura e o Diagrama). Texto novo que é SQL usa `font-editor`; **o dado do banco
   na grade e na árvore usa a da interface (`font-sans`, herdada)**; a mensagem do banco, o código e as etiquetas, `font-mono`.
+
+## Construir (`/build`, RN-CONSTRUIR-001 a 074)
+
+- A rota `/build` vive num `KeepAliveSlot` (`mountOnFirstVisit`, fora do `RemountOnLock` em `routes.tsx`), ao lado do `WorkbenchSlot`: só monta na primeira visita ao modo Construir e, depois disso, alternar entre Área de trabalho e Construir pelo seletor `ModeMenu` da `TopBar` esconde o outro modo com `hidden` e `inert`, preservando cursor, seleção, zoom do diagrama e histórico de desfazer/refazer até o cofre fechar.
+- As regras puras moram em `src/app/build/_lib/` (bancos-alvo `postgresql`, `db2` e `informix`, operações do modelo, verificação `E1`–`E12` e `W1`–`W14`, geração de DDL completo e de alterações, DBML, SQL do modelo, importação/releitura do catálogo, layout do diagrama, salvamento automático com detecção de conflito 409 e destino na Área de trabalho), todas testadas sem DOM contra as fixtures de ouro escritas à mão em `src/test-fixtures/build/`.
 
 ## Dependências
 

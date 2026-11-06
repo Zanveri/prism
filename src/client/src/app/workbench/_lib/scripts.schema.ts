@@ -10,14 +10,51 @@ const id = z.guid();
  * troca pelo padrão). `folderID` é a pasta de scripts dele (RN-SCRIPT-007), nula na raiz da seção; pode ser de uma pasta que outra janela acabou de tirar
  * da lista, e a árvore o põe na raiz até a leitura seguinte.
  */
-export const scriptSummarySchema = z.object({ id, name: z.string().min(1), connectionID: id.nullable(), database: z.string().nullable(), folderID: id.nullable(), icon: z.string().nullable(), color: z.string().nullable(), updatedAt: z.string(), sql: z.never().optional() });
+export const scriptSummarySchema = z.object({
+  id,
+  name: z.string().min(1),
+  connectionID: id.nullable(),
+  database: z.string().nullable(),
+  folderID: id.nullable(),
+  icon: z.string().nullable(),
+  color: z.string().nullable(),
+  // RN-VAR-026 e 028: se o texto começa por uma declaração; decide só se o menu do script tem "Executar com valores…".
+  declaresVariables: z.boolean().optional(),
+  updatedAt: z.string(),
+  sql: z.never().optional(),
+});
 
 export type ScriptSummary = Omit<z.infer<typeof scriptSummarySchema>, "sql">;
 
 export const scriptSummariesSchema = z.array(scriptSummarySchema);
 
-/** O script inteiro (`GET api/user/scripts/{id}`), com o SQL que a aba abre. */
-export const scriptSchema = z.object({ id, name: z.string().min(1), connectionID: id.nullable(), database: z.string().nullable(), folderID: id.nullable(), icon: z.string().nullable(), color: z.string().nullable(), sql: z.string(), updatedAt: z.string() });
+/**
+ * RN-VAR-028: os valores lembrados do "Executar com valores…", pelo nome da variável. Cada entrada se lê na hora de preencher o campo (`inputOfEntry`): a que não
+ * serve mais (o tipo mudou, a forma é outra) é esquecida em silêncio, e por isso aqui elas ficam como vieram.
+ */
+export const runValuesSchema = z.object({ values: z.record(z.string(), z.unknown()), connectionID: id.nullable(), database: z.string().nullable(), savedAt: z.string() });
+
+export type RunValues = z.infer<typeof runValuesSchema>;
+
+/** Uma entrada dos valores lembrados, como a API a guarda: o tipo e o texto, o `null` ou a lista (RN-VAR-028); o `object` leva o texto escrito como no script (RN-VAR-004). */
+export type RunValueEntry =
+  | { type: "number" | "text" | "boolean" | "date" | "timestamp" | "sql" | "object"; value: string }
+  | { type: "null"; value: null }
+  | { type: "list"; items: RunValueEntry[] };
+
+/** O script inteiro (`GET api/user/scripts/{id}`), com o SQL que a aba abre e os valores lembrados (RN-VAR-028). */
+export const scriptSchema = z.object({
+  id,
+  name: z.string().min(1),
+  connectionID: id.nullable(),
+  database: z.string().nullable(),
+  folderID: id.nullable(),
+  icon: z.string().nullable(),
+  color: z.string().nullable(),
+  sql: z.string(),
+  runValues: runValuesSchema.nullable().optional(),
+  updatedAt: z.string(),
+});
 
 export type Script = z.infer<typeof scriptSchema>;
 

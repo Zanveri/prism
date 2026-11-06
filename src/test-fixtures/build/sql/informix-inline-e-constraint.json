@@ -1,0 +1,111 @@
+{
+  "engine": "informix",
+  "sql": "-- Tabela de ordens no Informix\nCREATE TABLE manutencao.ordem (\n  -- Identificador da ordem\n  id    SERIAL NOT NULL,\n  valor decimal(10,2) DEFAULT 0 NOT NULL,\n  PRIMARY KEY (id) CONSTRAINT pk_ordem,\n  CHECK (valor >= 0) CONSTRAINT ck_ordem_valor\n);",
+  "before": {
+    "version": 1,
+    "engine": "informix",
+    "defaultSchema": "manutencao",
+    "schemas": [{ "name": "manutencao", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "manutencao",
+        "name": "ordem",
+        "exactName": false,
+        "comment": "Tabela de ordens no Informix",
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": "byDefault",
+            "comment": "Identificador da ordem"
+          },
+          {
+            "name": "valor",
+            "exactName": false,
+            "originName": null,
+            "type": "decimal(10,2)",
+            "nullable": false,
+            "default": "0",
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "pk_ordem", "columns": ["id"] },
+        "uniques": [],
+        "checks": [{ "name": "ck_ordem_valor", "expression": "valor >= 0" }],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "model": {
+    "version": 1,
+    "engine": "informix",
+    "defaultSchema": "manutencao",
+    "schemas": [{ "name": "manutencao", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "manutencao",
+        "name": "ordem",
+        "exactName": false,
+        "comment": "Tabela de ordens no Informix",
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": "byDefault",
+            "comment": "Identificador da ordem"
+          },
+          {
+            "name": "valor",
+            "exactName": false,
+            "originName": null,
+            "type": "decimal(10,2)",
+            "nullable": false,
+            "default": "0",
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "pk_ordem", "columns": ["id"] },
+        "uniques": [],
+        "checks": [{ "name": "ck_ordem_valor", "expression": "valor >= 0" }],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "warnings": []
+}

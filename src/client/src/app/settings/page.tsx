@@ -9,13 +9,14 @@ import { pathsConfig } from "@/config/paths.config";
 import { AboutSection } from "./_components/about-section";
 import { AccountSection } from "./_components/account-section";
 import { AppearanceSection } from "./_components/appearance-section";
+import { AuditSection } from "./_components/audit-section";
 import { DriversSection } from "./_components/drivers-section";
 import { EditorSection } from "./_components/editor-section";
 import { ImportSection } from "./_components/import-section";
 import { PluginsSection } from "./_components/plugins-section";
 import { ResultsSection } from "./_components/results-section";
 import { SecuritySection } from "./_components/security-section";
-import { ComingSoonCard } from "./_components/settings-card";
+import { TransactionsSection } from "./_components/transactions-section";
 import { UpdatesSection } from "./_components/updates-section";
 import { SettingsNav } from "./_components/settings-nav";
 import { settingsSections, type SettingsSection } from "./_lib/sections";
@@ -44,12 +45,14 @@ function SectionBody({ section, highlightedDriver }: { section: SettingsSection;
       return <ResultsSection anchor={section.anchor} />;
     case "security":
       return <SecuritySection anchor={section.anchor} />;
+    case "audit":
+      return <AuditSection anchor={section.anchor} />;
     case "account":
       return <AccountSection anchor={section.anchor} />;
     case "import":
       return <ImportSection anchor={section.anchor} />;
     case "transactions":
-      return <ComingSoonCard anchor={section.anchor} title={copy.transactions.title} description={copy.transactions.description} />;
+      return <TransactionsSection anchor={section.anchor} />;
   }
 }
 

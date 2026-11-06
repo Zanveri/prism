@@ -1,0 +1,292 @@
+{
+  "rule": "RN-VAR-028: o declaresVariables da lista dos scripts. Depois dos espaços em branco e dos comentários (-- e // até o fim da linha, /* ... */ sem aninhar e, em qualquer banco, { ... }), o texto começa por let, const, interface ou type, em minúsculas, seguido de espaço, tabulação ou quebra de linha e de um nome (só a forma do começo: letra, _ ou $). É uma aproximação, que só decide se o \"Executar com valores...\" aparece no menu do script. A API (GET api/user/scripts) e a tela leem este arquivo e têm de decidir igual.",
+  "notes": [
+    "text: o SQL do script, como está no cofre.",
+    "declares: o declaresVariables esperado.",
+    "Difere do leitor das declarações (itemShape, RN-VAR-001) de propósito: aqui a quebra de linha depois do let vale como o espaço, o { } é comentário em qualquer banco e a palavra reservada no lugar do nome conta.",
+    "Fora daqui de propósito: os espaços que o JavaScript e o .NET leem diferente (U+0085, U+FEFF).",
+    "interface e type no topo contam (seção 45, pedido do dono em 2026-11-05): o script que escreve os tipos no começo declara as variáveis deles logo abaixo."
+  ],
+  "cases": [
+    {
+      "name": "o texto vazio",
+      "text": "",
+      "declares": false
+    },
+    {
+      "name": "só espaços, tabulações e quebras de linha",
+      "text": "  \n\t\n",
+      "declares": false
+    },
+    {
+      "name": "let no começo",
+      "text": "let x = 1\nSELECT @x",
+      "declares": true
+    },
+    {
+      "name": "const no começo",
+      "text": "const ids = [1, 2]\nSELECT * FROM t WHERE id IN (@ids)",
+      "declares": true
+    },
+    {
+      "name": "o let sozinho com o nome, sem valor",
+      "text": "let x",
+      "declares": true
+    },
+    {
+      "name": "linhas em branco e espaços antes",
+      "text": "\n\n  let x = 1",
+      "declares": true
+    },
+    {
+      "name": "o comentário -- antes",
+      "text": "-- filtro\nlet x = 1",
+      "declares": true
+    },
+    {
+      "name": "o comentário // antes",
+      "text": "// filtro\nconst x = 1",
+      "declares": true
+    },
+    {
+      "name": "o comentário /* */ antes, na mesma linha",
+      "text": "/* cabeçalho\n   do relatório */ let x = 1",
+      "declares": true
+    },
+    {
+      "name": "o comentário { } antes, o do Informix, vale em qualquer banco",
+      "text": "{ relatório }\nconst x = 1",
+      "declares": true
+    },
+    {
+      "name": "vários comentários seguidos",
+      "text": "-- a\n/* b */\n{ c }\n// d\nlet x = 1",
+      "declares": true
+    },
+    {
+      "name": "o -- sem texto, colado à quebra",
+      "text": "--\nlet x = 1",
+      "declares": true
+    },
+    {
+      "name": "as quebras de linha do Windows",
+      "text": "-- a\r\nlet x = 1\r\nSELECT @x",
+      "declares": true
+    },
+    {
+      "name": "tabulação depois do let",
+      "text": "let\tx = 1",
+      "declares": true
+    },
+    {
+      "name": "quebra de linha depois do let",
+      "text": "let\nx = 1",
+      "declares": true
+    },
+    {
+      "name": "quebra de linha do Windows depois do const",
+      "text": "const\r\nx = 1",
+      "declares": true
+    },
+    {
+      "name": "vários espaços depois do const",
+      "text": "const   x = 1",
+      "declares": true
+    },
+    {
+      "name": "o nome com _",
+      "text": "let _x = 1",
+      "declares": true
+    },
+    {
+      "name": "o nome com $",
+      "text": "let $total = 1",
+      "declares": true
+    },
+    {
+      "name": "o nome com acento",
+      "text": "let éx = 1",
+      "declares": true
+    },
+    {
+      "name": "o nome em outra escrita",
+      "text": "const 名前 = 'a'",
+      "declares": true
+    },
+    {
+      "name": "a palavra reservada no lugar do nome conta: só a forma é conferida",
+      "text": "let select = 1",
+      "declares": true
+    },
+    {
+      "name": "interface no começo",
+      "text": "interface Cliente { id: number }\nlet c: Cliente\nSELECT @c.id",
+      "declares": true
+    },
+    {
+      "name": "type no começo",
+      "text": "type Filtro = { cidade: string }\nconst f: Filtro = { cidade: 'Lages' }",
+      "declares": true
+    },
+    {
+      "name": "o comentário antes da interface",
+      "text": "-- os tipos\ninterface A { a: number }",
+      "declares": true
+    },
+    {
+      "name": "quebra de linha depois do interface",
+      "text": "interface\nA { a: number }",
+      "declares": true
+    },
+    {
+      "name": "interfaces não é interface",
+      "text": "interfaces = 1",
+      "declares": false
+    },
+    {
+      "name": "typeof não é type",
+      "text": "typeof x",
+      "declares": false
+    },
+    {
+      "name": "INTERFACE em maiúsculas é SQL",
+      "text": "INTERFACE A { a: number }",
+      "declares": false
+    },
+    {
+      "name": "Type com a primeira maiúscula é SQL",
+      "text": "Type A = number",
+      "declares": false
+    },
+    {
+      "name": "o type seguido de =",
+      "text": "type = 'x'",
+      "declares": false
+    },
+    {
+      "name": "letx não é let",
+      "text": "letx = 1",
+      "declares": false
+    },
+    {
+      "name": "constante não é const",
+      "text": "constante = 1",
+      "declares": false
+    },
+    {
+      "name": "LET em maiúsculas é SQL",
+      "text": "LET x = 1",
+      "declares": false
+    },
+    {
+      "name": "Let com a primeira maiúscula é SQL",
+      "text": "Let x = 1",
+      "declares": false
+    },
+    {
+      "name": "CONST em maiúsculas é SQL",
+      "text": "CONST x = 1",
+      "declares": false
+    },
+    {
+      "name": "o let no fim do texto",
+      "text": "let",
+      "declares": false
+    },
+    {
+      "name": "o let e espaços no fim do texto",
+      "text": "let  \n",
+      "declares": false
+    },
+    {
+      "name": "o let seguido de dígito",
+      "text": "let 1x = 1",
+      "declares": false
+    },
+    {
+      "name": "o let seguido de =",
+      "text": "let = 1",
+      "declares": false
+    },
+    {
+      "name": "o let seguido de parêntese",
+      "text": "let (x) = 1",
+      "declares": false
+    },
+    {
+      "name": "o comentário colado ao let não é o espaço",
+      "text": "let/* a */x = 1",
+      "declares": false
+    },
+    {
+      "name": "o comentário entre o let e o nome não é o nome",
+      "text": "let /* a */ x = 1",
+      "declares": false
+    },
+    {
+      "name": "a reatribuição não declara",
+      "text": "x = 1",
+      "declares": false
+    },
+    {
+      "name": "um comando antes",
+      "text": "SELECT 1",
+      "declares": false
+    },
+    {
+      "name": "a declaração depois do primeiro comando não conta",
+      "text": "SELECT 1;\nlet x = 1",
+      "declares": false
+    },
+    {
+      "name": "o let dentro do comentário --",
+      "text": "-- let x = 1\nSELECT 1",
+      "declares": false
+    },
+    {
+      "name": "o let dentro do comentário /* */",
+      "text": "/* let x = 1 */ SELECT 1",
+      "declares": false
+    },
+    {
+      "name": "o let dentro do comentário { }",
+      "text": "{ let x = 1 } SELECT 1",
+      "declares": false
+    },
+    {
+      "name": "o comentário /* que não fecha é o texto inteiro",
+      "text": "/* let x = 1",
+      "declares": false
+    },
+    {
+      "name": "o comentário { que não fecha é o texto inteiro",
+      "text": "{ let x = 1",
+      "declares": false
+    },
+    {
+      "name": "só um comentário, sem quebra no fim",
+      "text": "-- só um comentário",
+      "declares": false
+    },
+    {
+      "name": "o hífen sozinho não é comentário",
+      "text": "- let x = 1",
+      "declares": false
+    },
+    {
+      "name": "a barra sozinha não é comentário",
+      "text": "/ let x = 1",
+      "declares": false
+    },
+    {
+      "name": "o } sozinho não é comentário",
+      "text": "} let x = 1",
+      "declares": false
+    },
+    {
+      "name": "o texto entre aspas antes",
+      "text": "'let' let x = 1",
+      "declares": false
+    }
+  ]
+}

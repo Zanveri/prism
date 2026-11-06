@@ -47,7 +47,7 @@ file, create one with a test user.
 
 What Prism sets out to protect: each user's encrypted vault, the connection passwords, the local API (which only listens on
 `127.0.0.1` and requires a launch token), the app window, what goes into the log and the update (the downloaded package is checked
-against two SHA-256 checksums before any use; see the [documentation](https://zanveri.github.io/prism/#updates)).
+against two SHA-256 checksums before any use; see the [documentation](https://zanveri.com/docs/prism/atualizacoes-e-canal-beta), in Portuguese).
 
 Out of scope: anyone who already has access to the user's session on the operating system, with the app open and unlocked, and
 flaws in the databases Prism connects to. An ordinary defect with no effect on security goes in a normal public issue.

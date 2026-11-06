@@ -1,6 +1,8 @@
 using CSharpFunctionalExtensions;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 using System.Globalization;
+using System.Resources;
 using static Prism.Infrastructure.Databases.Clients.EditableSql;
 
 namespace Prism.Infrastructure.Databases.Clients;
@@ -26,20 +28,23 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal static class WholeColumnSql
 {
+    /// <summary>Os textos, no idioma do pedido: <c>WholeColumnSql.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(WholeColumnSql));
+
     /// <summary>As chaves de um lote do caminho por lotes: longe do teto do driver da IBM, que recusa 32.768 parâmetros ou mais.</summary>
     public const int KeysPerBatch = 1000;
 
     /// <summary>As chaves que o caminho por lotes guarda na memória, no máximo.</summary>
     public const int MaxKeys = 1_000_000;
 
-    public const string CountNote = "A contagem confere, antes do UPDATE, que o comando ainda devolve as linhas confirmadas.";
-    public const string BatchNote = "As chaves vão em lotes de até 1.000.";
+    public static string CountNote => Texts.Get(nameof(CountNote));
+    public static string BatchNote => Texts.Get(nameof(BatchNote));
 
-    public const string JoinReason = "num resultado de junção, a coluna inteira não se altera: escolha as células da coluna (arraste, ou Shift+clique), e a edição vale para elas";
-    public const string NotReadReason = "a coluna inteira executa de novo o comando do resultado, e ele não é só de leitura";
-    public const string LimitReason = "o comando limita as linhas sem uma ordem, e o banco pode escolher outras linhas ao executar de novo: acrescente um ORDER BY, ou escolha as células da coluna";
-    public const string SampleReason = "o comando sorteia as linhas, e o banco escolheria outras ao executar de novo: escolha as células da coluna";
-    public const string TooManyKeysReason = "o comando devolve mais de 1.000.000 de linhas, e neste banco a coluna inteira de um comando com limite de linhas lê as chaves antes: tire o limite do comando, ou altere por partes";
+    public static string JoinReason => Texts.Get(nameof(JoinReason));
+    public static string NotReadReason => Texts.Get(nameof(NotReadReason));
+    public static string LimitReason => Texts.Get(nameof(LimitReason));
+    public static string SampleReason => Texts.Get(nameof(SampleReason));
+    public static string TooManyKeysReason => Texts.Get(nameof(TooManyKeysReason));
 
     private const string QAlias = "\"q\"";
     private const string UAlias = "\"u\"";
@@ -55,27 +60,27 @@ internal static class WholeColumnSql
 
     /// <summary>RN-EDIT-018: a coluna da chave na coluna inteira deixaria todas as linhas com a mesma chave.</summary>
     public static string KeyReason(string column, string table)
-        => $"{column} é da chave de {table}: na coluna inteira, todas as linhas ficariam com a mesma chave";
+        => Texts.Get("KeyReason", column, table);
 
     /// <summary>RN-EDIT-018 e 020: com o nome repetido no resultado, `"q"."id"` é ambíguo.</summary>
     public static string RepeatedKeyReason(string column, string table)
-        => $"{column}, da chave de {table}, aparece com o mesmo nome em mais de uma coluna do resultado";
+        => Texts.Get("RepeatedKeyReason", column, table);
 
     /// <summary>RN-EDIT-021: a contagem do "Salvar" não deu as linhas confirmadas; nada foi executado.</summary>
     public static string CountChanged(long counted, long confirmed)
-        => $"O resultado mudou desde a contagem: o comando devolve agora {Lines(counted)}, e não {Confirmed(confirmed)}. Nada foi gravado; salve de novo para contar outra vez.";
+        => Texts.Get("CountChanged", Lines(counted), Confirmed(confirmed));
 
     /// <summary>RN-EDIT-021: o `UPDATE` não alterou as linhas confirmadas; tudo o que o "Salvar" fez foi desfeito.</summary>
     public static string UpdateChanged(long affected, long confirmed)
-        => $"O resultado mudou desde a contagem: o comando alterou {Lines(affected)}, e não {Confirmed(confirmed)}. Nada foi gravado; salve de novo para contar outra vez. Se o número se repetir nas tentativas seguintes, o motivo pode ser um gatilho, uma regra ou uma cascata do banco, que a contagem não vê.";
+        => Texts.Get("UpdateChanged", Lines(affected), Confirmed(confirmed));
 
     /// <summary>RN-EDIT-021: no Informix sem log, o `UPDATE` (ou um lote) alterou outro número de linhas, e ficou gravado.</summary>
     public static string WrittenAnyway(long affected, long confirmed)
-        => $"A coluna inteira foi alterada em {Lines(affected)}, e não {(confirmed == 1 ? "na 1 contada" : $"nas {Number(confirmed)} contadas")}: o resultado mudou desde a contagem. Este banco não tem log de transação, e a alteração ficou gravada.";
+        => Texts.Get("WrittenAnyway", Lines(affected), Counted(confirmed));
 
     /// <summary>RN-EDIT-023: a recusa da coluna inteira, com o motivo da regra no `reason`, a posição dela no pedido e, quando é de uma coluna, a dela.</summary>
     public static DatabaseFailure NotSupported(string reason, int change, int? column = null)
-        => new(EDatabaseFailure.EditAllRowsNotSupported, $"A coluna inteira não se altera neste resultado: {reason}.", Reason: reason, Change: change, Column: column);
+        => new(EDatabaseFailure.EditAllRowsNotSupported, Texts.Get("NotSupported", reason), Reason: reason, Change: change, Column: column);
 
     /// <summary>RN-EDIT-023: a posição da coluna inteira no pedido, ou nula sem ela. Há no máximo uma por pedido: a segunda é `EditInvalid`, com a posição dela.</summary>
     public static Result<int?, DatabaseFailure> Find(IReadOnlyList<EditChange> changes)
@@ -87,7 +92,7 @@ internal static class WholeColumnSql
                 continue;
 
             if (found is not null)
-                return new DatabaseFailure(EDatabaseFailure.EditInvalid, "O pedido tem mais de uma alteração da coluna inteira: mande uma só, com todas as colunas no set.", Change: index);
+                return new DatabaseFailure(EDatabaseFailure.EditInvalid, Texts.Get("SeveralWholeChanges"), Change: index);
 
             found = index;
         }
@@ -104,14 +109,14 @@ internal static class WholeColumnSql
         for (var index = 0; index < changes.Count; index++)
         {
             if (changes[index].Kind != EEditKind.UpdateAll)
-                return new DatabaseFailure(EDatabaseFailure.EditInvalid, "A contagem leva só a alteração da coluna inteira (updateAll).", Change: index);
+                return new DatabaseFailure(EDatabaseFailure.EditInvalid, Texts.Get("CountTakesOnlyWhole"), Change: index);
         }
 
         var found = Find(changes);
         if (found.IsFailure)
             return found.Error;
 
-        return found.Value is { } position ? position : new DatabaseFailure(EDatabaseFailure.EditInvalid, "A contagem precisa da alteração da coluna inteira (updateAll).");
+        return found.Value is { } position ? position : new DatabaseFailure(EDatabaseFailure.EditInvalid, Texts.Get("CountNeedsWhole"));
     }
 
     /// <summary>
@@ -138,10 +143,10 @@ internal static class WholeColumnSql
     public static Result<WholeColumnPlan, DatabaseFailure> Plan(ESqlDialect dialect, string? sql, bool read, EditTarget target, IReadOnlyList<QueryColumn> columns, EditChange change, int index, bool requiresRows, IReadOnlyList<QueryParameter>? parameters = null)
     {
         if (requiresRows && change.Rows is null)
-            return new DatabaseFailure(EDatabaseFailure.EditInvalid, "Informe quantas linhas a contagem deu (rows).", Change: index);
+            return new DatabaseFailure(EDatabaseFailure.EditInvalid, Texts.Get("RowsMissing"), Change: index);
 
         if (requiresRows && change.Rows < 0)
-            return new DatabaseFailure(EDatabaseFailure.EditInvalid, "O número de linhas (rows) tem de ser um inteiro de 0 em diante.", Change: index);
+            return new DatabaseFailure(EDatabaseFailure.EditInvalid, Texts.Get("RowsInvalid"), Change: index);
 
         var shaped = Shape(dialect, sql, read, target, columns, change, index, parameters);
         if (shaped.IsFailure)
@@ -209,34 +214,34 @@ internal static class WholeColumnSql
             => new(EDatabaseFailure.EditInvalid, message, Change: index, Column: column);
 
         if (change.Table < 0 || change.Table >= target.Tables.Count)
-            return Invalid("A tabela da alteração não existe neste resultado.");
+            return Invalid(Texts.Get("TableNotInResult"));
 
         var table = target.Tables[change.Table];
         if (!table.Editable)
-            return Invalid($"A tabela da alteração não se edita: {table.Reason}.");
+            return Invalid(Texts.Get("TableNotEditable", table.Reason));
 
         if (!target.RowOperations)
             return NotSupported(JoinReason, index);
 
         if (change.Values.Count == 0)
-            return Invalid("A alteração da coluna inteira não tem nenhuma coluna.");
+            return Invalid(Texts.Get("WholeChangeHasNoColumn"));
 
         var set = new List<(EditColumn Column, int Position, string? Value)>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in change.Values)
         {
             if (value.Column < 0 || value.Column >= target.Columns.Count || value.Column >= columns.Count)
-                return Invalid("A coluna não existe no resultado.", value.Column);
+                return Invalid(Texts.Get("ColumnNotInResult"), value.Column);
 
             var column = target.Columns[value.Column];
             if (column.Editable && column.Table != change.Table)
-                return Invalid("A coluna não é da tabela da alteração.", value.Column);
+                return Invalid(Texts.Get("ColumnNotInTable"), value.Column);
 
             if (!column.Editable)
-                return Invalid($"A coluna não se edita: {column.Reason}.", value.Column);
+                return Invalid(Texts.Get("ColumnNotEditable", column.Reason), value.Column);
 
             if (!seen.Add(column.BaseColumn!))
-                return Invalid("A mesma coluna aparece duas vezes na alteração.", value.Column);
+                return Invalid(Texts.Get("ColumnRepeated"), value.Column);
 
             if (table.Key.Any(position => target.Columns[position].BaseColumn == column.BaseColumn))
                 return NotSupported(KeyReason(column.BaseColumn!, table.Name), index, value.Column);
@@ -536,14 +541,17 @@ internal static class WholeColumnSql
     }
 
     private static string Lines(long count)
-        => count == 1 ? "1 linha" : $"{Number(count)} linhas";
+        => count == 1 ? Texts.Get("LinesOne") : Texts.Get("LinesMany", Number(count));
 
     private static string Confirmed(long count)
-        => count == 1 ? "a 1 confirmada" : $"as {Number(count)} confirmadas";
+        => count == 1 ? Texts.Get("ConfirmedOne") : Texts.Get("ConfirmedMany", Number(count));
 
-    /// <summary>O número como a tela o escreve, com o ponto separando os milhares.</summary>
+    private static string Counted(long count)
+        => count == 1 ? Texts.Get("CountedOne") : Texts.Get("CountedMany", Number(count));
+
+    /// <summary>O número como a tela o escreve no idioma do pedido: o ponto separando os milhares, e a vírgula no inglês.</summary>
     private static string Number(long count)
-        => count.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');
+        => count.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en" ? ',' : '.');
 
     /// <summary>Um pedaço do texto como o banco o compara: a palavra sem diferença de maiúsculas (o `WHERE` refeito vale pelo `where` escrito), o resto como está.</summary>
     private static (ETokenKind Kind, string Text) Piece(Token token)

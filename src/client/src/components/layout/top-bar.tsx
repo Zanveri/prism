@@ -9,17 +9,20 @@ import { settingsCopy } from "@/app/settings/_lib/settings.copy";
 import { sessionQuery, signOut } from "@/app/sign-in/_lib/sign-in.service";
 import { transferExits } from "@/app/workbench/_lib/data-import/data-imports";
 import { countsOf, exitQuestion, type ExitQuestion } from "@/app/workbench/_lib/data-import/transfer-exits";
-import { ConfirmDialog, LockOpenIcon, RefreshIcon, WorkbenchIcon } from "@/components/ui";
+import { ConfirmDialog, LockOpenIcon, RefreshIcon } from "@/components/ui";
 import { CheckUpdatesButton } from "@/components/update/check-updates-button";
 import { updateCopy } from "@/components/update/update.copy";
 import { pathsConfig } from "@/config/paths.config";
 import { sharePeerEvent } from "@/lib/api/bridge";
 import { unwrap } from "@/lib/api/prism-api";
+import { buildModelSync } from "@/app/build/_lib/model-save";
 import { workspaceSync } from "@/lib/api/workspace-sync";
 import { cn } from "@/lib/utils/cn";
 
+import { ModeMenu } from "./mode-menu";
 import { PoweredByZanveri } from "./powered-by-zanveri";
 import { PrismMark } from "./prism-mark";
+import { layoutCopy } from "./layout.copy";
 
 /**
  * Abaixo de 1100 px (a janela vai até 1024) a barra fica mais compacta, para caber numa linha só com o texto das Configurações
@@ -61,7 +64,7 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
     // pessoa confirmou sair com elas, são canceladas antes, com as importações e as cópias, e os destinos soltos.
     mutationFn: async (cancelTransfers: boolean) => {
       if (cancelTransfers) await transferExits.cancelForExit();
-      await workspaceSync.flush();
+      await Promise.all([workspaceSync.flush(), buildModelSync.flush()]);
       return unwrap(await signOut());
     },
     onSettled: () => setAsking(null),
@@ -100,11 +103,8 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
 
       {leading}
 
-      <nav aria-label="Principal" className="ml-auto flex flex-none items-center gap-2 max-[1100px]:gap-0.5">
-        <NavLink to={pathsConfig.workbench} className={({ isActive }) => cn(itemClassName, isActive ? "bg-selected text-ink" : "text-muted hover:bg-selected hover:text-ink")}>
-          <WorkbenchIcon />
-          <span>Área de trabalho</span>
-        </NavLink>
+      <nav aria-label={layoutCopy.mainNavigation} className="ml-auto flex flex-none items-center gap-2 max-[1100px]:gap-0.5">
+        <ModeMenu />
         {/* O lembrete do reinício que ficou para depois (RN-DRIVER-005 e RN-NAV-006): leva a Configurações › Drivers, onde está o "Reiniciar agora". */}
         {restartPending ? (
           <Link to={pathsConfig.drivers} title={driversCopy.restart.topBarHint} className={cn(itemClassName, "text-accent hover:bg-selected")}>
@@ -129,7 +129,7 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
       ) : null}
 
       <button type="button" onClick={() => void requestLeave()} disabled={leave.isPending || checking} className={cn(itemClassName, "cursor-pointer text-muted enabled:hover:bg-selected enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-50")}>
-        Sair
+        {layoutCopy.signOut}
       </button>
 
       <PoweredByZanveri />

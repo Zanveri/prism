@@ -1,0 +1,62 @@
+{
+  "context": {
+    "modelName": "simples",
+    "prismVersion": "0.6.0",
+    "generatedAt": "29/10/2026 14:32",
+    "baseLabel": null
+  },
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "tag",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "codigo",
+            "exactName": false,
+            "originName": null,
+            "type": "varchar(20)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [{ "name": null, "columns": ["codigo"] }],
+        "checks": [{ "name": null, "expression": "codigo <> ''" }],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": false,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "expected": "-- Modelo simples · PostgreSQL · gerado pelo Prism 0.6.0 em 29/10/2026 14:32\n-- Tudo: o esquema inteiro, do zero.\n\nCREATE TABLE public.tag (\n  id     bigint GENERATED ALWAYS AS IDENTITY,\n  codigo varchar(20) NOT NULL,\n  PRIMARY KEY (id),\n  UNIQUE (codigo),\n  CHECK (codigo <> '')\n);"
+}

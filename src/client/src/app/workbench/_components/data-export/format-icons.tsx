@@ -57,10 +57,27 @@ const shapes: Record<DataFormat, ReactNode> = {
   xml: <path d="M5 4.5L1.5 8 5 11.5M11 4.5l3.5 3.5-3.5 3.5M9.2 3.5l-2.4 9" />,
 };
 
+const formatFamilies: Record<DataFormat, string> = {
+  csv: "table",
+  sourceCode: "code",
+  dbUnit: "document",
+  html: "code",
+  json: "code",
+  markdown: "document",
+  sql: "database",
+  txt: "lines",
+  xlsx: "table",
+  xml: "code",
+};
+
 /** O ícone de cada formato da lista (RN-EXPORT-004); o SQL usa o cilindro do banco que o app já tem. */
 export function DataFormatIcon({ format, className }: { format: DataFormat; className?: string }) {
   if (format === "sql") return <DatabaseIcon className={className} />;
-  return <FormatIcon className={className}>{shapes[format]}</FormatIcon>;
+  return (
+    <FormatIcon data-icon={formatFamilies[format]} className={className}>
+      {shapes[format]}
+    </FormatIcon>
+  );
 }
 
 /** O ícone do destino "Banco de dados" (seção 36), o mesmo cilindro. */

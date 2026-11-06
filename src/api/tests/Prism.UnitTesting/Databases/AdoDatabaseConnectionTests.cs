@@ -751,7 +751,7 @@ public sealed partial class AdoDatabaseConnectionTests
     }
 
     /// <summary>
-    /// RN-SQL-003 e RN-SESSAO-005: o controle de transação escrito no texto é recusado antes de executar. A resposta não leva `executed`,
+    /// RN-SQL-003 e RN-SESSAO-005: o controle de transação de duas fases ou encadeado é recusado antes de executar. A resposta não leva `executed`,
     /// nada vai ao banco, e o cursor aberto pelo comando anterior continua legível.
     /// </summary>
     [Trait("AdoDatabaseConnection", "ExecuteAsync")]
@@ -763,7 +763,7 @@ public sealed partial class AdoDatabaseConnectionTests
         var read = await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
 
         //Act
-        var refused = await connection.ExecuteAsync("BEGIN", CancellationToken.None);
+        var refused = await connection.ExecuteAsync("COMMIT PREPARED 'x'", CancellationToken.None);
         var next = await connection.FetchNextAsync(CancellationToken.None);
 
         //Assert
@@ -2076,7 +2076,7 @@ public sealed partial class AdoDatabaseConnectionTests
         var openBefore = connection.HasOpenCursor;
 
         //Act
-        var refused = await connection.ExecuteAsync("BEGIN", CancellationToken.None);
+        var refused = await connection.ExecuteAsync("COMMIT PREPARED 'x'", CancellationToken.None);
 
         //Assert
         Assert.True(openBefore);

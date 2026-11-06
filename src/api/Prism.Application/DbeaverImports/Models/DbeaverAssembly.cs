@@ -137,7 +137,17 @@ internal sealed class DbeaverAssembly
             model.EnvironmentName, model.EnvironmentColor, model.ConfirmCommands, model.ReadOnly,
             FileValue.Absent, FileValue.Absent, FileValue.Absent,
             new FileEffective(JsonValueKind.Undefined, FileValue.Absent, FileValue.Absent, FileValue.Absent, FileValue.Absent),
-            model.Refusal);
+            model.Refusal,
+            // RN-REDE-008: o túnel e o proxy seguem pela mesma análise do arquivo do Prism, na forma dele; o segredo só com "Levar as senhas".
+            FileObjectOf(model.Ssh is { } ssh && !withPasswords ? ssh with { Secret = null } : model.Ssh),
+            null,
+            FileObjectOf(model.Proxy is { } proxy && !withPasswords ? proxy with { Password = null } : model.Proxy));
+
+    private static readonly JsonSerializerOptions FileJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>O túnel ou o proxy como o arquivo de conexões do Prism os leva (RN-REDE-004), lido como o `ImportedFile` lê: nulo, sem ele.</summary>
+    private static FileObject? FileObjectOf(object? settings)
+        => settings is null ? null : FileObject.Of(JsonSerializer.SerializeToElement(new { value = settings }, FileJson), "value");
 }
 
 /// <summary>Uma conexão do arquivo montado: a chave, o nome inteiro do projeto de onde veio (a origem, RN-DBEAVER-018), a conexão traduzida e a porta DRDA aplicada, quando houve.</summary>

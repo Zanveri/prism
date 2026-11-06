@@ -55,9 +55,10 @@ function ExternalEditorIcon({ className }: { className?: string }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      data-icon="external-editor"
       className={cn("flex-none", className)}
     >
-      <path d="M9.5 2.5h4v4M13.5 2.5L8 8" />
+      <path className="icon-part-ne" d="M9.5 2.5h4v4M13.5 2.5L8 8" />
       <path d="M7 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9" />
     </svg>
   );
@@ -75,6 +76,7 @@ function WordWrapIcon({ className }: { className?: string }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      data-icon="undo"
       className={cn("flex-none", className)}
     >
       <path d="M2.5 4h11M2.5 8h8.5a2 2 0 0 1 0 4H8.5M10 10.5L8.5 12 10 13.5M2.5 12h3" />

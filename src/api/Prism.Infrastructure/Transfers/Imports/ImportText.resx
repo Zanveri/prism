@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="TooLarge" xml:space="preserve">
+    <value>O arquivo tem {0}, e o Prism importa até 2 GB.</value>
+  </data>
+  <data name="GigabytesFormat" xml:space="preserve">
+    <value>{0},{1} GB</value>
+  </data>
+  <data name="ThousandsSeparator" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="DefaultColumnName" xml:space="preserve">
+    <value>Coluna {0}</value>
+  </data>
+  <data name="MappingSourceMissingOne" xml:space="preserve">
+    <value>A coluna {0} do arquivo não existe: o arquivo tem {1} coluna.</value>
+  </data>
+  <data name="MappingSourceMissingMany" xml:space="preserve">
+    <value>A coluna {0} do arquivo não existe: o arquivo tem {1} colunas.</value>
+  </data>
+  <data name="MappingTargetMissing" xml:space="preserve">
+    <value>A tabela não tem a coluna {0}.</value>
+  </data>
+  <data name="ReaderObject" xml:space="preserve">
+    <value>As opções do leitor vêm num objeto.</value>
+  </data>
+  <data name="EncodingChoice" xml:space="preserve">
+    <value>A codificação deve ser auto, utf-8, utf-16le, utf-16be, windows-1252 ou iso-8859-1.</value>
+  </data>
+  <data name="DelimiterTsv" xml:space="preserve">
+    <value>No TSV o separador é a tabulação.</value>
+  </data>
+  <data name="DelimiterChoice" xml:space="preserve">
+    <value>O separador deve ser auto, ;, a vírgula, a tabulação ou |.</value>
+  </data>
+  <data name="QuoteChoice" xml:space="preserve">
+    <value>As aspas devem ser double ou none.</value>
+  </data>
+  <data name="NullTextMax" xml:space="preserve">
+    <value>O texto do nulo pode ter até {0} caracteres.</value>
+  </data>
+  <data name="NullTextControl" xml:space="preserve">
+    <value>O texto do nulo não pode ter caractere de controle.</value>
+  </data>
+  <data name="OptionBool" xml:space="preserve">
+    <value>A opção {0} deve ser true ou false.</value>
+  </data>
+  <data name="OptionText" xml:space="preserve">
+    <value>A opção {0} deve ser um texto.</value>
+  </data>
+  <data name="SheetName" xml:space="preserve">
+    <value>O nome da planilha tem de 1 a {0} caracteres.</value>
+  </data>
+  <data name="KeysList" xml:space="preserve">
+    <value>As chaves são uma lista de 1 a 16.384 nomes de até 256 caracteres, sem repetir.</value>
+  </data>
+  <data name="TargetView" xml:space="preserve">
+    <value>é uma visão</value>
+  </data>
+  <data name="TargetMaterializedView" xml:space="preserve">
+    <value>é uma visão materializada</value>
+  </data>
+  <data name="TargetForeign" xml:space="preserve">
+    <value>é uma tabela estrangeira</value>
+  </data>
+  <data name="TargetNotPlain" xml:space="preserve">
+    <value>não é uma tabela comum</value>
+  </data>
+  <data name="GeneratedReason" xml:space="preserve">
+    <value>O banco calcula esta coluna e não aceita valor.</value>
+  </data>
+  <data name="UnsupportedReason" xml:space="preserve">
+    <value>O Prism ainda não importa este tipo neste banco.</value>
+  </data>
+  <data name="CopiedBinaryIntoText" xml:space="preserve">
+    <value>A coluna {0} da origem é binária, e a coluna de destino não é.</value>
+  </data>
+  <data name="CopiedTextIntoBinary" xml:space="preserve">
+    <value>A coluna {0} da origem não é binária, e a coluna de destino é.</value>
+  </data>
+  <data name="ZoneRefused" xml:space="preserve">
+    <value>{0} tem fuso, e a coluna não guarda fuso.</value>
+  </data>
+  <data name="TimeInDateColumn" xml:space="preserve">
+    <value>{0} tem hora, e a coluna {1} é só data.</value>
+  </data>
+  <data name="InvalidSurrogate" xml:space="preserve">
+    <value>O valor tem um caractere inválido (U+{0} sozinho).</value>
+  </data>
+  <data name="NullCharacter" xml:space="preserve">
+    <value>O valor tem o caractere nulo (U+0000), que o Prism não grava num texto.</value>
+  </data>
+  <data name="NumberPointComma" xml:space="preserve">
+    <value>{0} não é um número com ponto decimal. Se o arquivo usa vírgula, escolha Vírgula em Separador decimal.</value>
+  </data>
+  <data name="NumberCommaPoint" xml:space="preserve">
+    <value>{0} tem ponto, e o separador decimal escolhido é a vírgula. Se o arquivo usa ponto decimal, escolha Ponto em Separador decimal; se escreve os milhares com ponto, ligue Aceitar o ponto como separador de milhar.</value>
+  </data>
+  <data name="NumberThousands" xml:space="preserve">
+    <value>{0} não é um número com vírgula decimal e ponto de milhar.</value>
+  </data>
+  <data name="NotInteger" xml:space="preserve">
+    <value>{0} não é um número inteiro.</value>
+  </data>
+  <data name="NotNumber" xml:space="preserve">
+    <value>{0} não é um número.</value>
+  </data>
+  <data name="OutOfRange" xml:space="preserve">
+    <value>{0} está fora da faixa da coluna.</value>
+  </data>
+  <data name="DecimalsNone" xml:space="preserve">
+    <value>{0} tem casas decimais, e a coluna {1} não guarda nenhuma.</value>
+  </data>
+  <data name="DecimalsMore" xml:space="preserve">
+    <value>{0} tem mais casas decimais que as {1} da coluna {2}.</value>
+  </data>
+  <data name="DateFormatIsoDate" xml:space="preserve">
+    <value>{0} não é uma data no formato aaaa-mm-dd.</value>
+  </data>
+  <data name="DateFormatDmyDate" xml:space="preserve">
+    <value>{0} não é uma data no formato dd/mm/aaaa.</value>
+  </data>
+  <data name="DateFormatIsoDateTime" xml:space="preserve">
+    <value>{0} não é uma data e hora no formato aaaa-mm-dd hh:mm:ss.</value>
+  </data>
+  <data name="DateFormatDmyDateTime" xml:space="preserve">
+    <value>{0} não é uma data e hora no formato dd/mm/aaaa hh:mm:ss.</value>
+  </data>
+  <data name="NotDateTime" xml:space="preserve">
+    <value>{0} não é uma data e hora.</value>
+  </data>
+  <data name="NotTime" xml:space="preserve">
+    <value>{0} não é uma hora no formato hh:mm:ss.</value>
+  </data>
+  <data name="InvalidTime" xml:space="preserve">
+    <value>{0} não é uma hora válida.</value>
+  </data>
+  <data name="InvalidDate" xml:space="preserve">
+    <value>{0} não é uma data válida.</value>
+  </data>
+  <data name="YearDigits" xml:space="preserve">
+    <value>O ano tem de ter 4 dígitos: {0}.</value>
+  </data>
+  <data name="ExtraMinutes" xml:space="preserve">
+    <value>minutos</value>
+  </data>
+  <data name="ExtraSeconds" xml:space="preserve">
+    <value>segundos</value>
+  </data>
+  <data name="ExtraFraction" xml:space="preserve">
+    <value>casas de fração</value>
+  </data>
+  <data name="UntilHour" xml:space="preserve">
+    <value>{0} tem {1}, e a coluna {2} guarda só até a hora.</value>
+  </data>
+  <data name="UntilMinutes" xml:space="preserve">
+    <value>{0} tem {1}, e a coluna {2} guarda só até os minutos.</value>
+  </data>
+  <data name="FractionNone" xml:space="preserve">
+    <value>{0} tem casas de fração, e a coluna {1} não guarda nenhuma.</value>
+  </data>
+  <data name="FractionMore" xml:space="preserve">
+    <value>{0} tem mais casas de fração que as {1} da coluna {2}.</value>
+  </data>
+  <data name="BinaryFormat" xml:space="preserve">
+    <value>Um binário vem como 0x seguido dos dígitos hexadecimais.</value>
+  </data>
+  <data name="CsvRowWiderHeader" xml:space="preserve">
+    <value>A linha {0} tem {1} valores, e o cabeçalho tem {2}.</value>
+  </data>
+  <data name="CsvRowWiderFirst" xml:space="preserve">
+    <value>A linha {0} tem {1} valores, e a primeira linha tem {2}.</value>
+  </data>
+  <data name="CsvQuoteOpen" xml:space="preserve">
+    <value>A aspa aberta na linha {0} não fecha até o fim do arquivo.</value>
+  </data>
+  <data name="CsvEncoding" xml:space="preserve">
+    <value>O arquivo não é {0} válido na linha {1}. Escolha a codificação dele.</value>
+  </data>
+  <data name="ValueTooLargeFile" xml:space="preserve">
+    <value>Um valor da linha {0} do arquivo, coluna {1}, passa de 64 MiB, e o Prism não o importa.</value>
+  </data>
+  <data name="ValueTooLargeItem" xml:space="preserve">
+    <value>Um valor do item {0} da lista, coluna {1}, passa de 64 MiB, e o Prism não o importa.</value>
+  </data>
+  <data name="ValueTooLargeSheet" xml:space="preserve">
+    <value>Um valor da linha {0} da planilha {2}, coluna {1}, passa de 64 MiB, e o Prism não o importa.</value>
+  </data>
+  <data name="RowTooLargeFile" xml:space="preserve">
+    <value>A linha {0} do arquivo passa de 256 MiB de valores, e o Prism não a importa.</value>
+  </data>
+  <data name="RowTooLargeItem" xml:space="preserve">
+    <value>O item {0} da lista passa de 256 MiB de valores, e o Prism não o importa.</value>
+  </data>
+  <data name="RowTooLargeSheet" xml:space="preserve">
+    <value>A linha {0} da planilha {1} passa de 256 MiB de valores, e o Prism não a importa.</value>
+  </data>
+  <data name="TooManyColumns" xml:space="preserve">
+    <value>O arquivo tem mais de {0} colunas.</value>
+  </data>
+  <data name="ColumnNameTooLong" xml:space="preserve">
+    <value>O nome da coluna {0} do arquivo passa de {1} caracteres.</value>
+  </data>
+  <data name="ReadCanceled" xml:space="preserve">
+    <value>A leitura do arquivo foi cancelada.</value>
+  </data>
+  <data name="XmlInvalid" xml:space="preserve">
+    <value>A planilha tem uma parte que não é um XML válido, e o Prism não a lê. No Excel, salve-a de novo como .xlsx.</value>
+  </data>
+  <data name="XlsxCorrupt" xml:space="preserve">
+    <value>O .xlsx está estragado: o Prism não consegue descompactá-lo. No Excel, salve-o de novo como .xlsx.</value>
+  </data>
+  <data name="ReadFailedCode" xml:space="preserve">
+    <value>Não foi possível ler o arquivo copiado (código {0}).</value>
+  </data>
+  <data name="ReadFailedType" xml:space="preserve">
+    <value>Não foi possível ler o arquivo ({0}).</value>
+  </data>
+  <data name="JsonShape" xml:space="preserve">
+    <value>O JSON não é uma lista de objetos, nem um objeto com uma lista de objetos dentro.</value>
+  </data>
+  <data name="JsonMalformed" xml:space="preserve">
+    <value>O arquivo não é um JSON válido: erro na linha {0}, byte {1} da linha.</value>
+  </data>
+  <data name="JsonItemNotObject" xml:space="preserve">
+    <value>O item {0} da lista não é um objeto.</value>
+  </data>
+  <data name="JsonKeyTwice" xml:space="preserve">
+    <value>O item {0} da lista tem a chave {1} duas vezes.</value>
+  </data>
+  <data name="JsonKeyUnknown" xml:space="preserve">
+    <value>O item {0} da lista tem a chave {1}, que não estava no arquivo quando ele foi lido.</value>
+  </data>
+  <data name="JsonValueTooLarge" xml:space="preserve">
+    <value>Um valor do arquivo passa de 64 MiB, e o Prism não o importa.</value>
+  </data>
+  <data name="JsonEncoding" xml:space="preserve">
+    <value>O JSON não é UTF-8 válido: erro na linha {0} do arquivo.</value>
+  </data>
+  <data name="XlsxTooDeep" xml:space="preserve">
+    <value>A planilha tem elementos aninhados demais (mais de 64 níveis).</value>
+  </data>
+  <data name="SheetNone" xml:space="preserve">
+    <value>A pasta de trabalho não tem planilhas.</value>
+  </data>
+  <data name="SheetMissing" xml:space="preserve">
+    <value>A planilha {0} não existe no arquivo.</value>
+  </data>
+  <data name="XlsxNoSheetPart" xml:space="preserve">
+    <value>Este arquivo não é um .xlsx que o Prism lê: a planilha {0} não tem a parte dela.</value>
+  </data>
+  <data name="XlsxNoTypes" xml:space="preserve">
+    <value>Este arquivo não é um .xlsx que o Prism lê: falta a lista das partes do arquivo ([Content_Types].xml).</value>
+  </data>
+  <data name="XlsxStrict" xml:space="preserve">
+    <value>A planilha está no formato Strict do Office Open XML, que o Prism não lê. No Excel, salve-a como Pasta de Trabalho do Excel (.xlsx).</value>
+  </data>
+  <data name="XlsxSharedTooLarge" xml:space="preserve">
+    <value>Os textos da planilha passam de 256 MiB, o que o Prism lê de uma planilha. No Excel, salve a planilha como CSV e importe o CSV.</value>
+  </data>
+  <data name="XlsxOutOfBounds" xml:space="preserve">
+    <value>A planilha tem uma célula fora dos limites do Excel.</value>
+  </data>
+  <data name="XlsxLimits" xml:space="preserve">
+    <value>A planilha passa dos limites que o Prism lê de um .xlsx.</value>
+  </data>
+  <data name="XlsxMissingPart" xml:space="preserve">
+    <value>Este arquivo não é um .xlsx que o Prism lê: falta a parte {0}.</value>
+  </data>
+  <data name="XlsxOld" xml:space="preserve">
+    <value>Este arquivo não é um .xlsx que o Prism lê: é uma planilha do Excel antigo (.xls) ou uma planilha com senha. No Excel, salve-a como .xlsx, sem senha.</value>
+  </data>
+  <data name="XlsxNotZip" xml:space="preserve">
+    <value>Este arquivo não é um .xlsx que o Prism lê: ele não é um .zip, como todo .xlsx.</value>
+  </data>
+  <data name="RangeTo" xml:space="preserve">
+    <value>{0} a {1}</value>
+  </data>
+  <data name="XlsxCellOutsideHeader" xml:space="preserve">
+    <value>A linha {0} da planilha tem valor na coluna {1}, fora das colunas do cabeçalho ({2}).</value>
+  </data>
+  <data name="XlsxCellOutsideFirst" xml:space="preserve">
+    <value>A linha {0} da planilha tem valor na coluna {1}, fora das colunas lidas no começo da planilha ({2}).</value>
+  </data>
+  <data name="XlsxCellSharedMissing" xml:space="preserve">
+    <value>A célula {0} aponta para um texto que a planilha não tem.</value>
+  </data>
+  <data name="XlsxCellBoolean" xml:space="preserve">
+    <value>A célula {0} tem um valor lógico que o Prism não lê.</value>
+  </data>
+  <data name="XlsxCellError" xml:space="preserve">
+    <value>A célula {0} tem o erro {1} do Excel.</value>
+  </data>
+  <data name="XlsxCellDate" xml:space="preserve">
+    <value>A célula {0} tem uma data que o Prism não lê.</value>
+  </data>
+  <data name="XlsxCellType" xml:space="preserve">
+    <value>A célula {0} tem um tipo que o Prism não lê.</value>
+  </data>
+  <data name="XlsxCellNumber" xml:space="preserve">
+    <value>A célula {0} tem um número que o Prism não lê.</value>
+  </data>
+  <data name="XlsxLeap1900" xml:space="preserve">
+    <value>A data 29/02/1900 do Excel não existe.</value>
+  </data>
+  <data name="XlsxCellNotDate" xml:space="preserve">
+    <value>A célula {0} tem um número que não é uma data do Excel.</value>
+  </data>
+</root>

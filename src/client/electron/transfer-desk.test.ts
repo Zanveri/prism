@@ -171,8 +171,8 @@ describe("escolher o destino (RN-EXPORT-019): o processo principal abre o diálo
     expect(await choose(join(harness.dataDir, "transfers", `${jobId}.ready`))).toEqual({ status: "notWritable" });
 
     const link = join(harness.root, "atalho");
-    symlinkSync(harness.dataDir, link);
-    expect(await choose(join(link, "usuario.vault"))).toEqual({ status: "notWritable" });
+    if (process.platform !== "win32") symlinkSync(harness.dataDir, link);
+    if (process.platform !== "win32") expect(await choose(join(link, "usuario.vault"))).toEqual({ status: "notWritable" });
   });
 
   it("o arquivo que outra exportação ainda não entregue vai gravar é `inUse`, comparado pelo caminho resolvido; sem diferenciar maiúsculas no Windows e no macOS", async () => {

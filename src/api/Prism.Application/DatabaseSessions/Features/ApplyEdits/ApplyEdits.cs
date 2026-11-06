@@ -2,9 +2,15 @@ using CSharpFunctionalExtensions;
 using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
+using Prism.Application.Journal;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
+using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
+using Prism.Infrastructure.Vault.Services;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Prism.Application.DatabaseSessions.Features.ApplyEdits;
@@ -25,7 +31,7 @@ public sealed record ApplyEditsCommand : IRequest<Result<EditsAppliedDto, ApiErr
     public override string ToString() => nameof(ApplyEditsCommand);
 }
 
-internal sealed class ApplyEditsHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService) : IRequestHandler<ApplyEditsCommand, Result<EditsAppliedDto, ApiErrorDto>>
+internal sealed class ApplyEditsHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService? vaultService = null, IJournalRecorder? journalRecorder = null) : IRequestHandler<ApplyEditsCommand, Result<EditsAppliedDto, ApiErrorDto>>
 {
     public async Task<Result<EditsAppliedDto, ApiErrorDto>> Handle(ApplyEditsCommand request, CancellationToken cancellationToken)
     {
@@ -34,9 +40,58 @@ internal sealed class ApplyEditsHandler(IConnectionQueries connectionQueries, ID
         if (readOnly.IsFailure)
             return Result.Failure<EditsAppliedDto, ApiErrorDto>(readOnly.Error);
 
-        if (readOnly.Value)
-            return Result.Failure<EditsAppliedDto, ApiErrorDto>(SessionProtections.EditsRefusal());
+        var wholeColumnChange = request.Changes?.FirstOrDefault(change => change.Kind is "updateAll" or "column");
+        long? wholeColumnRows = wholeColumnChange?.Rows is { ValueKind: JsonValueKind.Number } rowsElement && rowsElement.TryGetInt64(out var parsedRows) ? parsedRows : null;
+        var isWholeColumn = wholeColumnChange is not null;
 
-        return (await databaseSessionService.ApplyEditsAsync(request.SessionID, request.ResultID, request.Changes.ToChanges(), cancellationToken)).Map(applied => new EditsAppliedDto(applied, databaseSessionService.TransactionOf(request.SessionID)?.ToDto())).MapError(DatabaseSessionErrors.From);
+        var entryId = -1L;
+        if (journalRecorder is not null)
+        {
+            var sessionInfo = databaseSessionService.InfoOf(request.SessionID);
+            var (snapshot, protections) = JournalSnapshots.FromVault(vaultService, sessionInfo?.ConnectionID, sessionInfo, readOnly.Value);
+
+            entryId = journalRecorder.Begin(new JournalEntryStart(
+                Kind: EJournalKind.Edit,
+                Action: isWholeColumn ? "Salvar da coluna inteira" : "Salvar edições",
+                Level: isWholeColumn ? EJournalLevel.High : EJournalLevel.Warning,
+                Reason: isWholeColumn ? $"Coluna inteira: {wholeColumnRows ?? 0} linhas." : "Edição pela grade.",
+                Origin: "other",
+                Sql: isWholeColumn ? "UPDATE (coluna inteira)" : "Salvar edições da grade",
+                Confirmed: isWholeColumn,
+                SessionId: request.SessionID,
+                Connection: snapshot,
+                Protections: protections));
+        }
+
+        if (readOnly.Value)
+        {
+            var refusal = SessionProtections.EditsRefusal();
+            if (entryId > 0)
+                journalRecorder!.Complete(entryId, new JournalEntryEnd(EJournalOutcome.Refused, null, refusal.Type, null, refusal.Detail));
+
+            return Result.Failure<EditsAppliedDto, ApiErrorDto>(refusal);
+        }
+
+        var applied = await databaseSessionService.ApplyEditsAsync(request.SessionID, request.ResultID, request.Changes.ToChanges(), cancellationToken);
+        if (entryId > 0)
+        {
+            if (applied.IsSuccess)
+            {
+                journalRecorder!.Complete(entryId, new JournalEntryEnd(EJournalOutcome.Ok, wholeColumnRows ?? applied.Value));
+            }
+            else
+            {
+                var errorDto = DatabaseSessionErrors.From(applied.Error);
+                var journalOutcome = applied.Error.Outcome == ECancelOutcome.Canceled
+                    ? EJournalOutcome.Cancelled
+                    : applied.Error.Kind is EDatabaseFailure.ConnectionReadOnly or EDatabaseFailure.EditInvalid or EDatabaseFailure.TransactionFailed
+                        ? EJournalOutcome.Refused
+                        : EJournalOutcome.Error;
+                var sqlState = journalOutcome == EJournalOutcome.Error ? applied.Error.SqlState : null;
+                journalRecorder!.Complete(entryId, new JournalEntryEnd(journalOutcome, null, errorDto.Type, sqlState, errorDto.Detail));
+            }
+        }
+
+        return applied.Map(count => new EditsAppliedDto(count, databaseSessionService.TransactionOf(request.SessionID)?.ToDto())).MapError(DatabaseSessionErrors.From);
     }
 }

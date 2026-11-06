@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CanceledMessage" xml:space="preserve">
+    <value>The statement was canceled.</value>
+  </data>
+  <data name="UnknownOutcomeAdvice" xml:space="preserve">
+    <value>Prism does not know whether the statement finished: check the database before running it again.</value>
+  </data>
+  <data name="UnknownOutcomeMessage" xml:space="preserve">
+    <value>The database did not answer the cancellation in time, and the session was closed. {0}</value>
+  </data>
+  <data name="CanceledWhileReturningRowsMessage" xml:space="preserve">
+    <value>The cancellation arrived while the statement was returning the rows. What it wrote up to that point is confirmed, and it may be only part of the statement: Prism does not know whether it finished. Check the database before running it again.</value>
+  </data>
+  <data name="ConnectionClosedMessage" xml:space="preserve">
+    <value>The connection to the database was closed, and the statement was not sent. Open the session again.</value>
+  </data>
+  <data name="NoOpenCursorMessage" xml:space="preserve">
+    <value>There is no open cursor: run the statement again.</value>
+  </data>
+  <data name="UnknownObjectKindMessage" xml:space="preserve">
+    <value>The requested object type does not exist: use tables, views, routines or sequences.</value>
+  </data>
+  <data name="TransactionControlMessage" xml:space="preserve">
+    <value>Transaction control statements (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) are not accepted in Auto-commit, where each statement is committed when it finishes. To control the transaction, choose "Manual commit" in the editor bar: the first statement opens the transaction, and "Commit" and "Rollback" (or COMMIT and ROLLBACK typed) end it.</value>
+  </data>
+  <data name="NeverTransactionControlMessage" xml:space="preserve">
+    <value>Two-phase commit (PREPARE TRANSACTION, COMMIT PREPARED), AND CHAIN, and COMMIT or ROLLBACK followed by anything else are not accepted; nothing was sent. Use COMMIT or ROLLBACK alone, or the "Commit" and "Rollback" buttons.</value>
+  </data>
+  <data name="NotAllowedInTransactionMessage" xml:space="preserve">
+    <value>This statement does not run inside a transaction, and the database's refusal would spoil the tab's manual transaction; nothing was sent. Run it in a tab in Auto-commit.</value>
+  </data>
+  <data name="ReadOnlyWithTransactionMessage" xml:space="preserve">
+    <value>The connection became read-only with a manual transaction open in this tab; nothing was sent. End the transaction with "Commit" or "Rollback" first.</value>
+  </data>
+  <data name="RollbackWorkToSavepointMessage" xml:space="preserve">
+    <value>With the IBM driver, ROLLBACK WORK TO SAVEPOINT undoes the whole transaction, not just what came after the savepoint; nothing was sent. Write ROLLBACK TO SAVEPOINT, without the WORK.</value>
+  </data>
+  <data name="CanceledWhileReturningRowsInTransactionMessage" xml:space="preserve">
+    <value>The cancellation arrived while the statement was returning the rows. What it wrote up to that point stayed in the transaction, without a commit, and it may be only part of the statement: Prism does not know whether it finished. Check before the Commit.</value>
+  </data>
+  <data name="UndoneTransactionMessage" xml:space="preserve">
+    <value>The statement left a transaction open, and Prism rolled it back: nothing it wrote inside it stayed. {0}</value>
+  </data>
+  <data name="WritesAfterTheFirstPageMessage" xml:space="preserve">
+    <value>The statement started as a read and tried to write after the first page; nothing was written. Run it again: it will run to the end.</value>
+  </data>
+  <data name="SeveralStatementsMessage" xml:space="preserve">
+    <value>Each run takes a single statement, and the text sent has more than one; nothing was run. Send one at a time. A block with `;` in the body (procedure, function, trigger, compound block) is a single statement.</value>
+  </data>
+  <data name="NotCountableMessage" xml:space="preserve">
+    <value>Only a read can be counted, and the statement sent is not a single read; nothing was run.</value>
+  </data>
+  <data name="NoRowMessage" xml:space="preserve">
+    <value>The row no longer exists, or its key changed: the statement did not change any row.</value>
+  </data>
+  <data name="IsolationLevelInvalid" xml:space="preserve">
+    <value>The isolation level "{0}" does not exist for this database.</value>
+  </data>
+  <data name="TransactionOpenForIsolation" xml:space="preserve">
+    <value>The tab has an open transaction: end it with Commit or Rollback before changing the isolation level.</value>
+  </data>
+  <data name="NoTransactionLogForIsolation" xml:space="preserve">
+    <value>This database has no transaction log: the only isolation level available is Dirty Read.</value>
+  </data>
+  <data name="EditWouldChangeMany" xml:space="preserve">
+    <value>The statement would change {0} rows, not just one.</value>
+  </data>
+  <data name="CountReturnedNoRow" xml:space="preserve">
+    <value>The count returned no row.</value>
+  </data>
+  <data name="SemicolonInHost" xml:space="preserve">
+    <value>The IBM driver does not accept `;` in the host: it is the character it uses to separate the connection data.</value>
+  </data>
+  <data name="SemicolonInPassword" xml:space="preserve">
+    <value>The IBM driver does not accept `;` in the password: it is the character it uses to separate the connection data.</value>
+  </data>
+  <data name="SemicolonInDatabase" xml:space="preserve">
+    <value>The IBM driver does not accept `;` in the database name: it is the character it uses to separate the connection data.</value>
+  </data>
+  <data name="SemicolonInUserName" xml:space="preserve">
+    <value>The IBM driver does not accept `;` in the user: it is the character it uses to separate the connection data.</value>
+  </data>
+  <data name="VariableQueryTooManyColumns" xml:space="preserve">
+    <value>A variable's query has up to {0} columns, and this one has {1}.</value>
+  </data>
+  <data name="VariableQueryTooManyRows" xml:space="preserve">
+    <value>A variable's query reads up to {0} rows, and this one returned more.</value>
+  </data>
+  <data name="VariableQueryTooManyBytes" xml:space="preserve">
+    <value>The values of a variable's query go over 16 MiB.</value>
+  </data>
+</root>

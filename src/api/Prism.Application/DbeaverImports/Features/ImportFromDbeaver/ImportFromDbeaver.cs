@@ -6,6 +6,8 @@ using Prism.Application.DbeaverImports.Repositories;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
 using Prism.Infrastructure.DbeaverSources.Services;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Vault.Services;
 using System.Text.Json;
 using ILogger = Serilog.ILogger;
@@ -34,13 +36,13 @@ public sealed record ImportFromDbeaverCommand : IRequest<Result<ImportedDbeaverD
         => nameof(ImportFromDbeaverCommand);
 }
 
-internal sealed class ImportFromDbeaverHandler(IVaultService vaultService, IDbeaverSourceService source, IDbeaverImportRepository importRepository, TimeProvider timeProvider, ILogger logger) : IRequestHandler<ImportFromDbeaverCommand, Result<ImportedDbeaverDto, ApiErrorDto>>
+internal sealed class ImportFromDbeaverHandler(IVaultService vaultService, IDbeaverSourceService source, IDbeaverImportRepository importRepository, TimeProvider timeProvider, ILogger logger, IJournalRecorder? journal = null) : IRequestHandler<ImportFromDbeaverCommand, Result<ImportedDbeaverDto, ApiErrorDto>>
 {
     private readonly ILogger _logger = logger.ForContext<ImportFromDbeaverHandler>();
 
     public async Task<Result<ImportedDbeaverDto, ApiErrorDto>> Handle(ImportFromDbeaverCommand request, CancellationToken cancellationToken)
     {
-        // RN-DBEAVER-016: a geração é lida ANTES de abrir a cópia e conferida dentro da própria gravação, com a trava do cofre.
+        var startedAt = timeProvider.GetUtcNow();
         var generation = vaultService.Generation;
         var sourceId = DbeaverRequests.SourceIdOf(request.SourceId!);
 
@@ -50,12 +52,10 @@ internal sealed class ImportFromDbeaverHandler(IVaultService vaultService, IDbea
 
         var analysis = prepared.Value.Analysis;
 
-        // A chave que a cópia não tem só se sabe depois de lê-la (`IMPORT_INVALID`). A do item que não pode ser importado é ignorada: ele nunca fica marcado.
         var items = request.Items ?? [];
         if (items.Any(key => key is null || (!analysis.FoldersByKey.ContainsKey(key) && !analysis.ConnectionsByKey.ContainsKey(key))))
             return Refuse(sourceId, DbeaverErrors.UnknownItem());
 
-        // RN-DBEAVER-017: as chaves de `overwrite` têm de ser de conexões marcadas. A chave de uma conexão que não está mais no cofre não é erro: entra como nova.
         var itemKeys = items.ToHashSet(StringComparer.Ordinal);
         if ((request.Overwrite ?? []).Any(key => key is null || !itemKeys.Contains(key) || !analysis.ConnectionsByKey.ContainsKey(key)))
             return Refuse(sourceId, DbeaverErrors.UnknownOverwrite());
@@ -66,30 +66,33 @@ internal sealed class ImportFromDbeaverHandler(IVaultService vaultService, IDbea
             .ToHashSet(StringComparer.Ordinal);
         var overwrite = (request.Overwrite ?? []).Select(key => key!).Where(selected.Contains).ToHashSet(StringComparer.Ordinal);
 
-        var imported = await importRepository.Import(analysis, prepared.Value.Assembly, request.TargetFolderID, selected, overwrite, TransferRules.ConflictOf(request.OnConflict), generation, timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
+        var imported = await importRepository.Import(analysis, prepared.Value.Assembly, request.TargetFolderID, selected, overwrite, TransferRules.ConflictOf(request.OnConflict), generation, startedAt.UtcDateTime, cancellationToken);
         if (imported.IsFailure)
         {
-            // O cofre que fechou (o 401 e o 503 da gravação) leva a cópia; a recusa que a pessoa corrige (o lugar que sumiu) a deixa, e o diálogo continua com ela.
             if (imported.Error.Type is "VAULT_LOCKED" or "VAULT_UNAVAILABLE")
                 source.Delete(sourceId);
 
             return Refuse(sourceId, imported.Error);
         }
 
-        // RN-DBEAVER-006: a cópia é apagada depois da importação que terminou com sucesso, também a que não criou nem atualizou nada.
         source.Delete(sourceId);
 
         var result = imported.Value;
         var placed = result.Placed;
         var written = selected.Where(analysis.ConnectionsByKey.ContainsKey).Select(key => prepared.Value.Assembly.Items[key].Model).ToList();
 
-        // RN-LOG-001 e RN-DBEAVER-016: as contagens e os IDs criados e atualizados, nunca nomes, hosts, usuários, senhas, IDs do DBeaver, nomes de projetos ou caminhos.
         _logger.Information(
             "Importação do DBeaver {SourceId}: {Projects} projetos lidos, {CreatedFolders} pastas criadas, {MergedFolders} juntadas às que existiam, {CreatedConnections} conexões criadas, {Updated} atualizadas, {Kept} que já existiam e ficaram como estão, {Renamed} com outro nome, {Skipped} deixadas de fora, {Invalid} itens não importáveis, {WithPasswords} marcadas com senha, {CredentialsUnreadable} projetos com as senhas ilegíveis, {WithLeftOut} com algo de fora ({LeftOut}); pastas {FolderIDs}, conexões {ConnectionIDs} e atualizadas {UpdatedIDs}.",
             sourceId, prepared.Value.Included.Count, placed.CreatedFolderIDs.Count, placed.MergedFolders, placed.CreatedConnectionIDs.Count, result.UpdatedIDs.Count, result.Kept, placed.Renamed, placed.Skipped, analysis.InvalidCount,
             written.Count(model => model.PasswordFound && DbeaverRequests.WithPasswordsOf(request.WithPasswords)), prepared.Value.Included.Count(project => project.CredentialsUnreadable), written.Count(model => model.LeftOut.Count > 0),
             string.Join(',', written.SelectMany(model => model.LeftOut).GroupBy(code => code).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key}={group.Count()}")),
             placed.CreatedFolderIDs, placed.CreatedConnectionIDs, result.UpdatedIDs);
+
+        var endedAt = timeProvider.GetUtcNow();
+        var totalConnections = placed.CreatedConnectionIDs.Count + result.UpdatedIDs.Count;
+        journal?.Record(
+            new JournalEntryStart(startedAt, EJournalKind.Connections, "Importação do DBeaver", EJournalLevel.Warning, $"Importação do DBeaver: {placed.CreatedConnectionIDs.Count} conexões criadas e {result.UpdatedIDs.Count} atualizadas."),
+            new JournalEntryEnd(endedAt, Math.Max(0L, (long)(endedAt - startedAt).TotalMilliseconds), EJournalOutcome.Ok, RowCount: totalConnections));
 
         return Result.Success<ImportedDbeaverDto, ApiErrorDto>(new ImportedDbeaverDto
         {
@@ -102,7 +105,6 @@ internal sealed class ImportFromDbeaverHandler(IVaultService vaultService, IDbea
         });
     }
 
-    /// <summary>A recusa vai ao log só com o código (a classe da recusa, RN-LOG-001).</summary>
     private Result<ImportedDbeaverDto, ApiErrorDto> Refuse(Guid sourceId, ApiErrorDto error)
     {
         _logger.Information("Importação do DBeaver {SourceId} recusada ({Refusal:l}).", sourceId, error.Type);

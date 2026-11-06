@@ -39,6 +39,12 @@ describe("o realce das declarações e do @nome (RN-VAR-025)", () => {
     expect(marksOf(source, analysis)).toEqual(["keyword:const", "variable:base", "keyword:let", "variable:dobro", "variable:base", "keyword:const", "variable:esquema", "string:'estoque'", "sqlVariable:@esquema", "variable:@dobro"]);
   });
 
+  it("o campo de uma interface leva a cor até onde o tipo vai, e o resto do caminho é SQL (RN-VAR-040)", () => {
+    const source = "interface E { cidade: string }\ninterface C { id: number; endereco: E }\nlet c: C\nSELECT @c.endereco.cidade, @c.id.x, @c.outro";
+
+    expect(marksOf(source, read(source)).filter((mark) => mark.startsWith("variable:@"))).toEqual(["variable:@c.endereco.cidade", "variable:@c.id", "variable:@c"]);
+  });
+
   it("o texto entre aspas duplas e a crase de uma declaração são texto (e não nome entre aspas), e o `//` é comentário", () => {
     const source = '// o topo\nlet nome = "Ana" // quem\nlet modelo = `x`\nSELECT 1';
 
@@ -112,10 +118,10 @@ describe("os erros (RN-VAR-012 e 025)", () => {
     expect(errorsOf(source, read(source)).map(([, message]) => message)).toEqual(["@ids é uma lista e só entra numa lista entre parênteses, como IN (@ids)."]);
   });
 
-  it("a recusa provisória das partes que ainda não entraram aparece como erro (a frase da conferência)", () => {
+  it("a variável de consulta não é erro: o valor dela só se sabe na execução (RN-VAR-011)", () => {
     const source = "let x = (SELECT 1)\nSELECT @x";
 
-    expect(errorsOf(source, read(source)).map(([, message]) => message)).toContain("A variável de consulta chega numa próxima versão.");
+    expect(errorsOf(source, read(source))).toEqual([]);
   });
 
   it("o orçamento da execução em seco: passado o tempo, o que só ela acha vai para a execução, e os erros da leitura ficam", () => {

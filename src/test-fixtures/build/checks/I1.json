@@ -1,0 +1,60 @@
+{
+  "scope": "changes",
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [{ "name": "manutencao", "create": true }],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 14:10",
+      "knownSchemas": ["producao"],
+      "knownTables": ["producao.maquina"]
+    },
+    "tables": [
+      {
+        "schema": "manutencao",
+        "name": "area",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "I1",
+      "severity": "info",
+      "table": null,
+      "column": null
+    }
+  ]
+}

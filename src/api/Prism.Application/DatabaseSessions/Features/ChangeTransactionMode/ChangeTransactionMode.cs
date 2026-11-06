@@ -1,3 +1,5 @@
+using Prism.Core.Extensions;
+using System.Resources;
 using CSharpFunctionalExtensions;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
@@ -9,8 +11,8 @@ using Prism.Infrastructure.Databases.Services;
 namespace Prism.Application.DatabaseSessions.Features.ChangeTransactionMode;
 
 /// <summary>
-/// RN-TX-001 e 005 (`PATCH api/user/database-sessions`): o modo de transação da aba, que a sessão dela segue. Sem `transactionMode`, o modo fica como
-/// está, e a resposta é a sessão com o estado da transação. `isolationLevel` só aceita `default`: o seletor de nível (RN-ISOL-*) ainda não existe.
+/// RN-TX-001, 005 e RN-ISOL-002, 003 (`PATCH api/user/database-sessions`): o modo de transação e o nível de isolamento da aba, que a sessão dela segue.
+/// Sem `transactionMode` ou `isolationLevel`, o que não veio fica como está, e a resposta é a sessão com o estado da transação.
 /// </summary>
 public sealed record ChangeTransactionModeCommand : IRequest<Result<DatabaseSessionDto, ApiErrorDto>>
 {
@@ -21,14 +23,26 @@ public sealed record ChangeTransactionModeCommand : IRequest<Result<DatabaseSess
 
 internal sealed class ChangeTransactionModeHandler(IDatabaseSessionService databaseSessionService) : IRequestHandler<ChangeTransactionModeCommand, Result<DatabaseSessionDto, ApiErrorDto>>
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ChangeTransactionMode.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ChangeTransactionModeCommand));
+
     public async Task<Result<DatabaseSessionDto, ApiErrorDto>> Handle(ChangeTransactionModeCommand request, CancellationToken cancellationToken)
     {
         if (databaseSessionService.InfoOf(request.ID) is not { } session || databaseSessionService.TransactionOf(request.ID) is not { } transaction)
-            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.SessionNotFound, "A sessão não existe mais.")));
+            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.SessionNotFound, Texts.Get("SessionGone"))));
 
         if (request.TransactionMode is { } mode)
         {
             var changed = await databaseSessionService.SetTransactionModeAsync(request.ID, mode == "manual" ? ETransactionMode.Manual : ETransactionMode.AutoCommit, cancellationToken);
+            if (changed.IsFailure)
+                return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(changed.Error));
+
+            transaction = changed.Value;
+        }
+
+        if (request.IsolationLevel is { } isolationLevel)
+        {
+            var changed = await databaseSessionService.SetIsolationLevelAsync(request.ID, isolationLevel, cancellationToken);
             if (changed.IsFailure)
                 return Result.Failure<DatabaseSessionDto, ApiErrorDto>(DatabaseSessionErrors.From(changed.Error));
 

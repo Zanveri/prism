@@ -78,7 +78,10 @@ internal sealed record ImportedFile(IReadOnlyList<ImportedFolder> Folders, IRead
             FileValue.Of(item, "verificationEnabled"),
             FileValue.Of(item, "verificationInterval"),
             FileValue.Of(item, "verificationQuery"),
-            FileEffective.Of(item));
+            FileEffective.Of(item),
+            Ssh: FileObject.Of(item, "ssh"),
+            Ssl: FileObject.Of(item, "ssl"),
+            Proxy: FileObject.Of(item, "proxy"));
 }
 
 /// <summary>O que a leitura do conteúdo aberto achou: a forma certa (com o arquivo), a forma errada (`IMPORT_FILE_INVALID`) ou itens demais (`IMPORT_LIMITS_EXCEEDED`).</summary>
@@ -105,9 +108,9 @@ internal sealed record ImportedFolder(string Key, string? ParentKey, FileValue N
 /// <summary>
 /// Uma conexão do arquivo: a chave e a pasta, que a forma garante, e os outros campos como vieram, a senha do banco inclusive. `SourceRefusal` é o motivo de não ser
 /// importável que a origem já sabe e que as regras de campo não dizem (RN-DBEAVER-009 e 010: o banco que o Prism não tem, a URL que não casa): só a leitura do
-/// DBeaver o preenche, e a análise o devolve como o motivo do item.
+/// DBeaver o preenche, e a análise o devolve como o motivo do item. `Ssh`, `Ssl` e `Proxy` são o túnel, o SSL e o proxy (RN-REDE-004); nulos, não vieram.
 /// </summary>
-internal sealed record ImportedConnection(string Key, string? FolderKey, FileValue Name, FileValue Engine, FileValue Host, FileValue Port, FileValue Database, FileValue UserName, FileValue Password, FileValue EnvironmentName, FileValue EnvironmentColor, FileValue ConfirmCommands, FileValue ReadOnly, FileValue VerificationEnabled, FileValue VerificationInterval, FileValue VerificationQuery, FileEffective Effective, string? SourceRefusal = null)
+internal sealed record ImportedConnection(string Key, string? FolderKey, FileValue Name, FileValue Engine, FileValue Host, FileValue Port, FileValue Database, FileValue UserName, FileValue Password, FileValue EnvironmentName, FileValue EnvironmentColor, FileValue ConfirmCommands, FileValue ReadOnly, FileValue VerificationEnabled, FileValue VerificationInterval, FileValue VerificationQuery, FileEffective Effective, string? SourceRefusal = null, FileObject? Ssh = null, FileObject? Ssl = null, FileObject? Proxy = null)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria o host, o usuário e a senha do banco.</summary>
     public override string ToString()
@@ -139,6 +142,35 @@ internal sealed record FileEffective(JsonValueKind Kind, FileValue ReadOnly, Fil
 }
 
 /// <summary>
+/// Um objeto dentro de um item (o `ssh`, o `ssl` e o `proxy` da conexão, RN-REDE-004): ausente ou nulo é "não veio"; objeto, com os campos dele como vieram
+/// (<see cref="FileValue"/>, o nome repetido vale pelo último); qualquer outra coisa é o tipo errado, e tira o item. Pode ter a senha do túnel e a do proxy.
+/// </summary>
+internal sealed record FileObject(JsonValueKind Kind, IReadOnlyDictionary<string, FileValue> Fields)
+{
+    public static FileObject Of(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value))
+            return new FileObject(JsonValueKind.Undefined, new Dictionary<string, FileValue>());
+
+        var fields = new Dictionary<string, FileValue>(StringComparer.Ordinal);
+        if (value.ValueKind == JsonValueKind.Object)
+            foreach (var property in value.EnumerateObject())
+                fields[property.Name] = FileValue.From(property.Value);
+
+        return new FileObject(value.ValueKind, fields);
+    }
+
+    public FileValue this[string name]
+        => Fields.TryGetValue(name, out var value) ? value : FileValue.Absent;
+
+    public bool IsMissing
+        => Kind is JsonValueKind.Undefined or JsonValueKind.Null;
+
+    public override string ToString()
+        => nameof(FileObject);
+}
+
+/// <summary>
 /// Um campo de um item do arquivo como veio: o tipo do JSON (`Undefined` é o campo ausente) e, no texto e no número, o texto dele (o número como foi escrito,
 /// para a regra dizer se ele é inteiro e o motivo poder citá-lo). O verdadeiro e o falso estão no próprio tipo. Pode ser a senha do banco: o `ToString()`
 /// gerado a imprimiria.
@@ -148,10 +180,10 @@ internal readonly record struct FileValue(JsonValueKind Kind, string? Text)
     public static readonly FileValue Absent = new(JsonValueKind.Undefined, null);
 
     public static FileValue Of(JsonElement item, string name)
-    {
-        if (!item.TryGetProperty(name, out var value))
-            return Absent;
+        => item.TryGetProperty(name, out var value) ? From(value) : Absent;
 
+    public static FileValue From(JsonElement value)
+    {
         return value.ValueKind switch
         {
             JsonValueKind.String => new FileValue(JsonValueKind.String, value.GetString()),

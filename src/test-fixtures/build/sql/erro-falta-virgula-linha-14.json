@@ -1,0 +1,26 @@
+{
+  "engine": "postgresql",
+  "sql": "-- manutencao · PostgreSQL · as tabelas novas e, no fim, as existentes\n-- o que você mudar numa existente vira ALTER no DDL de diferenças\n\nCREATE TABLE manutencao.ordem_manutencao (\n  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n  maquina_id bigint NOT NULL REFERENCES producao.maquina (id),\n  plano_id   bigint REFERENCES manutencao.plano_manutencao (id)\n               ON DELETE SET NULL,\n  aberta_por bigint NOT NULL REFERENCES producao.operador (id),\n  tipo       varchar(12) NOT NULL DEFAULT 'corretiva'\n               CHECK (tipo IN ('corretiva', 'preventiva')),\n  status     varchar(12) NOT NULL DEFAULT 'aberta',\n  aberta_em  timestamptz NOT NULL DEFAULT now()\n  fechada_em timestamptz\n);",
+  "before": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [{ "name": "manutencao", "create": true }],
+    "base": null,
+    "tables": [],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "error": {
+    "line": 14,
+    "column": 3,
+    "message": "esperava , ou ) antes de fechada_em"
+  }
+}

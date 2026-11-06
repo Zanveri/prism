@@ -5,9 +5,12 @@ using Prism.Application.Folders.Models;
 using Prism.Application.Folders.Models.Dtos;
 using Prism.Application.Folders.Queries;
 using Prism.Application.Folders.Repositories;
+using Prism.Application.Journal;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Extensions;
 using Prism.Core.Mediator;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 
 namespace Prism.Application.Folders.Features.UpdateFolder;
 
@@ -44,10 +47,11 @@ public sealed record UpdateFolderCommand : IRequest<Result<FolderDto, ApiErrorDt
     public override string ToString() => nameof(UpdateFolderCommand);
 }
 
-internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderRepository folderRepository, TimeProvider timeProvider) : IRequestHandler<UpdateFolderCommand, Result<FolderDto, ApiErrorDto>>
+internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderRepository folderRepository, TimeProvider timeProvider, IJournalRecorder? journal = null) : IRequestHandler<UpdateFolderCommand, Result<FolderDto, ApiErrorDto>>
 {
     public async Task<Result<FolderDto, ApiErrorDto>> Handle(UpdateFolderCommand request, CancellationToken cancellationToken)
     {
+        var startedAt = timeProvider.GetUtcNow();
         var loaded = await folderRepository.GetByID(request.ID, cancellationToken);
         if (loaded.IsFailure)
             return Result.Failure<FolderDto, ApiErrorDto>(loaded.Error);
@@ -55,9 +59,6 @@ internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderR
         var (folder, protections) = loaded.Value;
         var parentChanged = request.ParentID != folder.ParentID;
 
-        // RN-PASTA-003. A pasta pai nova não é conferida por `ExistsByID`: "não existe" quem diz é a gravação, o único lugar em que um cofre
-        // fechado não vira 404 (o `false` da consulta é o mesmo para "não existe" e "cofre fechado"). Uma pasta pai inexistente também não é
-        // descendente de ninguém, e a conferência segue. Só uma consulta que respondeu "sim" recusa.
         if (parentChanged && request.ParentID is { } parentID && await folderQueries.IsSelfOrDescendant(parentID, folder.ID, cancellationToken))
             return Result.Failure<FolderDto, ApiErrorDto>(FolderErrors.Cycle());
 
@@ -67,18 +68,18 @@ internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderR
         var protectionsChanged = ProtectionRules.NormalizeConfirmation(request.ConfirmCommands) != folder.ConfirmCommands || request.ReadOnly != folder.ReadOnly;
         var internalDescriptionsChanged = request.UseInternalDescriptions != folder.UseInternalDescriptions;
 
-        // Nada mudou depois da normalização (a tela salva sem editar): carimbar UpdatedAt e regravar o cofre fingiria uma alteração que não houve.
-        // Nada mudou também não pede a senha do usuário: o somente leitura continua o mesmo.
         if (!parentChanged && name == folder.Name && !environmentChanged && !colorChanged && !protectionsChanged && !internalDescriptionsChanged)
             return Result.Success<FolderDto, ApiErrorDto>(folder.ToDto(protections));
 
-        // RN-PASTA-002, só quando a chave (nome sem diferenciar maiúsculas, pasta pai) mudou: com ela igual
-        // a única pasta que a ocupa é esta mesma, e salvar sem mudar o nome não é duplicidade.
         var keyChanged = parentChanged || !string.Equals(name, folder.Name, StringComparison.OrdinalIgnoreCase);
         if (keyChanged && await folderQueries.Exists(name, request.ParentID, cancellationToken))
             return Result.Failure<FolderDto, ApiErrorDto>(FolderErrors.AlreadyExists(name));
 
-        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var previousReadOnly = folder.ReadOnly;
+        var previousConfirm = folder.ConfirmCommands;
+        var previousParentID = folder.ParentID;
+
+        var now = startedAt.UtcDateTime;
         folder.Rename(name, now);
         folder.MoveTo(request.ParentID, now);
         folder.ChangeEnvironment(request.EnvironmentName, request.EnvironmentColor, now);
@@ -86,12 +87,54 @@ internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderR
         folder.ChangeProtections(request.ConfirmCommands, request.ReadOnly, now);
         folder.ChangeInternalDescriptions(request.UseInternalDescriptions, now);
 
-        // A senha do usuário vai à gravação, que a confere só se a mudança do somente leitura a pede (RN-PROT-003). As proteções que valem
-        // (RN-PROT-004) saem do documento gravado.
         var updated = await folderRepository.Update(folder, request.UserPassword, cancellationToken);
+        var endedAt = timeProvider.GetUtcNow();
+        var durationMs = Math.Max(0L, (long)(endedAt - startedAt).TotalMilliseconds);
         if (updated.IsFailure)
+        {
+            if (updated.Error.Type == "INVALID_PASSWORD")
+                journal?.Record(
+                    new JournalEntryStart(startedAt, EJournalKind.Security, "Senha errada numa conferência", EJournalLevel.Warning, "Senha errada ao mudar o somente leitura da pasta.", Protections: JournalSnapshots.ProtectionsText(protections)),
+                    new JournalEntryEnd(endedAt, durationMs, EJournalOutcome.Error, ErrorCode: "INVALID_PASSWORD"));
+
             return Result.Failure<FolderDto, ApiErrorDto>(updated.Error);
+        }
+
+        var (action, level, reason) = ClassifyChange(previousReadOnly, folder.ReadOnly, previousConfirm, folder.ConfirmCommands, previousParentID, folder.ParentID);
+        journal?.Record(
+            new JournalEntryStart(startedAt, EJournalKind.Connections, action, level, reason, Protections: JournalSnapshots.ProtectionsText(updated.Value)),
+            new JournalEntryEnd(endedAt, durationMs, EJournalOutcome.Ok));
 
         return Result.Success<FolderDto, ApiErrorDto>(folder.ToDto(updated.Value));
     }
+
+    private static (string Action, EJournalLevel Level, string Reason) ClassifyChange(bool previousReadOnly, bool currentReadOnly, string? previousConfirm, string? currentConfirm, Guid? previousParentID, Guid? currentParentID)
+    {
+        if (previousReadOnly && !currentReadOnly)
+            return ("Somente leitura desligado", EJournalLevel.High, "Somente leitura desligado na pasta.");
+
+        if (!previousReadOnly && currentReadOnly)
+            return ("Somente leitura ligado", EJournalLevel.Info, "Somente leitura ligado na pasta.");
+
+        var previousRank = ConfirmationRank(previousConfirm);
+        var currentRank = ConfirmationRank(currentConfirm);
+        if (currentRank < previousRank)
+            return ("Confirmação afrouxada", EJournalLevel.High, "Confirmação de comandos afrouxada na pasta.");
+
+        if (currentRank > previousRank)
+            return ("Confirmação ligada", EJournalLevel.Info, "Confirmação de comandos reforçada na pasta.");
+
+        if (previousParentID != currentParentID)
+            return ("Pasta movida", EJournalLevel.Info, "Pasta movida.");
+
+        return ("Pasta editada", EJournalLevel.Info, "Pasta editada.");
+    }
+
+    private static int ConfirmationRank(string? confirm)
+        => confirm switch
+        {
+            ProtectionRules.ConfirmAll => 2,
+            ProtectionRules.ConfirmIrreversible => 1,
+            _ => 0
+        };
 }

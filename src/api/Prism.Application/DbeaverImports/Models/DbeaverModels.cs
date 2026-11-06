@@ -41,18 +41,24 @@ internal sealed record DbeaverProjectModel(
 /// <param name="LeftOut">Os códigos do que ficou de fora (RN-DBEAVER-013), na ordem da especificação.</param>
 /// <param name="SavePassword">O "Salvar senha" da conexão no DBeaver.</param>
 /// <param name="PasswordFound">O DBeaver trouxe a senha (e o usuário, sem o qual ela não vem), antes de "Levar as senhas".</param>
+/// <param name="Ssh">RN-REDE-008: o túnel SSH do DBeaver que o Prism grava, com o segredo que veio (sai sem "Levar as senhas"); nulo sem túnel, ou com o que fica de fora.</param>
+/// <param name="Proxy">RN-REDE-008: o proxy SOCKS do DBeaver, como o túnel.</param>
 internal sealed record DbeaverConnectionModel(
     string ID, string FolderPath, string? Refusal, EDatabaseEngine? Engine,
     FileValue Name, FileValue EngineValue, FileValue Host, FileValue Port, FileValue Database, FileValue UserName, FileValue Password,
     FileValue EnvironmentName, FileValue EnvironmentColor, FileValue ConfirmCommands, FileValue ReadOnly,
-    int? SqliPort, string? Server, string? DbeaverType, string? AuthModel, IReadOnlyList<string> LeftOut, bool SavePassword, bool PasswordFound)
+    int? SqliPort, string? Server, string? DbeaverType, string? AuthModel, IReadOnlyList<string> LeftOut, bool SavePassword, bool PasswordFound,
+    ConnectionSshSettings? Ssh = null, ConnectionProxySettings? Proxy = null)
 {
     public override string ToString()
         => nameof(DbeaverConnectionModel);
 }
 
-/// <summary>O usuário e a senha de uma conexão no `credentials-config.json` (o nó `#connection`); o que não veio é nulo.</summary>
-internal sealed record DbeaverLogin(string? User, string? Password)
+/// <summary>
+/// O usuário e a senha de uma conexão no `credentials-config.json` (o nó `#connection`); o que não veio é nulo. `Tunnel` e `Proxy` são os do túnel SSH
+/// (`network/ssh_tunnel`) e do proxy SOCKS (`network/socks_proxy`), RN-REDE-008.
+/// </summary>
+internal sealed record DbeaverLogin(string? User, string? Password, DbeaverLogin? Tunnel = null, DbeaverLogin? Proxy = null)
 {
     public override string ToString()
         => nameof(DbeaverLogin);
@@ -66,6 +72,7 @@ internal static class DbeaverLeftOut
 {
     public const string InformixServer = "informixServer";
     public const string SshTunnel = "sshTunnel";
+    public const string Ssl = "ssl";
     public const string Proxy = "proxy";
     public const string DriverProperties = "driverProperties";
     public const string Bootstrap = "bootstrap";

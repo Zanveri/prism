@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Histórico de comandos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#7DB2FF}a:hover{color:#A9CBFF}
+</style>
+</helmet>
+<div style="height: 100vh; min-height: 760px; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+
+<header style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 48px; box-sizing: border-box; padding: 6px 12px 6px 16px; background: #14181D; border-bottom: 1px solid #2A313B">
+<span style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#7DB2FF" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M9 2 16 15H2Z"></path><path d="M9 2v13"></path></svg>Prism</span>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; background: #232A33; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">Área de trabalho<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4.5 3 3 3-3"></path></svg></button>
+<span style="margin-left: auto; display: flex; align-items: center; gap: 8px; color: #B4BCC8"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>marina.costa</span>
+<a href="Auditoria.dc.html" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; text-decoration: none"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg>Configurações</a>
+</header>
+
+<div style="flex: 1 1 0; min-height: 0; display: flex; flex-wrap: wrap">
+
+<nav aria-label="Navegador de conexões" style="flex: 0 1 240px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; background: #14181D; border-right: 1px solid #2A313B; overflow: auto">
+<div style="padding: 4px 8px 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8E99A8">Conexões</div>
+<div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; color: #B4BCC8"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2Z"></path></svg>Fábrica<span style="margin-left: auto; padding: 0 6px; border-radius: 4px; background: #3A1F1C; color: #FF8A7A; font-size: 11px; font-weight: 600">Produção</span></div>
+<div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 24px; border-radius: 6px; background: #232A33; color: #E6EAF0; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5ED3A3" aria-hidden="true"></span>MES Produção</div>
+<div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 24px; color: #B4BCC8"><span style="width: 8px; height: 8px; border-radius: 50%; border: 1px solid #8E99A8; box-sizing: border-box" aria-hidden="true"></span>ERP Informix</div>
+<div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; color: #B4BCC8"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2Z"></path></svg>Homologação<span style="margin-left: auto; padding: 0 6px; border-radius: 4px; background: #3A3018; color: #F2B644; font-size: 11px; font-weight: 600">QAS</span></div>
+<div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 24px; color: #B4BCC8"><span style="width: 8px; height: 8px; border-radius: 50%; border: 1px solid #8E99A8; box-sizing: border-box" aria-hidden="true"></span>MES QAS</div>
+<div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 24px; color: #B4BCC8"><span style="width: 8px; height: 8px; border-radius: 50%; border: 1px solid #8E99A8; box-sizing: border-box" aria-hidden="true"></span>Db2 Financeiro QAS</div>
+</nav>
+
+<main style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column">
+<div role="tablist" aria-label="Abas" style="flex: none; display: flex; align-items: flex-end; gap: 2px; height: 36px; padding: 0 8px; background: #14181D; border-bottom: 1px solid #2A313B">
+<span role="tab" aria-selected="true" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; background: #0E1114; border: 1px solid #2A313B; border-bottom-color: #0E1114; border-radius: 6px 6px 0 0; margin-bottom: -1px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #FF8A7A" aria-hidden="true"></span>apontamentos.sql</span>
+<span role="tab" aria-selected="false" style="display: flex; align-items: center; height: 30px; padding: 0 12px; color: #8E99A8">Consulta 2</span>
+</div>
+
+<div role="toolbar" aria-label="Barra do editor" style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; background: #14181D; border-bottom: 1px solid #2A313B">
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: #7DB2FF; border: 0; border-radius: 6px; color: #0E1114; font: inherit; font-weight: 600"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M3 2v8l7-4Z"></path></svg>Executar<kbd style="font-family: 'IBM Plex Mono', monospace; font-size: 11px">Ctrl+Enter</kbd></button>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">Executar script<kbd style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #B4BCC8">Alt+X</kbd></button>
+<button type="button" aria-pressed="true" aria-keyshortcuts="Control+Shift+H" title="Histórico de comandos (Ctrl+Shift+H)" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: #1E2C40; border: 1px solid #7DB2FF; border-radius: 6px; color: #E6EAF0; font: inherit; font-weight: 500"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#7DB2FF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"></path><path d="M2.5 2.5v2.6h2.6"></path><path d="M8 5v3.2l2 1.3"></path></svg>Histórico<kbd style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #B4BCC8">Ctrl+Shift+H</kbd></button>
+<span style="width: 1px; height: 20px; background: #2A313B" aria-hidden="true"></span>
+<button type="button" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; background: transparent; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit"><span style="padding: 0 6px; border-radius: 4px; background: #3A1F1C; color: #FF8A7A; font-size: 11px; font-weight: 600">Produção</span>MES Produção</button>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: transparent; border: 1px solid #38414D; border-radius: 6px; color: #B4BCC8; font: inherit">mes_prod</button>
+</div>
+
+<div style="flex: 1 1 0; min-height: 0; display: flex; flex-wrap: wrap">
+<div style="flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column">
+<pre aria-label="Editor SQL" style="flex: 1 1 0; min-height: 180px; margin: 0; padding: 12px 16px; overflow: auto; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 21px; color: #C9D1DC; counter-reset: l"><span style="color: #8E99A8">-- apontamentos do turno</span>
+<span style="color: #7DB2FF">SELECT</span> a.id, a.ordem, a.qtd_boa, a.qtd_refugo
+  <span style="color: #7DB2FF">FROM</span> producao.apontamento a
+ <span style="color: #7DB2FF">WHERE</span> a.turno = <span style="color: #5ED3A3">'B'</span>
+   <span style="color: #7DB2FF">AND</span> a.data_ref = <span style="color: #F2B644">CURRENT_DATE</span>;
+
+<span style="display: inline-block; width: 2px; height: 17px; background: #E6EAF0; vertical-align: text-bottom"></span></pre>
+<div style="flex: none; height: 1px; background: #2A313B"></div>
+<div style="flex: 0 0 230px; min-height: 0; display: flex; flex-direction: column; background: #0E1114">
+<div style="flex: none; display: flex; align-items: center; gap: 12px; height: 32px; padding: 0 12px; border-bottom: 1px solid #2A313B; color: #B4BCC8"><span style="color: #E6EAF0; font-weight: 500">Resultado</span><span>200 linhas · 84 ms</span></div>
+<div style="flex: 1 1 0; overflow: auto">
+<table style="border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 12px; min-width: 100%">
+<thead><tr style="background: #14181D; color: #B4BCC8; text-align: left"><th style="padding: 4px 12px; font-weight: 500">id</th><th style="padding: 4px 12px; font-weight: 500">ordem</th><th style="padding: 4px 12px; font-weight: 500">qtd_boa</th><th style="padding: 4px 12px; font-weight: 500">qtd_refugo</th></tr></thead>
+<tbody>
+<tr><td style="padding: 3px 12px">88412</td><td style="padding: 3px 12px">OP-55102</td><td style="padding: 3px 12px">1240</td><td style="padding: 3px 12px">12</td></tr>
+<tr style="background: #14181D"><td style="padding: 3px 12px">88413</td><td style="padding: 3px 12px">OP-55102</td><td style="padding: 3px 12px">980</td><td style="padding: 3px 12px">4</td></tr>
+<tr><td style="padding: 3px 12px">88415</td><td style="padding: 3px 12px">OP-55117</td><td style="padding: 3px 12px">2210</td><td style="padding: 3px 12px">31</td></tr>
+<tr style="background: #14181D"><td style="padding: 3px 12px">88419</td><td style="padding: 3px 12px">OP-55120</td><td style="padding: 3px 12px">640</td><td style="padding: 3px 12px">0</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<aside aria-label="Histórico de comandos" style="flex: 1 1 420px; max-width: 420px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; background: #14181D; border-left: 1px solid #2A313B">
+<div style="flex: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 10px; border-bottom: 1px solid #2A313B">
+<div style="display: flex; align-items: center; gap: 8px">
+<h2 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600">Histórico</h2>
+<span style="color: #8E99A8">cifrado no seu cofre</span>
+<button type="button" aria-label="Mais ações do histórico" style="margin-left: auto; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; background: transparent; border: 0; border-radius: 6px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"></circle><circle cx="8" cy="8" r="1.2"></circle><circle cx="12.5" cy="8" r="1.2"></circle></svg></button>
+<button type="button" aria-label="Fechar o histórico" style="display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; background: transparent; border: 0; border-radius: 6px; color: #B4BCC8"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 3 8 8M11 3l-8 8"></path></svg></button>
+</div>
+<label style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; background: #1B2027; border: 1px solid #7DB2FF; border-radius: 6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#8E99A8" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="m10.5 10.5 3 3"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Buscar no histórico</span><input type="search" value="apontamento" style="flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: 0; color: #E6EAF0; font: inherit"></label>
+<div role="radiogroup" aria-label="Escopo" style="display: flex; padding: 2px; background: #0E1114; border: 1px solid #2A313B; border-radius: 6px">
+<button type="button" role="radio" aria-checked="true" style="flex: 1; height: 28px; background: #232A33; border: 0; border-radius: 4px; color: #E6EAF0; font: inherit; font-weight: 500">Esta conexão</button>
+<button type="button" role="radio" aria-checked="false" style="flex: 1; height: 28px; background: transparent; border: 0; border-radius: 4px; color: #B4BCC8; font: inherit">Todas as conexões</button>
+</div>
+</div>
+
+<div role="listbox" aria-label="Comandos executados" style="flex: 1 1 0; min-height: 0; overflow: auto; padding: 4px 8px 8px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+<div style="position: sticky; top: 0; padding: 10px 6px 6px; background: #14181D; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8E99A8">{{g.day}}</div>
+<sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+<div role="option" aria-selected="{{it.selected}}" style="{{it.box}}">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #B4BCC8">
+<span style="font-family: 'IBM Plex Mono', monospace; color: #E6EAF0">{{it.time}}</span>
+<span style="display: flex; align-items: center; gap: 4px; color: {{it.statusColor}}"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{it.statusColor}}" aria-hidden="true"></span>{{it.status}}</span>
+<span>{{it.meta}}</span>
+<span style="margin-left: auto; color: #8E99A8">{{it.repeat}}</span>
+</div>
+<pre style="margin: 6px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 18px; color: #C9D1DC; white-space: pre-wrap; overflow: hidden; max-height: 54px">{{it.sql}}</pre>
+</div>
+</sc-for>
+</sc-for>
+</div>
+
+<div style="flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; background: #1B2027; border-top: 1px solid #2A313B">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #B4BCC8"><span style="color: #FF8A7A; font-weight: 600">Erro</span><span>14:02:51 · MES Produção · mes_prod</span></div>
+<p style="margin: 0; padding: 8px 10px; background: #2A1A19; border-radius: 6px; color: #FFB4A9; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 18px">ERROR: column a.qtd_refugos does not exist (42703)</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; background: #7DB2FF; border: 0; border-radius: 6px; color: #0E1114; font: inherit; font-weight: 600">Inserir no editor<kbd style="font-family: 'IBM Plex Mono', monospace; font-size: 11px">Enter</kbd></button>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; background: transparent; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">Nova aba<kbd style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #B4BCC8">Shift+Enter</kbd></button>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; background: transparent; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">Copiar</button>
+</div>
+<p style="margin: 0; font-size: 12px; color: #8E99A8">Nada executa daqui: o comando volta ao editor, onde valem as proteções da conexão.</p>
+</div>
+</aside>
+</div>
+</main>
+</div>
+
+<footer style="flex: none; display: flex; align-items: center; gap: 16px; height: 26px; padding: 0 12px; background: #14181D; border-top: 1px solid #2A313B; font-size: 12px; color: #B4BCC8"><span style="color: #FF8A7A; font-weight: 600">Produção</span><span>MES Produção · PostgreSQL 16</span><span>Auto-commit</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const base = 'margin: 2px 0; padding: 8px 10px; border-radius: 6px; cursor: default;';
+    const ok = '#5ED3A3', err = '#FF8A7A', gray = '#8E99A8';
+    const mk = (time, status, statusColor, meta, sql, repeat, selected) => ({
+      time, status, statusColor, meta, sql, repeat: repeat || '', selected: selected ? 'true' : 'false',
+      box: selected ? base + ' background: #232A33; box-shadow: inset 0 0 0 1px #7DB2FF;' : base
+    });
+    return {
+      groups: [
+        { day: 'Hoje', items: [
+          mk('14:05:12', 'Concluído', ok, '84 ms · 200 linhas', "SELECT a.id, a.ordem, a.qtd_boa, a.qtd_refugo\n  FROM producao.apontamento a\n WHERE a.turno = 'B'", '×3'),
+          mk('14:02:51', 'Erro', err, '12 ms', "SELECT a.id, a.qtd_refugos\n  FROM producao.apontamento a\n WHERE a.turno = @turno", '', true),
+          mk('13:48:07', 'Concluído', ok, '1,2 s · 1.204 linhas afetadas', "UPDATE producao.apontamento\n   SET status = 'FECHADO'\n WHERE data_ref < CURRENT_DATE - 30"),
+          mk('11:20:33', 'Cancelado', gray, '38 s', "SELECT ordem, SUM(qtd_boa)\n  FROM producao.apontamento\n GROUP BY ordem")
+        ]},
+        { day: 'Ontem', items: [
+          mk('17:31:02', 'Concluído', ok, '210 ms · 48 linhas', "SELECT * FROM producao.apontamento\n WHERE ordem = 'OP-55020'"),
+          mk('09:12:40', 'Interrompido', gray, '—', "CREATE INDEX ix_apont_turno\n    ON producao.apontamento (turno, data_ref)")
+        ]}
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

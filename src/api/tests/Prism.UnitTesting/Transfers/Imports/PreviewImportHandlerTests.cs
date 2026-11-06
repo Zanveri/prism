@@ -113,6 +113,25 @@ public sealed class PreviewImportHandlerTests
         _importPreviewService.Verify(service => service.PreviewAsync(It.IsAny<ImportPreviewRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    /// <summary>RN-REDE-006: o túnel SSH sem o segredo que a conexão não grava é recusado antes da prévia, no campo dele e com a conexão, para a tela pedir o segredo.</summary>
+    [Trait("PreviewImportHandler", "PreviewImportCommand")]
+    [Fact(DisplayName = "ERRO o túnel SSH sem o segredo é recusado no campo, com a conexão, sem ir ao banco")]
+    public async Task Handle_NetworkSecret_ShouldBeRefusedBeforeTheDatabase()
+    {
+        //Arrange
+        var tunneled = _record with { Ssh = new ConnectionSshSettings("bastion.invalid", 22, "ops", SaveCredentials: false) };
+        _connectionQueries.Setup(queries => queries.GetRecordByID(_record.ID, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success<VaultConnectionRecord?, EVaultError>(tunneled));
+
+        //Act
+        var result = await CreateHandler().Handle(Command(), CancellationToken.None);
+
+        //Assert
+        Assert.Equal("CONNECTION_CREDENTIALS_MISSING", result.Error.Type);
+        Assert.True(((Dictionary<string, string[]>)result.Error.Extensions["errors"]!).ContainsKey("sshSecret"));
+        Assert.Equal(_record.ID, result.Error.Extensions["connectionID"]);
+        _importPreviewService.Verify(service => service.PreviewAsync(It.IsAny<ImportPreviewRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Trait("PreviewImportHandler", "PreviewImportCommand")]
     [Fact(DisplayName = "ERRO a conexão que não existe é 404")]
     public async Task Handle_MissingConnection_ShouldBeNotFound()

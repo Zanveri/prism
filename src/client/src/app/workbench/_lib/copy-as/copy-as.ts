@@ -261,7 +261,7 @@ export type CopyOutcome =
   | { kind: "cancelled" };
 
 /** A frase do SQL sem coluna nenhuma, que a especificação não escreve. */
-export const noColumnsMessage = 'As colunas escolhidas são todas calculadas pelo banco e ficam fora do INSERT: ligue "Incluir as colunas que o banco calcula" nas opções do SQL.';
+export const noColumnsMessage = copyAsCopy.notice.noColumns;
 
 /**
  * RN-SQL-017 e RN-GRADE-016: o "para de pedir quando o texto passa do limite" da busca dos valores completos, exato. A cada lote que chega, as linhas do

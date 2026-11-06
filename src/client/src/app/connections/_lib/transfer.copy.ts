@@ -1,4 +1,8 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { transferCopyEn } from "./transfer.copy.en";
+import { transferCopyEs } from "./transfer.copy.es";
 
 /** "3 conexões", "1 pasta": a conta com a concordância certa. */
 const connections = (count: number) => formatCount(count, "conexão", "conexões");
@@ -8,7 +12,7 @@ const folders = (count: number) => formatCount(count, "pasta", "pastas");
  * Os textos de exportar e importar conexões (seção 34 da especificação, RN-TRANSF-001 a 016), num lugar só. As frases das recusas são da tela (a API manda o
  * código e, no campo, a mesma frase): "A tela mostra a frase dela, e não o detalhe da API" (RN-TRANSF-010).
  */
-export const transferCopy = {
+const pt = {
   // RN-TRANSF-002: o diálogo grande da exportação.
   export: {
     title: "Exportar conexões",
@@ -132,6 +136,9 @@ export const transferCopy = {
       servers: "Confira os servidores antes de importar. A senha que você digitar numa destas conexões vai para o servidor que o arquivo indica.",
       address: (host: string, port: string, database: string) => `${host}:${port} / ${database}`,
       user: (userName: string) => `usuário ${userName}`,
+      ssh: (server: string) => `via SSH ${server}`,
+      ssl: (mode: string | null) => (mode === null ? "SSL" : `SSL ${mode}`),
+      proxy: (server: string) => `proxy ${server}`,
       withPassword: "com senha",
       withoutPassword: "sem senha",
       noCredentials: "sem usuário e senha",
@@ -214,7 +221,12 @@ export const transferCopy = {
   credentials: {
     rowNoCredentials: " · sem usuário e senha",
     rowNoPassword: " · sem senha",
-    noticeNoUser: "Esta conexão chegou sem usuário e senha. Preencha para conectar.",
-    noticeNoPassword: "Esta conexão chegou sem a senha. Preencha para conectar.",
+    notice: {
+      userName: "Esta conexão chegou sem usuário e senha. Preencha para conectar.",
+      password: "Esta conexão chegou sem a senha. Preencha para conectar.",
+    },
   },
 } as const;
+
+export type TransferCopy = Localized<typeof pt>;
+export const transferCopy = pickCopy({ "pt-BR": pt, en: transferCopyEn, es: transferCopyEs });

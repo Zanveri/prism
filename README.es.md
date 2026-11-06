@@ -7,9 +7,9 @@
 [![Descargas](https://img.shields.io/github/downloads/Zanveri/prism/total?label=descargas)](https://github.com/Zanveri/prism/releases)
 [![Licencia](https://img.shields.io/github/license/Zanveri/prism?label=licencia)](LICENSE)
 [![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#descargar)
-[![Documentación](https://img.shields.io/badge/documentaci%C3%B3n-zanveri.github.io%2Fprism-blue)](https://zanveri.github.io/prism/es/)
+[![Documentación](https://img.shields.io/badge/documentaci%C3%B3n-zanveri.com%2Fdocs%2Fprism-blue)](https://zanveri.com/docs/prism)
 
-**[Descargar](https://github.com/Zanveri/prism/releases/latest)** · [Documentación](https://zanveri.github.io/prism/es/) · [Reportar un problema](https://github.com/Zanveri/prism/issues)
+**[Descargar](https://zanveri.com/products/prism)** · [Documentación](https://zanveri.com/docs/prism) · [Reportar un problema](https://github.com/Zanveri/prism/issues)
 
 **Prism** es un cliente de bases de datos de escritorio, una alternativa a DBeaver y DataGrip para quien trabaja todos los días
 con **PostgreSQL**, **Db2** e **Informix**: conectar, explorar los objetos, ejecutar SQL y ver el resultado, rápido y sin rodeos.
@@ -20,12 +20,13 @@ para el trabajo de todos los días.
 
 La interfaz de la aplicación está por ahora en portugués de Brasil.
 
-![El editor SQL de Prism con el resultado de una consulta](site/img/editor-resultado.png)
+![El editor SQL de Prism con el resultado de una consulta](docs/images/editor-resultado.png)
 
 ## Descargar
 
-Descarga la versión más reciente desde la **[página de releases](https://github.com/Zanveri/prism/releases/latest)** y, en
-**Assets**, elige el archivo de tu sistema:
+Descarga la versión más reciente desde la **[página de Prism](https://zanveri.com/products/prism)**, en el sitio de Zanveri. Los mismos
+paquetes están en la **[página de releases](https://github.com/Zanveri/prism/releases/latest)**, en **Assets**. Elige el archivo de
+tu sistema:
 
 | Sistema | Archivo | Para qué |
 | --- | --- | --- |
@@ -58,9 +59,8 @@ notarización), así que el sistema avisa en la primera apertura:
 
 ## Documentación
 
-Instalación, primer uso, conexiones, editor SQL, registros de una tabla, configuración y actualizaciones:
-**<https://zanveri.github.io/prism/es/>** (también en [inglés](https://zanveri.github.io/prism/) y
-[portugués](https://zanveri.github.io/prism/pt-br/)).
+Instalación, primer uso, conexiones, editor SQL, registros de una tabla, configuración y actualizaciones, en el sitio de Zanveri
+(en portugués): **<https://zanveri.com/docs/prism>**.
 
 ## Problemas y sugerencias
 

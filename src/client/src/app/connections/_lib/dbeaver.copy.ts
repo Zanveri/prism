@@ -1,4 +1,8 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { dbeaverCopyEn } from "./dbeaver.copy.en";
+import { dbeaverCopyEs } from "./dbeaver.copy.es";
 
 /** "3 conexões", "1 pasta": a conta com a concordância certa. */
 const connections = (count: number) => formatCount(count, "conexão", "conexões");
@@ -8,7 +12,7 @@ const folders = (count: number) => formatCount(count, "pasta", "pastas");
  * Os textos de importar do DBeaver (seção 40 da especificação, RN-DBEAVER-001 a 018 e RN-CONFIG-011), num lugar só. As frases das recusas do processo
  * principal (`tooLarge`, `notWritable`, `noSpace`) são da tela; a do `unreadable` vem inteira dele, sem caminho (RN-DBEAVER-006).
  */
-export const dbeaverCopy = {
+const pt = {
   /** Fora do Electron (o navegador do desenvolvimento) as entradas ficam desabilitadas, com esta dica (RN-DBEAVER-003). */
   outside: "Importar do DBeaver só funciona no app do Prism.",
 
@@ -147,6 +151,7 @@ export const dbeaverCopy = {
       informixServer: (server: string | null) => (server === null ? "o servidor Informix" : `o servidor Informix (${server})`),
       sshTunnel: "o túnel SSH",
       proxy: "o proxy",
+      ssl: "o SSL (configure-o em Editar conexão)",
       driverProperties: "as propriedades do driver",
       bootstrap: "os comandos de inicialização, o banco e o esquema padrão",
       autocommitOff: "o auto-commit desligado (as abas novas seguem Configurações › Transações)",
@@ -225,3 +230,6 @@ export const dbeaverCopy = {
     never: "Você ainda não importou do DBeaver.",
   },
 } as const;
+
+export type DbeaverCopy = Localized<typeof pt>;
+export const dbeaverCopy = pickCopy({ "pt-BR": pt, en: dbeaverCopyEn, es: dbeaverCopyEs });

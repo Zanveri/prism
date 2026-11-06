@@ -1,4 +1,4 @@
-import { useId, type FormEvent, type Ref } from "react";
+import { useId, type FormEvent, type ReactNode, type Ref } from "react";
 
 import { Button, type Engine } from "@/components/ui";
 
@@ -38,6 +38,8 @@ type RecordsFilterProps = {
   autocomplete: boolean;
   /** De quem é o campo: os Registros de uma tabela, ou o resultado de um comando da aba de consulta (RN-GRADE-011). Muda o nome e a dica. */
   subject?: "table" | "result";
+  /** RN-TX-001 e RN-ISOL-001: o controle de transação e nível de isolamento nos Registros de uma tabela. */
+  transaction?: ReactNode;
 };
 
 /**
@@ -48,7 +50,7 @@ type RecordsFilterProps = {
  * completa as colunas e as palavras do filtro (RN-TABELA-011, `FilterField`). Embaixo, nos Registros, o comando que a tela executou, uma parte por linha,
  * como foi enviado (o bloco rola se o filtro for comprido); a dica o repete inteiro.
  */
-export function RecordsFilter({ ref, draft, onDraft, applied, problem, busy, command, onApply, onClear, engine, columns, autocomplete, subject = "table" }: RecordsFilterProps) {
+export function RecordsFilter({ ref, draft, onDraft, applied, problem, busy, command, onApply, onClear, engine, columns, autocomplete, subject = "table", transaction }: RecordsFilterProps) {
   const hintId = useId();
   const problemId = useId();
   const field = subject === "table" ? recordsCopy.filter : gridFilterCopy.result;
@@ -61,35 +63,38 @@ export function RecordsFilter({ ref, draft, onDraft, applied, problem, busy, com
 
   return (
     <div className="flex flex-none flex-col gap-1.5 border-b border-border bg-panel px-3 py-2">
-      <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2">
-        <label title={field.hint} className="flex h-8 min-w-60 flex-1 items-center rounded-md border border-border bg-raised px-2.5 has-[.cm-focused]:outline-2 has-[.cm-focused]:outline-accent">
-          <FilterField
-            ref={ref}
-            value={draft}
-            onChange={onDraft}
-            onSubmit={() => {
-              if (!busy) onApply();
-            }}
-            label={field.label}
-            describedBy={message === null ? hintId : `${hintId} ${problemId}`}
-            invalid={message !== null}
-            placeholder={gridFilterCopy.placeholder}
-            engine={engine}
-            columns={columns}
-            autocomplete={autocomplete}
-          />
-        </label>
-        {/* A dica do campo para leitor de tela (a de quem vê é o `title` e o texto de ajuda do campo vazio). */}
-        <span id={hintId} className="sr-only">
-          {field.hint}
-        </span>
-        <Button type="submit" variant="secondary" size="compact" className="h-8 px-3" disabled={busy}>
-          {text.apply}
-        </Button>
-        <Button type="button" variant="secondary" size="compact" className="h-8 px-3" disabled={!canClear(draft, applied)} onClick={onClear}>
-          {text.clear}
-        </Button>
-      </form>
+      <div className="flex flex-wrap items-center gap-2">
+        <form onSubmit={handleSubmit} className="flex min-w-60 flex-1 flex-wrap items-center gap-2">
+          <label title={field.hint} className="flex h-8 min-w-60 flex-1 items-center rounded-md border border-border bg-raised px-2.5 has-[.cm-focused]:outline-2 has-[.cm-focused]:outline-accent">
+            <FilterField
+              ref={ref}
+              value={draft}
+              onChange={onDraft}
+              onSubmit={() => {
+                if (!busy) onApply();
+              }}
+              label={field.label}
+              describedBy={message === null ? hintId : `${hintId} ${problemId}`}
+              invalid={message !== null}
+              placeholder={gridFilterCopy.placeholder}
+              engine={engine}
+              columns={columns}
+              autocomplete={autocomplete}
+            />
+          </label>
+          {/* A dica do campo para leitor de tela (a de quem vê é o `title` e o texto de ajuda do campo vazio). */}
+          <span id={hintId} className="sr-only">
+            {field.hint}
+          </span>
+          <Button type="submit" variant="secondary" size="compact" className="h-8 px-3" disabled={busy}>
+            {text.apply}
+          </Button>
+          <Button type="button" variant="secondary" size="compact" className="h-8 px-3" disabled={!canClear(draft, applied)} onClick={onClear}>
+            {text.clear}
+          </Button>
+        </form>
+        {transaction}
+      </div>
 
       {message === null ? null : (
         <p id={problemId} className="text-xs whitespace-pre-wrap text-danger">

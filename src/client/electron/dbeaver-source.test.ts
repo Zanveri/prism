@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { dbeaverLimits, dbeaverSourceReplySchema } from "./dbeaver-messages";
-import { createDbeaverSource, dbeaverDialogTitle, dbeaverRoots, symlinkMessage, type DbeaverSourceDeps } from "./dbeaver-source";
+import { createDbeaverSource, dbeaverRoots, type DbeaverSourceDeps } from "./dbeaver-source";
+import { dbeaverSourceCopy } from "./dbeaver-source.copy";
+
+const { dialogTitle: dbeaverDialogTitle, symlink: symlinkMessage } = dbeaverSourceCopy();
 
 /**
  * A procura e a cópia do DBeaver (RN-DBEAVER-004 a 006), em pastas temporárias de verdade, com uma pasta pessoal falsa. Os nomes e o conteúdo dos arquivos são
@@ -28,7 +31,7 @@ type Harness = {
 let harness: Harness;
 
 function setUp(overrides: Partial<DbeaverSourceDeps> = {}): Harness {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "prism-dbeaver-")));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "prism-dbeaver-")));
   const home = join(root, "casa");
   const dataDir = join(root, "dados");
   mkdirSync(home);
@@ -275,7 +278,7 @@ describe("Escolher a pasta do DBeaver (choose)", () => {
 
     mkdirSync(standard(), { recursive: true });
     await choose(null, 2);
-    expect(harness.dialogs[1]).toEqual({ windowId: 2, title: dbeaverDialogTitle, defaultPath: standard() });
+    expect(harness.dialogs[1]).toEqual({ windowId: 2, title: dbeaverDialogTitle, defaultPath: dbeaverRoots({ platform: "linux", env: {}, home: harness.home })[2].dir });
   });
 
   it("serve a pasta de dados, o workspace, o projeto e a própria `.dbeaver`", async () => {

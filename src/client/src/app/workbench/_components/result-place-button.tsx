@@ -19,7 +19,7 @@ function PlaceIcon({ className, ...props }: ComponentProps<"svg">) {
 /** RN-ABAS-012: o ícone da aba do resultado, uma grade de três por três (diferente do ícone da aba de tabela, que tem o cabeçalho). */
 export function ResultTabIcon(props: ComponentProps<"svg">) {
   return (
-    <PlaceIcon {...props}>
+    <PlaceIcon data-icon="table" {...props}>
       <rect x="2" y="2" width="12" height="12" rx="1" />
       <path d="M2 6h12M2 10h12M6 2v12M10 2v12" />
     </PlaceIcon>
@@ -29,7 +29,7 @@ export function ResultTabIcon(props: ComponentProps<"svg">) {
 /** RN-ABAS-014: o ícone de "Onde mostrar o resultado", uma janela com o painel de baixo marcado. */
 export function ResultPlaceIcon(props: ComponentProps<"svg">) {
   return (
-    <PlaceIcon {...props}>
+    <PlaceIcon data-icon="panel" {...props}>
       <rect x="2" y="2.5" width="12" height="11" rx="1" />
       <path d="M2 9h12" />
       <path d="M4 11.25h8" strokeWidth="2" />

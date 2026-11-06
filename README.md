@@ -7,9 +7,9 @@
 [![Downloads](https://img.shields.io/github/downloads/Zanveri/prism/total?label=downloads)](https://github.com/Zanveri/prism/releases)
 [![License](https://img.shields.io/github/license/Zanveri/prism?label=license)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#download)
-[![Documentation](https://img.shields.io/badge/documentation-zanveri.github.io%2Fprism-blue)](https://zanveri.github.io/prism/)
+[![Documentation](https://img.shields.io/badge/documentation-zanveri.com%2Fdocs%2Fprism-blue)](https://zanveri.com/docs/prism)
 
-**[Download](https://github.com/Zanveri/prism/releases/latest)** · [Documentation](https://zanveri.github.io/prism/) · [Report a problem](https://github.com/Zanveri/prism/issues)
+**[Download](https://zanveri.com/products/prism)** · [Documentation](https://zanveri.com/docs/prism) · [Report a problem](https://github.com/Zanveri/prism/issues)
 
 **Prism** is a desktop database client, an alternative to DBeaver and DataGrip for people who work every day with
 **PostgreSQL**, **Db2** and **Informix**: connect, browse the objects, run SQL and see the result, fast and without detours.
@@ -20,12 +20,12 @@ again.
 
 The app's interface is currently in Brazilian Portuguese.
 
-![Prism's SQL editor with the result of a query](site/img/editor-resultado.png)
+![Prism's SQL editor with the result of a query](docs/images/editor-resultado.png)
 
 ## Download
 
-Get the newest version from the **[releases page](https://github.com/Zanveri/prism/releases/latest)** and, under **Assets**, pick
-the file for your system:
+Get the newest version on the **[Prism page](https://zanveri.com/products/prism)** of the Zanveri website. The same packages are on the
+**[releases page](https://github.com/Zanveri/prism/releases/latest)**, under **Assets**. Pick the file for your system:
 
 | System | File | What it is |
 | --- | --- | --- |
@@ -57,9 +57,8 @@ notarized), so the system warns you on first launch:
 
 ## Documentation
 
-Installation, first use, connections, the SQL editor, the records of a table, settings and updates:
-**<https://zanveri.github.io/prism/>** (also in [Portuguese](https://zanveri.github.io/prism/pt-br/) and
-[Spanish](https://zanveri.github.io/prism/es/)).
+Installation, first use, connections, the SQL editor, the records of a table, settings and updates, on the Zanveri website (in
+Portuguese): **<https://zanveri.com/docs/prism>**.
 
 ## Problems and suggestions
 

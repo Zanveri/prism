@@ -102,7 +102,10 @@ internal static class ImportPreviewMappings
             Effective = new ImportEffectiveDto { ReadOnly = origin.ReadOnly, ConfirmCommands = origin.ConfirmCommands, EnvironmentName = origin.Environment?.Name, EnvironmentColor = origin.Environment?.Color },
             Conflict = placed.Conflict,
             CopyName = placed.CopyName,
-            Strengthened = ToDto(placed.Strengthening)
+            Strengthened = ToDto(placed.Strengthening),
+            Ssh = candidate.Ssh is { } ssh ? new ImportPreviewSshDto(ssh.Host, ssh.Port, ssh.UserName, ssh.AuthMethod, !string.IsNullOrEmpty(ssh.Secret)) : null,
+            Ssl = candidate.Ssl is { } ssl ? new ImportPreviewSslDto(ssl.SslMode) : null,
+            Proxy = candidate.Proxy is { } proxy ? new ImportPreviewProxyDto(proxy.Host, proxy.Port, proxy.UserName, !string.IsNullOrEmpty(proxy.Password)) : null
         };
     }
 

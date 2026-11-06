@@ -4,6 +4,7 @@ using Prism.Core.Extensions;
 using Prism.Infrastructure.DbeaverSources.Models;
 using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Vault.Models;
+using System.Resources;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -16,12 +17,15 @@ namespace Prism.Application.DbeaverImports.Models;
 /// </summary>
 internal static class DbeaverProjects
 {
+    /// <summary>Os textos, no idioma do pedido: <c>DbeaverProjects.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(DbeaverProjects));
+
     private const string DefaultStorage = "data-sources.json";
     private const string StoragePrefix = "data-sources";
     private const string CredentialsPrefix = "credentials-config";
     private const string Extension = ".json";
 
-    public const string DuplicatedIDMessage = "O ID desta conexão se repete no projeto.";
+    public static string DuplicatedIDMessage => Texts.Get("DuplicatedID");
 
     /// <summary>
     /// O mais que um caminho de pastas pode ter para ser aberto em seus pais: bem acima dos 32 níveis (RN-TRANSF-010) e do tamanho de qualquer nome de pasta. O que passa disso
@@ -31,7 +35,7 @@ internal static class DbeaverProjects
 
     public const int MaxPathLength = 4096;
 
-    public const string PathTooDeepMessage = "A pasta desta conexão tem níveis demais.";
+    public static string PathTooDeepMessage => Texts.Get("PathTooDeep");
 
     /// <summary>
     /// RN-DBEAVER-006: o nome do projeto que o Prism não aceita: vazio, com mais de 255 caracteres (a origem guarda o nome inteiro, RN-DBEAVER-018) ou com
@@ -47,7 +51,7 @@ internal static class DbeaverProjects
     public static DbeaverProjectModel Read(IDbeaverSourceService source, DbeaverProjectFiles project)
     {
         var invalidName = NameIsInvalid(project.Name);
-        var display = invalidName ? $"Projeto {project.Position}" : project.Name;
+        var display = invalidName ? Texts.Get("ProjectPosition", project.Position) : project.Name;
         var files = project.Files.ToDictionary(file => file.Name, StringComparer.Ordinal);
 
         // O nome que não serve deixa as conexões de fora: nem o arquivo é aberto.
@@ -194,7 +198,10 @@ internal static class DbeaverProjects
         return decrypted.IsSuccess ? decrypted.Value : new Dictionary<string, DbeaverLogin>();
     }
 
-    /// <summary>`{ "&lt;ID&gt;": { "#connection": { "user": "…", "password": "…" }, … } }`. Do nó `#connection`, só `user` e `password`; os nós `network/…` (o túnel SSH) e as entradas `profile:…` são ignorados.</summary>
+    /// <summary>
+    /// `{ "&lt;ID&gt;": { "#connection": { "user": "…", "password": "…" }, "network/ssh_tunnel": { … }, … } }`. Dos nós `#connection`, `network/ssh_tunnel` e
+    /// `network/socks_proxy` (RN-REDE-008), só `user` e `password`; os outros nós e as entradas `profile:…` são ignorados.
+    /// </summary>
     private static IReadOnlyDictionary<string, DbeaverLogin> ReadLogins(JsonElement root)
     {
         var logins = new Dictionary<string, DbeaverLogin>(StringComparer.Ordinal);
@@ -204,8 +211,10 @@ internal static class DbeaverProjects
                 continue;
 
             var node = Child(entry.Value, "#connection");
-            if (node.ValueKind == JsonValueKind.Object)
-                logins[entry.Name] = new DbeaverLogin(Text(node, "user"), Text(node, "password"));
+            var tunnel = LoginOf(Child(entry.Value, "network/ssh_tunnel"));
+            var proxy = LoginOf(Child(entry.Value, "network/socks_proxy"));
+            if (node.ValueKind == JsonValueKind.Object || tunnel is not null || proxy is not null)
+                logins[entry.Name] = new DbeaverLogin(Text(node, "user"), Text(node, "password"), tunnel, proxy);
         }
 
         return logins;
@@ -262,4 +271,7 @@ internal static class DbeaverProjects
 
     private static JsonElement Child(JsonElement element, string name)
         => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) ? value : default;
+
+    private static DbeaverLogin? LoginOf(JsonElement node)
+        => node.ValueKind == JsonValueKind.Object ? new DbeaverLogin(Text(node, "user"), Text(node, "password")) : null;
 }

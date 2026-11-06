@@ -14,9 +14,9 @@ import { signInCopy } from "./_lib/sign-in.copy";
 function VaultNotice() {
   return (
     <div className="flex gap-2.5 rounded-lg border border-border px-3.5 py-3 text-sm text-muted">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-0.5 flex-none">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon="lock" className="mt-0.5 flex-none">
         <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
-        <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+        <path className="icon-part-shackle" d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
       </svg>
       <span>{signInCopy.vaultNotice}</span>
     </div>

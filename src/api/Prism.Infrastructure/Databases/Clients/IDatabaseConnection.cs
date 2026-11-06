@@ -12,6 +12,9 @@ public interface IDatabaseConnection : IAsyncDisposable
 {
     string ServerVersion { get; }
 
+    /// <summary>RN-REDE-005: a impressão digital da chave do servidor SSH aceita no primeiro acesso, quando o túnel desta conexão a aceitou; nula nos outros casos.</summary>
+    string? FirstUseHostKey => null;
+
     /// <summary>`false` quando a conexão caiu (rede, banco reiniciado, sessão derrubada por um administrador): depois de uma falha, é o que diz que ela não serve mais.</summary>
     bool IsOpen { get; }
 
@@ -29,11 +32,17 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// </summary>
     bool ManualCommit { get; set; }
 
+    /// <summary>RN-ISOL-001: o nível de isolamento da aba (`default` ou o código do nível escolhido).</summary>
+    string IsolationLevel { get; }
+
     /// <summary>RN-TX-002 e 009: a transação manual, depois da última operação. Some sem Commit nem Rollback quando o banco a desfez (RN-TX-009).</summary>
     ETransactionState Transaction { get; }
 
     /// <summary>RN-TX-013: o banco da sessão tem transação? O Informix sem log de transação não tem.</summary>
     Task<Result<bool, DatabaseFailure>> TransactionsAvailableAsync(CancellationToken cancellationToken);
+
+    /// <summary>RN-ISOL-002 a 004: aplica o nível de isolamento na sessão.</summary>
+    Task<UnitResult<DatabaseFailure>> SetIsolationLevelAsync(string isolationLevel, CancellationToken cancellationToken);
 
     /// <summary>RN-TX-002: confirma a transação manual. Sem ela, não faz nada. A falha é a do banco, e a transação já não existe (RN-TX-014).</summary>
     Task<UnitResult<DatabaseFailure>> CommitAsync(CancellationToken cancellationToken);
@@ -81,6 +90,20 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// seria a do comando embrulhado.
     /// </summary>
     Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null);
+
+    /// <summary>
+    /// RN-VAR-034: a consulta de uma variável, que quem chama já conferiu (um comando só, os marcadores, a leitura pela RN-PROT-005). Fecha o cursor anterior, como
+    /// todo comando (RN-SQL-007), e lê as linhas inteiras: no PostgreSQL em Auto-commit, na transação só de leitura; com a transação manual aberta, dentro dela.
+    /// Com a linha depois de `maxRows`, mais de 100 colunas ou mais de 16 MiB de valores, para de ler, fecha a leitura e responde `VariableQueryTooLarge`. Não
+    /// deixa cursor aberto.
+    /// </summary>
+    Task<Result<FullRows, DatabaseFailure>> ReadVariableAsync(string sql, IReadOnlyList<QueryParameter> parameters, int maxRows, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-VAR-035: uma leitura que o Prism monta (os valores de uma coluna, o total, a conferência), com os valores da pessoa como parâmetros, lida até o fim no
+    /// texto da grade sem o corte. Fecha o cursor anterior, como o catálogo.
+    /// </summary>
+    Task<Result<FullRows, DatabaseFailure>> ReadColumnValuesAsync(string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken);
 
     /// <summary>Fecha o cursor aberto, se houver, sem esperar o resto das linhas. Não falha.</summary>
     Task CloseCursorAsync();

@@ -1,3 +1,4 @@
+import { locale } from "@/lib/i18n";
 import type { ToastAction } from "@/components/ui";
 import type { ApiResult } from "@/lib/api/prism-api";
 
@@ -91,7 +92,7 @@ export function formatFileSize(bytes: number): string {
     value /= 1024;
     unit++;
   }
-  return `${value.toLocaleString("pt-BR", { maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0 })} ${units[unit]}`;
+  return `${value.toLocaleString(locale, { maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0 })} ${units[unit]}`;
 }
 
 /** O que a entrada da barra diz (RN-EXPORT-021): o texto, a dica com o texto inteiro, e a barra de progresso (`percent` nulo é a barra sem medida). */

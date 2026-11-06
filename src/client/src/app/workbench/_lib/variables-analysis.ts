@@ -2,6 +2,7 @@ import type { Engine } from "@/components/ui/engine-tag";
 
 import { commandStart, statementHasBody, visitCode } from "./sql-statements";
 import { childrenOf, type Node } from "./variables/ast";
+import { membersAt } from "./variables/named-types";
 import { checkScript } from "./variables/run";
 import { readScript, staticDiagnostics, type ItemDiagnostic, type ModelItem, type ScriptModel } from "./variables/script";
 import { variablesEditorCopy as copy } from "./variables-editor.copy";
@@ -36,7 +37,7 @@ export type DeclaredName = { name: string; itemIndex: number; from: number; to: 
 /** Onde o valor aparece no fim da linha: `at` é o fim da última linha da declaração. */
 export type ValueTail = { name: string; from: number; to: number; at: number };
 
-export type AnalysisItem = { kind: "statement" | "declaration" | "reassignment"; from: number; to: number };
+export type AnalysisItem = { kind: "statement" | "declaration" | "reassignment" | "type"; from: number; to: number };
 
 export type EditorAnalysis = {
   /** O tamanho do texto lido. */
@@ -338,8 +339,9 @@ function readAssignment(model: ScriptModel, item: ModelItem, analysis: EditorAna
   const parsed = item.parsed;
 
   const keywordAt = parsed === null ? firstTokenStart(source, item, model.engine) : parsed.kind === "declaration" ? parsed.start : -1;
-  if (item.kind === "declaration" && keywordAt >= 0) {
-    const word = /^(?:let|const)/.exec(source.slice(keywordAt, keywordAt + 5));
+  if ((item.kind === "declaration" || item.kind === "type") && keywordAt >= 0) {
+    // O tipo com nome (`interface Cliente`, `type Filtro =`) pinta a palavra como o `let`; o nome dele é de outro espaço de nomes e não leva a cor de variável.
+    const word = (item.kind === "type" ? /^(?:interface|type)/ : /^(?:let|const)/).exec(source.slice(keywordAt, keywordAt + 9));
     if (word !== null) marks.push({ from: keywordAt, to: keywordAt + word[0].length, kind: "keyword", name: null });
   }
 
@@ -382,7 +384,11 @@ function readStatement(model: ScriptModel, item: ModelItem, analysis: EditorAnal
   for (const reference of scan.references) {
     const declared = model.declarations.get(reference.name);
     const isSql = declared?.annotation?.base === "sql";
-    marks.push({ from: item.start + reference.start, to: item.start + reference.end, kind: isSql ? "sqlVariable" : "variable", name: reference.name });
+    // RN-VAR-040: a cor vai até o último campo que o tipo anotado tem (`@c.endereco.cidade`); o resto do caminho é SQL (`@p.e.x` é `$1.x`).
+    let depth = 0;
+    const annotation = declared?.annotation ?? null;
+    while (annotation !== null && depth < reference.path.length && membersAt(model, annotation, reference.path.slice(0, depth).map((field) => field.name))?.some((member) => member.name === reference.path[depth].name) === true) depth++;
+    marks.push({ from: item.start + reference.start, to: item.start + (depth === 0 ? reference.end : reference.path[depth - 1].end), kind: isSql ? "sqlVariable" : "variable", name: reference.name });
     if (isSql) continue;
 
     const before = text.slice(Math.max(0, reference.start - 400), reference.start);

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CanceledBeforeItRanMessage" xml:space="preserve">
+    <value>The statement was canceled before it went to the database: nothing was run.</value>
+  </data>
+  <data name="VaultChanged" xml:space="preserve">
+    <value>The vault changed while the session was being opened.</value>
+  </data>
+  <data name="NoTransactionLogManualCommit" xml:space="preserve">
+    <value>This database has no transaction log: each statement is written when it finishes, and there is no Manual commit.</value>
+  </data>
+  <data name="ResultNotFoundForCopy" xml:space="preserve">
+    <value>The result no longer exists: the session ran another statement after it. Run the statement again to copy.</value>
+  </data>
+  <data name="NoQueryToCount" xml:space="preserve">
+    <value>No statement in this session returned rows to count.</value>
+  </data>
+  <data name="TransactionOpenForAutoCommit" xml:space="preserve">
+    <value>The tab has an open transaction: end it with Commit or Rollback before switching to Auto-commit.</value>
+  </data>
+  <data name="TransactionOpenForIsolation" xml:space="preserve">
+    <value>The tab has an open transaction: end it with Commit or Rollback before changing the isolation level.</value>
+  </data>
+  <data name="NoOpenTransaction" xml:space="preserve">
+    <value>There is no open transaction in this tab.</value>
+  </data>
+  <data name="TransactionFailed" xml:space="preserve">
+    <value>The transaction has an error: undo it with Rollback. Until then the database accepts no other statement in this tab.</value>
+  </data>
+  <data name="SessionNotFound" xml:space="preserve">
+    <value>The database session does not exist or has already been closed.</value>
+  </data>
+  <data name="ResultNoLongerKept" xml:space="preserve">
+    <value>The result is no longer kept in the session: another statement was run in it after it. Run the statement again to edit.</value>
+  </data>
+  <data name="SchemaMayHaveChanged" xml:space="preserve">
+    <value>A statement run after this result (such as a SET or a CALL) may have changed the session's current schema, and {0}, written without a schema, may be another table now. Nothing was written; write the schema in the statement (schema.table), or run it again.</value>
+  </data>
+  <data name="ReadsAnotherTable" xml:space="preserve">
+    <value>The statement now reads another table ({0}.{1}, and not {2}.{3}): the session's current schema changed since the query. Nothing was written; run the statement again.</value>
+  </data>
+  <data name="TableChanged" xml:space="preserve">
+    <value>The table {0} changed since the query (the key, the columns or their type). Nothing was written; run the statement again.</value>
+  </data>
+  <data name="PlatformUnsupported" xml:space="preserve">
+    <value>Prism for {0} does not connect to Db2 and Informix yet: IBM does not publish the driver for it.</value>
+  </data>
+  <data name="CanceledBeforeItsTurn" xml:space="preserve">
+    <value>The operation was canceled before its turn in the session came.</value>
+  </data>
+  <data name="SessionBusy" xml:space="preserve">
+    <value>The session is busy with another statement.</value>
+  </data>
+  <data name="VariableSeveralStatementsMessage" xml:space="preserve">
+    <value>A variable's query is a single statement, and the text has more than one; nothing was run.</value>
+  </data>
+  <data name="VariableQueryNotRead" xml:space="preserve">
+    <value>A variable's query has to be a read: {0}.</value>
+  </data>
+  <data name="NotAReadEnding" xml:space="preserve">
+    <value> is not a read</value>
+  </data>
+  <data name="NotAReadShortEnding" xml:space="preserve">
+    <value> is not</value>
+  </data>
+</root>

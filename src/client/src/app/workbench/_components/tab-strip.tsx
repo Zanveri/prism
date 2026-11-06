@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEve
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
-import { CheckIcon, ChevronIcon, CloseIcon, ContextMenu, DatabaseIcon, DocumentIcon, FolderIcon, TableIcon, type ContextMenuItem } from "@/components/ui";
+import { CheckIcon, ChevronIcon, CloseIcon, ContextMenu, DatabaseIcon, DocumentIcon, FolderIcon, PlayIcon, TableIcon, type ContextMenuItem } from "@/components/ui";
 import { listOtherWindows } from "@/lib/api/bridge";
 import { cn } from "@/lib/utils/cn";
 
@@ -15,6 +15,7 @@ import { dropIndex, readTabDrag, resultTabDragType, tabDragType, writeTabDrag } 
 import { dropMarks, placeOf, resultEntryKey, resultPanelElementId, resultTabElementId, resultTabTitle, stripEntries, unitRects, type PlaceMenuItem, type PlaceVia, type StripEntry } from "../_lib/result-place";
 import { resultPlaceCopy } from "../_lib/result-place.copy";
 import { scriptIconOf } from "../_lib/saved-scripts";
+import { executionTabCopy } from "../_lib/execution-tab.copy";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import type { ScriptSummary } from "../_lib/scripts.schema";
 import { closeShortcutLabel, moveMenu, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabTitleOf, wheelScroll, type CloseScope } from "../_lib/tab-strip";
@@ -454,12 +455,14 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
                 aria-selected={selected}
                 aria-controls={panelElementId(tab.id)}
                 tabIndex={selected ? 0 : -1}
-                title={label.label}
+                // RN-VAR-029: a aba de execução diz de que script e onde; o leitor de tela ouve "Execução de <script>".
+                title={tab.execution === undefined ? label.label : executionTabCopy.hint(tab.execution.name, connectionOf(tab.connectionId)?.name ?? null, tab.database)}
+                {...(tab.execution === undefined ? {} : { "aria-label": executionTabCopy.label(titles.get(tab.id) ?? tab.title) })}
                 onClick={() => show(entry)}
                 onKeyDown={(event) => handleKeyDown(event, entry, index)}
                 className="flex cursor-pointer items-center gap-1.5 pr-1 pl-2.5"
               >
-                {tab.table ? <TableIcon className={stripIcon} /> : tab.schemaTarget ? <FolderIcon className={stripIcon} /> : tab.databaseTarget ? <DatabaseIcon className={stripIcon} /> : script !== undefined ? <ScriptIconView icon={scriptIconOf(script)} color={script.color} className={stripIcon} /> : <DocumentIcon className={stripIcon} />}
+                {tab.execution ? <PlayIcon className={stripIcon} /> : tab.table ? <TableIcon className={stripIcon} /> : tab.schemaTarget ? <FolderIcon className={stripIcon} /> : tab.databaseTarget ? <DatabaseIcon className={stripIcon} /> : script !== undefined ? <ScriptIconView icon={scriptIconOf(script)} color={script.color} className={stripIcon} /> : <DocumentIcon className={stripIcon} />}
                 <span className="max-w-[200px] truncate">{titles.get(tab.id) ?? tab.title}</span>
                 {/* RN-SCRIPT-001: o ponto da mudança não salva é desenho; o leitor de tela ouve o texto. */}
                 {label.unsaved ? (

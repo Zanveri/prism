@@ -359,7 +359,7 @@ public sealed partial class VaultServiceTests : IDisposable
         Assert.True(service.IsUnlocked);
         Assert.Equal(_userName, service.UserName);
         Assert.True(document.IsSuccess);
-        Assert.True(document.Value.JsonEquals(expected));
+        Assert.True((document.Value with { Journal = null }).JsonEquals(expected));
     }
 
     [Trait("VaultService", "UnlockAsync")]
@@ -862,9 +862,9 @@ public sealed partial class VaultServiceTests : IDisposable
         //Assert
         var expected = new VaultDocument(_userName, [folder], [connection], [], VaultWorkspaceRecord.Empty, []);
         Assert.True(saved.IsSuccess);
-        Assert.True(afterSave.Value.JsonEquals(expected));
+        Assert.True((afterSave.Value with { Journal = null }).JsonEquals(expected));
         Assert.True(unlocked.IsSuccess);
-        Assert.True(service.Read().Value.JsonEquals(expected));
+        Assert.True((service.Read().Value with { Journal = null }).JsonEquals(expected));
     }
 
     /// <summary>

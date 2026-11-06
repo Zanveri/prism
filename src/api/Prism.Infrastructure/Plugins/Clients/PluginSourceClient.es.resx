@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LocalFolderMissing" xml:space="preserve">
+    <value>La carpeta local indicada no existe o no es accesible.</value>
+  </data>
+  <data name="GitUrlInvalid" xml:space="preserve">
+    <value>Indica una URL de repositorio Git válida (https://, http://, ssh:// o git@).</value>
+  </data>
+  <data name="AlreadyInstalled" xml:space="preserve">
+    <value>El plugin '{0}' ({1}) ya está instalado.</value>
+  </data>
+  <data name="IdInvalid" xml:space="preserve">
+    <value>El identificador del plugin no es válido.</value>
+  </data>
+  <data name="InstalledFolderMissing" xml:space="preserve">
+    <value>No se encontró en este equipo la carpeta del plugin instalado.</value>
+  </data>
+  <data name="IdChanged" xml:space="preserve">
+    <value>El manifiesto actualizado cambió el identificador del plugin, lo cual no está permitido.</value>
+  </data>
+  <data name="PluginFolderMissing" xml:space="preserve">
+    <value>No se encontró la carpeta del plugin '{0}'.</value>
+  </data>
+  <data name="ManifestMissing" xml:space="preserve">
+    <value>No se encontró el archivo manifest.json en la raíz del plugin.</value>
+  </data>
+  <data name="ManifestEmpty" xml:space="preserve">
+    <value>El archivo manifest.json está vacío o supera el tamaño máximo permitido (64 KB).</value>
+  </data>
+  <data name="ManifestBad" xml:space="preserve">
+    <value>El archivo manifest.json no es válido.</value>
+  </data>
+  <data name="ManifestId" xml:space="preserve">
+    <value>El campo 'id' de manifest.json debe contener solo letras minúsculas, números, punto, guion o guion bajo (de 2 a 64 caracteres).</value>
+  </data>
+  <data name="ManifestName" xml:space="preserve">
+    <value>El campo 'name' de manifest.json es obligatorio y debe tener hasta 120 caracteres.</value>
+  </data>
+  <data name="ManifestVersion" xml:space="preserve">
+    <value>El campo 'version' de manifest.json es obligatorio y debe tener hasta 40 caracteres.</value>
+  </data>
+  <data name="ManifestMain" xml:space="preserve">
+    <value>El campo 'main' de manifest.json debe ser una ruta relativa dentro de la carpeta del plugin.</value>
+  </data>
+  <data name="MainEscapes" xml:space="preserve">
+    <value>El archivo principal del plugin no puede salir de la carpeta del plugin.</value>
+  </data>
+  <data name="MainMissing" xml:space="preserve">
+    <value>No se encontró el archivo principal '{0}' al que apunta manifest.json.</value>
+  </data>
+  <data name="MainEmpty" xml:space="preserve">
+    <value>El archivo principal '{0}' del plugin está vacío.</value>
+  </data>
+  <data name="MainTooBig" xml:space="preserve">
+    <value>El archivo principal '{0}' supera el límite de 2 MB.</value>
+  </data>
+  <data name="GitStartFailed" xml:space="preserve">
+    <value>No se pudo iniciar el comando 'git'. Comprueba que Git esté instalado en este equipo.</value>
+  </data>
+  <data name="GitExitCode" xml:space="preserve">
+    <value>El comando git terminó con el código {0}.</value>
+  </data>
+  <data name="GitAccessFailed" xml:space="preserve">
+    <value>No se pudo acceder al repositorio Git. Comprueba la URL y tus credenciales SSH/HTTPS en este equipo ({0})</value>
+  </data>
+  <data name="GitFailedFallback" xml:space="preserve">
+    <value>error al ejecutar git</value>
+  </data>
+  <data name="GitTimeout" xml:space="preserve">
+    <value>La operación en el repositorio Git superó el tiempo límite de 60 segundos.</value>
+  </data>
+  <data name="GitNotFound" xml:space="preserve">
+    <value>No se encontró el comando 'git' en el sistema. Instala Git y comprueba que esté en el PATH.</value>
+  </data>
+  <data name="ManifestNotJson" xml:space="preserve">
+    <value>El archivo manifest.json del plugin no contiene un JSON válido.</value>
+  </data>
+  <data name="DiskFailed" xml:space="preserve">
+    <value>No se pudieron leer ni escribir los archivos del plugin en el disco (comprueba la ruta y los permisos).</value>
+  </data>
+</root>

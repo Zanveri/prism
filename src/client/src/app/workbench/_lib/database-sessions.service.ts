@@ -1,10 +1,11 @@
-import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type Query, type QueryClient } from "@tanstack/react-query";
 
 import { driverIdOf } from "@/app/drivers/_lib/drivers.model";
 import { apiRequest, ApiRequestError, unwrap, type ApiResult } from "@/lib/api/prism-api";
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
 import {
+  checksSchema,
   columnsSchema,
   databaseObjectsSchema,
   databasePropertiesSchema,
@@ -27,11 +28,12 @@ import {
   type ReferencingForeignKey,
   type SchemaDiagram,
   type ServerDatabase,
+  type TableCheck,
   type TableIndex,
   type TransactionEnded,
 } from "./database-sessions.schema";
 import { columnNodes, databaseNodes, foreignKeyNodes, inDatabase, indexNodes, objectNodes, schemaNodes, type DatabaseRef, type NavNode, type NavPath, type ObjectsKind } from "./navigator-model";
-import type { TransactionMode } from "./transaction";
+import type { IsolationLevel, TransactionMode } from "./transaction";
 
 /**
  * Uma função por rota de `api/user/database-sessions`. Devolvem `ApiResult`; quem as chama numa
@@ -43,13 +45,13 @@ import type { TransactionMode } from "./transaction";
  * Abre a sessão com o banco da conexão (RN-SESSAO-001) ou, com `database`, com outro banco do mesmo servidor, pelas credenciais da
  * conexão (RN-ARVORE-006). Falha: 422 `DATABASE_CONNECTION_FAILED` com a mensagem do banco.
  */
-export function openDatabaseSession(connectionId: string, database?: string, transactionMode?: TransactionMode): Promise<ApiResult<DatabaseSession>> {
-  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "POST", body: { connectionID: connectionId, ...inDatabase(database), ...(transactionMode === undefined ? {} : { transactionMode }) }, schema: databaseSessionSchema });
+export function openDatabaseSession(connectionId: string, database?: string, transactionMode?: TransactionMode, isolationLevel?: IsolationLevel): Promise<ApiResult<DatabaseSession>> {
+  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "POST", body: { connectionID: connectionId, ...inDatabase(database), ...(transactionMode === undefined ? {} : { transactionMode }), ...(isolationLevel === undefined || isolationLevel === "default" ? {} : { isolationLevel }) }, schema: databaseSessionSchema });
 }
 
 /** RN-TX-001 e 005: o modo de transação da aba. Recusas: 409 `TRANSACTION_OPEN` (saindo do Commit manual com a transação aberta), 422 `TRANSACTIONS_NOT_AVAILABLE`. */
-export function changeTransactionMode(sessionId: string, transactionMode: TransactionMode): Promise<ApiResult<DatabaseSession>> {
-  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "PATCH", body: { id: sessionId, transactionMode }, schema: databaseSessionSchema });
+export function changeTransactionMode(sessionId: string, transactionMode: TransactionMode, isolationLevel?: IsolationLevel): Promise<ApiResult<DatabaseSession>> {
+  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "PATCH", body: { id: sessionId, transactionMode, ...(isolationLevel === undefined ? {} : { isolationLevel }) }, schema: databaseSessionSchema });
 }
 
 /** RN-TX-002: o "Commit" e o "Rollback" da barra do editor. Recusas: 409 `NO_OPEN_TRANSACTION`, `TRANSACTION_FAILED` (o Commit); 422 `SQL_EXECUTION_FAILED`, com `transactionUndone`. */
@@ -75,13 +77,13 @@ export function getDatabaseProperties(sessionId: string): Promise<ApiResult<Data
   return apiRequest(prismEndpoints.userDatabaseSessionProperties(sessionId), { schema: databasePropertiesSchema });
 }
 
-export function getObjects(sessionId: string, schema: string, kind: ObjectsKind): Promise<ApiResult<DatabaseObject[]>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionObjects(sessionId, schema, kind), { schema: databaseObjectsSchema });
+export function getObjects(sessionId: string, schema: string, kind: ObjectsKind, signal?: AbortSignal): Promise<ApiResult<DatabaseObject[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionObjects(sessionId, schema, kind), { schema: databaseObjectsSchema, signal });
 }
 
 /** RN-ESQUEMA-003 e RN-CAT-008: todas as tabelas, colunas e chaves estrangeiras do esquema de uma vez. */
-export function getSchemaDiagram(sessionId: string, schema: string): Promise<ApiResult<SchemaDiagram>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionSchemaDiagram(sessionId, schema), { schema: schemaDiagramSchema });
+export function getSchemaDiagram(sessionId: string, schema: string, signal?: AbortSignal): Promise<ApiResult<SchemaDiagram>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionSchemaDiagram(sessionId, schema), { schema: schemaDiagramSchema, signal });
 }
 
 /**
@@ -92,16 +94,20 @@ export function getObjectNames(sessionId: string): Promise<ApiResult<ObjectNames
   return apiRequest(prismEndpoints.userDatabaseSessionObjectNames(sessionId), { schema: objectNamesSchema });
 }
 
-export function getColumns(sessionId: string, schema: string, table: string): Promise<ApiResult<Column[]>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionColumns(sessionId, schema, table), { schema: columnsSchema });
+export function getColumns(sessionId: string, schema: string, table: string, signal?: AbortSignal): Promise<ApiResult<Column[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionColumns(sessionId, schema, table), { schema: columnsSchema, signal });
 }
 
-export function getIndexes(sessionId: string, schema: string, table: string): Promise<ApiResult<TableIndex[]>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionIndexes(sessionId, schema, table), { schema: indexesSchema });
+export function getIndexes(sessionId: string, schema: string, table: string, signal?: AbortSignal): Promise<ApiResult<TableIndex[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionIndexes(sessionId, schema, table), { schema: indexesSchema, signal });
 }
 
-export function getForeignKeys(sessionId: string, schema: string, table: string): Promise<ApiResult<ForeignKey[]>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionForeignKeys(sessionId, schema, table), { schema: foreignKeysSchema });
+export function getForeignKeys(sessionId: string, schema: string, table: string, signal?: AbortSignal): Promise<ApiResult<ForeignKey[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionForeignKeys(sessionId, schema, table), { schema: foreignKeysSchema, signal });
+}
+
+export function getTableChecks(sessionId: string, schema: string, table: string, signal?: AbortSignal): Promise<ApiResult<TableCheck[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionChecks(sessionId, schema, table), { schema: checksSchema, signal });
 }
 
 /** RN-CAT-004: as chaves estrangeiras que apontam para a tabela. */
@@ -164,6 +170,20 @@ export async function openSessionForSearch(queryClient: QueryClient, connectionI
   } catch {
     return false;
   }
+}
+
+/**
+ * RN-REDE-006: o segredo do túnel ou do proxy acaba de entrar na memória da API, e as sessões da conexão que a recusa deixou com erro e sem sessão abrem de novo.
+ * As observadas (o nó aberto, outro banco aberto) buscam de novo; a do banco da conexão abre também pelo caminho da busca, porque a que o "Buscar nelas também"
+ * pediu não tem nó aberto, e o observador desabilitado da árvore faz o `refetchQueries` pulá-la. A sessão que tem dado nunca é refeita (abriria outra).
+ */
+export async function reopenAfterSecret(queryClient: QueryClient, connectionId: string): Promise<void> {
+  const refused = (query: Query) => query.state.status === "error" && query.state.data === undefined;
+  const treeSession = queryClient.getQueryCache().find({ queryKey: databaseSessionKey(connectionId), exact: true });
+  await Promise.all([
+    queryClient.refetchQueries({ queryKey: ["database-session", connectionId], type: "active", predicate: refused }),
+    ...(treeSession !== undefined && refused(treeSession) ? [openSessionForSearch(queryClient, connectionId)] : []),
+  ]);
 }
 
 /** As sessões da árvore abertas de todos os bancos da conexão (RN-ARVORE-006): é o que "Desconectar" fecha, além das abas. */

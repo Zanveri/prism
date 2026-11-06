@@ -1,0 +1,192 @@
+{
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "producao",
+    "schemas": [{ "name": "producao", "create": false }],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 14:10",
+      "knownSchemas": ["producao"],
+      "knownTables": ["producao.maquina", "producao.linha", "producao.operador"]
+    },
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": "id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "linha_id",
+            "exactName": false,
+            "originName": "linha_id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          },
+          {
+            "name": "operador_id",
+            "exactName": false,
+            "originName": "operador_id",
+            "type": "bigint",
+            "nullable": true,
+            "default": null,
+            "identity": null,
+            "comment": null
+          },
+          {
+            "name": "tag",
+            "exactName": false,
+            "originName": "tag",
+            "type": "varchar(12)",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [
+          {
+            "name": "ix_maquina_linha",
+            "columns": ["linha_id", "tag"],
+            "unique": false
+          },
+          {
+            "name": "ix_maquina_operador",
+            "columns": ["operador_id"],
+            "unique": false
+          }
+        ],
+        "foreignKeys": [
+          {
+            "name": "maquina_linha_id_fkey",
+            "columns": ["linha_id"],
+            "target": { "schema": "producao", "table": "linha", "columns": ["id"] },
+            "onDelete": "cascade",
+            "onUpdate": "noAction"
+          },
+          {
+            "name": "fk_maquina_operador",
+            "columns": ["operador_id"],
+            "target": { "schema": "producao", "table": "operador", "columns": ["id"] },
+            "onDelete": "setNull",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": {
+          "schema": "producao",
+          "name": "maquina",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            {
+              "name": "id",
+              "exactName": false,
+              "originName": "id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": "always",
+              "comment": null
+            },
+            {
+              "name": "linha_id",
+              "exactName": false,
+              "originName": "linha_id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": null,
+              "comment": null
+            },
+            {
+              "name": "operador_id",
+              "exactName": false,
+              "originName": "operador_id",
+              "type": "bigint",
+              "nullable": true,
+              "default": null,
+              "identity": null,
+              "comment": null
+            },
+            {
+              "name": "tag",
+              "exactName": false,
+              "originName": "tag",
+              "type": "varchar(12)",
+              "nullable": false,
+              "default": null,
+              "identity": null,
+              "comment": null
+            }
+          ],
+          "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [
+            {
+              "name": "ix_maquina_antigo",
+              "columns": ["tag"],
+              "unique": false
+            },
+            {
+              "name": "ix_maquina_linha",
+              "columns": ["linha_id"],
+              "unique": false
+            }
+          ],
+          "foreignKeys": [
+            {
+              "name": "maquina_antiga_fkey",
+              "columns": ["operador_id"],
+              "target": { "schema": "producao", "table": "operador", "columns": ["id"] },
+              "onDelete": "noAction",
+              "onUpdate": "noAction"
+            },
+            {
+              "name": "maquina_linha_id_fkey",
+              "columns": ["linha_id"],
+              "target": { "schema": "producao", "table": "linha", "columns": ["id"] },
+              "onDelete": "noAction",
+              "onUpdate": "noAction"
+            }
+          ]
+        },
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "changes",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "context": {
+    "modelName": "fk-e-indice",
+    "prismVersion": "0.6.0",
+    "generatedAt": "29/10/2026 14:32",
+    "baseLabel": "MES Produção / mes"
+  },
+  "expected": "-- Modelo fk-e-indice · PostgreSQL · gerado pelo Prism 0.6.0 em 29/10/2026 14:32\n-- Só as diferenças em relação a MES Produção / mes, lida em 29/10/2026 14:10.\n\nALTER TABLE producao.maquina DROP CONSTRAINT maquina_linha_id_fkey;\nALTER TABLE producao.maquina DROP CONSTRAINT maquina_antiga_fkey;\n\nDROP INDEX producao.ix_maquina_linha;\nDROP INDEX producao.ix_maquina_antigo;\n\nALTER TABLE producao.maquina\n  ADD CONSTRAINT maquina_linha_id_fkey FOREIGN KEY (linha_id)\n    REFERENCES producao.linha (id) ON DELETE CASCADE;\nALTER TABLE producao.maquina\n  ADD CONSTRAINT fk_maquina_operador FOREIGN KEY (operador_id)\n    REFERENCES producao.operador (id) ON DELETE SET NULL;\n\nCREATE INDEX ix_maquina_linha\n  ON producao.maquina (linha_id, tag);\nCREATE INDEX ix_maquina_operador\n  ON producao.maquina (operador_id);"
+}

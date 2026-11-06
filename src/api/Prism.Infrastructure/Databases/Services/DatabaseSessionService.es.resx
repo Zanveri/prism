@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CanceledBeforeItRanMessage" xml:space="preserve">
+    <value>La sentencia se canceló antes de ir a la base de datos: no se ejecutó nada.</value>
+  </data>
+  <data name="VaultChanged" xml:space="preserve">
+    <value>La caja fuerte cambió mientras se abría la sesión.</value>
+  </data>
+  <data name="NoTransactionLogManualCommit" xml:space="preserve">
+    <value>Esta base de datos no tiene log de transacciones: cada sentencia se escribe al terminar, y no hay Commit manual.</value>
+  </data>
+  <data name="ResultNotFoundForCopy" xml:space="preserve">
+    <value>El resultado ya no existe: la sesión ejecutó otra sentencia después de él. Ejecuta la sentencia de nuevo para copiar.</value>
+  </data>
+  <data name="NoQueryToCount" xml:space="preserve">
+    <value>Ninguna sentencia de esta sesión devolvió filas para contar.</value>
+  </data>
+  <data name="TransactionOpenForAutoCommit" xml:space="preserve">
+    <value>La pestaña tiene una transacción abierta: termínala con Commit o Rollback antes de pasar a Auto-commit.</value>
+  </data>
+  <data name="TransactionOpenForIsolation" xml:space="preserve">
+    <value>La pestaña tiene una transacción abierta: termínala con Commit o Rollback antes de cambiar el nivel de aislamiento.</value>
+  </data>
+  <data name="NoOpenTransaction" xml:space="preserve">
+    <value>No hay una transacción abierta en esta pestaña.</value>
+  </data>
+  <data name="TransactionFailed" xml:space="preserve">
+    <value>La transacción tiene un error: revierte con Rollback. Hasta entonces la base de datos no acepta otra sentencia en esta pestaña.</value>
+  </data>
+  <data name="SessionNotFound" xml:space="preserve">
+    <value>La sesión con la base de datos no existe o ya se cerró.</value>
+  </data>
+  <data name="ResultNoLongerKept" xml:space="preserve">
+    <value>El resultado ya no está guardado en la sesión: se ejecutó otra sentencia en ella después de él. Ejecuta la sentencia de nuevo para editar.</value>
+  </data>
+  <data name="SchemaMayHaveChanged" xml:space="preserve">
+    <value>Una sentencia ejecutada después de este resultado (como un SET o un CALL) puede haber cambiado el esquema actual de la sesión, y {0}, escrita sin esquema, puede ser otra tabla ahora. No se escribió nada; escribe el esquema en la sentencia (esquema.tabla), o ejecútala de nuevo.</value>
+  </data>
+  <data name="ReadsAnotherTable" xml:space="preserve">
+    <value>La sentencia ahora lee otra tabla ({0}.{1}, y no {2}.{3}): el esquema actual de la sesión cambió desde la consulta. No se escribió nada; ejecuta la sentencia de nuevo.</value>
+  </data>
+  <data name="TableChanged" xml:space="preserve">
+    <value>La tabla {0} cambió desde la consulta (la clave, las columnas o su tipo). No se escribió nada; ejecuta la sentencia de nuevo.</value>
+  </data>
+  <data name="PlatformUnsupported" xml:space="preserve">
+    <value>Prism para {0} aún no se conecta a Db2 e Informix: IBM no publica el driver para ella.</value>
+  </data>
+  <data name="CanceledBeforeItsTurn" xml:space="preserve">
+    <value>La operación se canceló antes de que le llegara el turno en la sesión.</value>
+  </data>
+  <data name="SessionBusy" xml:space="preserve">
+    <value>La sesión está ocupada con otra sentencia.</value>
+  </data>
+  <data name="VariableSeveralStatementsMessage" xml:space="preserve">
+    <value>La consulta de una variable es una sola sentencia, y el texto tiene más de una; no se ejecutó nada.</value>
+  </data>
+  <data name="VariableQueryNotRead" xml:space="preserve">
+    <value>La consulta de una variable tiene que ser una lectura: {0}.</value>
+  </data>
+  <data name="NotAReadEnding" xml:space="preserve">
+    <value> no es una lectura</value>
+  </data>
+  <data name="NotAReadShortEnding" xml:space="preserve">
+    <value> no es</value>
+  </data>
+</root>

@@ -1,9 +1,14 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { documentCopyEn } from "./document.copy.en";
+import { documentCopyEs } from "./document.copy.es";
+
 /**
  * Os textos fixos dos documentos da exportação escritos na tela (RN-EXPORT-011 e RN-GRADE-016). Os comentários do SQL são frases FIXAS, iguais às da API
  * (`SqlExportWriter`): nenhum dado do banco (nome de coluna, valor) entra num comentário, porque uma quebra de linha dentro de um `--` o encerra e o que vem
  * depois passa a ser código.
  */
-export const documentCopy = {
+const pt = {
   sql: {
     /** O começo do comentário da linha que não virou `INSERT`, com o número dela na grade. */
     skipped: (row: number) => `-- Linha ${row} não exportada: `,
@@ -20,3 +25,6 @@ export const documentCopy = {
     },
   },
 };
+
+export type DocumentCopy = Localized<typeof pt>;
+export const documentCopy = pickCopy({ "pt-BR": pt, en: documentCopyEn, es: documentCopyEs });

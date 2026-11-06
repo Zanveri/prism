@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { locale } from "@/lib/i18n";
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
@@ -149,8 +150,8 @@ export function DatabaseSchemasBody({
                 <tr key={item.name} className="hover:bg-hover/50">
                   <td className="px-3 py-2 font-mono font-medium text-ink">{item.name}</td>
                   <td className="px-3 py-2 font-mono text-muted">{item.isSystem ? copy.systemSchema : copy.userSchema}</td>
-                  <td className="px-3 py-2 font-mono text-muted">{item.tables !== null && item.tables !== undefined ? item.tables.toLocaleString("pt-BR") : "—"}</td>
-                  <td className="px-3 py-2 font-mono text-muted">{item.views !== null && item.views !== undefined ? item.views.toLocaleString("pt-BR") : "—"}</td>
+                  <td className="px-3 py-2 font-mono text-muted">{item.tables !== null && item.tables !== undefined ? item.tables.toLocaleString(locale) : "—"}</td>
+                  <td className="px-3 py-2 font-mono text-muted">{item.views !== null && item.views !== undefined ? item.views.toLocaleString(locale) : "—"}</td>
                   <td className="px-3 py-1.5 text-right">
                     <div className="inline-flex items-center gap-1.5">
                       <Button type="button" variant="secondary" size="compact" className="h-6 px-2 text-xs" onClick={() => onOpenSchema(item.name, "tables")}>
@@ -215,7 +216,7 @@ export function DatabaseDiagramBody({
       layout={layout}
       schema={database}
       subject={database}
-      diagramLabel="Diagrama do banco"
+      diagramLabel={copy.diagramLabel}
       tableCount={tableCount}
       foreignKeyCount={foreignKeyCount}
       omitted={0}

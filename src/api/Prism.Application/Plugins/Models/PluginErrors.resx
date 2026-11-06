@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ConsentRequiredTitle" xml:space="preserve">
+    <value>Consentimento de plugins de terceiros necessário.</value>
+  </data>
+  <data name="ConsentRequiredDetail" xml:space="preserve">
+    <value>É preciso aceitar o termo de responsabilidade e desativar o modo restrito antes de instalar ou habilitar plugins de terceiros.</value>
+  </data>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Plugin não encontrado.</value>
+  </data>
+  <data name="NotFoundDetail" xml:space="preserve">
+    <value>O plugin '{0}' não está instalado neste cofre.</value>
+  </data>
+  <data name="AlreadyInstalledTitle" xml:space="preserve">
+    <value>Plugin já instalado.</value>
+  </data>
+  <data name="AlreadyInstalledDetail" xml:space="preserve">
+    <value>O plugin '{0}' já está instalado.</value>
+  </data>
+  <data name="LocalPluginTitle" xml:space="preserve">
+    <value>Plugin local não usa Git.</value>
+  </data>
+  <data name="LocalPluginDetail" xml:space="preserve">
+    <value>Plugins vinculados por pasta local já refletem os arquivos do disco ao atualizar a estrutura.</value>
+  </data>
+  <data name="SourceInvalidTitle" xml:space="preserve">
+    <value>Origem do plugin inválida.</value>
+  </data>
+  <data name="ManifestInvalidTitle" xml:space="preserve">
+    <value>Manifesto do plugin inválido.</value>
+  </data>
+  <data name="GitFailedTitle" xml:space="preserve">
+    <value>Falha ao acessar repositório Git.</value>
+  </data>
+  <data name="BundleUnavailableTitle" xml:space="preserve">
+    <value>Código do plugin indisponível.</value>
+  </data>
+</root>

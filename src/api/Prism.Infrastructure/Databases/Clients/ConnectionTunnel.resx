@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="HostKeyMismatch" xml:space="preserve">
+    <value>A chave do servidor SSH ({0}) não confere com a impressão digital gravada na conexão ({1}). Pode haver outro servidor no caminho: confirme com quem administra o servidor (ssh-keygen -lf). Se a chave mudou mesmo, informe a nova em "Impressão digital do host", em Editar conexão.</value>
+  </data>
+  <data name="EncryptedKeyWithoutPassphrase" xml:space="preserve">
+    <value>A chave privada do túnel SSH é cifrada, e esta conexão não tem a frase secreta dela. Informe-a para conectar.</value>
+  </data>
+  <data name="WrongPassphrase" xml:space="preserve">
+    <value>A frase secreta não abre a chave privada do túnel SSH. Confira a frase e tente de novo.</value>
+  </data>
+  <data name="SshPasswordMissing" xml:space="preserve">
+    <value>A senha do túnel SSH não está gravada nesta conexão. Conecte-se a ela e informe-a quando o Prism pedir: sem "Salvar credenciais", ela fica só na memória até a conexão ser desconectada.</value>
+  </data>
+  <data name="ProxyPasswordMissing" xml:space="preserve">
+    <value>A senha do proxy não está gravada nesta conexão. Conecte-se a ela e informe-a quando o Prism pedir: sem "Salvar credenciais", ela fica só na memória até a conexão ser desconectada.</value>
+  </data>
+  <data name="PrivateKeyPathRequired" xml:space="preserve">
+    <value>Informe o caminho da chave privada SSH.</value>
+  </data>
+  <data name="SocksInvalidResponse" xml:space="preserve">
+    <value>Resposta inválida do servidor proxy SOCKS5.</value>
+  </data>
+  <data name="SocksCredentialsRefused" xml:space="preserve">
+    <value>O proxy SOCKS5 recusou o usuário ou a senha.</value>
+  </data>
+  <data name="SocksMethodRefused" xml:space="preserve">
+    <value>O proxy SOCKS5 não aceitou o método de autenticação.</value>
+  </data>
+  <data name="SocksConnectFailed" xml:space="preserve">
+    <value>O proxy SOCKS5 não conseguiu conectar ao destino (código {0}).</value>
+  </data>
+  <data name="SocksAddressTypeInvalid" xml:space="preserve">
+    <value>Tipo de endereço inválido na resposta do proxy SOCKS5.</value>
+  </data>
+</root>

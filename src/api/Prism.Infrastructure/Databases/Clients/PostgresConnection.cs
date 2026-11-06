@@ -69,6 +69,8 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
         => AppContext.SetSwitch("Npgsql.EnableSqlRewriting", false);
 
     /// <summary>RN-CONN-013.</summary>
+    protected override ConnectionSettings? TunnelSettings => settings;
+
     protected override string PingSql => "SELECT 1";
 
     /// <summary>
@@ -210,7 +212,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
                                                    AND pg_catalog.has_database_privilege(pg_database.oid, 'CONNECT')
                                                  ORDER BY pg_database.datname";
 
-    protected override string BeginReadOnlySql => "BEGIN TRANSACTION READ ONLY";
+    protected override string BeginReadOnlySql => IsolationLevels.PostgresBeginReadOnlySql(IsolationLevel);
 
     /// <summary>RN-TX-009: qualquer erro de um comando dentro da transação, também o cancelamento, a deixa inteira com erro até o Rollback.</summary>
     protected override bool ErrorsSpoilTheTransaction => true;
@@ -400,7 +402,10 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// `UPDATE` veem o mesmo retrato, e a linha que outra sessão alterou depois dele é a recusa 40001 do banco, sem nada gravado. (O Serializable da aba,
     /// RN-ISOL-001, e o nível da aba no Commit manual entram com eles.)
     /// </summary>
-    protected override IsolationLevel? WholeColumnIsolation => IsolationLevel.RepeatableRead;
+    protected override IsolationLevel? WholeColumnIsolation =>
+        IsolationLevel == IsolationLevels.Serializable
+            ? System.Data.IsolationLevel.Serializable
+            : System.Data.IsolationLevel.RepeatableRead;
 
     /// <summary>
     /// RN-EXPORT-017 e RN-IMPORT-028: além do prazo de trava, a forma do texto que o servidor escreve, para ela ser a mesma em qualquer servidor e o
@@ -487,7 +492,14 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// </summary>
     protected override DbConnection CreateConnection()
     {
-        _dataSource = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder { Host = settings.Host, Port = settings.Port, Database = settings.Database, Username = settings.UserName, Password = settings.Password, Pooling = false, IncludeErrorDetail = true, IncludeFailedBatchedCommand = true }.ConnectionString);
+        var builder = new NpgsqlConnectionStringBuilder { Host = EffectiveHost, Port = EffectivePort, Database = settings.Database, Username = settings.UserName, Password = settings.Password, Pooling = false, IncludeErrorDetail = true, IncludeFailedBatchedCommand = true };
+        ApplySsl(builder, settings.Ssl);
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(builder.ConnectionString);
+        // Pelo túnel o driver conecta no loopback: o TLS confere o certificado (`verify-full`) e manda o SNI com o host do banco, como na conexão direta.
+        if (TunneledHost is { } tunneledHost)
+            dataSourceBuilder.UseSslClientAuthenticationOptionsCallback(options => options.TargetHost = tunneledHost);
+
+        _dataSource = dataSourceBuilder.Build();
 
         return _dataSource.CreateConnection();
     }
@@ -496,6 +508,39 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     {
         if (_dataSource is not null)
             await _dataSource.DisposeAsync();
+    }
+
+    private static void ApplySsl(NpgsqlConnectionStringBuilder builder, ConnectionSslSettings? ssl)
+    {
+        if (ssl is null)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(ssl.SslMode))
+        {
+            builder.SslMode = ssl.SslMode.ToLowerInvariant() switch
+            {
+                "disable" => SslMode.Disable,
+                "allow" => SslMode.Allow,
+                "prefer" => SslMode.Prefer,
+                "require" => SslMode.Require,
+                "verify-ca" => SslMode.VerifyCA,
+                "verify-full" => SslMode.VerifyFull,
+                _ => SslMode.Prefer
+            };
+        }
+        else if (!string.IsNullOrWhiteSpace(ssl.CaCertificatePath) || !string.IsNullOrWhiteSpace(ssl.ClientCertificatePath) || !string.IsNullOrWhiteSpace(ssl.ClientKeyPath))
+        {
+            builder.SslMode = SslMode.Require;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ssl.CaCertificatePath))
+            builder.RootCertificate = ssl.CaCertificatePath;
+
+        if (!string.IsNullOrWhiteSpace(ssl.ClientCertificatePath))
+            builder.SslCertificate = ssl.ClientCertificatePath;
+
+        if (!string.IsNullOrWhiteSpace(ssl.ClientKeyPath))
+            builder.SslKey = ssl.ClientKeyPath;
     }
 
     /// <summary>

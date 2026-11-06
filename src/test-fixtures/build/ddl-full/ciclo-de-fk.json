@@ -1,0 +1,113 @@
+{
+  "context": {
+    "modelName": "ciclo",
+    "prismVersion": "0.6.0",
+    "generatedAt": "29/10/2026 14:32",
+    "baseLabel": null
+  },
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "departamento",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "gerente_id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": true,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          {
+            "name": null,
+            "columns": ["gerente_id"],
+            "target": { "schema": "public", "table": "funcionario", "columns": ["id"] },
+            "onDelete": "setNull",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      },
+      {
+        "schema": "public",
+        "name": "funcionario",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "departamento_id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          {
+            "name": null,
+            "columns": ["departamento_id"],
+            "target": { "schema": "public", "table": "departamento", "columns": ["id"] },
+            "onDelete": "noAction",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "expected": "-- Modelo ciclo · PostgreSQL · gerado pelo Prism 0.6.0 em 29/10/2026 14:32\n-- Tudo: o esquema inteiro, do zero.\n\nCREATE TABLE public.departamento (\n  id         bigint GENERATED ALWAYS AS IDENTITY,\n  gerente_id bigint,\n  CONSTRAINT pk_departamento PRIMARY KEY (id)\n);\n\nCREATE TABLE public.funcionario (\n  id              bigint GENERATED ALWAYS AS IDENTITY,\n  departamento_id bigint NOT NULL,\n  CONSTRAINT pk_funcionario PRIMARY KEY (id)\n);\n\nALTER TABLE public.departamento\n  ADD CONSTRAINT fk_departamento_funcionario FOREIGN KEY (gerente_id)\n    REFERENCES public.funcionario (id) ON DELETE SET NULL;\nALTER TABLE public.funcionario\n  ADD CONSTRAINT fk_funcionario_departamento FOREIGN KEY (departamento_id)\n    REFERENCES public.departamento (id);"
+}

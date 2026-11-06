@@ -8,7 +8,13 @@ namespace Prism.Infrastructure.Vault.Models;
 /// trabalho vazia ao ser migrado (RN-VERSAO-005, `VaultMigration`). As pastas de scripts vêm no fim, para as
 /// construções de antes só ganharem a lista nova.
 ///
-/// O que o cofre guarda da importação do DBeaver (`Dbeaver`, RN-DBEAVER-018: o convite e a última importação) e dos plugins de terceiros (`Plugins`) veio depois, no fim e sem subir o formato: nulo
-/// até acontecer algo, e uma versão anterior do Prism o ignora.
+/// O que o cofre guarda da importação do DBeaver (`Dbeaver`, RN-DBEAVER-018: o convite e a última importação), dos plugins de terceiros (`Plugins`), dos
+/// modelos do Construir (`BuildModels`) e da chave do diário (`Journal`, RN-DIARIO-002) veio depois, no fim e sem subir o formato: nulo até acontecer algo, e uma versão anterior do Prism o ignora.
 /// </summary>
-public sealed record VaultDocument(string UserName, IReadOnlyList<VaultFolderRecord> Folders, IReadOnlyList<VaultConnectionRecord> Connections, IReadOnlyList<VaultScriptRecord> Scripts, VaultWorkspaceRecord Workspace, IReadOnlyList<VaultScriptFolderRecord> ScriptFolders, VaultDbeaverRecord? Dbeaver = null, VaultPluginsRecord? Plugins = null);
+public sealed record VaultDocument(string UserName, IReadOnlyList<VaultFolderRecord> Folders, IReadOnlyList<VaultConnectionRecord> Connections, IReadOnlyList<VaultScriptRecord> Scripts, VaultWorkspaceRecord Workspace, IReadOnlyList<VaultScriptFolderRecord> ScriptFolders, VaultDbeaverRecord? Dbeaver = null, VaultPluginsRecord? Plugins = null, IReadOnlyList<VaultBuildModelRecord>? BuildModels = null, VaultJournalRecord? Journal = null)
+{
+    public VaultDocument()
+        : this(string.Empty, [], [], [], new VaultWorkspaceRecord([], null), [])
+    {
+    }
+}

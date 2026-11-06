@@ -3,6 +3,7 @@ import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
+import type { Locale } from "../locale";
 import { parseSums, sumRefusal } from "./checksums";
 import { downloadFile, fetchText, sha256OfFile, type HttpGet } from "./download";
 import { deliverToDownloads, runInstaller, type SpawnInstaller } from "./install";
@@ -11,6 +12,7 @@ import { githubApiHeaders, maxReleasePages, packageUrl, releasesPerPage, release
 import { choosePackage, isPackageFile, sumsFile, type InstallFacts, type InstallFormat } from "./packages";
 import { dueForStartupCheck, readPreferences, writePreferences, type UpdatePreferences } from "./preferences";
 import { clipNotes, mergeReleasePages, offerable, readReleasePage, type ReleaseInfo, type ReleasePage } from "./releases";
+import { updateMessagesCopy } from "./update-messages.copy";
 import type { CheckOutcome, UpdateNotice, UpdateOffer, UpdateProgress, UpdateState } from "./update-state";
 
 export type UpdaterDeps = {
@@ -19,6 +21,8 @@ export type UpdaterDeps = {
   /** O app foi aberto com um argumento que tira a garantia do HTTPS (`updatesBlocked`): nada vai à rede nesta abertura. */
   blocked?: boolean;
   currentVersion: string;
+  /** O idioma desta abertura do app (`locale.json`, lido pelo `main.ts`): o das frases que vão à tela. Sem ele, o português; o log é sempre em português. */
+  locale?: Locale;
   facts: InstallFacts;
   /**
    * Instalado pelo instalador do Windows, a instalação é para todos os usuários (RN-INSTALA-003; `install-scope.ts`)? Só é
@@ -64,17 +68,6 @@ const maxOfferedReleases = 20;
 const progressIntervalMs = 200;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
-/** O arquivo baixado e conferido não é mais o mesmo no disco: alguém o trocou entre a conferência e o uso. */
-const changed = "O arquivo da atualização mudou depois de conferido.";
-/**
- * O que a tela diz quando a instalação não foi adiante DEPOIS de a API ter sido parada para ela: o app está aberto sem o
- * serviço, e a tela de trás mostra o erro da API com "Reiniciar". Sem estas frases a pessoa veria só "não foi possível".
- */
-const serviceIsBack = ' Use "Reiniciar" para trazer o serviço de volta.';
-const serviceStopped = ` O serviço do Prism foi parado para instalar.${serviceIsBack}`;
-const packageKept = ' O pacote baixado continua guardado: "Tentar de novo" o confere outra vez, sem baixar de novo.';
-/** A parada que falhou não prova nada, nem depois: nesta abertura o instalador não roda mais, e quem resolve é abrir o Prism de novo. */
-const reopenToUpdate = " Para atualizar, feche o Prism e abra-o de novo.";
 /** O pedido da tela que não é a versão achada, ou que chega no estado errado. É a única rejeição que a tela recebe, e não leva dado nenhum. */
 class InvalidRequest extends Error {}
 const invalid = () => new InvalidRequest("Pedido de atualização inválido.");
@@ -82,10 +75,10 @@ const invalid = () => new InvalidRequest("Pedido de atualização inválido.");
  * A causa que vai para a tela. A mensagem de um erro do sistema de arquivos traz o caminho do arquivo: dele só vai o código.
  * O erro pode chegar reembrulhado (o download troca a mensagem e guarda o original em `cause`), então a busca desce por `cause`.
  */
-function causeOf(error: unknown): string {
+function causeOf(error: unknown, dataFolderRefused: (code: string) => string): string {
   for (let each: unknown = error, depth = 0; typeof each === "object" && each !== null && depth < 5; each = (each as Error).cause, depth += 1) {
     const { code, path, syscall } = each as NodeJS.ErrnoException;
-    if (typeof code === "string" && (typeof path === "string" || typeof syscall === "string")) return `O sistema não deixou gravar na pasta de dados do Prism (${code}).`;
+    if (typeof code === "string" && (typeof path === "string" || typeof syscall === "string")) return dataFolderRefused(code);
   }
   return messageOf(error);
 }
@@ -124,9 +117,14 @@ async function withRetries<T>(work: () => Promise<T>, attempts = 3, waitMs = 150
  * preferências. O que chega da tela (`unknown`) é conferido aqui: ela só diz "baixe", "instale" ou "pule" a versão que a
  * última consulta DESTE processo achou, e nunca um endereço, um caminho ou um nome de arquivo.
  */
-export function createUpdater({ origin: recordedOrigin, blocked = false, currentVersion, facts, installedForAllUsers, dataDir, downloadsDir, http, now, log, spawn, stopApi, apiStopTimeoutMs = 15_000, quit, reveal, onState, onProgress }: UpdaterDeps) {
+export function createUpdater({ origin: recordedOrigin, blocked = false, currentVersion, locale, facts, installedForAllUsers, dataDir, downloadsDir, http, now, log, spawn, stopApi, apiStopTimeoutMs = 15_000, quit, reveal, onState, onProgress }: UpdaterDeps) {
   // Bloqueado é sem origem: nenhum caminho abaixo chega à rede sem ela.
   const origin = blocked ? null : recordedOrigin;
+  // As frases que vão à tela (`update-messages.copy.ts`), no idioma desta abertura. O que não foi adiante DEPOIS de a API ter sido parada
+  // diz isso e como voltar (`serviceStopped`): o app está aberto sem o serviço, e sem estas frases a pessoa veria só "não foi possível".
+  const messages = updateMessagesCopy(locale);
+  const t = messages.updater;
+  const serviceStopped = `${t.serviceStoppedForInstall}${t.serviceIsBack}`;
   const preferencesFile = join(dataDir, "update-preferences.json");
   const updatesDir = join(dataDir, "updates");
   // O que está em `updates/` só vale para o processo que o baixou e conferiu (as somas ficam na memória): o que sobrou de
@@ -177,7 +175,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
   async function readPage(source: UpdateOrigin, page: number): Promise<ReleasePage | { failure: string }> {
     let text: string;
     try {
-      text = await fetchText(http, releasesUrl(source, page), { origin: source, maxBytes: releasesMaxBytes, timeoutMs: queryTimeoutMs, redirects: false, headers: githubApiHeaders });
+      text = await fetchText(http, releasesUrl(source, page), { origin: source, maxBytes: releasesMaxBytes, timeoutMs: queryTimeoutMs, redirects: false, headers: githubApiHeaders, text: messages.download });
     } catch (error) {
       return { failure: messageOf(error) };
     }
@@ -186,11 +184,11 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
     try {
       payload = JSON.parse(text);
     } catch {
-      return { failure: "A resposta do servidor não é a lista de versões (não é JSON)." };
+      return { failure: t.notJson };
     }
     // O canal é o desta consulta: ligar ou desligar "Receber versões beta" vale a partir da próxima (RN-ATUALIZA-010).
     const read = readReleasePage(payload, currentVersion, preferences.receiveBeta ? "beta" : "stable");
-    if (read === null) return { failure: "A resposta do servidor não é a lista de versões." };
+    if (read === null) return { failure: t.notReleaseList };
 
     // O que ficou de fora vai para o log, e a tela não sabe dele: uma linha por página, com as primeiras.
     if (read.ignored.length > 0) log(`atualização: ${read.ignored.length} da página ${page} da lista de releases ignorada(s): ${read.ignored.slice(0, 10).join("; ")}${read.ignored.length > 10 ? "; …" : ""}`);
@@ -245,7 +243,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
         version,
         prerelease,
         date,
-        notes: clipNotes(notes),
+        notes: clipNotes(notes, messages.releases.notesCut),
         sums: [...sums].filter(([file]) => file !== sumsFile && isPackageFile(version, file)).map(([file, sha256]) => ({ file, sha256 })),
       })),
       omitted: Math.max(0, releases.length - maxOfferedReleases),
@@ -284,7 +282,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
     if (!privateFolders.some((folder) => text.includes(folder))) return reason;
 
     log(`atualização: causa com caminho de pasta, trocada antes de ir para a tela: ${reason}`);
-    return "O Prism não conseguiu gravar a atualização no disco.";
+    return t.diskWriteFailed;
   }
   const fail = (reason: string) => setState({ status: "failed", reason: screenSafe(reason), ...offer });
 
@@ -302,7 +300,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
         return false;
       },
     );
-    return fail(`${refusal} ${removed ? "Ele foi apagado." : "O Prism não conseguiu apagá-lo agora: ele não será usado, e sai na próxima abertura."}${after}`);
+    return fail(`${refusal} ${removed ? t.removed : t.notRemoved}${after}`);
   }
 
   /**
@@ -316,7 +314,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       if (error instanceof InvalidRequest) throw error;
 
       log(`atualização: falha inesperada: ${messageOf(error)}`);
-      return fail(causeOf(error));
+      return fail(causeOf(error, t.dataFolderRefused));
     }
   }
 
@@ -378,8 +376,8 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       if (origin === null || latest === undefined || version !== latest.version || (state.status !== "available" && state.status !== "failed")) throw invalid();
 
       const choice = choosePackage(latest.version, facts);
-      if (choice === null) return fail("Não há pacote desta versão para o sistema e a arquitetura deste computador.");
-      if (!latest.sums.has(choice.fileName)) return fail(sumRefusal(choice.fileName, latest.sums, new Map()) ?? "");
+      if (choice === null) return fail(t.noPackage);
+      if (!latest.sums.has(choice.fileName)) return fail(sumRefusal(choice.fileName, latest.sums, new Map(), undefined, messages.sums) ?? "");
 
       const controller = new AbortController();
       downloading = controller;
@@ -389,9 +387,9 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       setState({ status: "downloading", receivedBytes: 0, totalBytes: null, ...offer });
 
       try {
-        const published = parseSums(await fetchText(http, packageUrl(origin, latest.version, sumsFile), { origin, maxBytes: sumsMaxBytes, timeoutMs: queryTimeoutMs, redirects: true, signal: controller.signal }));
+        const published = parseSums(await fetchText(http, packageUrl(origin, latest.version, sumsFile), { origin, maxBytes: sumsMaxBytes, timeoutMs: queryTimeoutMs, redirects: true, signal: controller.signal, text: messages.download }));
 
-        const missing = sumRefusal(choice.fileName, latest.sums, published);
+        const missing = sumRefusal(choice.fileName, latest.sums, published, undefined, messages.sums);
         if (missing !== null) return fail(missing);
 
         // O pacote pode já estar aqui: é o que fica quando o instalador não iniciou (a API já tinha parado, e a pessoa pede
@@ -399,7 +397,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
         // e o SHA256SUMS que acabou de chegar. Se não confere, segue o caminho normal, que apaga a pasta e baixa.
         if (existsSync(target)) {
           const kept = await sha256OfFile(target).catch(() => null);
-          if (kept !== null && sumRefusal(choice.fileName, latest.sums, published, kept) === null) {
+          if (kept !== null && sumRefusal(choice.fileName, latest.sums, published, kept, messages.sums) === null) {
             log("atualização: o pacote já baixado confere de novo com as duas somas; não foi baixado outra vez");
             verified = { version: latest.version, path: target, sha256: kept, format: choice.format };
             return setState({ status: "ready", ...offer });
@@ -415,6 +413,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
           maxBytes: packageMaxBytes,
           stallMs,
           signal: controller.signal,
+          text: messages.download,
           onProgress(receivedBytes, totalBytes) {
             if (state.status !== "downloading" || (Date.now() - lastPush < progressIntervalMs && receivedBytes !== totalBytes)) return;
             lastPush = Date.now();
@@ -426,7 +425,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
           },
         });
 
-        const refusal = sumRefusal(choice.fileName, latest.sums, published, sha256);
+        const refusal = sumRefusal(choice.fileName, latest.sums, published, sha256, messages.sums);
         if (refusal !== null) return await refuseAndRemove(refusal, directory, { recursive: true });
 
         // Só depois de conferido o arquivo ganha o nome dele.
@@ -438,7 +437,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
         if (controller.signal.aborted) return setState({ status: "available", ...offer });
 
         log(`atualização: o download falhou: ${messageOf(error)}`);
-        return fail(causeOf(error));
+        return fail(causeOf(error, t.dataFolderRefused));
       } finally {
         downloading = null;
       }
@@ -469,9 +468,9 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
           actual = await sha256OfFile(path);
         } catch (error) {
           log(`atualização: o arquivo conferido não pôde ser lido: ${messageOf(error)}`);
-          return fail(`O arquivo conferido não está mais onde o Prism o deixou.${note} Baixe a atualização de novo.`);
+          return fail(t.verifiedFileGone(note));
         }
-        return actual === sha256 ? null : refuseAndRemove(changed, path, { after: `${note} Baixe a atualização de novo.` });
+        return actual === sha256 ? null : refuseAndRemove(t.changed, path, { after: `${note}${t.downloadAgain}` });
       };
 
       const refusedBefore = await refusedIfChanged();
@@ -483,11 +482,11 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
         try {
           if (!(await settledWithin(stopApiAndWait(), apiStopTimeoutMs))) {
             log(`atualização: a API não terminou em ${apiStopTimeoutMs / 1000} s; o instalador não foi iniciado (a parada continua, e a próxima tentativa espera por ela)`);
-            return fail(`O serviço do Prism não encerrou a tempo, e por isso o instalador não foi iniciado.${serviceIsBack}${packageKept}`);
+            return fail(`${t.stopTimedOut}${t.serviceIsBack}${t.packageKept}`);
           }
         } catch (error) {
           log(`atualização: a API não pôde ser parada: ${messageOf(error)}; o instalador não roda mais nesta abertura`);
-          return fail(`O serviço do Prism não encerrou, e por isso o instalador não foi iniciado.${serviceIsBack}${reopenToUpdate}`);
+          return fail(`${t.stopFailed}${t.serviceIsBack}${t.reopenToUpdate}`);
         }
 
         // A parada levou tempo (fechar o cofre, esperar o processo), e nesse tempo o arquivo pode ter sido trocado. A soma é
@@ -521,7 +520,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
           return state;
         }
 
-        const delivered = await deliverToDownloads(path, downloadsDir);
+        const delivered = await deliverToDownloads(path, downloadsDir, messages.install.noFreeName);
         reveal(delivered);
         return setState({ status: "delivered", fileName: basename(delivered), ...offer });
       } catch (error) {
@@ -530,7 +529,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
         log(`atualização: a instalação falhou: ${messageOf(error)}`);
         // O instalador não iniciou, mas a API já parou para ele: a tela diz isso e como voltar. O pacote conferido NÃO é
         // apagado: "Tentar de novo" (o `download`) refaz a conferência do arquivo que ficou, em vez de baixar tudo outra vez.
-        return fail(format === "nsis" ? `Não foi possível iniciar o instalador (${cause}).${serviceStopped}${packageKept}` : `Não foi possível deixar o pacote na pasta de downloads (${cause}).`);
+        return fail(format === "nsis" ? `${t.installerFailed(cause)}${serviceStopped}${t.packageKept}` : t.deliverFailed(cause));
       }
     },
 

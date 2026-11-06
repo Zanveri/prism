@@ -11,6 +11,7 @@ export const prismEndpoints = {
   userConnections: "api/user/connections",
   userConnection: (id: string) => `api/user/connections/${encodeURIComponent(id)}`,
   userConnectionPasswordReveal: (id: string) => `api/user/connections/${encodeURIComponent(id)}/password/reveal`,
+  userConnectionNetworkSecret: (id: string) => `api/user/connections/${encodeURIComponent(id)}/network-secret`,
   userConnectionDuplicate: (id: string) => `api/user/connections/${encodeURIComponent(id)}/duplicate`,
   userConnectionsTest: "api/user/connections/test",
   userConnectionVerification: (id: string) => `api/user/connections/${encodeURIComponent(id)}/verification`,
@@ -38,12 +39,17 @@ export const prismEndpoints = {
   userDatabaseSessionSchemaDiagram: (id: string, schema: string) => `api/user/database-sessions/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/diagram`,
   userDatabaseSessionColumns: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/columns`,
   userDatabaseSessionIndexes: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/indexes`,
+  userDatabaseSessionChecks: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/checks`,
   userDatabaseSessionForeignKeys: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/foreign-keys`,
   userDatabaseSessionReferencedBy: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/referenced-by`,
   userDatabaseSessionQueries: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries`,
   userDatabaseSessionQueriesNext: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/next`,
   userDatabaseSessionQueriesCount: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/count`,
   userDatabaseSessionQueriesCancel: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/cancel`,
+  // RN-VAR-034 e 035: a consulta de uma variável, e os valores de uma coluna (a escolha pela chave estrangeira e o `random.of`).
+  userDatabaseSessionQueriesVariable: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/variable`,
+  userDatabaseSessionColumnValues: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/values`,
+  userDatabaseSessionColumnValuesCheck: (id: string, schema: string, table: string) => `${tablePath(id, schema, table)}/values/check`,
   // RN-TX-002: o Commit e o Rollback da transação manual da aba.
   userDatabaseSessionTransactionCommit: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/transaction/commit`,
   userDatabaseSessionTransactionRollback: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/transaction/rollback`,
@@ -54,9 +60,14 @@ export const prismEndpoints = {
   userDatabaseSessionResultCells: (id: string, resultId: string) => `api/user/database-sessions/${encodeURIComponent(id)}/results/${encodeURIComponent(resultId)}/cells`,
   userScripts: "api/user/scripts",
   userScript: (id: string) => `api/user/scripts/${encodeURIComponent(id)}`,
+  // RN-VAR-028: os valores lembrados do "Executar com valores…".
+  userScriptRunValues: (id: string) => `api/user/scripts/${encodeURIComponent(id)}/run-values`,
   // RN-SCRIPT-007: as pastas da seção Scripts, à parte das pastas de conexões.
   userScriptFolders: "api/user/script-folders",
   userScriptFolder: (id: string) => `api/user/script-folders/${encodeURIComponent(id)}`,
+  // RN-CONSTRUIR-080: modelos do Construir no cofre.
+  userBuildModels: "api/user/build-models",
+  userBuildModel: (id: string) => `api/user/build-models/${encodeURIComponent(id)}`,
   userWorkspace: "api/user/workspace",
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
@@ -77,6 +88,14 @@ export const prismEndpoints = {
   userTransferCopiesPreview: "api/user/transfers/copies/preview",
   userTransferCopies: "api/user/transfers/copies",
   userTransfer: (id: string) => `api/user/transfers/${encodeURIComponent(id)}`,
+  // RN-HIST-002 a 006 e RN-AUDIT-010 a 016: o diário de comandos e auditoria do usuário.
+  userJournalHistory: "api/user/journal/history",
+  userJournalHistoryEntry: (id: number) => `api/user/journal/history/${encodeURIComponent(String(id))}`,
+  userJournalAudit: "api/user/journal/audit",
+  userJournalAuditEntry: (id: number) => `api/user/journal/audit/${encodeURIComponent(String(id))}`,
+  userJournalAuditFacets: "api/user/journal/audit/facets",
+  userJournalAuditPurge: "api/user/journal/audit/purge",
+  userJournalSettings: "api/user/journal/settings",
 } as const;
 
 function tablePath(id: string, schema: string, table: string) {

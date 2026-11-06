@@ -19,17 +19,15 @@ rodam igual na sua máquina.
 
 | Arquivo | O que faz |
 | --- | --- |
-| [`.github/workflows/pipeline.yml`](../.github/workflows/pipeline.yml) | A entrada. Roda só no `push` em `develop` e em `main`; uma execução por vez em cada ramo, na ordem em que chegaram; chama os seis abaixo (o das páginas só na `develop`) e passa o plano do lançamento de um para o outro. |
+| [`.github/workflows/pipeline.yml`](../.github/workflows/pipeline.yml) | A entrada. Roda só no `push` em `develop` e em `main`; uma execução por vez em cada ramo, na ordem em que chegaram; chama os cinco abaixo e passa o plano do lançamento de um para o outro. |
 | [`.github/workflows/verificar.yml`](../.github/workflows/verificar.yml) | Interface (lint, typecheck e testes), API (build sem avisos e testes de unidade), os testes dos roteiros e as regras dos workflows (com o actionlint), e a **decisão do que o merge lança** (job `versao`). |
 | [`.github/workflows/integrar.yml`](../.github/workflows/integrar.yml) | Os testes de integração da API contra PostgreSQL, Informix e Db2 em contêiner. |
 | [`.github/workflows/seguranca.yml`](../.github/workflows/seguranca.yml) | O `leak-guard` (RN-ABERTO-003), a auditoria das dependências da interface e da API, e o CodeQL (só com o repositório público). |
 | [`.github/workflows/empacotar.yml`](../.github/workflows/empacotar.yml) | A API publicada para as quatro plataformas e os pacotes de Windows e Linux e, só na `main`, de macOS (RN-ABERTO-006), com a origem das atualizações gravada (RN-GITHUB-005). Os jobs de pacote são independentes. |
 | [`.github/workflows/lancar.yml`](../.github/workflows/lancar.yml) | A release do GitHub: rascunho, anexos (as plataformas que vieram inteiras) e publicação, que cria a tag (RN-VERSAO-008). O único job com escrita no conteúdo. |
-| [`.github/workflows/paginas.yml`](../.github/workflows/paginas.yml) | O site de `site/` no GitHub Pages: um job junta os arquivos e outro os publica. Só na `develop`, sem esperar o empacotamento. Não chama roteiro: só usa actions do GitHub. O único com `pages: write` e `id-token: write`. |
 | [`.github/actions/preparar-node/`](../.github/actions/preparar-node/action.yml) | O Node 22.23.2 e o pnpm do `packageManager` de `src/client/package.json`, com o hash conferido pelo `corepack`. |
 | [`.github/actions/preparar-dotnet/`](../.github/actions/preparar-dotnet/action.yml) | O SDK do .NET 10.0.401, fixado por um `global.json` só da cópia de trabalho do runner. |
 | [`scripts/ci/`](../scripts/ci) | Os roteiros (um por passo) e os testes deles (`*.test.sh`, que o `test-scripts.sh` roda). |
-| [`site/`](../site) | O site de documentação (HTML e CSS escritos à mão, sem build nem dependência): o que o `paginas.yml` publica em <https://zanveri.github.io/prism/>. |
 
 Os roteiros, por assunto:
 
@@ -45,8 +43,6 @@ Os roteiros, por assunto:
 | `check-tools.sh` | o segundo passo das actions compostas |
 | `actions.sh` | os avisos à vista (anotação e resumo do job), que vários roteiros usam |
 | `fake-project.sh`, `fake-gh.py` | só dos testes: o repositório de mentira e o `gh` de mentira |
-
-O `paginas.yml` não chama roteiro: os passos dele são só `uses:` de actions do GitHub.
 
 ## Quando a pipeline roda
 
@@ -90,9 +86,8 @@ pipeline.yml (push em develop ou main; uma execução por vez em cada ramo)
 ├── empacotar ─ api (as quatro APIs) ─┬─ windows
 │   (espera verificar e seguranca)    ├─ linux (contêiner do electron-builder)
 │                                     └─ macos (arm64 e x64; SÓ NA MAIN)
-├── lancar ──── publicar (só quando o plano diz que lança; espera os três, mas roda
-│                         mesmo com um pacote em falha)
-└── paginas ─── montar · publicar (só na develop; não espera ninguém, e ninguém o espera)
+└── lancar ──── publicar (só quando o plano diz que lança; espera os três, mas roda
+                          mesmo com um pacote em falha)
 ```
 
 Um job que falha para os que dependem dele: com a versão errada (job `versao`), um teste vermelho, um achado do `leak-guard` num
@@ -110,7 +105,6 @@ independente](#cada-plataforma-é-independente).
 | `pipeline.yml` | `seguranca` | Segurança | (chama `seguranca.yml`) | — | `contents: read`, `security-events: write` (só o CodeQL a usa) |
 | `pipeline.yml` | `empacotar` | Empacotar | (chama `empacotar.yml`) | verificar, seguranca | `contents: read` |
 | `pipeline.yml` | `lancar` | Lançar | (chama `lancar.yml`) | verificar, seguranca, empacotar; só com o plano `lanca`; roda mesmo com o `empacotar` em falha | `contents: write` |
-| `pipeline.yml` | `paginas` | Páginas | (chama `paginas.yml`); só na `develop` | — | `contents: read`, `pages: write`, `id-token: write` (só o `publicar` as usa) |
 | `verificar.yml` | `versao` | Conferir a versão | `ubuntu-24.04` | — | `contents: read` |
 | `verificar.yml` | `interface` | Interface | `ubuntu-24.04` | — | `contents: read` |
 | `verificar.yml` | `api` | API | `ubuntu-24.04` | — | `contents: read` |
@@ -125,8 +119,6 @@ independente](#cada-plataforma-é-independente).
 | `empacotar.yml` | `linux` | Pacote de Linux | `ubuntu-24.04`, no contêiner `electronuserland/builder` | `api` | `contents: read` |
 | `empacotar.yml` | `macos` | Pacote de macOS (arm64 e x64) | `macos-15` | `api`; só na `main` | `contents: read` |
 | `lancar.yml` | `publicar` | Publicar a release | `ubuntu-24.04` | — | `contents: write` |
-| `paginas.yml` | `montar` | Montar o site | `ubuntu-24.04` | — | `contents: read`, `pages: read` |
-| `paginas.yml` | `publicar` | Publicar no GitHub Pages | `ubuntu-24.04` | `montar` | `pages: write`, `id-token: write` |
 <!-- tabela-de-jobs:fim -->
 
 Esta tabela é conferida pelo `check-workflows.sh`: um job que não está nela, ou uma linha que não é job, reprova o job `roteiros`.
@@ -147,8 +139,7 @@ chegar ao pacote de uma release; raciocínio nosso, não da documentação).
 - **`roteiros`**: os testes dos roteiros (`test-scripts.sh`), as regras dos workflows (`check-workflows.sh`) e o actionlint
   (`actionlint.sh`). O `check-workflows.sh` reprova: gatilho que não é `push` em `develop` e `main` (ou `workflow_call`, nos
   reutilizáveis); `uses:` que não é local nem `actions/*`/`github/*` fixada pelo SHA de 40 caracteres com o comentário da versão;
-  workflow sem `permissions: {}` no topo; escrita fora do job de lançamento (e do `security-events` do CodeQL, e do `pages` e do
-  `id-token` do job que publica as páginas); segredo fora do passo
+  workflow sem `permissions: {}` no topo; escrita fora do job de lançamento (e do `security-events` do CodeQL); segredo fora do passo
   do leak-guard; `run:` que não é **uma** chamada a um roteiro de `scripts/ci/` que existe, ou que tem uma expressão `${{ }}` dentro
   (o valor de fora entra por `env:`); runner fora dos três rótulos escolhidos; contêiner sem digest; checkout sem
   `persist-credentials: false`; job sem `timeout-minutes`; concorrência que cancela; `always()` em qualquer expressão (o lançamento roda
@@ -261,27 +252,6 @@ livre no log. **A confirmar** na primeira execução: se o espaço dá.
   [cotas](https://docs.github.com/en/billing/reference/product-usage-included)). Repetir o job `publicar` depois de dois dias pede uma
   execução nova.
 
-### Páginas
-
-O site de documentação, `site/`, publicado no GitHub Pages em <https://zanveri.github.io/prism/>. É HTML e CSS escritos à mão: não
-há build, dependência nem roteiro, e os passos são só actions do GitHub (`paginas.yml`, chamado só na `develop`).
-
-- **`montar`**: clona o repositório (sem guardar o token), roda o `configure-pages` e o `upload-pages-artifact` com `path: site`. O
-  `configure-pages` lê a configuração do Pages e **falha dizendo o que ligar** quando a fonte não é "GitHub Actions" (item 13 da
-  [lista de conferência](#lista-de-conferência-do-repositório)). Permissões: `contents: read` e `pages: read`; a documentação das
-  permissões dos tokens de instalação lista a leitura do Pages (`GET /repos/{dono}/{repo}/pages`) como `pages: read`
-  ([permissões](https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps#repository-permissions-for-pages)).
-  Arquivo e pasta com nome começado por ponto não entram no artefato (o padrão do `upload-pages-artifact`).
-- **`publicar`**: o `deploy-pages`, no ambiente `github-pages`, com `pages: write` (criar a publicação) e `id-token: write` (o GitHub
-  confere de que execução e de que ramo o artefato veio, pelo token OIDC do job; [deploy-pages](https://github.com/actions/deploy-pages#security-considerations)).
-  Ele não clona o código. É o **único** job com essas duas escritas, e o `check-workflows.sh` as reprova em qualquer outro.
-- **Não espera nem é esperado.** O job do workflow de entrada tem `if: github.ref_name == 'develop'` e nenhum `needs`: o site sobe em
-  paralelo com a verificação, e nem um teste vermelho segura o site, nem uma falha do Pages (a fonte ainda não ligada, por exemplo)
-  segura os pacotes (o `lancar` não depende dele). A falha fica à vista na execução, como a da integração. Na `main` o job não roda, e
-  o ambiente `github-pages` só deixaria publicar a partir do ramo padrão.
-- **Uma publicação por vez.** O `concurrency` do workflow de entrada já faz uma execução de cada vez por ramo, então duas
-  publicações da `develop` nunca se sobrepõem.
-
 ## O que cada merge publica
 
 A decisão é uma só (`version.sh`, `decide_release`), tomada no job `versao` e refeita no `publicar` com o estado do remoto de agora.
@@ -301,10 +271,6 @@ O número do beta é procurado pelo **nome exato** de cada tag (`vX.Y.Z-beta.N`,
 versão do beta** (`Prism-0.2.0-beta.3-win-x64.exe`, e o app instalado diz `0.2.0-beta.3`): é com esse número que o atualizador compara
 as versões. As notas do beta são as do `git-cliff`, desde a tag de versão anterior que está na história do commit (no primeiro beta, o
 histórico inteiro), seguidas das somas, e **não** são gravadas no `CHANGELOG.md` (RN-VERSAO-007).
-
-**O site, na `develop`.** Todo merge na `develop` também publica o site de `site/` no GitHub Pages ([Páginas](#páginas)), em paralelo
-com o resto: ele não espera o empacotamento nem a decisão do `versao`, e um merge que não lança nada ainda atualiza o site. Na `main`
-o site não é publicado.
 
 **Na `main`, a estável:**
 
@@ -421,9 +387,6 @@ O único token é o `GITHUB_TOKEN` de cada job, com as permissões da [tabela](#
 
 - **Checkout sem guardar o token**: todo `actions/checkout` tem `persist-credentials: false` (o padrão grava o token no `.git/config`
   do runner, onde qualquer passo seguinte o leria).
-- **Páginas**: o `montar` tem `contents: read` e `pages: read`, e o `publicar` só `pages: write` e `id-token: write` (a segunda é o
-  token OIDC que o `deploy-pages` pede ao GitHub para provar de que execução veio o artefato). O `publicar` não clona o código, e o
-  `check-workflows.sh` reprova essas duas escritas em qualquer outro job.
 - **`gh`** (só no `publicar`): recebe o token por `GH_TOKEN`, com uma pasta de configuração própria e vazia (`GH_CONFIG_DIR`), sem
   `GH_DEBUG`, `DEBUG` nem token de outro servidor no ambiente, sem perguntar nada e sem paginador. Ele só manda o token ao servidor do
   pedido e não o leva a um redirecionamento para outro servidor (o código do `gh`, `AddAuthTokenHeader`). O token nunca vai em
@@ -566,13 +529,11 @@ item 1 vem **antes** do primeiro envio dos workflows.
     `LEAK_GUARD_EXTRA`, um termo por linha. *O que fecha:* os termos próprios da empresa ficam fora do repositório e só chegam ao passo
     do leak-guard. *Conferir:* o log do leak-guard diz "N termo(s) extra(s) carregado(s)" (sem o segredo, o aviso "Sem os termos
     extras").
-13. **GitHub Pages por Actions.** *Onde:* Settings › Pages › Build and deployment › Source: **GitHub Actions**
-    ([publicar com um workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)).
-    *O que fecha:* sem isso, o job `montar` do `paginas.yml` falha no `configure-pages` ("Get Pages site failed") e o site não sobe;
-    com a fonte por Actions, o GitHub cria o ambiente `github-pages`, que limita a publicação ao ramo padrão (a `develop`; **a
-    confirmar** a regra exata em Settings › Environments › `github-pages`). O endereço do site é `https://zanveri.github.io/prism/`.
-    *Conferir:* depois do primeiro merge na `develop` com o `paginas.yml`, a execução mostra "Publicar no GitHub Pages" verde com o
-    endereço, e a página abre. O site de um repositório **público** não tem custo no plano gratuito.
+13. **GitHub Pages desligado.** *Onde:* Settings › Pages, **Unpublish site**; e Settings › Environments, apagar o ambiente
+    `github-pages`. *O que fecha:* a documentação mora no site da Zanveri (<https://zanveri.com/docs/prism>), no repositório do site, e
+    nenhum workflow daqui publica páginas; ligado, o endereço antigo (`https://zanveri.github.io/prism/`) continuaria servindo o
+    último site que saiu deste repositório. *Conferir:* o endereço antigo responde 404, e Settings › Environments não lista o
+    `github-pages`.
 14. *(Opcional, código de conduta.)* Settings › Moderation options › Reported content: com o repositório público de organização, quem
     contribui pode relatar um comentário aos mantenedores sem expor o relato
     ([conteúdo relatado](https://docs.github.com/en/communities/moderating-comments-and-conversations/managing-how-contributors-report-abuse-in-your-organizations-repository)).
@@ -676,11 +637,10 @@ Cada passo é uma chamada a um arquivo de `scripts/ci/`; rode o arquivo. Para co
 | o instalador do Windows | `bash scripts/ci/check-windows-installer.sh` (ou `… <instalador>.exe`), no Git Bash, num Windows sem o Prism instalado e como administrador | o resultado do `package-desktop.sh win`; **instala e desinstala** o Prism nos dois modos: rode numa máquina descartável |
 | as notas | `bash scripts/ci/release-notes.sh --sums <arquivo> 0.1.0`, ou `… --beta --since v0.1.0-beta.1 0.1.0-beta.2` | o `CHANGELOG.md`; no beta, o Docker (`git-cliff.sh`) |
 | `publicar` | só na pipeline (escreve no GitHub). O ensaio dele, com um `gh` de mentira, é `bash scripts/ci/release.test.sh` | bash, git, jq, python3 |
-| `paginas` | só na pipeline (publica no GitHub Pages). Para ver o site antes: `python3 -m http.server --directory site 8000` e abrir `http://127.0.0.1:8000/` | python3 (o site é HTML e CSS estáticos: não há build) |
 
 ## O que a pipeline não faz
 
-- **Configurar o repositório**: a lista de conferência acima é manual (inclusive ligar o GitHub Pages por Actions, o item 13).
+- **Configurar o repositório**: a lista de conferência acima é manual (inclusive desligar o GitHub Pages, o item 13).
 - **Assinatura de código e notarização**: o pacote de Windows e o de Linux não são assinados, e o de macOS leva só a assinatura ad hoc
   (sem Developer ID, sem notarização). O README diz o que isso implica em cada sistema. O que faltaria para o macOS abrir sem aviso
   nenhum está em [Notarizar o pacote de macOS](#notarizar-o-pacote-de-macos), abaixo.

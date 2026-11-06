@@ -762,7 +762,7 @@ public abstract partial class DatabaseClientContractTests
         await using var connection = await OpenAsync();
 
         var refusals = new List<DatabaseFailure>();
-        foreach (var sql in new[] { "BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT ponto", "-- abre\nbegin transaction", "START TRANSACTION", ";BEGIN", "; ;\n BEGIN" })
+        foreach (var sql in new[] { "PREPARE TRANSACTION 'x'", "COMMIT PREPARED 'x'", "ROLLBACK PREPARED 'x'", "COMMIT AND CHAIN", "ROLLBACK AND CHAIN", "-- abre\ncommit and chain", ";COMMIT PREPARED 'x'", "; ;\n PREPARE TRANSACTION 'x'" })
             refusals.Add((await connection.ExecuteAsync(sql, CancellationToken.None)).Error);
 
         var afterwards = await ExecutePageAsync(connection, "SELECT id FROM loja.cliente ORDER BY id");

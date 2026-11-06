@@ -109,9 +109,13 @@ public abstract partial class DatabaseClientContractTests
             await using (var connection = await OpenAsync())
             {
                 connection.ManualCommit = true;
-                var begin = await connection.ExecuteAsync(Engine == EDatabaseEngine.Informix ? "BEGIN WORK" : "BEGIN", CancellationToken.None);
-                Assert.That(begin.IsFailure && begin.Error.Kind == EDatabaseFailure.TransactionControlNotSupported, Is.True);
+                var refused = await connection.ExecuteAsync("COMMIT PREPARED 'x'", CancellationToken.None);
+                Assert.That(refused.IsFailure && refused.Error.Kind == EDatabaseFailure.TransactionControlNotSupported, Is.True);
                 Assert.That(connection.Transaction, Is.EqualTo(ETransactionState.None));
+
+                var begin = await connection.ExecuteAsync(Engine == EDatabaseEngine.Informix ? "BEGIN WORK" : "BEGIN", CancellationToken.None);
+                Assert.That(begin.IsSuccess, Is.True, begin.IsFailure ? begin.Error.Message : null);
+                Assert.That(connection.Transaction, Is.EqualTo(ETransactionState.Open));
 
                 foreach (var sql in new[] { $"UPDATE {table} SET versao = 1", TypedSavepoint("antes_do_dois"), $"UPDATE {table} SET versao = 2" })
                 {

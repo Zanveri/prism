@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — O que o DDL deve trazer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<header aria-hidden="true" style="display: flex; align-items: center; gap: 8px; min-height: 48px; box-sizing: border-box; padding: 4px 12px; background: #14181D; border-bottom: 1px solid #2A313B; opacity: 0.35">
+<span style="display: flex; align-items: center; height: 40px; padding: 0 8px 0 4px; font-size: 15px; font-weight: 600">Prism</span>
+<span style="margin-left: auto; display: flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 6px; background: #232A33">Construir</span>
+<span style="display: flex; align-items: center; height: 36px; padding: 0 12px; color: #B4BCC8">Configurações</span>
+<span style="display: flex; align-items: center; height: 36px; padding: 0 12px; color: #B4BCC8">marina.costa</span>
+</header>
+<div style="flex: 1; display: flex; justify-content: center; align-items: flex-start; box-sizing: border-box; padding: 96px 16px 56px; background: rgb(6 8 10 / 0.72)">
+<section role="dialog" aria-modal="true" aria-labelledby="escopo-titulo" aria-describedby="escopo-texto" style="width: 100%; max-width: 640px; box-sizing: border-box; display: flex; flex-direction: column; background: #14181D; border: 1px solid #38414D; border-radius: 10px; box-shadow: 0 24px 64px rgb(0 0 0 / 0.5)">
+<div style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #2A313B">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; color: #B4BCC8"><path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5"></path></svg>
+<h1 id="escopo-titulo" style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">O que o DDL deve trazer?</h1>
+<a href="Construir.dc.html" aria-label="Fechar (Esc)" style="margin-left: auto; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"></path></svg></a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px; padding: 20px">
+<p id="escopo-texto" style="margin: 0; color: #C9D1DC">O modelo <b style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 600; color: #E6EAF0">manutencao</b> partiu de <b style="font-weight: 600; color: #E6EAF0">MES Produção / mes</b>. O DDL pode trazer só o que você mudou em relação a ele, ou o esquema inteiro.</p>
+<div role="radiogroup" aria-labelledby="escopo-titulo" style="display: flex; flex-direction: column; gap: 8px">
+<button type="button" role="radio" aria-checked="{{ isChanges }}" onClick="{{ pickChanges }}" style="display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; box-sizing: border-box; border: 1px solid {{ changesLine }}; border-radius: 8px; background: {{ changesFill }}; color: #E6EAF0; font: inherit; text-align: left; cursor: pointer"><span aria-hidden="true" style="flex: none; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-top: 2px; box-sizing: border-box; border: 1.5px solid {{ changesLine }}; border-radius: 50%"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{ changesDot }}"></span></span><span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 600">Só as diferenças</span><span style="color: #B4BCC8; font-size: 12px; line-height: 18px">CREATE das tabelas novas e ALTER do que você mudou nas existentes. As existentes sem mudança ficam de fora. Para rodar em MES Produção / mes.</span><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: #C9D1DC">3 CREATE TABLE · 1 ALTER TABLE · 2 CREATE INDEX</span></span></button>
+<button type="button" role="radio" aria-checked="{{ isFull }}" onClick="{{ pickFull }}" style="display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; box-sizing: border-box; border: 1px solid {{ fullLine }}; border-radius: 8px; background: {{ fullFill }}; color: #E6EAF0; font: inherit; text-align: left; cursor: pointer"><span aria-hidden="true" style="flex: none; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-top: 2px; box-sizing: border-box; border: 1.5px solid {{ fullLine }}; border-radius: 50%"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{ fullDot }}"></span></span><span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 600">Tudo</span><span style="color: #B4BCC8; font-size: 12px; line-height: 18px">O esquema inteiro, do zero: CREATE de todas as tabelas, novas e existentes, como estão no modelo. Para criar em outro banco; na própria MES Produção / mes, falha no primeiro CREATE.</span><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: #C9D1DC">6 CREATE TABLE · 2 CREATE INDEX</span></span></button>
+</div>
+<p style="display: flex; align-items: center; gap: 8px; margin: 0; color: #B4BCC8; font-size: 12px; line-height: 18px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 7.5v3M8 5.25v.01"></path></svg>A escolha fica guardada no modelo. Dá para trocar depois, no topo do DDL.</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid #2A313B; background: #1B2027; border-radius: 0 0 10px 10px">
+<a href="Construir.dc.html" style="display: flex; align-items: center; height: 36px; padding: 0 14px; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; text-decoration: none">Cancelar</a>
+<a href="ConstruirDDL.dc.html" style="display: flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 6px; background: #F2B644; color: #14181D; font-weight: 600; text-decoration: none">Gerar DDL</a>
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { scope: 'changes' };
+}
+renderVals() {
+const on = (yes) => ({ line: yes ? '#F2B644' : '#38414D', fill: yes ? '#232A33' : 'transparent', dot: yes ? '#F2B644' : 'transparent' });
+const changes = on(this.state.scope === 'changes');
+const full = on(this.state.scope === 'full');
+return {
+isChanges: this.state.scope === 'changes', isFull: this.state.scope === 'full',
+changesLine: changes.line, changesFill: changes.fill, changesDot: changes.dot,
+fullLine: full.line, fullFill: full.fill, fullDot: full.dot,
+pickChanges: () => this.setState({ scope: 'changes' }),
+pickFull: () => this.setState({ scope: 'full' }),
+};
+}
+}
+</script>
+</body>
+</html>

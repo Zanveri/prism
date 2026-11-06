@@ -1,0 +1,160 @@
+import type { AuditCopy } from "./audit.copy";
+
+export const auditCopyEs: AuditCopy = {
+  title: "Auditoría",
+  subtitle: (userName: string) =>
+    `Todo lo que se ejecutó y las acciones de la cuenta, cifrado en el diario de ${userName}. Solo lo ve quien entra con esta cuenta.`,
+  subtitleAnonymous: "Todo lo que se ejecutó y las acciones de la cuenta, cifrado en el diario de esta cuenta. Solo lo ve quien entra con esta cuenta.",
+
+  stats: {
+    entries: "registros",
+    oldest: "más antiguo",
+    noOldest: "—",
+    retentionAndSize: (sizeLabel: string) => `conserva · ${sizeLabel}`,
+  },
+
+  filters: {
+    regionLabel: "Filtros de la auditoría",
+    searchLabel: "Buscar",
+    searchPlaceholder: "Buscar en la sentencia, en el mensaje, en la conexión…",
+    clearFilters: "Limpiar filtros",
+    activePrefix: "Activos:",
+    totalFound: (total: number) =>
+      total === 1 ? "1 registro encontrado" : `${total.toLocaleString("es")} registros encontrados`,
+    all: "Todos",
+    allFeminine: "Todas",
+    periodLabel: "Período",
+    connectionsLabel: "Conexiones",
+    connectionSearchPlaceholder: "Filtrar conexiones…",
+    deletedConnectionSuffix: "(eliminada)",
+    environmentsLabel: "Entornos",
+    noEnvironment: "Sin entorno",
+    levelsLabel: "Nivel",
+    highAndCriticalShortcut: "Alto y Crítico",
+    kindsLabel: "Tipo",
+    outcomesLabel: "Resultado",
+    customFrom: "Desde",
+    customTo: "Hasta",
+    scriptFilterChip: "Script seleccionado",
+    removeFilter: (label: string) => `Quitar el filtro ${label}`,
+  },
+
+  periods: {
+    "1h": "Última hora",
+    today: "Hoy",
+    "7d": "7 días",
+    "30d": "30 días",
+    all: "Todo",
+    custom: "Personalizado",
+  },
+
+  levels: {
+    info: { mark: "•", label: "Informativo" },
+    warning: { mark: "●", label: "Atención" },
+    high: { mark: "▲", label: "Alto" },
+    critical: { mark: "◆", label: "Crítico" },
+  },
+
+  kinds: {
+    sql: "SQL",
+    edits: "Edición",
+    transaction: "Transacción",
+    transfer: "Datos",
+    security: "Seguridad",
+    connection: "Conexiones",
+  },
+
+  outcomes: {
+    inProgress: "En curso",
+    ok: "Completado",
+    error: "Error",
+    refused: "Rechazado",
+    cancelled: "Cancelado",
+    interrupted: "Interrumpido",
+  },
+
+  origins: {
+    editor: "Editor (Ctrl+Enter)",
+    script: "Script (Alt+X)",
+    values: "Ejecutar con valores…",
+    statement: "Ejecutar esta sentencia",
+    rerun: "Ejecutar de nuevo (F5)",
+    filter: "Filtro y orden de la cuadrícula",
+    "auto-refresh": "Actualización automática",
+    other: "Otro origen",
+  },
+
+  table: {
+    dateTime: "Fecha y hora",
+    level: "Nivel",
+    event: "Evento",
+    connection: "Conexión",
+    environment: "Entorno",
+    outcome: "Resultado",
+    duration: "Duración",
+    loadMore: "Cargar más",
+    loadingMore: "Cargando…",
+    loading: "Cargando los registros de la auditoría…",
+    empty: "Aún no hay registros en el diario.",
+    emptyFiltered: "No se encontraron registros con estos filtros.",
+    unavailable: "El historial y la auditoría están desactivados: no se pudo abrir el diario.",
+    loadError: "No se pudieron cargar los registros de la auditoría.",
+  },
+
+  detail: {
+    ariaLabel: "Detalle del registro",
+    closeLabel: "Cerrar el detalle",
+    numberLabel: (id: number) => `n.º ${id.toLocaleString("es")}`,
+    when: "Cuándo",
+    connection: "Conexión",
+    folder: "Carpeta",
+    environment: "Entorno",
+    origin: "Origen",
+    protections: "Protecciones",
+    confirmation: "Confirmación",
+    confirmedYes: "Pasó por la confirmación",
+    confirmedNo: "No necesitó confirmación",
+    outcome: "Resultado",
+    session: "Sesión",
+    script: "Script",
+    filterByScript: "Ver todos de este script",
+    error: "Error",
+    sqlSent: "Sentencia enviada",
+    copy: "Copiar",
+    copied: "Sentencia copiada al portapapeles.",
+    openInEditor: "Abrir en el editor",
+    openedInEditor: "Sentencia abierta en una nueva pestaña de consulta.",
+  },
+
+  retention: {
+    label: "Conservar los registros durante",
+    hint: "La elección queda dentro del diario cifrado: nadie sin la cuenta puede acortarla.",
+    options: [
+      { value: 30, label: "30 días" },
+      { value: 90, label: "90 días" },
+      { value: 180, label: "180 días" },
+      { value: 365, label: "1 año" },
+      { value: 0, label: "Siempre" },
+    ] as const,
+    savedToast: "Conservación del diario actualizada.",
+    saveErrorToast: "No se pudo actualizar la conservación del diario.",
+    purgeButton: "Eliminar registros…",
+  },
+
+  purge: {
+    title: "Eliminar registros de la auditoría",
+    description:
+      "Elimina definitivamente los registros anteriores a la fecha elegida. Un registro Crítico anotará esta limpieza en el diario.",
+    beforeLabel: "Eliminar todo antes de",
+    beforeRequired: "Elige la fecha límite.",
+    passwordLabel: "Contraseña de Prism",
+    passwordRequired: "Escribe la contraseña de esta cuenta.",
+    invalidPassword: "Contraseña incorrecta.",
+    cancel: "Cancelar",
+    confirm: "Eliminar registros",
+    confirming: "Eliminando…",
+    successToast: (deleted: number) =>
+      deleted === 1 ? "1 registro eliminado del diario." : `${deleted.toLocaleString("es")} registros eliminados del diario.`,
+    errorToast: "No se pudieron eliminar los registros del diario.",
+  },
+};

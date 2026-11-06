@@ -3,7 +3,10 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open, opendir, realpath, rename, rm, statfs, unlink } from "node:fs/promises";
 import { basename, dirname, join, posix, win32 } from "node:path";
 
+import { dbeaverSourceCopy } from "./dbeaver-source.copy";
 import { dbeaverLimits, dbeaverReleaseRequestSchema, dbeaverSourceRequestSchema, type DbeaverSourceReply, type DbeaverWhere } from "./dbeaver-messages";
+import { fileTransferCopy } from "./file-transfer.copy";
+import type { Locale } from "./locale";
 import { unreadableReason } from "./transfer-source";
 
 /**
@@ -17,6 +20,8 @@ import { unreadableReason } from "./transfer-source";
 export type DbeaverSourceDeps = {
   /** A pasta de dados do Prism (`PRISM_DATA_DIR`): a cópia vai para `<dados>/transfers/<sourceId>.dbeaver`. */
   dataDir: string;
+  /** O idioma desta abertura do app (`locale.json`, lido pelo `main.ts`): o do diálogo e das frases que vão à tela. Sem ele, o português. */
+  locale?: Locale;
   platform: NodeJS.Platform;
   /** As variáveis de ambiente (`DBEAVER_DATA` e, no Windows, `APPDATA`). */
   env: Readonly<Record<string, string | undefined>>;
@@ -35,14 +40,6 @@ export type DbeaverSourceDeps = {
   beforeOpen?: (path: string) => Promise<void> | void;
 };
 
-/** O título do diálogo de pasta (RN-DBEAVER-005), escrito aqui: nada da tela vai ao diálogo. */
-export const dbeaverDialogTitle = "Escolher a pasta do DBeaver";
-
-/** A frase do atalho recusado (RN-DBEAVER-006), inteira. */
-export const symlinkMessage = "O DBeaver guarda esta pasta por um atalho (link simbólico), e o Prism não segue atalhos. Escolha a pasta de verdade.";
-
-/** A frase de um arquivo ilegível (RN-DBEAVER-006), com o motivo da RN-IMPORT-018. */
-export const unreadableMessage = (reason: string) => `Não foi possível ler os arquivos do DBeaver: ${reason}.`;
 
 /** Uma pasta de dados do DBeaver a procurar (RN-DBEAVER-004). `legacy`: a antiga do Linux, que só vale quando a de sempre não existe. */
 export type DbeaverRoot = { where: DbeaverWhere; dir: string; legacy?: boolean };
@@ -195,6 +192,11 @@ async function scanWorkspace(workspace: string): Promise<{ projects: Project[]; 
 
 export function createDbeaverSource(deps: DbeaverSourceDeps) {
   const transfersDir = join(deps.dataDir, "transfers");
+  // O título do diálogo e as frases das recusas (`dbeaver-source.copy.ts`), no idioma desta abertura; o motivo de um arquivo ilegível é o da importação.
+  const text = dbeaverSourceCopy(deps.locale);
+  const fileText = fileTransferCopy(deps.locale);
+  const symlinkMessage = text.symlink;
+  const unreadable = (error: unknown) => text.unreadable(unreadableReason(codeOf(error), fileText));
   const freeSpace = deps.freeSpace ?? defaultFreeSpace;
   /** As cópias vivas, com a janela dona de cada uma (RN-DBEAVER-006: no máximo uma por janela). */
   const copies = new Map<string, number>();
@@ -294,7 +296,7 @@ export function createDbeaverSource(deps: DbeaverSourceDeps) {
     try {
       real = await realpath(chosen);
     } catch (error) {
-      return { reply: { status: "unreadable", message: unreadableMessage(unreadableReason(codeOf(error))) } };
+      return { reply: { status: "unreadable", message: unreadable(error) } };
     }
     const projectName = basename(chosen) || basename(real);
 
@@ -330,12 +332,12 @@ export function createDbeaverSource(deps: DbeaverSourceDeps) {
     } catch (error) {
       // O atalho trocado no meio do caminho: o `O_NOFOLLOW` o recusa com `ELOOP`.
       if (codeOf(error) === "ELOOP") throw new CopyRefusal({ status: "unreadable", message: symlinkMessage });
-      throw new CopyRefusal({ status: "unreadable", message: unreadableMessage(unreadableReason(codeOf(error))) });
+      throw new CopyRefusal({ status: "unreadable", message: unreadable(error) });
     }
     try {
       const stats = await source.stat({ bigint: true });
       if (!stats.isFile() || stats.dev !== expected.dev || stats.ino !== expected.ino) {
-        throw new CopyRefusal({ status: "unreadable", message: unreadableMessage("o arquivo foi trocado durante a cópia") });
+        throw new CopyRefusal({ status: "unreadable", message: text.unreadable(text.swapped) });
       }
 
       const chunks: Buffer[] = [];
@@ -346,7 +348,7 @@ export function createDbeaverSource(deps: DbeaverSourceDeps) {
         try {
           read = await source.read(chunk, 0, chunk.length, null);
         } catch (error) {
-          throw new CopyRefusal({ status: "unreadable", message: unreadableMessage(unreadableReason(codeOf(error))) });
+          throw new CopyRefusal({ status: "unreadable", message: unreadable(error) });
         }
         if (read.bytesRead === 0) break;
         size += read.bytesRead;
@@ -453,7 +455,7 @@ export function createDbeaverSource(deps: DbeaverSourceDeps) {
       await dropOf(windowId);
       search = await locate();
     } else {
-      const chosen = await deps.showOpenDialog(windowId, { title: dbeaverDialogTitle, defaultPath: await dialogStart() });
+      const chosen = await deps.showOpenDialog(windowId, { title: text.dialogTitle, defaultPath: await dialogStart() });
       if (chosen === null || chosen === "") return { status: "canceled" };
       await dropOf(windowId);
       search = await shapeOf(chosen);

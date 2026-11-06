@@ -7,9 +7,9 @@
 [![Downloads](https://img.shields.io/github/downloads/Zanveri/prism/total?label=downloads)](https://github.com/Zanveri/prism/releases)
 [![Licença](https://img.shields.io/github/license/Zanveri/prism?label=licen%C3%A7a)](LICENSE)
 [![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#baixar)
-[![Documentação](https://img.shields.io/badge/documenta%C3%A7%C3%A3o-zanveri.github.io%2Fprism-blue)](https://zanveri.github.io/prism/pt-br/)
+[![Documentação](https://img.shields.io/badge/documenta%C3%A7%C3%A3o-zanveri.com%2Fdocs%2Fprism-blue)](https://zanveri.com/docs/prism)
 
-**[Baixar](https://github.com/Zanveri/prism/releases/latest)** · [Documentação](https://zanveri.github.io/prism/pt-br/) · [Relatar um problema](https://github.com/Zanveri/prism/issues)
+**[Baixar](https://zanveri.com/products/prism)** · [Documentação](https://zanveri.com/docs/prism) · [Relatar um problema](https://github.com/Zanveri/prism/issues)
 
 O **Prism** é um cliente de banco de dados para desktop, uma alternativa ao DBeaver e ao DataGrip para quem trabalha todo dia
 com **PostgreSQL**, **Db2** e **Informix**: conectar, navegar pelos objetos, rodar SQL e ver o resultado, rápido e sem rodeio.
@@ -18,12 +18,12 @@ Roda no Windows, no macOS e no Linux, e guarda as pastas e as conexões de cada 
 O Prism nasceu da nossa frustração com as versões recentes do DBeaver: queríamos de volta uma ferramenta leve e direta para o
 trabalho de todo dia.
 
-![O editor SQL do Prism com o resultado de uma consulta](site/img/editor-resultado.png)
+![O editor SQL do Prism com o resultado de uma consulta](docs/images/editor-resultado.png)
 
 ## Baixar
 
-Baixe a versão mais nova na **[página de releases](https://github.com/Zanveri/prism/releases/latest)** e, em **Assets**, escolha o
-arquivo do seu sistema:
+Baixe a versão mais nova na **[página do Prism](https://zanveri.com/products/prism)**, no site da Zanveri. Os mesmos pacotes estão na
+**[página de releases](https://github.com/Zanveri/prism/releases/latest)**, em **Assets**. Escolha o arquivo do seu sistema:
 
 | Sistema | Arquivo | Para quê |
 | --- | --- | --- |
@@ -55,8 +55,8 @@ notarização), então o sistema avisa na primeira abertura:
 
 ## Documentação
 
-Instalação, primeiro uso, conexões, editor SQL, registros de uma tabela, configurações e atualizações:
-**<https://zanveri.github.io/prism/pt-br/>**.
+Instalação, primeiro uso, conexões, editor SQL, registros de uma tabela, configurações e atualizações, no site da Zanveri:
+**<https://zanveri.com/docs/prism>**.
 
 ## Problemas e sugestões
 

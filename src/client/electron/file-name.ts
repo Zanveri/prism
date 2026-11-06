@@ -59,17 +59,3 @@ export const exportExtensions = ["csv", "tsv", "php", "xml", "html", "json", "md
 
 export type ExportExtension = (typeof exportExtensions)[number];
 
-/** O nome do filtro do diálogo de salvar, que o processo principal escreve (nenhum texto da tela vai ao diálogo além do nome conferido). */
-export const extensionLabels: Record<ExportExtension, string> = {
-  csv: "CSV",
-  tsv: "TSV",
-  php: "PHP",
-  xml: "XML",
-  html: "HTML",
-  json: "JSON",
-  md: "Markdown",
-  sql: "SQL",
-  txt: "Texto",
-  xlsx: "Excel",
-  zip: "ZIP",
-};

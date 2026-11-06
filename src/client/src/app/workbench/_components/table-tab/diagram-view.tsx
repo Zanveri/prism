@@ -25,6 +25,12 @@ type DiagramViewProps = {
   visible: boolean;
   /** Duplo clique numa vizinha: abre a aba dela (RN-TABELA-004). */
   onOpenTable: (table: TableRef) => void;
+  /** Abre os dados da tabela selecionada no inspetor. */
+  onOpenData?: (table: TableRef) => void;
+  /** Abre a estrutura da tabela selecionada no inspetor. */
+  onOpenStructure?: (table: TableRef) => void;
+  /** Abre uma consulta SELECT para a tabela selecionada no inspetor. */
+  onGenerateSelect?: (table: TableRef) => void;
   /** Quem guarda o zoom e a rolagem do diagrama desta aba: o id dela (`tab-memory.ts`). */
   memoryKey: string;
   /** RN-GRADE-012: onde a vista deixa o "Atualizar" para o F5 da aba. */
@@ -39,7 +45,19 @@ type DiagramViewProps = {
  * todas chegaram, para as caixas não crescerem por baixo do usuário; a vizinha cujas colunas falharam
  * aparece só com o nome (o aviso central diz o que houve).
  */
-export function DiagramView({ connectionId, database, schema, name, visible, onOpenTable, memoryKey, refreshSlot }: DiagramViewProps) {
+export function DiagramView({
+  connectionId,
+  database,
+  schema,
+  name,
+  visible,
+  onOpenTable,
+  onOpenData,
+  onOpenStructure,
+  onGenerateSelect,
+  memoryKey,
+  refreshSlot,
+}: DiagramViewProps) {
   const queryClient = useQueryClient();
   const { preferences } = usePreferences();
   const { refresh } = useStructureActions(connectionId, database);
@@ -108,6 +126,9 @@ export function DiagramView({ connectionId, database, schema, name, visible, onO
       omitted={(neighbors?.omitted ?? 0) + (incoming?.omitted ?? 0)}
       fetching={columns.isFetching || foreignKeys.isFetching || referencedBy.isFetching}
       onOpenTable={onOpenTable}
+      onOpenData={onOpenData}
+      onOpenStructure={onOpenStructure}
+      onGenerateSelect={onGenerateSelect}
       onRefresh={() => void refresh(everyone)}
       initial={recall(memoryKey, "diagram")}
       onViewChange={rememberView}

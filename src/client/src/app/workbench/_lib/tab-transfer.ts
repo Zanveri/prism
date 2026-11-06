@@ -3,7 +3,7 @@ import { isScriptDirty } from "./saved-scripts";
 import type { SelectionMemory, TransferMemory } from "./tab-memory";
 import type { RunnerState } from "./use-query-runner";
 import { emptyTabValues, valuesFromTransfer, valuesToTransfer, type TabValuesSnapshot } from "./variables/tab-values";
-import type { QueryTab } from "./workbench-model";
+import type { ExecutionValues, QueryTab } from "./workbench-model";
 
 /**
  * A passagem de uma aba para outra janela (RN-ABAS-002 e 003), nos dois sentidos, sem React: `serializeTab` monta o que vai pelo processo principal,
@@ -75,7 +75,7 @@ export function serializeTab({ tab, sessionId, editor, state, memory, values = e
   const result = resultOf(state);
   if (result === undefined) return null;
 
-  const { table, schemaTarget, databaseTarget, database, script, resultPlace } = tab;
+  const { table, schemaTarget, databaseTarget, database, script, resultPlace, execution } = tab;
   return {
     version: 1,
     tab: {
@@ -102,6 +102,7 @@ export function serializeTab({ tab, sessionId, editor, state, memory, values = e
               ...(script.folderId === undefined ? {} : { folderId: script.folderId }),
             },
           }),
+      ...(execution === undefined ? {} : { execution: { scriptId: execution.scriptId, name: execution.name, generic: execution.generic, values: execution.values, ranAt: execution.ranAt } }),
     },
     editor: editor === null ? null : { anchor: editor.anchor, head: editor.head },
     result,
@@ -146,6 +147,8 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
     ...(tab.resultPlace === undefined ? {} : { resultPlace: tab.resultPlace }),
     // RN-SCRIPT-003: o ponto da faixa é o texto que chegou e o lugar da aba contra o que foi salvo (a aba pode ter trocado de conexão ou de banco).
     ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql, tab) } }),
+    // RN-VAR-029: cada valor é conferido de novo ao executar (`answersByName`): o que não tem a forma de uma entrada abre o diálogo.
+    ...(tab.execution === undefined ? {} : { execution: { ...tab.execution, values: tab.execution.values as ExecutionValues | null, pending: null } }),
   };
   const restored: TransferMemory = memory;
 

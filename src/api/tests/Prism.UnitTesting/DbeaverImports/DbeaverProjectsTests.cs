@@ -314,7 +314,10 @@ public sealed class DbeaverProjectsTests : IDisposable
         Assert.Equal(("Teste", "#D6FACF"), (connections[DbeaverWorkspace.PgUrl].EnvironmentName.Text, connections[DbeaverWorkspace.PgUrl].EnvironmentColor.Text));
         Assert.Equal((true, "Restrito"), (connections[DbeaverWorkspace.Restricted].ReadOnly.Boolean, connections[DbeaverWorkspace.Restricted].EnvironmentName.Text));
         Assert.Contains("permissions", connections[DbeaverWorkspace.Restricted].LeftOut);
-        Assert.Contains("sshTunnel", connections[DbeaverWorkspace.InformixFields].LeftOut);
+        // RN-REDE-008: o túnel da conexão vem, com o usuário e a senha do nó `network/ssh_tunnel` do credentials-config.
+        Assert.DoesNotContain("sshTunnel", connections[DbeaverWorkspace.InformixFields].LeftOut);
+        var ssh = connections[DbeaverWorkspace.InformixFields].Ssh!;
+        Assert.Equal(("bastion.exemplo.invalid", 22, "usuario-do-tunel", "password", "senha-do-tunel-fictícia", true), (ssh.Host, ssh.Port, ssh.UserName, ssh.AuthMethod, ssh.Secret, ssh.SaveCredentials));
         Assert.Empty(connections[DbeaverWorkspace.PgFields].LeftOut);
     }
 

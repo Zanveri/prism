@@ -1,11 +1,15 @@
 import { formatCount } from "@/lib/utils/format";
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { connectionsCopyEn } from "./connections.copy.en";
+import { connectionsCopyEs } from "./connections.copy.es";
 
 /**
  * Os textos das pastas e das conexões, num lugar só (RN-AVISO-002, RN-AVISO-003, RN-CONN-002): os diálogos de pasta, o diálogo de conexão
  * (RN-NAV-004 e 005), o de mover e o de renomear conexão e o de revelar a senha. A tela de Conexões deixou de existir (RN-NAV-001); o que o navegador diz
  * está em `workbench.copy.ts` e `navigator.copy.ts`.
  */
-export const connectionsCopy = {
+const pt = {
   folder: {
     parent: "Pasta pai",
     noParent: "Sem pasta pai",
@@ -93,6 +97,61 @@ export const connectionsCopy = {
       inherits: (environment: string, folder: string) => `Herda ${environment} da pasta ${folder}.`,
       // A dica da etiqueta herdada, na árvore, na aba e na barra de status.
       inheritedFrom: (folder: string) => `Herdado da pasta ${folder}`,
+    },
+    tabs: {
+      main: "Principal",
+      ssh: "SSH",
+      ssl: "SSL",
+      proxy: "Proxy",
+      addMenuLabel: "Adicionar configuração de rede (SSH, SSL ou Proxy)",
+      removeTab: (tab: string) => `Remover aba ${tab}`,
+    },
+    ssh: {
+      settingsTitle: "Configurações",
+      host: "Host/IP",
+      port: "Porta",
+      userName: "Nome de usuário",
+      authMethod: "Método de autenticação",
+      authPassword: "Senha",
+      authPrivateKey: "Chave privada",
+      privateKeyPath: "Chave privada",
+      privateKeyPlaceholder: "Caminho do arquivo (ex.: ~/.ssh/id_ed25519)",
+      password: "Senha",
+      passphrase: "Frase secreta",
+      saveCredentials: "Salvar credenciais",
+      askPassphrase: "Pedir a frase secreta ao conectar",
+      advancedTitle: "Configurações avançadas",
+      generalTitle: "Geral",
+      ignoreHostVerification: "Ignorar verificação de host",
+      hostKeyFingerprint: "Impressão digital do host",
+      hostKeyFingerprintPlaceholder: "Em branco: aceita e grava a do primeiro acesso",
+      timeoutsTitle: "Timeouts",
+      keepAliveIntervalMs: "Intervalo de keep-alive (ms)",
+      tunnelTimeoutMs: "Timeout de conexão do túnel (ms)",
+      portForwardingTitle: "Encaminhamento de porta",
+      localHost: "Host local",
+      localPort: "Porta local",
+      remoteHost: "Host remoto",
+      remotePort: "Porta remota",
+    },
+    ssl: {
+      notice: "Todos os parâmetros SSL são opcionais. Você precisa especificar certificados SSL se eles forem requeridos pela configuração do seu servidor. As configurações nesta página sobrepõem as propriedades do driver.",
+      parametersTitle: "Parâmetros",
+      caCertificatePath: "Certificado CA",
+      clientCertificatePath: "Certificado de cliente",
+      clientPrivateKeyPath: "Chave privada de cliente",
+      certificatePlaceholder: "Caminho do arquivo (ex.: /etc/ssl/certs/ca.pem)",
+      advancedTitle: "Avançado",
+      sslMode: "Modo SSL",
+      sslModeDefault: "Padrão do driver",
+    },
+    proxy: {
+      socksTitle: "SOCKS",
+      host: "Host",
+      port: "Porta",
+      userName: "Nome de usuário",
+      password: "Senha",
+      savePassword: "Salvar senha/frase de acesso",
     },
     save: "Salvar",
     saving: "Salvando…",
@@ -184,6 +243,20 @@ export const connectionsCopy = {
   },
 
   // RN-PROT-003: a senha do usuário que a mudança do somente leitura pede, num diálogo como o de revelar a senha.
+  networkSecret: {
+    title: (label: string) => `${label} para conectar`,
+    description: "Esta conexão não guarda este segredo. O Prism conecta com ele e o esquece quando você desconectar ou o Prism for bloqueado.",
+    passphrase: "Frase secreta da chave SSH",
+    sshPassword: "Senha do túnel SSH",
+    proxyPassword: "Senha do proxy",
+    required: (label: string) => `Informe a ${label.charAt(0).toLowerCase()}${label.slice(1)}.`,
+    forgotten: "Nada é gravado no cofre. Para não ser perguntado de novo, marque “Salvar credenciais” em Editar conexão.",
+    forgottenPassphrase: "Nada é gravado no cofre. Para não ser perguntado de novo, informe a frase em Editar conexão, com “Pedir a frase secreta ao conectar” desmarcado.",
+    cancel: "Cancelar",
+    connect: "Conectar",
+    connecting: "Conectando…",
+  },
+
   userPassword: {
     title: "Confirme a sua senha",
     description: "Esta mudança tira ou põe uma proteção. Para salvar, digite a sua senha do Prism.",
@@ -238,4 +311,77 @@ export const connectionsCopy = {
     // RN-AVISO-003: o quinto erro de senha fecha o cofre e a tela volta ao login.
     vaultLockedAfterFiveAttempts: "Cofre fechado depois de cinco tentativas.",
   },
+
+  // As frases de validação do formulário (zod), a tela e a API conferem do mesmo jeito (RN-CONN-010, RN-PASTA-001, RN-VERIF-001).
+  validation: {
+    engine: "Escolha o banco de dados.",
+    port: "Informe uma porta de 1 a 65535.",
+    control: (field: string) => `${field} não pode ter caractere de controle nem de direção do texto.`,
+    fields: {
+      environmentName: "O nome do ambiente",
+      verificationQuery: "A consulta de verificação",
+      connectionName: "O nome da conexão",
+      host: "O host",
+      database: "O banco de dados",
+      databaseUser: "O usuário do banco",
+      folderName: "O nome da pasta",
+      sshHost: "O host SSH",
+      sshUser: "O usuário SSH",
+      sshPrivateKey: "O caminho da chave privada SSH",
+      sshLocalHost: "O host local do encaminhamento SSH",
+      sshRemoteHost: "O host remoto do encaminhamento SSH",
+      sshFingerprint: "A impressão digital do host",
+      sslCa: "O caminho do certificado CA",
+      sslClientCertificate: "O caminho do certificado de cliente",
+      sslClientKey: "O caminho da chave privada de cliente",
+      proxyHost: "O host do proxy",
+      proxyUser: "O usuário do proxy",
+    },
+    environmentMax: "O ambiente pode ter no máximo 30 caracteres.",
+    colorFormat: "Use uma cor no formato #RRGGBB.",
+    confirmCommands: "Escolha não confirmar, só os comandos irreversíveis ou todos os comandos.",
+    verificationInterval: "A verificação deve ser feita a cada 5 a 3.600 segundos.",
+    verificationQueryMax: "A consulta de verificação pode ter no máximo 1.000 caracteres.",
+    connectionNameRequired: "Informe o nome da conexão.",
+    connectionNameMax: "O nome pode ter no máximo 80 caracteres.",
+    hostRequired: "Informe o host.",
+    hostMax: "O host pode ter até 255 caracteres.",
+    databaseRequired: "Informe o banco de dados.",
+    databaseMax: "O banco de dados pode ter até 128 caracteres.",
+    userRequired: "Informe o usuário do banco.",
+    userMax: "O usuário do banco pode ter até 128 caracteres.",
+    passwordRequired: "Informe a senha do banco.",
+    passwordMax: "A senha do banco pode ter até 1.024 caracteres.",
+    userPasswordRequired: "Informe a sua senha do Prism.",
+    folderNameRequired: "Informe o nome da pasta.",
+    folderNameMax: "O nome pode ter no máximo 60 caracteres.",
+    sshPort: "Informe uma porta SSH de 1 a 65535.",
+    sshKeepAlive: "O intervalo de keep-alive SSH deve ficar entre 0 e 3.600.000 ms.",
+    sshTimeout: "O timeout do túnel SSH deve ficar entre 0 e 600.000 ms.",
+    sshLocalPort: "A porta local do encaminhamento SSH deve ficar entre 0 e 65535.",
+    sshRemotePort: "A porta remota do encaminhamento SSH deve ficar entre 0 e 65535.",
+    proxyPort: "Informe uma porta de proxy de 1 a 65535.",
+    sshHostRequired: "Informe o host SSH.",
+    sshHostMax: "O host SSH pode ter até 255 caracteres.",
+    sshUserRequired: "Informe o usuário SSH.",
+    sshUserMax: "O usuário SSH pode ter até 128 caracteres.",
+    sshAuthMethod: "Escolha o método de autenticação SSH (senha ou chave privada).",
+    sshPrivateKeyRequired: "Informe o caminho da chave privada SSH.",
+    sshPrivateKeyMax: "O caminho da chave privada SSH pode ter até 1.024 caracteres.",
+    sshSecretMax: "A senha ou frase secreta SSH pode ter até 1.024 caracteres.",
+    sshLocalHostMax: "O host local do encaminhamento SSH pode ter até 255 caracteres.",
+    sshRemoteHostMax: "O host remoto do encaminhamento SSH pode ter até 255 caracteres.",
+    sshFingerprintMax: "A impressão digital do host pode ter até 255 caracteres.",
+    sslCaMax: "O caminho do certificado CA pode ter até 1.024 caracteres.",
+    sslClientCertificateMax: "O caminho do certificado de cliente pode ter até 1.024 caracteres.",
+    sslClientKeyMax: "O caminho da chave privada de cliente pode ter até 1.024 caracteres.",
+    sslMode: "Escolha um modo SSL válido.",
+    proxyHostRequired: "Informe o host do proxy.",
+    proxyHostMax: "O host do proxy pode ter até 255 caracteres.",
+    proxyUserMax: "O usuário do proxy pode ter até 128 caracteres.",
+    proxyPasswordMax: "A senha do proxy pode ter até 1.024 caracteres.",
+  },
 } as const;
+
+export type ConnectionsCopy = Localized<typeof pt>;
+export const connectionsCopy = pickCopy({ "pt-BR": pt, en: connectionsCopyEn, es: connectionsCopyEs });

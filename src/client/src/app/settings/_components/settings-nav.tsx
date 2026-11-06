@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType } from "react";
 import { NavLink } from "react-router";
 
-import { CodeIcon, InfoIcon, LockIcon, navItem, PackageIcon, PaletteIcon, PuzzleIcon, RefreshIcon, TableIcon, TransactionIcon, UploadIcon, UserIcon } from "@/components/ui";
+import { CodeIcon, InfoIcon, LockIcon, navItem, PackageIcon, PaletteIcon, PuzzleIcon, RefreshIcon, ShieldCheckIcon, TableIcon, TransactionIcon, UploadIcon, UserIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import type { SettingsSection, SettingsSectionId } from "../_lib/sections";
@@ -19,6 +19,7 @@ const sectionIcons: Record<SettingsSectionId, ComponentType<ComponentProps<"svg"
   editor: CodeIcon,
   results: TableIcon,
   security: LockIcon,
+  audit: ShieldCheckIcon,
   updates: RefreshIcon,
   drivers: PackageIcon,
   about: InfoIcon,

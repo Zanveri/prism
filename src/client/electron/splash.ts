@@ -4,6 +4,7 @@ import { BrowserWindow } from "electron";
 import prismLogo from "@assets/prism-logo.svg?raw";
 import zanveriWordmark from "@assets/zanveri/zanveri-wordmark-paper.svg?raw";
 
+import { defaultLocale, type Locale } from "./locale";
 import splashHtml from "./splash.html?raw";
 
 export type SplashStep = "api" | "ui";
@@ -12,6 +13,19 @@ export type SplashStep = "api" | "ui";
 export const splashSteps: Record<SplashStep, { label: string; position: string; progress: number }> = {
   api: { label: "Iniciando o serviço local…", position: "1 de 2", progress: 45 },
   ui: { label: "Carregando a interface…", position: "2 de 2", progress: 85 },
+};
+
+/** Os textos do splash nos outros idiomas (`locale.ts`): o processo principal sabe o idioma antes da primeira janela. */
+const localizedSteps: Record<Locale, typeof splashSteps> = {
+  "pt-BR": splashSteps,
+  en: { api: { label: "Starting the local service…", position: "1 of 2", progress: 45 }, ui: { label: "Loading the interface…", position: "2 of 2", progress: 85 } },
+  es: { api: { label: "Iniciando el servicio local…", position: "1 de 2", progress: 45 }, ui: { label: "Cargando la interfaz…", position: "2 de 2", progress: 85 } },
+};
+
+const pageText: Record<Locale, { tagline: string; versionWord: string; progressLabel: string }> = {
+  "pt-BR": { tagline: "Abra, conecte, consulte.", versionWord: "versão", progressLabel: "Inicialização do Prism" },
+  en: { tagline: "Open, connect, query.", versionWord: "version", progressLabel: "Prism startup" },
+  es: { tagline: "Abre, conecta, consulta.", versionWord: "versión", progressLabel: "Inicio de Prism" },
 };
 
 /** Texto entre aspas de uma regra CSS: a barra invertida, a aspa e a quebra de linha não saem soltas. */
@@ -62,8 +76,13 @@ const logoMarkup = inlineLogo(prismLogo);
  * A página do splash com a versão do app (RN-VERSAO-004), o logotipo e o selo: tudo é texto no HTML, antes de a página carregar, e não
  * script. Funções como substituto, porque `$&` e afins na versão (ou no desenho) não podem valer como padrão do `replace`.
  */
-export function splashPage(version: string): string {
+export function splashPage(version: string, locale: Locale = defaultLocale): string {
+  const text = pageText[locale];
   return splashHtml
+    .replace("{{lang}}", locale)
+    .replace("{{tagline}}", () => escapeHtml(text.tagline))
+    .replace("{{version-word}}", () => escapeHtml(text.versionWord))
+    .replace("{{progress-label}}", () => escapeHtml(text.progressLabel))
     .replace("{{prism-logo}}", () => logoMarkup)
     .replace("{{zanveri-wordmark}}", () => wordmarkSource)
     .replace("{{version}}", () => escapeHtml(version));
@@ -87,7 +106,7 @@ export function splashGeometry(factor: number, workArea: { width: number; height
  * nada do app. Não aparece enquanto o primeiro passo não estiver desenhado, para nunca mostrar a
  * barra vazia e sem texto.
  */
-export function createSplash(options: { iconPath: string | undefined; version: string; geometry: ReturnType<typeof splashGeometry> }): { setStep(step: SplashStep): void; close(): void } {
+export function createSplash(options: { iconPath: string | undefined; version: string; locale: Locale; geometry: ReturnType<typeof splashGeometry> }): { setStep(step: SplashStep): void; close(): void } {
   const { width, height, zoomFactor } = options.geometry;
   const window = new BrowserWindow({
     width,
@@ -107,7 +126,7 @@ export function createSplash(options: { iconPath: string | undefined; version: s
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
   // `insertCSS` antes de a página carregar se perde: toda mudança de passo espera nesta fila.
-  let queue: Promise<unknown> = window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashPage(options.version))}`);
+  let queue: Promise<unknown> = window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashPage(options.version, options.locale))}`);
   let inserted: string | undefined;
 
   window.once("ready-to-show", () => {
@@ -123,7 +142,7 @@ export function createSplash(options: { iconPath: string | undefined; version: s
           if (window.isDestroyed()) return;
 
           // O novo entra antes de o anterior sair: não há quadro sem texto no meio.
-          const key = await window.webContents.insertCSS(splashCss(step));
+          const key = await window.webContents.insertCSS(splashCss(step, localizedSteps[options.locale]));
           if (inserted !== undefined) await window.webContents.removeInsertedCSS(inserted);
           inserted = key;
         })

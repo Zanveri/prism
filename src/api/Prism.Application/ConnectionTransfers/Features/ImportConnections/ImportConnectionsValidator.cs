@@ -12,10 +12,10 @@ public sealed class ImportConnectionsValidator : AbstractValidator<ImportConnect
 {
     public ImportConnectionsValidator()
     {
-        RuleFor(request => request.Items).Must(items => items is { Count: > 0 }).WithMessage(TransferErrors.ImportEmptyMessage).WithErrorCode("IMPORT_EMPTY");
-        RuleFor(request => request.Items).Must(items => items is null || items.Count <= TransferLimits.MaxImportItems).WithMessage("Marque até 4.000 itens por importação.").WithErrorCode("IMPORT_INVALID");
-        RuleFor(request => request.Items).Must(items => items is null || (items.All(key => key is not null) && items.Distinct(StringComparer.Ordinal).Count() == items.Count)).WithMessage("Cada item é marcado uma vez só.").WithErrorCode("IMPORT_INVALID");
-        RuleFor(request => request.OnConflict).Must(TransferRules.ConflictIsValid).WithMessage("Escolha importar com outro nome ou não importar.").WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.Items).Must(items => items is { Count: > 0 }).WithMessage(_ => TransferErrors.ImportEmptyMessage).WithErrorCode("IMPORT_EMPTY");
+        RuleFor(request => request.Items).Must(items => items is null || items.Count <= TransferLimits.MaxImportItems).WithMessage(_ => TransferErrors.ImportItemsLimitMessage).WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.Items).Must(items => items is null || (items.All(key => key is not null) && items.Distinct(StringComparer.Ordinal).Count() == items.Count)).WithMessage(_ => TransferErrors.ImportItemsDuplicateMessage).WithErrorCode("IMPORT_INVALID");
+        RuleFor(request => request.OnConflict).Must(TransferRules.ConflictIsValid).WithMessage(_ => TransferErrors.ImportConflictInvalidMessage).WithErrorCode("IMPORT_INVALID");
         RuleFor(request => request.Content).MustFitTheImportLimit();
         RuleFor(request => request.Passphrase).MustBeAnImportPassphrase();
     }

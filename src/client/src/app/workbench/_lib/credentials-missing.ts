@@ -11,11 +11,27 @@ import { ApiRequestError, type ApiError } from "@/lib/api/prism-api";
  */
 export const credentialsMissingCode = "CONNECTION_CREDENTIALS_MISSING";
 
+/**
+ * O campo que falta (RN-TRANSF-016, RN-REDE-003 e 006): o usuário ou a senha do banco, ou o segredo do túnel SSH (`sshSecret`, a senha ou a frase secreta da chave) ou
+ * do proxy (`proxyPassword`) que a conexão gravada sem "Salvar credenciais" não guarda e que ninguém digitou desde que ela foi conectada (a API o guarda só na
+ * memória, até a conexão ser desconectada ou o cofre fechar). O do banco abre o "Editar conexão"; o do túnel e o do proxy, o pedido do segredo (`NetworkSecretDialog`).
+ */
+export type CredentialsField = DatabaseCredentialsField | NetworkSecretField;
+
+/** O usuário e a senha do banco, que se informam no "Editar conexão" (RN-TRANSF-016). */
+export type DatabaseCredentialsField = "userName" | "password";
+
+/** O segredo do túnel SSH ou do proxy, que se pede ao conectar (RN-REDE-006). */
+export type NetworkSecretField = "sshSecret" | "proxyPassword";
+
+export const isNetworkSecretField = (field: CredentialsField): field is NetworkSecretField => field === "sshSecret" || field === "proxyPassword";
+
 /** O campo que falta, numa recusa (ou num erro lançado) de abrir a sessão ou de testar; `null` quando não é esta recusa. */
-export function credentialsMissingField(error: ApiError | unknown): "userName" | "password" | null {
+export function credentialsMissingField(error: ApiError | unknown): CredentialsField | null {
   const apiError = error instanceof ApiRequestError ? error.error : isApiError(error) ? error : null;
   if (apiError === null || apiError.code !== credentialsMissingCode) return null;
-  return apiError.errors !== null && "userName" in apiError.errors ? "userName" : "password";
+  const errors = apiError.errors ?? {};
+  return "userName" in errors ? "userName" : "sshSecret" in errors ? "sshSecret" : "proxyPassword" in errors ? "proxyPassword" : "password";
 }
 
 function isApiError(value: unknown): value is ApiError {
@@ -38,15 +54,15 @@ export function credentialsHint(connection: { userName: string; hasPassword: boo
   return missing === "userName" ? transferCopy.credentials.rowNoCredentials : missing === "password" ? transferCopy.credentials.rowNoPassword : "";
 }
 
-/** Um pedido de abrir o "Editar conexão" da conexão sem credenciais; o número diz se é o mesmo pedido ou um novo. */
-export type CredentialsRequest = { readonly connectionId: string; readonly seq: number };
+/** Um pedido de abrir o "Editar conexão" da conexão sem credenciais, com o campo que falta; o número diz se é o mesmo pedido ou um novo. */
+export type CredentialsRequest = { readonly connectionId: string; readonly field: CredentialsField; readonly seq: number };
 
 /**
  * O pedido viaja daqui até quem abre o diálogo (a página da área de trabalho): a árvore, as vistas de uma tabela, a barra do editor e o executor de cada aba
  * abrem sessões por caminhos diferentes, e nenhum deles tem o diálogo. Um pedido só, o último.
  */
 export type CredentialsRequests = {
-  request: (connectionId: string) => void;
+  request: (connectionId: string, field: CredentialsField) => void;
   /** O pedido à espera, se há: o MESMO objeto enquanto nada muda (é o que o React compara). */
   pending: () => CredentialsRequest | null;
   /** O pedido foi atendido: sai, se ainda é o mesmo. */
@@ -68,7 +84,7 @@ export function createCredentialsRequests(): CredentialsRequests {
   }
 
   return {
-    request: (connectionId) => set({ connectionId, seq: ++seq }),
+    request: (connectionId, field) => set({ connectionId, field, seq: ++seq }),
     pending: () => pending,
     take: (taken) => {
       if (pending?.seq === taken) set(null);
@@ -85,6 +101,16 @@ export function createCredentialsRequests(): CredentialsRequests {
 export const credentialsRequests = createCredentialsRequests();
 
 /**
+ * RN-REDE-006: a recusa de um assistente de dados (a prévia e o começo da importação, da cópia e da exportação) por faltar o segredo do túnel ou do proxy, com a
+ * conexão em `connectionID` (a cópia tem duas), pede o segredo daquela conexão. O assistente mostra a recusa; conectado o diálogo, a pessoa tenta de novo.
+ */
+export function askNetworkSecretFor(error: ApiError, requests: CredentialsRequests = credentialsRequests): void {
+  const field = credentialsMissingField(error);
+  const connectionId = error.extensions["connectionID"];
+  if (field !== null && isNetworkSecretField(field) && typeof connectionId === "string") requests.request(connectionId, field);
+}
+
+/**
  * Observa as sessões da árvore no cache (`["database-session", conexão, …]`: o nó da conexão, a Estrutura e o Diagrama, a lista dos bancos da barra do
  * editor) e pede o "Editar conexão" quando uma delas é recusada por faltar o usuário ou a senha. Devolve a função que para de observar.
  */
@@ -93,6 +119,7 @@ export function watchCredentialsMissing(queryClient: QueryClient, requests: Cred
     if (event.type !== "updated" || event.action.type !== "error") return;
     const [family, connectionId] = event.query.queryKey;
     if (family !== "database-session" || typeof connectionId !== "string") return;
-    if (credentialsMissingField(event.action.error) !== null) requests.request(connectionId);
+    const field = credentialsMissingField(event.action.error);
+    if (field !== null) requests.request(connectionId, field);
   });
 }

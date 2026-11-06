@@ -3,8 +3,11 @@ using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Models.Dtos;
 using Prism.Application.Connections.Queries;
+using Prism.Application.Journal;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Vault.Services;
 using System.Text.Json.Serialization;
 
@@ -24,35 +27,50 @@ public sealed record RevealConnectionPasswordCommand : IRequest<Result<Connectio
     public override string ToString() => nameof(RevealConnectionPasswordCommand);
 }
 
-internal sealed class RevealConnectionPasswordHandler(IConnectionQueries connectionQueries, IVaultService vaultService) : IRequestHandler<RevealConnectionPasswordCommand, Result<ConnectionPasswordDto, ApiErrorDto>>
+internal sealed class RevealConnectionPasswordHandler(IConnectionQueries connectionQueries, IVaultService vaultService, IJournalRecorder? journal = null, TimeProvider? timeProvider = null) : IRequestHandler<RevealConnectionPasswordCommand, Result<ConnectionPasswordDto, ApiErrorDto>>
 {
     public async Task<Result<ConnectionPasswordDto, ApiErrorDto>> Handle(RevealConnectionPasswordCommand request, CancellationToken cancellationToken)
     {
-        // Esta primeira leitura serve só para o 404: um ID que não existe responde sem conferir a senha e não gasta uma das cinco
-        // tentativas (RN-CONN-003). Ela é feita fora do semáforo do cofre, então o registro lido aqui NUNCA responde: entre a leitura e a
-        // conferência outro usuário pode ter virado o cofre aberto (a criação de um usuário deriva a chave durante segundos com o anterior
-        // ainda aberto), e a senha dele "confirmaria" a conexão do anterior.
+        var clock = timeProvider ?? TimeProvider.System;
+        var startedAt = clock.GetUtcNow();
+
         var read = await connectionQueries.GetRecordByID(request.ID, cancellationToken);
         if (read.IsFailure)
             return Result.Failure<ConnectionPasswordDto, ApiErrorDto>(VaultErrors.From(read.Error));
 
-        if (read.Value is null)
+        if (read.Value is not { } record)
             return Result.Failure<ConnectionPasswordDto, ApiErrorDto>(ConnectionErrors.NotFound(request.ID));
 
-        // RN-CONN-002 e RN-CONN-003: quem deriva a chave, conta os erros seguidos e fecha o cofre no quinto é o serviço do cofre, e ele entrega
-        // o documento do mesmo cofre que a senha abriu, na mesma operação. `Locked` é o cofre fechado (inclusive por este quinto erro, no
-        // lugar do 422); sucesso sem documento é senha errada.
         var verified = await vaultService.ReadIfPasswordMatchesAsync(request.Password, cancellationToken);
+        var endedAt = clock.GetUtcNow();
+        var durationMs = Math.Max(0L, (long)(endedAt - startedAt).TotalMilliseconds);
         if (verified.IsFailure)
             return Result.Failure<ConnectionPasswordDto, ApiErrorDto>(VaultErrors.From(verified.Error));
 
         if (verified.Value is not { } document)
-            return Result.Failure<ConnectionPasswordDto, ApiErrorDto>(ConnectionErrors.InvalidPassword());
+        {
+            if (journal is not null)
+            {
+                var (errSnapshot, errProtections) = JournalSnapshots.FromRecord(vaultService, record);
+                journal.Record(
+                    new JournalEntryStart(startedAt, EJournalKind.Security, "Senha da conexão revelada", EJournalLevel.High, "Tentativa de revelar a senha da conexão com senha errada.", Connection: errSnapshot, Protections: errProtections),
+                    new JournalEntryEnd(endedAt, durationMs, EJournalOutcome.Error, ErrorCode: "INVALID_PASSWORD"));
+            }
 
-        // A senha do banco sai deste documento. Se a conexão não está nele, o cofre mudou de dono no meio: é 404, e nada da primeira leitura vaza.
+            return Result.Failure<ConnectionPasswordDto, ApiErrorDto>(ConnectionErrors.InvalidPassword());
+        }
+
         var verifiedRecord = document.Connections.FirstOrDefault(connection => connection.ID == request.ID);
         if (verifiedRecord is null)
             return Result.Failure<ConnectionPasswordDto, ApiErrorDto>(ConnectionErrors.NotFound(request.ID));
+
+        if (journal is not null)
+        {
+            var (snapshot, protections) = JournalSnapshots.FromDocument(document, verifiedRecord);
+            journal.Record(
+                new JournalEntryStart(startedAt, EJournalKind.Security, "Senha da conexão revelada", EJournalLevel.High, "Senha da conexão revelada.", Connection: snapshot, Protections: protections),
+                new JournalEntryEnd(endedAt, durationMs, EJournalOutcome.Ok));
+        }
 
         return Result.Success<ConnectionPasswordDto, ApiErrorDto>(new ConnectionPasswordDto { Password = verifiedRecord.Password });
     }

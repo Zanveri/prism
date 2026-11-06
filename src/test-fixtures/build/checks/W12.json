@@ -1,0 +1,130 @@
+{
+  "scope": "full",
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "producao",
+    "schemas": [{ "name": "producao", "create": false }],
+    "base": {
+      "connectionId": "0199c3a0-0000-7000-8000-000000000010",
+      "database": "mes",
+      "readAt": "29/10/2026 14:10",
+      "knownSchemas": ["producao"],
+      "knownTables": ["producao.maquina", "producao.linha"]
+    },
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "maquina",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": "id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "linha_id",
+            "exactName": false,
+            "originName": "linha_id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [
+          {
+            "name": "maquina_linha_id_fkey",
+            "columns": ["linha_id"],
+            "target": { "schema": "producao", "table": "linha", "columns": ["id"] },
+            "onDelete": "noAction",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": {
+          "schema": "producao",
+          "name": "maquina",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            {
+              "name": "id",
+              "exactName": false,
+              "originName": "id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": "always",
+              "comment": null
+            },
+            {
+              "name": "linha_id",
+              "exactName": false,
+              "originName": "linha_id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": null,
+              "comment": null
+            }
+          ],
+          "primaryKey": { "name": "maquina_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": [
+            {
+              "name": "maquina_linha_id_fkey",
+              "columns": ["linha_id"],
+              "target": { "schema": "producao", "table": "linha", "columns": ["id"] },
+              "onDelete": "noAction",
+              "onUpdate": "noAction"
+            }
+          ]
+        },
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": "full",
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "W12",
+      "severity": "warning",
+      "table": "producao.maquina",
+      "column": "linha_id"
+    },
+    {
+      "code": "I2",
+      "severity": "info",
+      "table": null,
+      "column": null
+    },
+    {
+      "code": "I3",
+      "severity": "info",
+      "table": null,
+      "column": null
+    }
+  ]
+}

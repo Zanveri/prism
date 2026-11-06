@@ -71,6 +71,15 @@ describe("as escolhas de cada conexão (RN-TRANSF-003)", () => {
     expect(credentialsOffered(imported)).toEqual(["none"]);
   });
 
+  it("o segredo gravado do túnel ou do proxy, sem a senha do banco, também oferece “Usuário e senha” (RN-REDE-004)", () => {
+    const tunnel = { hasSecret: true } as NonNullable<typeof userOnly.ssh>;
+    const proxy = { hasPassword: true } as NonNullable<typeof userOnly.proxy>;
+    expect(credentialsOffered({ ...userOnly, ssh: tunnel })).toEqual(["none", "user", "userAndPassword"]);
+    expect(credentialsOffered({ ...userOnly, proxy })).toEqual(["none", "user", "userAndPassword"]);
+    expect(credentialsOffered({ ...userOnly, ssh: { ...tunnel, hasSecret: false } })).toEqual(["none", "user"]);
+    expect(credentialsOffered({ ...imported, ssh: tunnel })).toEqual(["none"]);
+  });
+
   it("o padrão é “Sem usuário e senha”, o mais seguro", () => {
     expect(credentialsOf(new Map(), prdFix)).toBe("none");
   });

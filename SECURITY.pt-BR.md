@@ -45,7 +45,7 @@ precisar de um arquivo de cofre, crie um com um usuário de teste.
 
 O que o Prism se propõe a proteger: o cofre cifrado de cada usuário, a senha das conexões, a API local (que só escuta em
 `127.0.0.1` e exige um token de lançamento), a janela do app, o que vai para o log e a atualização (o pacote baixado é conferido
-contra duas somas SHA-256 antes de qualquer uso; veja o [documentação](https://zanveri.github.io/prism/pt-br/#atualizacoes)).
+contra duas somas SHA-256 antes de qualquer uso; veja a [documentação](https://zanveri.com/docs/prism/atualizacoes-e-canal-beta)).
 
 Fora do escopo: quem já tem acesso à sessão do usuário no sistema operacional, com o app aberto e destravado, e falhas dos bancos de
 dados a que o Prism se conecta. Um defeito comum, sem efeito sobre a segurança, vai numa issue pública normal.

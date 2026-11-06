@@ -579,6 +579,33 @@ public sealed class ConnectionRepositoryTests
         VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
+    /// <summary>
+    /// RN-REDE-005: a chave do servidor SSH aceita no primeiro acesso fica gravada na conexão; a conexão que já tem uma, que ignora a verificação ou que passou a
+    /// levar o túnel a outro servidor fica como estava, e o cofre não é regravado (a mesma instância).
+    /// </summary>
+    [Trait("ConnectionRepository", "TrustHostKey")]
+    [Theory(DisplayName = "OK grava a impressão digital do primeiro acesso só na conexão sem uma, no mesmo servidor SSH")]
+    [InlineData(null, false, "bastion.local", 22, true)]
+    [InlineData("SHA256:gravada", false, "bastion.local", 22, false)]
+    [InlineData(null, true, "bastion.local", 22, false)]
+    [InlineData(null, false, "outro-bastion.local", 22, false)]
+    [InlineData(null, false, "bastion.local", 2222, false)]
+    public async Task TrustHostKey_ShouldBeOK_OnlyOnTheFirstUseOfTheSameServer(string? stored, bool ignoreHostVerification, string presentedHost, int presentedPort, bool saved)
+    {
+        //Arrange
+        var record = VaultFakers.CreateConnection() with { Ssh = new ConnectionSshSettings("bastion.local", 22, "ops", IgnoreHostVerification: ignoreHostVerification, HostKeyFingerprint: stored) };
+        var current = Document(connections: [record]);
+        var repository = CreateRepository(current);
+
+        //Act
+        var result = await repository.TrustHostKey(record.ID, presentedHost, presentedPort, "SHA256:primeiro-acesso", CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(saved, !ReferenceEquals(current, _saved));
+        Assert.Equal(saved ? "SHA256:primeiro-acesso" : stored, _saved!.Connections.Single().Ssh!.HostKeyFingerprint);
+    }
+
     [Trait("ConnectionRepository", "Delete")]
     [Fact(DisplayName = "OK tira só a conexão do documento")]
     public async Task Delete_ShouldBeOK()

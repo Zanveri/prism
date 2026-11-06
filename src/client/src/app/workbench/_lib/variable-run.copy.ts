@@ -1,7 +1,12 @@
 import { formatCount } from "@/lib/utils/format";
 
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { variableRunCopyEn } from "./variable-run.copy.en";
+import { variableRunCopyEs } from "./variable-run.copy.es";
+
 /** Os textos da execução com variáveis (RN-VAR-012, 019, 020 e 022) que não são frases da linguagem (essas estão em `variables/variables.copy.ts`). */
-export const variableRunCopy = {
+const pt = {
   /** A área de resultado quando a conferência achou erros (RN-VAR-012): o título e a linha de cada erro. */
   errors: {
     title: "Erros nas variáveis",
@@ -22,3 +27,6 @@ export const variableRunCopy = {
   declaration: "Declaração",
   declarationTitle: (number: number, total: number) => `A declaração ${number.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} falhou`,
 } as const;
+
+export type VariableRunCopy = Localized<typeof pt>;
+export const variableRunCopy = pickCopy({ "pt-BR": pt, en: variableRunCopyEn, es: variableRunCopyEs });

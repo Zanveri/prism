@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { parseNavKey } from "./navigator-model";
 import type { ScriptRef } from "./saved-scripts";
+import type { RunValueEntry } from "./scripts.schema";
 
 /** As vistas da aba de uma tabela: os registros, a estrutura (colunas, chaves estrangeiras e índices) e o diagrama. */
 export type TableView = "data" | "structure" | "diagram";
@@ -48,6 +49,24 @@ export type QueryTab = {
   databaseTarget?: DatabaseTarget;
   script?: ScriptRef;
   resultPlace?: ResultPlace;
+  execution?: ExecutionTarget;
+};
+
+/**
+ * RN-VAR-029: a aba de execução de um script salvo, aberta pelo "Executar com valores…" do navegador: uma aba de consulta sem editor, com o texto do script como
+ * foi lido do cofre (`sql`). `values`: os valores da última execução, pelo nome da variável; nulos antes da primeira e depois do bloqueio por inatividade, e
+ * "Executar de novo" então abre o diálogo. `pending`: o pedido que a aba atende quando monta (com os valores, executa; sem eles, abre o diálogo); `fresh` diz
+ * que a aba nasceu dele, e cancelar o diálogo a fecha. O pedido não vai para outra janela, nem a aba volta na próxima entrada.
+ */
+export type ExecutionValues = Record<string, RunValueEntry>;
+
+export type ExecutionTarget = {
+  scriptId: string;
+  name: string;
+  generic: boolean;
+  values: ExecutionValues | null;
+  ranAt: number | null;
+  pending: { values: ExecutionValues | null; fresh: boolean } | null;
 };
 
 /** RN-ABAS-011: os três lugares do resultado da aba de consulta. */

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
+import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { driverIdOf, driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
 import type { Engine } from "@/components/ui/engine-tag";
 import type { useToast } from "@/components/ui/toast";
@@ -10,30 +11,37 @@ import { allowRefusal, ApiRequestError, type ApiError, type ApiResult } from "@/
 
 import { createAutoRefresh, type AutoRefreshControl } from "./auto-refresh";
 import { confirmedOf, queryParamsOf, sentTextOf } from "./command-wire";
-import { commandQuestion, numberedScriptQuestion } from "./command-confirmation";
+import { itemQuestion, numberedScriptQuestion, type ConfirmedTarget } from "./command-confirmation";
 import type { MakeQuestion } from "./use-command-confirmation";
 import { credentialsMissingField, credentialsRequests } from "./credentials-missing";
-import { changeTransactionMode, closeDatabaseSession, endTransaction, openDatabaseSession } from "./database-sessions.service";
+import { changeTransactionMode, closeDatabaseSession, endTransaction, getColumns, getObjectNames, openDatabaseSession } from "./database-sessions.service";
 import { queryOutcomeCopy } from "./query-outcome.copy";
 import { createScriptRun, finishRun, keptResultIds, platformScriptShortcut, scriptEndToast, scriptResultCap, startEntry, withEntry, withSavedResult, type ScriptChoice, type ScriptError, type ScriptRun } from "./script-run";
 import { scriptRunCopy } from "./script-run.copy";
 import { scriptsCopy } from "./scripts.copy";
 import { gridFilterCopy } from "./grid-filter.copy";
 import { sqlErrorDetails, type FilterApplied, type QueryColumn, type QueryPage, type QueryResult, type QueryRow } from "./query.schema";
-import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage, type QueryParam } from "./query.service";
+import { cancelQuery, countQueryTotal, executeQuery, executeVariableQuery, fetchNextPage, getColumnValues, type ColumnValuesRequest, type ExecuteQueryJournal, type QueryOrigin, type QueryParam } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
-import { bindItem, planItem, planScript, scopeBefore, usesVariables, type Plan, type ScriptDoc } from "./variable-execution";
-import { closedTransaction, createTransactionStore, fromWire, transactionOf, withUncommitted, type TransactionMode, type TransactionStore } from "./transaction";
+import { bindItem, databaseDependent, isUnvalued, knownConfirmed, planItem, planScript, queryTextOf, scopeBefore, usesVariables, type Plan, type ScriptDoc } from "./variable-execution";
+import { fieldsOf, fullFieldsOf, type ValuesQuestion } from "./variable-fields";
+import { closedTransaction, createTransactionStore, fromWire, transactionOf, withUncommitted, type IsolationLevel, type TabTransaction, type TransactionMode, type TransactionStore } from "./transaction";
 import { transactionCopy } from "./transaction.copy";
 import { variableRunCopy } from "./variable-run.copy";
-import type { BoundCommand } from "./variables/bind";
+import { defaultSchemasOf } from "./table-links";
+import { requestParams, type BoundCommand } from "./variables/bind";
+import { columnRefsOf, columnTypesOf, readColumns, type ColumnRead } from "./variables/column-types";
 import { createEvaluatorHost, type Evaluator } from "./variables/evaluator-host";
-import { locate } from "./variables/errors";
-import { productionSeed } from "./variables/random";
-import type { StoredValue } from "./variables/run";
-import type { ItemDiagnostic } from "./variables/script";
+import { locate, VariableError } from "./variables/errors";
+import { queryValue } from "./variables/query-value";
+import { samplePositions, sampleValue } from "./variables/sample";
+import { listValue, type Value } from "./variables/values";
+import { phrase } from "./variables/variables.copy";
+import { productionSeed, Random } from "./variables/random";
+import { ScriptRun as VariableRun, type StoredValue } from "./variables/run";
+import type { ItemDiagnostic, ScriptModel } from "./variables/script";
 import { createRevealStore, createTabValuesStore, type RevealStore, type TabValuesSnapshot, type TabValuesStore } from "./variables/tab-values";
-import { storedToWire } from "./variables/wire";
+import { columnsToWire, storedToWire, toWire } from "./variables/wire";
 import { editorOffset } from "./variables/positions";
 import { workbenchCopy } from "./workbench.copy";
 
@@ -296,13 +304,39 @@ export type RunHooks = {
   begin?: () => void;
   /** O item do texto que o Ctrl+Enter com variáveis avaliou ou vai enviar (a declaração também): o editor o destaca por um instante (RN-SQL-018, RN-VAR-025). */
   flash?: (item: { offset: number; text: string }) => void;
+  /**
+   * RN-VAR-021: a pergunta dos valores que faltam, antes de avaliar: os campos das declarações sem valor do que vai, com os valores da aba para preencher. Devolve
+   * o valor de cada campo, pelo índice da declaração, ou nulo (o Esc): nada roda.
+   */
+  ask?: (question: ValuesQuestion) => Promise<ReadonlyMap<number, Value> | null>;
+  /**
+   * RN-VAR-026 e 027: o "Executar com valores…" pela barra do editor: a pergunta é o diálogo inteiro (`ask`, no modo `full`), com um campo por declaração do topo, e o
+   * valor escrito num campo vale no lugar da expressão (a origem "diálogo").
+   */
+  withValues?: boolean;
 };
 
 /**
- * RN-VAR-022: uma declaração ou reatribuição do script. `stored` é o valor que a avaliação de antes da pergunta já deu (RN-VAR-012), e o laço só o toma; sem ele
- * (o "Tentar de novo" depois de um erro), `evaluate` a avalia agora.
+ * O que a avaliação de uma atribuição na vez dela deu (RN-VAR-022): o valor, com as linhas que a consulta leu (`rows`, só na consulta, RN-VAR-011); o erro da
+ * declaração (só "Parar" e "Tentar de novo"); ou o fim do script sem perguntar (`end`): o que não é da declaração (a sessão que caiu, a API fora do ar) e o "Cancelar"
+ * durante a consulta (RN-SQL-022). `reached`: a consulta chegou à sessão, e daí em diante ela não reabre em silêncio (RN-SQL-021).
  */
-type DeclarationStep = { stored: StoredValue | null; evaluate: () => Promise<{ ok: true; stored: StoredValue } | { ok: false; error: ScriptError }> };
+type DeclarationOutcome = ({ ok: true; stored: StoredValue; rows?: number } | { ok: false; error: ScriptError; end?: "stopped" | "cancelled" }) & { reached?: boolean };
+
+/**
+ * RN-VAR-022: uma declaração ou reatribuição do script. `stored` é o valor que a avaliação de antes da pergunta já deu (RN-VAR-012), e o laço só o toma; sem ele
+ * (a que depende do banco, e o "Tentar de novo" depois de um erro), `evaluate` a avalia agora, na vez dela. Nulo: a aba foi solta, ou o "Cancelar" chegou antes de
+ * a consulta sair. `reopen` diz se a sessão que caiu ainda reabre (nada do script foi respondido).
+ */
+type DeclarationStep = { stored: StoredValue | null; evaluate: (reopen: boolean) => Promise<DeclarationOutcome | null> };
+
+/** RN-VAR-019 e 022: o comando que usa um valor do banco só se troca pelos marcadores na vez dele; o que não pôde ser montado é um erro do comando. */
+type LateBind = () => { ok: true; target: RunTarget } | { ok: false; error: ScriptError };
+
+/** RN-VAR-022 e 034: as recusas da consulta da variável que são erros da declaração (só "Parar" e "Tentar de novo"); as outras param o script sem perguntar. */
+const variableQueryRefusals = ["SQL_EXECUTION_FAILED", "VARIABLE_QUERY_NOT_READ", "VARIABLE_QUERY_TOO_LARGE", "QUERY_INVALID", "QUERY_PARAMETERS_MISMATCH", "MULTIPLE_STATEMENTS_NOT_SUPPORTED"];
+/** RN-VAR-022: as recusas da rota dos valores que são erros da declaração do `random.of`, com "Parar" e "Tentar de novo". */
+const sampleRefusals = ["SQL_EXECUTION_FAILED", "VALUES_INVALID", "VALUES_TABLE_NOT_FOUND"];
 
 /** O que a avaliação das declarações deu (RN-VAR-012): o valor de cada atribuição avaliada, na ordem; ou os erros, com a linha de cada um. */
 type Evaluated = { ok: true; results: Map<number, StoredValue> } | { ok: false; errors: VariableErrorLine[] };
@@ -330,17 +364,17 @@ export type QueryRunner = {
    * Devolve a recusa do filtro do resultado (`FILTER_INVALID`), quando é ela; o resto vai à área de resultado e aos avisos, como sempre. O comando aceito
    * troca os resultados de um script (RN-SQL-020), menos com `keepScript`: o filtro do resultado do último comando do script muda só ele.
    */
-  run: (target: RunTarget, options?: { keepScript?: boolean }) => Promise<FilterRefusal | void>;
+  run: (target: RunTarget, options?: { keepScript?: boolean; confirmed?: boolean }) => Promise<FilterRefusal | void>;
   /**
    * RN-SQL-019: executa os comandos, um por vez, na ordem, na sessão da aba. O estado do script (as abas, as Estatísticas, a pergunta de erro) está em
    * `script`; o do executor fica "executando" enquanto ele roda, e no fim é o do último comando executado.
    */
-  runScript: (commands: readonly RunTarget[]) => Promise<void>;
+  runScript: (commands: readonly RunTarget[], options?: { confirmed?: boolean }) => Promise<void>;
   /**
    * RN-SQL-020: "Executar este comando", de uma aba guardada do script: executa só ele, como o Ctrl+Enter nele, e troca os resultados do script pelo dele. O
    * lugar no texto é o de quando o script rodou: o texto editado depois disso não ganha a marca do erro.
    */
-  runCommand: (target: RunTarget) => Promise<void>;
+  runCommand: (target: RunTarget, options?: { confirmed?: boolean }) => Promise<void>;
   /** RN-SQL-019 a 022: o script da aba (nulo sem script), e a resposta da pergunta de erro. */
   script: { subscribe: (listener: () => void) => () => void; getState: () => ScriptRun | null; decide: (choice: ScriptChoice) => void };
   /**
@@ -349,9 +383,9 @@ export type QueryRunner = {
    * `end` é o "Commit" (`true`) e o "Rollback" (`false`) da barra do editor, e diz se a transação acabou. `note` recebe o `transaction` de uma resposta que não
    * passa pelo executor (o "Salvar" da grade, RN-EDIT-005).
    */
-  transaction: Pick<TransactionStore, "subscribe" | "getState"> & { setMode: (mode: TransactionMode) => Promise<boolean>; end: (commit: boolean) => Promise<boolean>; note: (wire: unknown) => void };
+  transaction: Pick<TransactionStore, "subscribe" | "getState"> & { setMode: (mode: TransactionMode) => Promise<boolean>; setIsolationLevel: (isolationLevel: IsolationLevel) => Promise<boolean>; end: (commit: boolean) => Promise<boolean>; note: (wire: unknown) => void };
   /** Executa de novo o comando das linhas que estão na tela, e nunca outro: é o que o aviso de cursor fechado oferece. */
-  rerun: () => Promise<void>;
+  rerun: (options?: { confirmed?: boolean }) => Promise<void>;
   cancel: () => Promise<void>;
   /**
    * RN-GRADE-014: resolve quando não há execução automática em andamento, nem a que a pessoa interrompeu e ainda ocupa a sessão. "Exportar CSV" espera por
@@ -412,11 +446,13 @@ type QueryRunnerOptions = {
    * RN-ABAS-002: a aba chegou de outra janela, com o resultado que estava na tela (parado: a aba ocupada não muda de janela) e a sessão que já tinha,
    * com o cursor aberto nela. Nada é executado: "Carregar mais" continua de onde parou.
    */
-  initial?: { state: RunnerState; sessionId: string | null; /** RN-VAR-023: os valores das variáveis que vieram com a aba. */ values?: TabValuesSnapshot };
+  initial?: { state?: RunnerState; sessionId?: string | null; /** RN-VAR-023: os valores das variáveis que vieram com a aba. */ values?: TabValuesSnapshot; transaction?: Partial<Pick<TabTransaction, "mode" | "isolationLevel">> };
   /** RN-VAR-014: quem avalia as declarações (o Worker). Sem ele, o hospedeiro do pacote, aberto no primeiro uso; os testes passam um que avalia no mesmo processo. */
   evaluator?: Evaluator;
   /** O nome da aba agora (ela pode ter sido renomeada ou salva como script): o aviso do fim do script o diz (RN-SQL-020). Sem ele, o aviso não diz a aba. */
   title?: () => string | null;
+  /** Grava a origem do comando no diário e invalida a lista do histórico (RN-HIST-002). */
+  journal?: boolean;
 };
 
 function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells: [number, number][], rowOffset: number): ReadonlyMap<number, ReadonlySet<number>> {
@@ -443,12 +479,12 @@ function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells:
  * de transação recusado antes de executar, API fora do ar, resposta inválida) deixa o resultado e o
  * cursor dele como estavam, e avisa.
  */
-export function createQueryRunner({ connectionId, database, queryClient, toast, onSession, initial, title, evaluator }: QueryRunnerOptions): QueryRunner {
+export function createQueryRunner({ connectionId, database, queryClient, toast, onSession, initial, title, evaluator, journal = false }: QueryRunnerOptions): QueryRunner {
   let state: RunnerState = initial?.state ?? { status: "idle" };
   const listeners = new Set<() => void>();
   const values = createTabValuesStore(initial?.values);
   const reveal = createRevealStore();
-  const transaction = createTransactionStore();
+  const transaction = createTransactionStore(initial?.transaction);
   /** O hospedeiro do Worker, aberto no primeiro uso (RN-VAR-014). */
   let host: Evaluator | null = evaluator ?? null;
   const evaluatorHost = () => (host ??= createEvaluatorHost());
@@ -622,13 +658,49 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * do primeiro comando respondido (RN-SQL-021): a sessão que caiu fica caída, e a resposta é a da API. `handled`: as recusas que quem chama trata a mais
    * (as do comando, no script). `keep`: os resultados das abas do script que ficam na tela, e que a API continua guardando para a edição (RN-SQL-024).
    */
-  async function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean, handled: readonly string[] = [], keep: readonly string[] = [], params: readonly QueryParam[] = []): Promise<ApiResult<QueryResult> | null> {
+  function journalInfo(target: RunTarget, origin: QueryOrigin, wasConfirmed?: boolean, scriptRunID?: string): ExecuteQueryJournal | undefined {
+    const historyText = target.sent !== undefined && target.sql !== target.sent.sql ? target.sql : undefined;
+    if (!journal && wasConfirmed !== true) return undefined;
+    return {
+      ...(journal ? { origin } : {}),
+      ...(journal && historyText !== undefined ? { historyText } : {}),
+      ...(wasConfirmed === true ? { confirmed: true } : {}),
+      ...(journal && scriptRunID !== undefined ? { scriptRunID } : {}),
+    };
+  }
+
+  function refreshHistory(origin?: QueryOrigin) {
+    if (!journal || origin === "auto-refresh") return;
+    if (typeof (queryClient as { invalidateQueries?: unknown }).invalidateQueries === "function") {
+      void queryClient.invalidateQueries({ queryKey: ["journal", "history"] });
+    }
+  }
+
+  function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean, handled: readonly string[] = [], keep: readonly string[] = [], params: readonly QueryParam[] = [], meta?: ExecuteQueryJournal): Promise<ApiResult<QueryResult> | null> {
+    return inSession(
+      connection,
+      started,
+      reopen,
+      ["SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", "CONNECTION_READ_ONLY", ...handled, ...(filter === undefined ? [] : ["FILTER_INVALID"])],
+      async (session) => {
+        const result = await executeQuery(session, sql, filter, keep, params, meta);
+        refreshHistory(meta?.origin);
+        return result;
+      },
+    );
+  }
+
+  /**
+   * O pedido `request` na sessão da aba, que abre na primeira vez (RN-SESSAO-001) e reabre uma vez quando caiu (o que `execute` diz). `handled`: as recusas que quem
+   * chama trata no lugar. A consulta de uma variável (RN-VAR-034) também vai por aqui.
+   */
+  async function inSession<T>(connection: string, started: number, reopen: boolean, handled: readonly string[], request: (session: string) => Promise<ApiResult<T>>): Promise<ApiResult<T> | null> {
     for (let reopened = false; ; reopened = true) {
       let id = sessionId;
 
       if (id === null) {
         // RN-TX-001: a sessão começa no modo da aba; sem o Commit manual, o pedido vai como sempre foi.
-        const opened = await call(() => openDatabaseSession(connection, database, transaction.getState().mode === "manual" ? "manual" : undefined));
+        const opened = await call(() => openDatabaseSession(connection, database, transaction.getState().mode === "manual" ? "manual" : undefined, transaction.getState().isolationLevel !== "default" ? transaction.getState().isolationLevel : undefined));
         if (started !== epoch) {
           // A aba foi solta enquanto a sessão abria: ninguém mais a usaria nem a fecharia.
           if (opened.ok) void call(() => closeDatabaseSession(opened.data.id), codes("DATABASE_SESSION_NOT_FOUND")).catch(() => undefined);
@@ -636,12 +708,13 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         }
         if (!opened.ok) {
           // RN-TX-013: o banco sem log de transação não tem Commit manual. O comando não foi executado; a aba passa a Auto-commit (o aviso central diz por quê).
-          if (opened.error.code === "TRANSACTIONS_NOT_AVAILABLE") transaction.set({ mode: "autoCommit", available: false });
+          if (opened.error.code === "TRANSACTIONS_NOT_AVAILABLE") transaction.set({ mode: "autoCommit", isolationLevel: "default", available: false });
           // A sessão que caiu não reabriu: a aba segue sem ela.
           if (reopened) autoRefresh.lost();
           // RN-TRANSF-016: a conexão sem usuário ou sem senha não chega ao driver. A aba fica com o resultado de antes e o comando sem executar (o erro de
           // campo não vira aviso), e o "Editar conexão" dela abre, com o que falta.
-          if (credentialsMissingField(opened.error) !== null) credentialsRequests.request(connection);
+          const missingField = credentialsMissingField(opened.error);
+          if (missingField !== null) credentialsRequests.request(connection, missingField);
           return opened;
         }
 
@@ -657,10 +730,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
 
       const session = id;
       // RN-PROT-002: a recusa do somente leitura é tratada no lugar, como a do controle de transação: a frase da API, e o resultado de antes fica.
-      const result = await call(
-        () => executeQuery(session, sql, filter, keep, params),
-        codes("SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", "CONNECTION_READ_ONLY", ...handled, ...(filter === undefined ? [] : ["FILTER_INVALID"]), ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])),
-      );
+      const result = await call(() => request(session), codes(...handled, ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])));
       if (started !== epoch) return null;
       if (result.ok || result.error.code !== "DATABASE_SESSION_NOT_FOUND") return result;
 
@@ -830,7 +900,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * comando aceito troca os resultados do script que estiver na tela (RN-SQL-020: o Ctrl+Enter, "Executar este comando"); o F5, o filtro e a execução
    * automática no resultado do último comando do script mudam só ele.
    */
-  const runWith = async (target: RunTarget, kind: "person" | "again" | "auto", clearsScript = false): Promise<FilterRefusal | void> => {
+  const runWith = async (target: RunTarget, kind: "person" | "again" | "auto", clearsScript = false, meta?: { origin?: QueryOrigin; confirmed?: boolean }): Promise<FilterRefusal | void> => {
     const auto = kind === "auto";
     let refusal: FilterRefusal | undefined;
     await guarded(async () => {
@@ -879,7 +949,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
 
       // RN-SQL-024: o comando que troca os resultados do script não guarda nenhum; o F5, o filtro e a execução automática do resultado do último comando
       // guardam os das outras abas, que continuam se editando.
-      const result = await execute(connectionId, sentTextOf(target), started, target.filter, !auto, [], clearsScript ? [] : keptResultIds(script), queryParamsOf(target));
+      const origin: QueryOrigin = meta?.origin ?? (auto ? "auto-refresh" : kind === "again" ? "rerun" : target.filter !== undefined || !clearsScript ? "filter" : "editor");
+      const result = await execute(connectionId, sentTextOf(target), started, target.filter, !auto, [], clearsScript ? [] : keptResultIds(script), queryParamsOf(target), journalInfo(target, origin, meta?.confirmed));
       if (result === null) return;
       // RN-GRADE-011: a API recusou o filtro antes de executar: o resultado e o cursor de antes ficam como estavam, e a frase vai ao campo de filtro.
       if (!result.ok && result.error.code === "FILTER_INVALID" && target.filter !== undefined) {
@@ -963,7 +1034,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   /** O comando vai mesmo à API: um comando só, e a aba com conexão (o resto o executor recusa antes, só com o aviso). */
   const sends = (target: RunTarget) => connectionId !== null && statementCount(sentTextOf(target), target.engine) === 1;
 
-  const run = (target: RunTarget, options?: { keepScript?: boolean }) => afterPausedScript(sends(target), () => runWith(target, "person", options?.keepScript !== true));
+  const run = (target: RunTarget, options?: { keepScript?: boolean; confirmed?: boolean }) =>
+    afterPausedScript(sends(target), () => runWith(target, "person", options?.keepScript !== true, { origin: options?.keepScript || target.filter !== undefined ? "filter" : "editor", confirmed: options?.confirmed }));
 
   /**
    * O "Executar script" (seção 31, RN-SQL-019 a 022): os comandos, um por vez, na ordem, pela sessão da aba e pelo mesmo caminho de `run` (`execute`: a
@@ -975,7 +1047,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * antes do primeiro), deixa a tela como estava: o script de antes volta, e o executor faz o que faria com o Ctrl+Enter. Depois do primeiro, a sessão que
    * cai não é reaberta: o que os comandos de antes deixaram nela (uma tabela temporária, um SET) se perdeu.
    */
-  const runScript = (commands: readonly RunTarget[]): Promise<void> => afterPausedScript(connectionId !== null && commands.length > 0, () => runScriptNow(commands));
+  const runScript = (commands: readonly RunTarget[], options?: { confirmed?: boolean }): Promise<void> =>
+    afterPausedScript(connectionId !== null && commands.length > 0, () => runScriptNow(commands, new Map(), undefined, options?.confirmed));
 
   /**
    * O laço do script (RN-SQL-019 a 022). `declarations` (RN-VAR-019 e 022) diz quais itens são declarações ou reatribuições, por posição: elas não vão à API, tomam
@@ -1022,6 +1095,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       counter: snapshot.counter,
       seed: [a, b, c, d],
       now: Date.now(),
+      ...(plan.columns === undefined ? {} : { columns: columnsToWire(plan.columns) }),
+      ...(plan.answers === undefined ? {} : { answers: [...plan.answers].map(([index, answer]) => ({ index, value: toWire(answer.value), origin: answer.origin })) }),
     });
 
     const results = new Map<number, StoredValue>();
@@ -1036,11 +1111,182 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     return { ok: false, errors: [{ ...locate(plan.model.source, at), message: outcome.message, offset: at }] };
   }
 
+  /**
+   * RN-VAR-004 e 019: o tipo de cada coluna que as atribuições `indices` citam, lido no catálogo pela sessão da aba (que abre aqui, se ainda não abriu), com a tabela
+   * sem esquema no esquema padrão da sessão (RN-LINK-001). Nulo quando o catálogo não respondeu (a sessão que não abriu, a API que recusou: o aviso central já
+   * disse por quê) ou a aba foi solta: nada roda, e a área fica como estava. A falha não é da coluna, e por isso não vira erro de declaração.
+   */
+  async function readColumnTypes(model: ScriptModel, engine: Engine | undefined, indices: readonly number[], started: number): Promise<Map<string, ColumnRead> | null> {
+    const refs = columnRefsOf(model, indices);
+    const connection = connectionId;
+    if (refs.length === 0 || connection === null) return new Map();
+    const userName = queryClient.getQueryData<{ id: string; userName: string }[]>(connectionsQuery.queryKey)?.find((candidate) => candidate.id === connection)?.userName;
+    let failed = false;
+    const ask = async <T>(request: (session: string) => Promise<ApiResult<T>>): Promise<T | { error: string }> => {
+      const result = failed ? null : await inSession(connection, started, true, [], request);
+      if (result?.ok === true) return result.data;
+      failed = true;
+      return { error: "" };
+    };
+    const reads = await readColumns(refs, engine, defaultSchemasOf(engine, userName), {
+      tables: async () => {
+        const names = await ask((session) => getObjectNames(session));
+        return "error" in names ? names : new Map(names.schemas.map((schema) => [schema.name, new Set([...schema.tables, ...schema.views])] as const));
+      },
+      columns: (schema, table) => ask((session) => getColumns(session, schema, table)),
+    });
+    return failed || started !== epoch ? null : reads;
+  }
+
+  /**
+   * O que vem antes da pergunta da proteção (RN-VAR-019): a leitura dos tipos de coluna das atribuições `all` (RN-VAR-004) e a avaliação de `indices`, as que não
+   * dependem do banco. Devolve o plano com os tipos lidos, que as avaliações na vez de cada item também usam; nulo quando o catálogo não respondeu.
+   */
+  async function prepare(
+    plan: Plan,
+    doc: ScriptDoc,
+    engine: Engine | undefined,
+    all: readonly number[],
+    indices: readonly number[],
+    started: number,
+    hooks: RunHooks | undefined,
+  ): Promise<{ plan: Plan; evaluated: Evaluated } | null> {
+    preparing = true;
+    try {
+      const reads = await readColumnTypes(plan.model, engine, all, started);
+      if (reads === null) return null;
+      let read: Plan = reads.size === 0 ? plan : { ...plan, columns: columnTypesOf(reads), reads };
+      // RN-VAR-021: as declarações sem valor do que vai são perguntadas num diálogo só, antes de avaliar; o tipo de coluna que não se resolveu é erro antes da pergunta.
+      // RN-VAR-027: no "Executar com valores…", a pergunta é o diálogo inteiro, com os campos do topo.
+      const full = hooks?.withValues === true;
+      const missing = all.filter((index) => isUnvalued(read.model, index));
+      if ((full || missing.length > 0) && hooks?.ask !== undefined && started === epoch) {
+        const asked = full ? fullFieldsOf(read.model, engine, read.columns, databaseDependent(read.model)) : { ...fieldsOf(read.model, missing, read.columns), calculated: [] };
+        if (asked.errors.length > 0) return { plan: read, evaluated: { ok: false, errors: asked.errors } };
+        const tab = values.snapshot().values;
+        const answers = await hooks.ask({ mode: full ? "full" : "ask", model: read.model, engine, fields: asked.fields, calculated: asked.calculated, tab, ...(read.reads === undefined ? {} : { reads: read.reads }) });
+        if (answers === null || started !== epoch) return null;
+        const origin = full ? ("diálogo" as const) : ("pergunta" as const);
+        read = { ...read, answers: new Map([...answers].map(([index, value]) => [index, { value, origin }])) };
+      }
+      const evaluated: Evaluated = indices.length === 0 || started !== epoch ? { ok: true, results: new Map() } : await evaluateIndices(read, doc, engine, indices);
+      return { plan: read, evaluated };
+    } finally {
+      preparing = false;
+    }
+  }
+
+  /** RN-VAR-022: o erro de uma declaração, como a pergunta de erro do script e as Estatísticas o mostram. */
+  const declarationError = (message: string | null): ScriptError => ({ title: variableRunCopy.errors.title, message, sqlState: null });
+
+  /** A atribuição `index` avaliada agora no Worker, com os valores que a aba tem (o laço do script os aplica na ordem, RN-VAR-012). */
+  async function evaluateNow(plan: Plan, doc: ScriptDoc, engine: Engine | undefined, index: number): Promise<DeclarationOutcome> {
+    const again = await evaluateIndices(plan, doc, engine, [index]);
+    const stored = again.ok ? again.results.get(index) : undefined;
+    if (stored !== undefined) return { ok: true, stored };
+    return { ok: false, error: declarationError(again.ok ? null : again.errors[0].message) };
+  }
+
+  /**
+   * RN-VAR-011 e 034: a consulta da atribuição `index`, na sessão da aba e na vez dela, com os `@nome` trocados pelos valores que a aba tem agora. O resultado vira o
+   * valor pela forma dele e pela anotação, e é conferido e guardado como a avaliação guarda. Nulo quando a aba foi solta ou o "Cancelar" chegou antes de o pedido sair.
+   */
+  async function evaluateQuery(plan: Plan, engine: Engine | undefined, index: number, started: number, reopen: boolean): Promise<DeclarationOutcome | null> {
+    const connection = connectionId;
+    const name = plan.model.items[index].parsed?.name ?? "";
+    const snapshot = values.snapshot();
+    const config = { engine, random: new Random(productionSeed()), clock: () => performance.now(), now: () => Date.now(), ...(plan.columns === undefined ? {} : { columns: plan.columns }) };
+    const run = new VariableRun(plan.model, config, snapshot.values, snapshot.counter);
+    const bound = run.bindQuery(index);
+    if (!bound.ok) return { ok: false, error: declarationError(bound.error.message) };
+    if (connection === null) return null;
+
+    const result = await inSession(connection, started, reopen, variableQueryRefusals, (session) => executeVariableQuery(session, bound.command.sql, requestParams(bound.command.params)));
+    if (result === null) return null;
+    if (!result.ok) {
+      // RN-VAR-013: a frase do limite tem o nome da variável, que a API não sabe.
+      const reason = result.error.extensions.reason;
+      if (result.error.code === "VARIABLE_QUERY_TOO_LARGE" && (reason === "rows" || reason === "columns" || reason === "bytes")) return { ok: false, error: declarationError(phrase.queryTooLarge(name, reason)), reached: true };
+      return readFailure(result.error, variableQueryRefusals);
+    }
+
+    try {
+      const assigned = run.assign(index, queryValue(name, result.data, run.annotationOf(index), engine), "consulta", result.data.elapsedMs);
+      if (!assigned.ok) return { ok: false, error: declarationError(assigned.error.message), reached: true };
+      return { ok: true, stored: assigned.stored, rows: result.data.rows.length, reached: true };
+    } catch (error) {
+      if (error instanceof VariableError) return { ok: false, error: declarationError(error.message), reached: true };
+      throw error;
+    }
+  }
+
+  /**
+   * A recusa de uma leitura de variável (RN-VAR-022): a cancelada (RN-SQL-022); a da declaração (`refusals`), com "Parar" e "Tentar de novo"; e o que não é da
+   * declaração, que para o script sem perguntar (o aviso central já disse o que houve).
+   */
+  function readFailure(error: ApiError, refusals: readonly string[]): DeclarationOutcome {
+    if (cancelOutcomeOf(error) === "canceled") return { ok: false, error: scriptErrorOf(error), end: "cancelled", reached: true };
+    if (refusals.includes(error.code)) return { ok: false, error: scriptErrorOf(error), reached: true };
+    const lost = error.code === "DATABASE_SESSION_NOT_FOUND" ? { title: error.title, message: scriptRunCopy.error.sessionLost, sqlState: null } : scriptErrorOf(error);
+    return { ok: false, error: lost, end: "stopped" };
+  }
+
+  /**
+   * RN-VAR-010: o `random.of` da atribuição `index`, na sessão da aba e na vez dela: a rota dos valores (RN-VAR-035) diz quantos valores diferentes a coluna tem, o
+   * gerador sorteia as posições, e cada posição é uma leitura, em sequência. O valor tem o tipo da coluna, lido antes de avaliar (RN-VAR-004). Nulo como na consulta.
+   */
+  async function evaluateSample(plan: Plan, engine: Engine | undefined, index: number, started: number, reopen: boolean): Promise<DeclarationOutcome | null> {
+    const connection = connectionId;
+    const snapshot = values.snapshot();
+    // ponytail: um gerador por `random.of`, com a semente da produção; o "um só por execução" da RN-VAR-010 só pesa nas sequências de ouro, que são do Worker.
+    const random = new Random(productionSeed());
+    const config = { engine, random, clock: () => performance.now(), now: () => Date.now(), ...(plan.columns === undefined ? {} : { columns: plan.columns }) };
+    const run = new VariableRun(plan.model, config, snapshot.values, snapshot.counter);
+    const sample = run.sampleOf(index);
+    if (!sample.ok) return { ok: false, error: declarationError(sample.error.message) };
+    const read = plan.reads?.get(sample.column.text);
+    if (read?.ok !== true) return { ok: false, error: declarationError(read?.ok === false ? read.message : phrase.columnNotRead(sample.column.text)) };
+    if (connection === null) return null;
+
+    const begun = performance.now();
+    const ask = (request: ColumnValuesRequest) => inSession(connection, started, reopen, sampleRefusals, (session) => getColumnValues(session, read.schema, read.table, request));
+    const counted = await ask({ column: read.column, limit: 0, total: true });
+    if (counted === null) return null;
+    if (!counted.ok) return readFailure(counted.error, sampleRefusals);
+    try {
+      const positions = samplePositions(sample.written, counted.data.total ?? 0, sample.count, random);
+      const items: Value[] = [];
+      for (const position of positions) {
+        if (cancelRequested) return { ok: false, error: { title: copy.commandCancelled, message: null, sqlState: null }, end: "cancelled", reached: true };
+        const page = await ask({ column: read.column, offset: position, limit: 1 });
+        if (page === null) return null;
+        if (!page.ok) return readFailure(page.error, sampleRefusals);
+        const entry = page.data.values[0];
+        if (entry === undefined) return { ok: false, error: declarationError(phrase.sampleChanged(sample.written)), reached: true };
+        items.push(sampleValue(sample.written, entry, read, engine));
+      }
+      const assigned = run.assign(index, sample.count === null ? items[0] : listValue(items), "random", Math.round(performance.now() - begun));
+      if (!assigned.ok) return { ok: false, error: declarationError(assigned.error.message), reached: true };
+      return { ok: true, stored: assigned.stored, reached: true };
+    } catch (error) {
+      if (error instanceof VariableError) return { ok: false, error: declarationError(error.message), reached: true };
+      throw error;
+    }
+  }
+
+  /** A atribuição `index` na vez dela: a consulta (RN-VAR-011) e o `random.of` (RN-VAR-010) leem o banco; as outras se avaliam no Worker. */
+  function evaluateAt(plan: Plan, doc: ScriptDoc, engine: Engine | undefined, index: number, started: number, reopen: boolean): Promise<DeclarationOutcome | null> {
+    const kind = plan.model.items[index].parsed?.value?.t;
+    if (kind === "query") return evaluateQuery(plan, engine, index, started, reopen);
+    if (kind === "sample") return evaluateSample(plan, engine, index, started, reopen);
+    return evaluateNow(plan, doc, engine, index);
+  }
+
   /** RN-PROT-001: a pergunta da proteção com os valores já calculados. Verdadeiro quando nada pergunta ou a pessoa confirma. */
-  async function confirmed(hooks: RunHooks | undefined, make: MakeQuestion): Promise<boolean> {
-    if (hooks?.confirm === undefined) return true;
+  async function confirmed(hooks: RunHooks | undefined, make: MakeQuestion): Promise<{ ok: boolean; asked: boolean }> {
+    if (hooks?.confirm === undefined) return { ok: true, asked: false };
     const answer = hooks.confirm(make);
-    return answer === true ? true : await answer;
+    return answer === true ? { ok: true, asked: false } : { ok: await answer, asked: true };
   }
 
   /** Nada a executar, ou a seleção com mais de um item (RN-SQL-001 e RN-VAR-020): os avisos de sempre. */
@@ -1074,55 +1320,119 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       if (!planned.ok) return refusePlan(planned);
       if (refuseWithoutConnection()) return;
 
-      const { plan } = planned;
-      const item = plan.items[0];
+      const item = planned.plan.items[0];
       const subject = item.kind === "declaration" ? "declaration" : "command";
-      if (plan.errors.length > 0) return refuseVariables(plan.errors.map(lineOf), subject);
+      if (planned.plan.errors.length > 0) return refuseVariables(planned.plan.errors.map(lineOf), subject);
 
       const started = epoch;
-      let evaluated: Evaluated = { ok: true, results: new Map() };
-      const indices = [...new Set([...plan.outer, ...(item.kind === "declaration" ? [item.index] : [])])].sort((x, y) => x - y);
-      if (indices.length > 0) {
-        preparing = true;
-        try {
-          evaluated = await evaluateIndices(plan, request.doc, request.engine, indices);
-        } finally {
-          preparing = false;
-        }
-      }
-      if (started !== epoch || retired) return;
+      const dependent = databaseDependent(planned.plan.model);
+      const all = [...new Set([...planned.plan.outer, ...(item.kind === "declaration" ? [item.index] : [])])].sort((x, y) => x - y);
+      // RN-VAR-019: antes da pergunta, só o que não depende do banco; a consulta e o que usa o valor dela, depois, na vez deles.
+      const prepared = await prepare(planned.plan, request.doc, request.engine, all, all.filter((index) => !dependent.has(index)), started, hooks);
+      if (prepared === null || started !== epoch || retired) return;
+      const { plan, evaluated } = prepared;
       if (!evaluated.ok) return refuseVariables(evaluated.errors, subject);
+      const results = evaluated.results;
+      const late = all.filter((index) => dependent.has(index));
 
-      if (item.kind === "declaration") {
-        for (const stored of evaluated.results.values()) applyStored(stored);
+      if (item.kind === "declaration" && late.length === 0) {
+        for (const stored of results.values()) applyStored(stored);
         reveal.reveal(plan.model.items[item.index].parsed?.name ?? null);
         hooks?.flash?.({ offset: item.offset, text: item.text });
         return;
       }
 
-      const base: RunTarget = { sql: item.text, offset: item.offset, ...(request.engine === undefined ? {} : { engine: request.engine }) };
+      const engineField = request.engine === undefined ? {} : { engine: request.engine };
+      const queries = late.flatMap((index) => {
+        const sql = queryTextOf(plan.model.items[index]);
+        return sql === null ? [] : [{ sql, ...engineField }];
+      });
+      const base: RunTarget = { sql: item.text, offset: item.offset, ...engineField };
       let target = base;
-      if (usesVariables(plan.model.items[item.index])) {
-        const scope = scopeBefore(plan.model, item.index, evaluated.results, values.snapshot().values);
-        const bound = bindItem(plan.model, item.index, scope, request.engine);
+      const lateBind = item.kind === "statement" && dependent.has(item.index);
+      if (item.kind === "statement" && !lateBind && usesVariables(plan.model.items[item.index])) {
+        const bound = bindItem(plan.model, item.index, scopeBefore(plan.model, item.index, results, values.snapshot().values), request.engine);
         if (!bound.ok) return refuseVariables([lineOf(bound.error)], "command");
         target = { ...base, sent: bound.command };
       }
 
-      // RN-PROT-001: uma pergunta só, com o comando e os valores que já se sabem.
-      if (!(await confirmed(hooks, (protections) => commandQuestion(protections, confirmedOf(target))))) return;
+      // RN-PROT-001 e RN-VAR-020: uma pergunta só, com as consultas de variável que vão rodar e o comando, com os valores que já se sabem.
+      const shown = item.kind === "declaration" ? null : lateBind ? knownConfirmed(plan.model, item.index, dependent, results, values.snapshot().values, request.engine) : confirmedOf(target);
+      const confirmResult = await confirmed(hooks, (protections) => itemQuestion(protections, queries, shown));
+      if (!confirmResult.ok) return;
       if (started !== epoch || retired) return;
-      // RN-SQL-021: só o comando que vai mesmo ao banco responde "Parar" à pergunta de erro do script que espera; o que foi recusado até aqui a deixou esperando.
+      // RN-SQL-021: só o que vai mesmo ao banco responde "Parar" à pergunta de erro do script que espera; o que foi recusado até aqui a deixou esperando.
       if (deciding !== null) {
         await stopPausedScript();
         if (started !== epoch || retired) return;
       }
-      for (const stored of evaluated.results.values()) applyStored(stored);
       hooks?.flash?.({ offset: item.offset, text: item.text });
+
+      if (late.length > 0) {
+        if (!(await assignOutside(plan, request.doc, request.engine, all, results, dependent, subject))) return;
+      } else for (const stored of results.values()) applyStored(stored);
+
+      if (item.kind === "declaration") return reveal.reveal(plan.model.items[item.index].parsed?.name ?? null);
+      if (lateBind) {
+        const bound = bindItem(plan.model, item.index, scopeBefore(plan.model, item.index, new Map(), values.snapshot().values), request.engine);
+        if (!bound.ok) return refuseVariables([lineOf(bound.error)], "command");
+        target = { ...base, sent: bound.command };
+      }
       hooks?.begin?.();
-      await runWith(target, "person", true);
+      await runWith(target, "person", true, { origin: "editor", confirmed: confirmResult.asked });
     });
   };
+
+  /**
+   * RN-VAR-019 e 020: as atribuições `indices`, na ordem do texto, depois da pergunta da proteção: a que não depende do banco toma o valor já avaliado (`results`), e
+   * a que depende é avaliada agora (a consulta, na sessão da aba). Cada valor vai para a aba na hora, para a seguinte o ver. Para no primeiro erro. `reached`: alguma
+   * consulta chegou à sessão (e fechou o cursor do resultado na tela).
+   */
+  async function assignInOrder(plan: Plan, doc: ScriptDoc, engine: Engine | undefined, indices: readonly number[], results: ReadonlyMap<number, StoredValue>, dependent: ReadonlySet<number>, started: number): Promise<{ reached: boolean } & ({ kind: "ok" | "cancelled" } | { kind: "error"; index: number; error: ScriptError; stop: boolean })> {
+    let reached = false;
+    for (const index of indices) {
+      if (!dependent.has(index)) {
+        const stored = results.get(index);
+        if (stored !== undefined) applyStored(stored);
+        continue;
+      }
+      const outcome = await evaluateAt(plan, doc, engine, index, started, true);
+      if (outcome?.reached === true) reached = true;
+      if (started !== epoch || outcome === null || (!outcome.ok && (cancelRequested || outcome.end === "cancelled"))) return { kind: "cancelled", reached };
+      if (!outcome.ok) return { kind: "error", index, error: outcome.error, stop: outcome.end === "stopped", reached };
+      applyStored(outcome.stored);
+      if (cancelRequested) return { kind: "cancelled", reached };
+    }
+    return { kind: "ok", reached };
+  }
+
+  /**
+   * As atribuições que dependem do banco fora do laço do script (o Ctrl+Enter, RN-VAR-020, e as de fora da seleção no Alt+X, RN-VAR-019), com a aba ocupada como num
+   * comando (RN-SESSAO-002): o "Cancelar" interrompe a consulta, e a execução automática em andamento cede o lugar. O resultado na tela fica, com o cursor fechado
+   * quando uma consulta chegou ao banco (RN-SQL-007). O erro vai à lista de erros, na linha da declaração; o que não é da declaração já foi avisado. Verdadeiro quando
+   * tudo foi avaliado e a execução segue.
+   */
+  async function assignOutside(plan: Plan, doc: ScriptDoc, engine: Engine | undefined, indices: readonly number[], results: ReadonlyMap<number, StoredValue>, dependent: ReadonlySet<number>, subject: VariableErrorsState["subject"]): Promise<boolean> {
+    const previous = state.status === "running" ? state.previous : resultOf(state);
+    if (isAutoRun(state)) await abandonAuto();
+    if (retired) return false;
+    const turn = epoch;
+    cancelRequested = false;
+    set({ status: "running", cancelling: false, previous });
+    const assigned = await assignInOrder(plan, doc, engine, indices, results, dependent, turn);
+    if (turn !== epoch) return false;
+    set((assigned.reached ? withCursorClosed(previous) : previous) ?? { status: "idle" });
+    if (assigned.kind === "cancelled") {
+      toast.warning(copy.commandCancelled);
+      return false;
+    }
+    if (assigned.kind === "error") {
+      const at = plan.model.items[assigned.index].start;
+      if (!assigned.stop) refuseVariables([{ ...locate(plan.model.source, at), message: assigned.error.message ?? assigned.error.title, offset: at }], subject);
+      return false;
+    }
+    return true;
+  }
 
   /**
    * RN-VAR-019: o Alt+X com variáveis, na ordem: as conferências, a avaliação do que não depende do banco (uma vez só, na ordem do texto), a pergunta da proteção
@@ -1138,62 +1448,78 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       if (!planned.ok) return void toast.warning(copy.nothingToSend);
       if (refuseWithoutConnection()) return;
 
-      const { plan } = planned;
-      if (plan.errors.length > 0) return refuseVariables(plan.errors.map(lineOf), "script");
+      if (planned.plan.errors.length > 0) return refuseVariables(planned.plan.errors.map(lineOf), "script");
 
       const started = epoch;
-      const indices = [...new Set([...plan.outer, ...plan.items.filter((item) => item.kind === "declaration").map((item) => item.index)])].sort((x, y) => x - y);
-      let evaluated: Evaluated = { ok: true, results: new Map() };
-      if (indices.length > 0) {
-        preparing = true;
-        try {
-          evaluated = await evaluateIndices(plan, request.doc, request.engine, indices);
-        } finally {
-          preparing = false;
-        }
-      }
-      if (started !== epoch || retired) return;
+      // RN-VAR-019: antes da pergunta, só o que não depende do banco; a consulta e o que usa o valor dela, na vez deles.
+      const dependent = databaseDependent(planned.plan.model);
+      const all = [...new Set([...planned.plan.outer, ...planned.plan.items.filter((item) => item.kind === "declaration").map((item) => item.index)])].sort((x, y) => x - y);
+      const prepared = await prepare(planned.plan, request.doc, request.engine, all, all.filter((index) => !dependent.has(index)), started, hooks);
+      if (prepared === null || started !== epoch || retired) return;
+      const { plan, evaluated } = prepared;
       if (!evaluated.ok) return refuseVariables(evaluated.errors, "script");
       const results = evaluated.results;
 
       const engineField = request.engine === undefined ? {} : { engine: request.engine };
       const targets: RunTarget[] = [];
       const steps = new Map<number, DeclarationStep>();
-      const asked: (ReturnType<typeof confirmedOf> & { number: number })[] = [];
+      const binds = new Map<number, LateBind>();
+      const asked: (ConfirmedTarget & { number: number })[] = [];
       const bindErrors: VariableErrorLine[] = [];
       for (const [position, item] of plan.items.entries()) {
         const base: RunTarget = { sql: item.text, offset: item.offset, ...engineField };
+        const number = position + 1;
         if (item.kind === "declaration") {
           targets.push(base);
+          const query = queryTextOf(plan.model.items[item.index]);
+          // RN-VAR-019: a consulta da variável entra na pergunta da proteção, com o número dela no script; ela é uma leitura.
+          if (query !== null) asked.push({ number, sql: query, ...engineField, irreversible: null });
           steps.set(position, {
-            stored: results.get(item.index) ?? null,
-            evaluate: async () => {
-              const again = await evaluateIndices(plan, request.doc, request.engine, [item.index]);
-              const stored = again.ok ? again.results.get(item.index) : undefined;
-              if (stored !== undefined) return { ok: true, stored };
-              const error = again.ok ? null : again.errors[0];
-              return { ok: false, error: { title: variableRunCopy.errors.title, message: error?.message ?? null, sqlState: null } };
-            },
+            stored: dependent.has(item.index) ? null : (results.get(item.index) ?? null),
+            evaluate: (reopen) => evaluateAt(plan, request.doc, request.engine, item.index, epoch, reopen),
           });
           continue;
         }
 
-        let target = base;
-        if (usesVariables(plan.model.items[item.index])) {
-          const bound = bindItem(plan.model, item.index, scopeBefore(plan.model, item.index, results, values.snapshot().values), request.engine);
-          if (!bound.ok) {
-            bindErrors.push(lineOf(bound.error));
-            continue;
-          }
-          target = { ...base, sent: bound.command };
+        if (!usesVariables(plan.model.items[item.index])) {
+          targets.push(base);
+          asked.push({ number, ...confirmedOf(base) });
+          continue;
         }
+        // RN-VAR-019 e 022: o comando que usa um valor do banco é montado na vez dele, com os valores que a aba tem então; a pergunta o mostra com os `@nome`.
+        if (dependent.has(item.index)) {
+          targets.push(base);
+          asked.push({ number, ...knownConfirmed(plan.model, item.index, dependent, results, values.snapshot().values, request.engine) });
+          binds.set(position, () => {
+            const bound = bindItem(plan.model, item.index, scopeBefore(plan.model, item.index, new Map(), values.snapshot().values), request.engine);
+            return bound.ok ? { ok: true, target: { ...base, sent: bound.command } } : { ok: false, error: { title: variableRunCopy.errors.title, message: bound.error.message, sqlState: null } };
+          });
+          continue;
+        }
+        const bound = bindItem(plan.model, item.index, scopeBefore(plan.model, item.index, results, values.snapshot().values), request.engine);
+        if (!bound.ok) {
+          bindErrors.push(lineOf(bound.error));
+          continue;
+        }
+        const target = { ...base, sent: bound.command };
         targets.push(target);
-        asked.push({ number: position + 1, ...confirmedOf(target) });
+        asked.push({ number, ...confirmedOf(target) });
       }
       if (bindErrors.length > 0) return refuseVariables(bindErrors, "script");
 
       // RN-PROT-001: uma vez, antes do primeiro item, com a lista dos comandos que pedem confirmação e os valores já calculados.
-      if (!(await confirmed(hooks, (protections) => numberedScriptQuestion(protections, asked, plan.items.length)))) return;
+      const outerQueries = plan.outer.flatMap((index) => {
+        const sql = queryTextOf(plan.model.items[index]);
+        return sql === null ? [] : [{ sql, ...engineField, irreversible: null }];
+      });
+      const confirmResult = await confirmed(hooks, (protections) => {
+        const question = numberedScriptQuestion(protections, asked, plan.items.length);
+        // As consultas de fora da seleção (RN-VAR-019, "A seleção") rodam antes do primeiro item, sem número no script.
+        return question?.kind === "script" && outerQueries.length > 0 && protections.confirm?.level === "all"
+          ? { ...question, commands: [...outerQueries.map((query) => ({ number: null, sql: query.sql, irreversible: null })), ...question.commands] }
+          : question;
+      });
+      if (!confirmResult.ok) return;
       if (started !== epoch || retired) return;
       // RN-SQL-021: só o script que vai mesmo ao banco responde "Parar" à pergunta de erro do script que espera.
       if (deciding !== null) {
@@ -1201,19 +1527,23 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         if (started !== epoch || retired) return;
       }
 
-      // As atribuições de fora do que vai (RN-VAR-019, "A seleção") aparecem no painel, e não nas Estatísticas.
-      for (const index of plan.outer) {
-        const stored = results.get(index);
-        if (stored !== undefined) applyStored(stored);
+      // As atribuições de fora do que vai (RN-VAR-019, "A seleção") aparecem no painel, e não nas Estatísticas; a que depende do banco é avaliada agora.
+      if (plan.outer.some((index) => dependent.has(index))) {
+        if (!(await assignOutside(plan, request.doc, request.engine, plan.outer, results, dependent, "script"))) return;
+      } else {
+        for (const index of plan.outer) {
+          const stored = results.get(index);
+          if (stored !== undefined) applyStored(stored);
+        }
       }
       hooks?.begin?.();
-      await runScriptNow(targets, steps, () => {
+      await ((closing: () => void) => runScriptNow(targets, steps, closing, confirmResult.asked, binds))(() => {
         if (steps.size === targets.length) reveal.reveal(null);
       });
     });
   };
 
-  const runScriptNow = async (commands: readonly RunTarget[], declarations: ReadonlyMap<number, DeclarationStep> = new Map(), closing?: () => void): Promise<void> => {
+  const runScriptNow = async (commands: readonly RunTarget[], declarations: ReadonlyMap<number, DeclarationStep> = new Map(), closing?: () => void, wasConfirmed?: boolean, binds: ReadonlyMap<number, LateBind> = new Map()): Promise<void> => {
     const loop = guarded(async () => {
       if (retired) return refuse("runScript");
       if (isPersonBusy(state)) return;
@@ -1234,6 +1564,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       const yielding = isAutoRun(state) ? abandonAuto() : autoBusy;
       const started = epoch;
       const before = script;
+      const scriptRunID = journal && typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : undefined;
       cancelRequested = false;
       editedSinceRun = false;
       truncationWarned = false;
@@ -1288,21 +1619,37 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         }
 
         for (let index = 0; index < commands.length; ) {
-          const target = commands[index];
+          let target = commands[index];
           patch((run) => startEntry(run, index));
           set({ status: "running", cancelling: false, previous: shown });
 
-          // RN-VAR-019 e 022: a declaração toma o valor já avaliado, ou o avalia agora; não vai à API.
+          // RN-VAR-019 e 022: a declaração toma o valor já avaliado, ou o avalia agora (a consulta, na sessão da aba, RN-VAR-011); só a consulta vai à API.
           const step = declarations.get(index);
           if (step !== undefined) {
-            const outcome = step.stored !== null ? { ok: true as const, stored: step.stored } : await step.evaluate();
+            const outcome: DeclarationOutcome | null = step.stored !== null ? { ok: true, stored: step.stored } : await step.evaluate(!answered);
             if (started !== epoch) return;
-            if (cancelRequested) return finish("cancelled");
+            if (outcome?.reached === true) answered = true;
+            // A consulta fecha o cursor do resultado na tela, como todo comando (RN-SQL-007 e RN-VAR-034).
+            if (outcome?.reached === true) shown = withCursorClosed(shown);
+            if (outcome === null || (!outcome.ok && (cancelRequested || outcome.end === "cancelled"))) {
+              if (outcome !== null) patch((run) => withEntry(run, index, { status: "cancelled" }));
+              return finish("cancelled");
+            }
             if (outcome.ok) {
               applyStored(outcome.stored);
-              patch((run) => withEntry(run, index, { status: "ok", elapsedMs: outcome.stored.ms }));
+              // As linhas que a consulta leu vão para as Estatísticas (RN-VAR-022).
+              const rows = outcome.rows;
+              patch((run) => withEntry(run, index, { status: "ok", elapsedMs: outcome.stored.ms, ...(rows === undefined ? {} : { rows: { read: rows, more: false, total: null } }) }));
+              // RN-SQL-022: o cancelamento chegou depois de a declaração terminar: ela fica como concluída, e o script para.
+              if (cancelRequested) return finish("cancelled");
               index++;
               continue;
+            }
+            // O que não é da declaração (a sessão que caiu, a API fora do ar) para o script sem perguntar, como num comando.
+            if (outcome.end === "stopped") {
+              set(shown ?? { status: "idle" });
+              patch((run) => withEntry(run, index, { status: "error", error: outcome.error }));
+              return finish("stopped");
             }
 
             // RN-VAR-022: só "Parar" (o padrão) e "Tentar de novo". Sem o valor, os comandos que o usam não têm como rodar.
@@ -1315,9 +1662,35 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
             return finish("stopped");
           }
 
+          // RN-VAR-022: o comando que usa um valor do banco é montado agora; o que não pôde ser montado é um erro do comando, com as quatro escolhas.
+          const bind = binds.get(index);
+          if (bind !== undefined) {
+            const bound = bind();
+            if (!bound.ok) {
+              if (skipAll) {
+                patch((run) => withEntry(run, index, { status: "skipped", error: bound.error }));
+                index++;
+                continue;
+              }
+              set(shown ?? { status: "idle" });
+              patch((run) => ({ ...withEntry(run, index, { status: "error", error: bound.error }), phase: "paused", current: index }));
+              const choice = await new Promise<ScriptChoice>((resolve) => (deciding = resolve));
+              if (started !== epoch) return;
+              if (choice === "stop") return finish("stopped");
+              if (choice === "retry") continue;
+              if (choice === "skipAll") skipAll = true;
+              patch((run) => withEntry(run, index, { status: "skipped" }));
+              index++;
+              continue;
+            }
+            const sent = bound.target;
+            target = sent;
+            patch((run) => withEntry(run, index, { target: sent }));
+          }
+
           // RN-SQL-024: cada comando (e o "Tentar de novo") manda os resultados das abas que o script já tem: a API continua guardando o que a edição deles
           // precisa. O primeiro comando de um script novo não manda nenhum, e a API esquece os do script de antes quando ele vai ao banco.
-          const result = await execute(connectionId, sentTextOf(target), started, undefined, !answered, scriptCommandRefusals, keptResultIds(script), queryParamsOf(target));
+          const result = await execute(connectionId, sentTextOf(target), started, undefined, !answered, scriptCommandRefusals, keptResultIds(script), queryParamsOf(target), journalInfo(target, "script", wasConfirmed, scriptRunID));
           // A aba foi solta (desconectar, fechar, trocar de banco, o bloqueio): `release` já parou o script.
           if (started !== epoch) return;
           // Cancelado antes de o comando sair (a sessão abria): nada dele rodou, e o executor já voltou ao que mostrava.
@@ -1681,7 +2054,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     getState: () => state,
     run,
     runScript,
-    runCommand: (target) => afterPausedScript(sends(target), () => runWith(target, "again", true).then(() => undefined)),
+    runCommand: (target, options) => afterPausedScript(sends(target), () => runWith(target, "again", true, { origin: "statement", confirmed: options?.confirmed }).then(() => undefined)),
     script: {
       subscribe: (listener) => {
         scriptListeners.add(listener);
@@ -1694,8 +2067,37 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         answer?.(choice);
       },
     },
-    transaction: { subscribe: transaction.subscribe, getState: transaction.getState, setMode, end, note: noteWire },
-    rerun: () => {
+    transaction: {
+      subscribe: transaction.subscribe,
+      getState: transaction.getState,
+      setMode,
+      setIsolationLevel: async (isolationLevel: IsolationLevel): Promise<boolean> => {
+        const current = transaction.getState();
+        if (current.isolationLevel === isolationLevel) return true;
+        if (retired || current.pending || isBusy()) return false;
+        const id = sessionId;
+        if (id === null) {
+          transaction.set({ isolationLevel });
+          return true;
+        }
+        const started = epoch;
+        transaction.set({ pending: true });
+        const changed = await call(() => changeTransactionMode(id, current.mode, isolationLevel), codes("DATABASE_SESSION_NOT_FOUND"));
+        if (started !== epoch) return false;
+        transaction.set({ pending: false });
+        if (changed.ok) return true;
+        if (changed.error.code === "DATABASE_SESSION_NOT_FOUND") {
+          sessionLost();
+          transaction.set({ isolationLevel });
+          return true;
+        }
+        if (changed.error.code === "TRANSACTIONS_NOT_AVAILABLE") transaction.set({ isolationLevel: "default", available: false });
+        return false;
+      },
+      end,
+      note: noteWire,
+    },
+    rerun: (options) => {
       // Com a execução automática em andamento, o resultado na tela é o de antes dela, e o comando dele é o que se executa de novo.
       const shownTarget = () => {
         const shown = state.status === "running" ? state.previous : state;
@@ -1704,7 +2106,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       const before = shownTarget();
       return afterPausedScript(before !== null && sends(before), async () => {
         const target = shownTarget();
-        if (target !== null) await runWith(target, "again");
+        if (target !== null) await runWith(target, "again", false, { origin: "rerun", confirmed: options?.confirmed });
       });
     },
     cancel,

@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Models;
+using Prism.Application.Connections.Models.Dtos;
 using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Core.Api.Models.Dtos;
@@ -30,18 +31,22 @@ public sealed record TestConnectionCommand : IRequest<UnitResult<ApiErrorDto>>
     public string UserName { get; init; } = string.Empty;
     public string? Password { get; init; }
     public string? VerificationQuery { get; init; }
+    public ConnectionSshInputDto? Ssh { get; init; }
+    public ConnectionSslSettings? Ssl { get; init; }
+    public ConnectionProxyInputDto? Proxy { get; init; }
 
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e esta é a senha do banco (e o host e o usuário vão junto).</summary>
     public override string ToString() => nameof(TestConnectionCommand);
 }
 
-internal sealed class TestConnectionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService) : IRequestHandler<TestConnectionCommand, UnitResult<ApiErrorDto>>
+internal sealed class TestConnectionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService, IUnsavedSecretsService? unsavedSecrets = null) : IRequestHandler<TestConnectionCommand, UnitResult<ApiErrorDto>>
 {
     public async Task<UnitResult<ApiErrorDto>> Handle(TestConnectionCommand request, CancellationToken cancellationToken)
     {
         // Lida ANTES de a senha guardada ser lida: o teste conecta fora do semáforo do cofre (a mesma regra da abertura de sessão).
         var generation = vaultService.Generation;
         var password = request.Password;
+        VaultConnectionRecord? record = null;
 
         // Sem senha no pedido o validator garante que há `ID`, e a senha é a do cofre. Cofre fechado é 401; só um sucesso com `null` é "não existe" (404).
         if (password is null)
@@ -51,23 +56,44 @@ internal sealed class TestConnectionHandler(IConnectionQueries connectionQueries
             if (read.IsFailure)
                 return UnitResult.Failure(VaultErrors.From(read.Error));
 
-            if (read.Value is not { } record)
+            if (read.Value is not { } existing)
                 return UnitResult.Failure(ConnectionErrors.NotFound(id));
 
             // RN-TRANSF-016: a conexão que a importação trouxe sem a senha (RN-TRANSF-015) não é testada com a senha vazia: a recusa diz, no campo da
             // senha, que é preciso informá-la. Vem antes da do servidor: sem senha gravada não há o que a RN-CONN-004 proteger, e a resposta que resolve é a mesma.
-            if (string.IsNullOrEmpty(record.Password))
+            if (string.IsNullOrEmpty(existing.Password))
                 return UnitResult.Failure(ConnectionErrors.CredentialsMissingToTest());
 
             // RN-CONN-013 com a RN-CONN-004: a senha gravada só vai ao servidor para o qual foi gravada. A recusa vem antes de qualquer conexão.
-            if (!ConnectionRules.SameServer(record.Host, record.Port, request.Host, request.Port))
+            if (!ConnectionRules.SameServer(existing.Host, existing.Port, request.Host, request.Port))
                 return UnitResult.Failure(ConnectionErrors.PasswordRequiredToTestOtherServer());
 
-            password = record.Password;
+            record = existing;
+            password = existing.Password;
+        }
+        else if (request.ID is { } existingId && (request.Ssh is { Secret: null or "" } || request.Proxy is { Password: null or "" }))
+        {
+            var read = await connectionQueries.GetRecordByID(existingId, cancellationToken);
+            if (read.IsSuccess)
+                record = read.Value;
         }
 
+        // RN-REDE-001 (a RN-CONN-013 no túnel e no proxy): o segredo gravado só vai ao servidor para o qual foi gravado. A recusa vem antes de qualquer conexão.
+        if (!ConnectionRules.SshSecretStaysOnItsServer(request.Ssh, record?.Ssh))
+            return UnitResult.Failure(ConnectionErrors.SshSecretRequiredForOtherServer());
+
+        if (!ConnectionRules.ProxyPasswordStaysOnItsServer(request.Proxy, record?.Proxy))
+            return UnitResult.Failure(ConnectionErrors.ProxyPasswordRequiredForOtherServer());
+
+        // RN-REDE-002 e 003: o segredo que a conexão não grava, digitado antes para o mesmo servidor, vale como o gravado. Sem nenhum, a recusa fica no campo dele.
+        var ssh = ConnectionRules.WithRemembered(ConnectionRules.NormalizeSsh(request.Ssh, record?.Ssh, forTest: true), record is null ? null : unsavedSecrets?.Ssh(record.ID));
+        var ssl = ConnectionRules.NormalizeSsl(request.Ssl);
+        var proxy = ConnectionRules.WithRemembered(ConnectionRules.NormalizeProxy(request.Proxy, record?.Proxy, forTest: true), record is null ? null : unsavedSecrets?.Proxy(record.ID));
+        if (ConnectionRules.MissingNetworkSecret(ssh, proxy) is { } secretField)
+            return UnitResult.Failure(ConnectionErrors.NetworkSecretMissingToTest(secretField));
+
         // Aparados como o domínio os grava (`Connection.Create`): testar e gravar o mesmo formulário conecta da mesma forma.
-        var settings = new ConnectionSettings(request.Engine, request.Host.Trim(), request.Port, request.Database.Trim(), request.UserName.Trim(), password);
+        var settings = new ConnectionSettings(request.Engine, request.Host.Trim(), request.Port, request.Database.Trim(), request.UserName.Trim(), password, Ssh: ssh, Ssl: ssl, Proxy: proxy);
         var tested = await databaseSessionService.TestAsync(settings, ConnectionRules.NormalizeVerificationQuery(request.VerificationQuery), cancellationToken);
         if (tested.IsFailure)
             return UnitResult.Failure(DatabaseSessionErrors.From(tested.Error));

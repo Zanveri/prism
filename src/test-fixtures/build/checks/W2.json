@@ -1,0 +1,128 @@
+{
+  "scope": "full",
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "manutencao",
+    "schemas": [
+      { "name": "manutencao", "create": true },
+      { "name": "producao", "create": false }
+    ],
+    "base": null,
+    "tables": [
+      {
+        "schema": "producao",
+        "name": "produto",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": "id",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": "produto_pkey", "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": {
+          "schema": "producao",
+          "name": "produto",
+          "exactName": false,
+          "comment": null,
+          "columns": [
+            {
+              "name": "id",
+              "exactName": false,
+              "originName": "id",
+              "type": "bigint",
+              "nullable": false,
+              "default": null,
+              "identity": "always",
+              "comment": null
+            }
+          ],
+          "primaryKey": { "name": "produto_pkey", "columns": ["id"] },
+          "uniques": [],
+          "checks": [],
+          "indexes": [],
+          "foreignKeys": []
+        },
+        "dropInDatabase": false
+      },
+      {
+        "schema": "manutencao",
+        "name": "peca_trocada",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          {
+            "name": "id",
+            "exactName": false,
+            "originName": null,
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "identity": "always",
+            "comment": null
+          },
+          {
+            "name": "produto_id",
+            "exactName": false,
+            "originName": null,
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": null,
+            "comment": null
+          }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [
+          {
+            "name": "ix_peca_trocada_produto",
+            "columns": ["produto_id"],
+            "unique": false
+          }
+        ],
+        "foreignKeys": [
+          {
+            "name": null,
+            "columns": ["produto_id"],
+            "target": { "schema": "producao", "table": "produto", "columns": ["id"] },
+            "onDelete": "noAction",
+            "onUpdate": "noAction"
+          }
+        ],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "problems": [
+    {
+      "code": "W2",
+      "severity": "warning",
+      "table": "manutencao.peca_trocada",
+      "column": "produto_id"
+    }
+  ]
+}

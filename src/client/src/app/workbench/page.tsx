@@ -13,6 +13,7 @@ import { releaseDbeaverSource, requestDbeaverSource } from "@/lib/api/bridge";
 import { vaultLock } from "@/lib/api/vault-lock";
 
 import { ConnectionCheckLabel } from "./_components/connection-check";
+import { NetworkSecretDialog } from "./_components/network-secret-dialog";
 import { FirstUse } from "./_components/first-use";
 import { StartHere } from "./_components/start-here";
 import { Navigator } from "./_components/navigator";
@@ -20,7 +21,8 @@ import { NavigatorToggle } from "./_components/navigator-toggle";
 import { ScriptsSection } from "./_components/scripts-section";
 import { connectionReveal } from "./_lib/connection-intent";
 import { keepsDialog, type ConnectionDialogOpen } from "./_lib/connection-dialog-state";
-import { credentialsRequests, watchCredentialsMissing } from "./_lib/credentials-missing";
+import { credentialsRequests, isNetworkSecretField, watchCredentialsMissing, type NetworkSecretField } from "./_lib/credentials-missing";
+import { reopenAfterSecret } from "./_lib/database-sessions.service";
 import { dbeaverEntry, inviteStep, startHerePhaseOf, type StartHerePhase } from "./_lib/dbeaver-entry";
 import { hideFocusTarget, navigatorShortcut, navigatorShortcutLabels } from "./_lib/navigator-layout";
 import { importedReveal, keepsTransfer, transferRequests, type TransferDialogOpen, type TransferRequest } from "./_lib/transfer-requests";
@@ -130,10 +132,19 @@ export function WorkbenchPage() {
   useEffect(() => () => credentialsRequests.clear(), []);
   const credentialsRequest = useSyncExternalStore(credentialsRequests.subscribe, credentialsRequests.pending, credentialsRequests.pending);
   const [answeredCredentials, setAnsweredCredentials] = useState(0);
+  // RN-REDE-006: o segredo do túnel ou do proxy que a conexão não grava é pedido num diálogo próprio, e não no "Editar conexão". Some no bloqueio, quando a
+  // área de trabalho sai da tela e quando a conexão sai da lista.
+  const [secret, setSecret] = useState<{ connectionId: string; field: NetworkSecretField; epoch: number } | null>(null);
+  if (secret !== null && (secret.epoch !== lockEpoch || !onScreen || connectionIds?.has(secret.connectionId) === false)) setSecret(null);
   if (credentialsRequest !== null && credentialsRequest.seq !== answeredCredentials && onScreen && connectionIds !== null) {
     setAnsweredCredentials(credentialsRequest.seq);
-    if (dialog === null && connectionIds.has(credentialsRequest.connectionId)) setDialog({ request: { mode: "edit", connectionId: credentialsRequest.connectionId }, epoch: lockEpoch });
+    const { connectionId, field } = credentialsRequest;
+    if (dialog === null && secret === null && connectionIds.has(connectionId)) {
+      if (isNetworkSecretField(field)) setSecret({ connectionId, field, epoch: lockEpoch });
+      else setDialog({ request: { mode: "edit", connectionId, missing: field }, epoch: lockEpoch });
+    }
   }
+  const secretConnection = secret === null ? undefined : connections.data?.find((connection) => connection.id === secret.connectionId);
   useEffect(() => {
     if (answeredCredentials !== 0) credentialsRequests.take(answeredCredentials);
   }, [answeredCredentials]);
@@ -262,7 +273,7 @@ export function WorkbenchPage() {
 
   const editingId = dialog?.request.mode === "edit" ? dialog.request.connectionId : null;
   const editing = editingId === null ? undefined : connections.data?.find((connection) => connection.id === editingId);
-  const dialogRequest = dialog === null ? null : dialog.request.mode === "new" ? dialog.request : editing === undefined ? null : ({ mode: "edit", connection: editing } as const);
+  const dialogRequest = dialog === null ? null : dialog.request.mode === "new" ? dialog.request : editing === undefined ? null : ({ mode: "edit", connection: editing, missing: dialog.request.missing } as const);
 
   return (
     // RN-CONFIG-009: a área de trabalho inteira na escala do canvas, 13/20 (`text-sm`), aqui e só aqui; quem tem tamanho próprio (o editor, a grade, as
@@ -349,6 +360,21 @@ export function WorkbenchPage() {
           }}
         />
       ) : null}
+
+      {secret === null || secretConnection === undefined ? null : (
+        <NetworkSecretDialog
+          key={`${secret.connectionId}:${secret.field}`}
+          connection={secretConnection}
+          field={secret.field}
+          onConnected={() => {
+            setSecret(null);
+            // A árvore que pediu conecta de novo, agora com o segredo na memória da API, e a busca também. A aba e a barra do editor repetem quando a pessoa pedir.
+            void reopenAfterSecret(queryClient, secret.connectionId);
+          }}
+          onMissing={(field) => setSecret({ ...secret, field })}
+          onClose={() => setSecret(null)}
+        />
+      )}
 
       {dialogRequest === null ? null : (
         <ConnectionDialog

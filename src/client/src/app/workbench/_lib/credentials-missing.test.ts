@@ -6,7 +6,7 @@ import { ApiRequestError, type ApiError } from "@/lib/api/prism-api";
 import { createCredentialsRequests, credentialsHint, credentialsMissingCode, credentialsMissingField, missingCredentials, watchCredentialsMissing } from "./credentials-missing";
 
 // A recusa de abrir a sessão da conexão sem usuário ou sem senha (RN-TRANSF-016): 422 no campo que falta, na forma do erro de campo.
-const refusal = (field: "userName" | "password"): ApiError => ({
+const refusal = (field: "userName" | "password" | "sshSecret" | "proxyPassword"): ApiError => ({
   status: 422,
   code: credentialsMissingCode,
   title: "Faltam o usuário ou a senha da conexão.",
@@ -20,6 +20,11 @@ describe("credentialsMissingField: o campo que falta, na recusa (RN-TRANSF-016)"
     expect(credentialsMissingField(refusal("userName"))).toBe("userName");
     expect(credentialsMissingField(refusal("password"))).toBe("password");
     expect(credentialsMissingField(new ApiRequestError(refusal("userName")))).toBe("userName");
+  });
+
+  it("o segredo do túnel SSH ou do proxy que a conexão não grava é o campo dele, e não a senha do banco", () => {
+    expect(credentialsMissingField(refusal("sshSecret"))).toBe("sshSecret");
+    expect(credentialsMissingField(refusal("proxyPassword"))).toBe("proxyPassword");
   });
 
   it("outra recusa, ou o que não é recusa da API, não é esta", () => {
@@ -49,19 +54,19 @@ describe("createCredentialsRequests: o pedido de abrir o “Editar conexão”",
     const listener = vi.fn();
     const unsubscribe = requests.subscribe(listener);
 
-    requests.request("c1");
+    requests.request("c1", "password");
     const first = requests.pending();
-    expect(first).toEqual({ connectionId: "c1", seq: 1 });
+    expect(first).toEqual({ connectionId: "c1", field: "password", seq: 1 });
     expect(requests.pending()).toBe(first);
 
-    requests.request("c2");
+    requests.request("c2", "sshSecret");
     requests.take(1);
-    expect(requests.pending()).toEqual({ connectionId: "c2", seq: 2 });
+    expect(requests.pending()).toEqual({ connectionId: "c2", field: "sshSecret", seq: 2 });
     requests.take(2);
     expect(requests.pending()).toBeNull();
     expect(listener).toHaveBeenCalledTimes(3);
 
-    requests.request("c3");
+    requests.request("c3", "userName");
     requests.clear();
     expect(requests.pending()).toBeNull();
     unsubscribe();
@@ -87,7 +92,7 @@ describe("watchCredentialsMissing: as sessões da árvore no cache (RN-TRANSF-01
     const stop = watchCredentialsMissing(queryClient, requests);
 
     await failSession(queryClient, ["database-session", "c1"], new ApiRequestError(refusal("userName")));
-    expect(requests.pending()).toMatchObject({ connectionId: "c1" });
+    expect(requests.pending()).toMatchObject({ connectionId: "c1", field: "userName" });
 
     await failSession(queryClient, ["database-session", "c2", { database: "outro" }], new ApiRequestError(refusal("password")));
     expect(requests.pending()).toMatchObject({ connectionId: "c2" });

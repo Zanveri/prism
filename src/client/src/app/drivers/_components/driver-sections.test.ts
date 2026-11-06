@@ -52,22 +52,22 @@ describe("a lista agrupada (item B)", () => {
     expect(renderList([driver("a", { state: "comingSoon" })]).match(/<h3/g)).toHaveLength(1);
   });
 
-  it("cada linha traz o nome, o fabricante, as etiquetas dos bancos, a versão e o tamanho em MB", () => {
+  it("cada linha traz o nome, o fabricante, as logos dos bancos, a versão e o tamanho em MB", () => {
     const markup = renderRow(driver("ibm", { name: "IBM Data Server", vendor: "IBM", engines: [2, 3], version: "12.1.3", sizeBytes: 115343360 }));
 
     expect(markup).toContain("IBM Data Server");
     expect(markup).toContain(">IBM<");
-    expect(markup).toContain(">DB2<");
-    expect(markup).toContain(">IFX<");
-    expect(markup).not.toContain(">PG<");
+    expect(markup).toContain('alt="DB2"');
+    expect(markup).toContain('alt="IFX"');
+    expect(markup).not.toContain('alt="PG"');
     expect(markup).toContain("12.1.3");
     expect(markup).toContain("110 MB");
   });
 
-  it("o PostgreSQL embutido leva a etiqueta PG e não tem tamanho a mostrar", () => {
+  it("o PostgreSQL embutido leva a logo PG e não tem tamanho a mostrar", () => {
     const markup = renderRow(all[3]);
 
-    expect(markup).toContain(">PG<");
+    expect(markup).toContain('alt="PG"');
     expect(markup).toContain("10.0.3");
     expect(markup).not.toContain("MB");
   });
@@ -87,7 +87,7 @@ describe("a lista agrupada (item B)", () => {
   });
 
   it("o texto que vem da API nunca vira HTML", () => {
-    const markup = renderRow(driver("x", { name: "<img src=x onerror=alert(1)>", vendor: "<b>IBM</b>", platformNote: "<script>1</script>", state: "unavailable" }));
+    const markup = renderRow(driver("x", { name: "<img src=x onerror=alert(1)>", vendor: "<b>IBM</b>", engines: [], platformNote: "<script>1</script>", state: "unavailable" }));
 
     expect(markup).not.toContain("<img");
     expect(markup).not.toContain("<script");

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FromInvalid" xml:space="preserve">
+    <value>The filter start date is not valid.</value>
+  </data>
+  <data name="ToInvalid" xml:space="preserve">
+    <value>The filter end date is not valid.</value>
+  </data>
+  <data name="DateOrderInvalid" xml:space="preserve">
+    <value>The start date cannot be later than the end date.</value>
+  </data>
+  <data name="ConnectionIdInvalid" xml:space="preserve">
+    <value>The connection identifier is not valid.</value>
+  </data>
+  <data name="LevelInvalid" xml:space="preserve">
+    <value>The danger level provided is not valid.</value>
+  </data>
+  <data name="KindInvalid" xml:space="preserve">
+    <value>The record type provided is not valid.</value>
+  </data>
+  <data name="OutcomeInvalid" xml:space="preserve">
+    <value>The result provided is not valid.</value>
+  </data>
+  <data name="ScriptRunInvalid" xml:space="preserve">
+    <value>The script run identifier is not valid.</value>
+  </data>
+  <data name="CursorInvalid" xml:space="preserve">
+    <value>The pagination cursor must be positive.</value>
+  </data>
+  <data name="LimitInvalid" xml:space="preserve">
+    <value>The audit limit must be between 1 and 500.</value>
+  </data>
+</root>

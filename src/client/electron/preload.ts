@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import { versionFromArgv, windowIdFromArgv } from "./app-version";
+import { localeFromArgv, type Locale } from "./locale";
 import type { DbeaverReleaseRequest, DbeaverSourceRequest } from "./dbeaver-messages";
 import type { ResultWindowFocus, ResultWindowNamed, ResultWindowRequest, ResultWindowTitle } from "./result-window-messages";
 import type { ChooseSourceRequest, CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest, SourceRequest } from "./transfer-messages";
@@ -22,6 +23,10 @@ export type PrismBridge = {
   restartApi(): Promise<void>;
   /** O `version` do `package.json`, como o processo principal a pôs na janela (`app-version.ts`). Vazia se não veio. */
   version: string;
+  /** O idioma desta janela (`locale.ts`), como o processo principal o pôs nela. */
+  locale: Locale;
+  /** Grava o idioma da próxima abertura (`prism:locale-set`); o desta continua até fechar. */
+  setLocale(locale: Locale): Promise<unknown>;
   /**
    * A pasta de dados em uso (os cofres e o log da API), como o processo principal a diz: um caminho absoluto, só para a tela mostrar. Não há como abrir
    * nem escolher pasta por aqui. `null` onde não há processo principal (a tela aberta fora do Electron).
@@ -249,6 +254,8 @@ const bridge: PrismBridge = {
     await askForApi("prism:api-restart");
   },
   version: versionFromArgv(process.argv),
+  locale: localeFromArgv(process.argv),
+  setLocale: (locale) => ipcRenderer.invoke("prism:locale-set", locale),
   getDataFolder: () => ipcRenderer.invoke("prism:data-folder"),
   updates: {
     getState: () => ipcRenderer.invoke("prism:update-state"),

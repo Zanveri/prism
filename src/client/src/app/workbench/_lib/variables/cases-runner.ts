@@ -10,6 +10,7 @@ import { editorOffset } from "./positions";
 import { sentSql } from "./sent-sql";
 import { readScript } from "./script";
 import { typeLabel, type Value } from "./values";
+import { columnsFromWire } from "./wire";
 import { numberText } from "./values";
 
 /*
@@ -35,6 +36,8 @@ export type Case = {
   /** Os milissegundos que o relógio falso anda a cada leitura (os casos dos 250 ms e dos 5 s). */
   clockStep?: number;
   now?: string;
+  /** O que o catálogo leu de cada coluna citada (RN-VAR-004), como vai ao Worker: `{ text, type }` ou `{ text, error }`. Sem ele, nenhuma foi lida. */
+  columns?: unknown[];
   [extra: string]: unknown;
 };
 
@@ -84,7 +87,7 @@ export type Outcome = { value: unknown; type: string; exact?: string } | { error
 export function evaluateCase(c: Case): Outcome {
   const model = readScript(inputOf(c), c.engine ?? undefined, { blankLines: true });
   let ticks = 0;
-  const config = { engine: c.engine ?? undefined, random: new Random((c.seed ?? [1, 2, 3, 4]) as Seed), clock: () => (ticks += c.clockStep ?? 0), now: () => testNow(typeof c.now === "string" ? c.now : undefined) };
+  const config = { engine: c.engine ?? undefined, random: new Random((c.seed ?? [1, 2, 3, 4]) as Seed), clock: () => (ticks += c.clockStep ?? 0), now: () => testNow(typeof c.now === "string" ? c.now : undefined), ...(c.columns === undefined ? {} : { columns: columnsFromWire(c.columns) }) };
   const report = evaluateScript(model, config);
 
   const first = report.checkErrors[0];

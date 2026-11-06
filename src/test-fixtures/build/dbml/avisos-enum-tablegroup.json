@@ -1,0 +1,62 @@
+{
+  "dbml": "Project erp {\n  database_type: 'MySQL'\n}\n\nEnum status_pedido {\n  aberto\n  fechado\n}\n\nTable public.pedido as P {\n  id bigint [pk, increment]\n  codigo varchar(20) [not null]\n\n  Indexes {\n    (`lower(codigo)`)\n  }\n}\n\nTableGroup vendas {\n  public.pedido\n}",
+  "before": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "model": {
+    "version": 1,
+    "engine": "postgresql",
+    "defaultSchema": "public",
+    "schemas": [{ "name": "public", "create": false }],
+    "base": null,
+    "tables": [
+      {
+        "schema": "public",
+        "name": "pedido",
+        "exactName": false,
+        "comment": null,
+        "columns": [
+          { "name": "id", "exactName": false, "originName": null, "type": "bigint", "nullable": false, "default": null, "identity": "always", "comment": null },
+          { "name": "codigo", "exactName": false, "originName": null, "type": "varchar(20)", "nullable": false, "default": null, "identity": null, "comment": null }
+        ],
+        "primaryKey": { "name": null, "columns": ["id"] },
+        "uniques": [],
+        "checks": [],
+        "indexes": [],
+        "foreignKeys": [],
+        "origin": null,
+        "dropInDatabase": false
+      }
+    ],
+    "layout": {},
+    "ddl": {
+      "scope": null,
+      "constraintNames": true,
+      "comments": true,
+      "foreignKeysAtEnd": false,
+      "dropNewFirst": false
+    },
+    "ignoredWarnings": []
+  },
+  "warnings": [
+    { "line": 2, "message": "linha 2: database_type 'MySQL' ignorado" },
+    { "line": 5, "message": "linha 5: Enum ignorado" },
+    { "line": 10, "message": "linha 10: alias de tabela ignorado" },
+    { "line": 15, "message": "linha 15: índice por expressão ignorado" },
+    { "line": 19, "message": "linha 19: TableGroup ignorado" }
+  ]
+}

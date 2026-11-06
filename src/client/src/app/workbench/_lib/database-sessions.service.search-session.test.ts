@@ -1,7 +1,7 @@
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { databaseSessionKey, databaseSessionQuery, objectNamesKey, openSessionForSearch, treeKey } from "./database-sessions.service";
+import { databaseSessionKey, databaseSessionQuery, objectNamesKey, openSessionForSearch, reopenAfterSecret, treeKey } from "./database-sessions.service";
 
 // "Buscar nelas também" (RN-BUSCA-002): abrir a sessão da árvore de uma conexão de fora, sem abrir o nó. A API é trocada; o cache é o de verdade.
 const api = vi.hoisted(() => ({ request: vi.fn() }));
@@ -22,6 +22,47 @@ beforeEach(() => {
   api.request.mockImplementation((_path: string, options?: { method?: string }) =>
     options?.method === "POST" ? Promise.resolve({ ok: true, data: { id: `sessao-${++opened}`, database: "loja" } }) : Promise.resolve({ ok: true, data: [] }),
   );
+});
+
+describe("reopenAfterSecret (RN-REDE-006)", () => {
+  const missing = { ok: false, error: { status: 422, code: "CONNECTION_CREDENTIALS_MISSING", title: "Conexão sem usuário ou sem senha.", detail: null, errors: { sshSecret: ["Informe a frase."] }, extensions: {} } };
+  const refuseOnce = () => api.request.mockImplementationOnce(() => Promise.resolve(missing));
+
+  it("a sessão que o 'Buscar nelas também' pediu abre de novo, mesmo com o observador desabilitado da árvore (o nó fechado)", async () => {
+    const unsubscribe = new QueryObserver(queryClient, { ...databaseSessionQuery("c1"), enabled: false }).subscribe(() => undefined);
+    refuseOnce();
+    expect(await openSessionForSearch(queryClient, "c1")).toBe(false);
+
+    await reopenAfterSecret(queryClient, "c1");
+
+    expect(posts()).toHaveLength(2);
+    expect(queryClient.getQueryData(databaseSessionKey("c1"))).toEqual({ id: "sessao-1", database: "loja" });
+    unsubscribe();
+  });
+
+  it("o nó aberto que pediu abre UMA sessão, e a sessão de outro banco que já tem dado não é refeita", async () => {
+    queryClient.setQueryData(databaseSessionKey("c1", "outro"), { id: "sessao-antiga", database: "outro" });
+    const other = new QueryObserver(queryClient, databaseSessionQuery("c1", "outro")).subscribe(() => undefined);
+    refuseOnce();
+    const tree = new QueryObserver(queryClient, databaseSessionQuery("c1")).subscribe(() => undefined);
+    await vi.waitFor(() => expect(queryClient.getQueryState(databaseSessionKey("c1"))?.status).toBe("error"));
+
+    await reopenAfterSecret(queryClient, "c1");
+
+    expect(posts()).toEqual([
+      { path: "api/user/database-sessions", method: "POST", body: { connectionID: "c1" } },
+      { path: "api/user/database-sessions", method: "POST", body: { connectionID: "c1" } },
+    ]);
+    expect(queryClient.getQueryData(databaseSessionKey("c1", "outro"))).toEqual({ id: "sessao-antiga", database: "outro" });
+    tree();
+    other();
+  });
+
+  it("sem recusa, nada é pedido: a aba que pediu repete quando a pessoa pedir", async () => {
+    await reopenAfterSecret(queryClient, "c1");
+
+    expect(posts()).toEqual([]);
+  });
 });
 
 describe("openSessionForSearch", () => {

@@ -120,4 +120,20 @@ describe("o Commit manual da aba (RN-TX-001 a 008)", () => {
     expect(api.calls.at(-1)).toEqual({ method: "PATCH", path: sessions, body: { id: "s1", transactionMode: "autoCommit" } });
     expect(runner.transaction.getState()).toMatchObject({ mode: "manual", open: true, pending: false });
   });
+
+  it("o nível de isolamento vai na abertura da sessão (quando não é o padrão) e na troca pela API (RN-ISOL-002 a 004)", async () => {
+    const { api, runner } = setup();
+    expect(await runner.transaction.setIsolationLevel("serializable")).toBe(true);
+    api.on(`POST ${sessions}`, json({ id: "s1", database: "mes", transaction: { ...manual(0), mode: "autoCommit", isolationLevel: "serializable" }, transactionsAvailable: true }, 201));
+    api.on(`POST ${sessions}/s1/queries`, affected(1, { ...manual(0), mode: "autoCommit", isolationLevel: "serializable" }));
+
+    await runner.run({ sql: "update t set a = 1", offset: 0 });
+    expect(api.calls[0]).toEqual({ method: "POST", path: sessions, body: { connectionID: "c1", isolationLevel: "serializable" } });
+    expect(runner.transaction.getState().isolationLevel).toBe("serializable");
+
+    api.on(`PATCH ${sessions}`, json({ id: "s1", database: "mes", transaction: { ...manual(0), mode: "autoCommit", isolationLevel: "readCommitted" }, transactionsAvailable: true }));
+    expect(await runner.transaction.setIsolationLevel("readCommitted")).toBe(true);
+    expect(api.calls.at(-1)).toEqual({ method: "PATCH", path: sessions, body: { id: "s1", transactionMode: "autoCommit", isolationLevel: "readCommitted" } });
+    expect(runner.transaction.getState().isolationLevel).toBe("readCommitted");
+  });
 });

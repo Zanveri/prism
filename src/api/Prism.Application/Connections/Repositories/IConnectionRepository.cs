@@ -46,4 +46,11 @@ internal interface IConnectionRepository
 
     /// <summary>Falha com 404 `CONNECTION_NOT_FOUND` quando a conexão não existe.</summary>
     Task<UnitResult<ApiErrorDto>> Delete(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-REDE-005: grava a impressão digital da chave que o servidor SSH apresentou no primeiro acesso, só se a conexão ainda leva o túnel ao mesmo servidor (o
+    /// mesmo host e a mesma porta) e continua sem impressão digital e sem "Ignorar verificação de host": outra janela pode tê-la alterado enquanto a sessão abria.
+    /// Fora disso nada é gravado, e não é recusa.
+    /// </summary>
+    Task<UnitResult<ApiErrorDto>> TrustHostKey(Guid id, string sshHost, int sshPort, string fingerprint, CancellationToken cancellationToken);
 }

@@ -1,7 +1,10 @@
 import type { InstallFormat } from "../../../electron/update/packages";
+import { pickCopy, type Localized } from "@/lib/i18n";
+import { updateCopyEn } from "./update.copy.en";
+import { updateCopyEs } from "./update.copy.es";
 
 /** Os textos das atualizações, num lugar só (seção 17 da especificação: RN-ATUALIZA-002, 003, 006 e 009). */
-export const updateCopy = {
+const pt = {
   check: "Verificar atualizações",
   checking: "Verificando…",
   version: (version: string) => `versão ${version}`,
@@ -102,3 +105,6 @@ export const updateCopy = {
     nsis: "Feche o Prism e abra o instalador.",
   } satisfies Record<InstallFormat, string>,
 } as const;
+
+export type UpdateCopy = Localized<typeof pt>;
+export const updateCopy = pickCopy({ "pt-BR": pt, en: updateCopyEn, es: updateCopyEs });

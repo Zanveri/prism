@@ -1,4 +1,6 @@
 using FluentValidation;
+using Prism.Core.Extensions;
+using System.Resources;
 
 namespace Prism.Application.Users.Models;
 
@@ -9,6 +11,9 @@ namespace Prism.Application.Users.Models;
 /// </summary>
 internal static class UserPasswordRules
 {
+    /// <summary>Os textos, no idioma do pedido: <c>UserPasswordRules.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(UserPasswordRules));
+
     public static IRuleBuilderOptions<T, string> MustBeAValidPassword<T>(this IRuleBuilder<T, string> rule)
-        => rule.Must(password => password is { Length: >= 8 and <= 128 }).WithMessage("A senha deve ter de 8 a 128 caracteres.").WithErrorCode("PASSWORD_INVALID");
+        => rule.Must(password => password is { Length: >= 8 and <= 128 }).WithMessage(_ => Texts.Get("PasswordInvalid")).WithErrorCode("PASSWORD_INVALID");
 }

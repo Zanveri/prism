@@ -3,6 +3,11 @@ import { formatCount } from "@/lib/utils/format";
 import { gridSelectionCopy } from "../grid-selection.copy";
 import { recordsCopy } from "../records.copy";
 
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { generateSqlCopyEn } from "./generate-sql.copy.en";
+import { generateSqlCopyEs } from "./generate-sql.copy.es";
+
 /** O número como a tela o escreve (`1.234`). */
 const number = (count: number) => count.toLocaleString("pt-BR");
 
@@ -10,7 +15,7 @@ const number = (count: number) => count.toLocaleString("pt-BR");
  * Os textos do "Gerar SQL" (RN-GRADE-006 e 018 a 020), num lugar só. Os comentários do SQL são frases FIXAS e números: nenhum dado do banco (nome de
  * coluna, valor) entra num comentário, porque uma quebra de linha dentro de um `--` o encerra e o que vem depois passa a ser código.
  */
-export const generateSqlCopy = {
+const pt = {
   /** Os seis itens do submenu, na ordem do print do dono (RN-GRADE-006): os do menu da grade (`gridSelectionCopy.menu`, que os desenha). */
   items: gridSelectionCopy.menu.sql,
   menu: gridSelectionCopy.menu.generateSql,
@@ -96,3 +101,6 @@ export const generateSqlCopy = {
     readOnly: "A conexão é somente leitura: o SQL que grava será recusado nela.",
   },
 };
+
+export type GenerateSqlCopy = Localized<typeof pt>;
+export const generateSqlCopy = pickCopy({ "pt-BR": pt, en: generateSqlCopyEn, es: generateSqlCopyEs });

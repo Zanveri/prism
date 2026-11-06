@@ -1,3 +1,4 @@
+import { locale } from "@/lib/i18n";
 import { engineOption, type Confirmation } from "./connections.schema";
 import { checkTree, foldersInFile, markedLeaves, type CheckNode, type CheckTree } from "./check-tree";
 import type { ConflictPolicy, ImportPreview, ImportResult, PreviewConnection, PreviewFolder } from "./transfer.schema";
@@ -17,9 +18,9 @@ export const importFileMaxBytes = 5 * 1024 * 1024;
 
 /** O tamanho do arquivo escolhido, ao lado do nome ("14 KB"). */
 export function fileSizeLabel(bytes: number): string {
-  if (bytes < 1024) return `${bytes.toLocaleString("pt-BR")} ${bytes === 1 ? "byte" : "bytes"}`;
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString("pt-BR")} KB`;
-  return `${(bytes / (1024 * 1024)).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+  if (bytes < 1024) return `${bytes.toLocaleString(locale)} ${bytes === 1 ? "byte" : "bytes"}`;
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString(locale)} KB`;
+  return `${(bytes / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 1 })} MB`;
 }
 
 /** O nome que se vê de um item do arquivo (o do item que não pode ser importado pode faltar). */
@@ -66,15 +67,27 @@ export function previewSummary(preview: ImportPreview): string {
     connections: preview.connections.length,
     folders: preview.folders.length,
     withUser: preview.connections.filter((connection) => connection.userName !== "").length,
-    withPassword: preview.connections.filter((connection) => connection.hasPassword).length,
+    withPassword: preview.connections.filter((connection) => connection.hasPassword || connection.ssh?.hasSecret === true || connection.proxy?.hasPassword === true).length,
   });
 }
 
-/** A segunda linha da conexão: o servidor e as credenciais ("informix-prd.exemplo.invalid:9089 / estoque · usuário datafix · com senha"). A senha nunca. */
+/**
+ * A segunda linha da conexão: o servidor, as credenciais e, quando há, o túnel, o SSL e o proxy (RN-REDE-004): "informix-prd.exemplo.invalid:9089 / estoque ·
+ * usuário datafix · com senha · via SSH ops@bastion:22 · SSL verify-full". A senha nunca.
+ */
 export function connectionLine(connection: PreviewConnection): string {
   const address = copy.preview.address(connection.host ?? "", connection.port === null ? "" : String(connection.port), connection.database ?? "");
-  if (connection.userName === "") return `${address} · ${copy.preview.noCredentials}`;
-  return `${address} · ${copy.preview.user(connection.userName)} · ${connection.hasPassword ? copy.preview.withPassword : copy.preview.withoutPassword}`;
+  const credentials = connection.userName === "" ? copy.preview.noCredentials : `${copy.preview.user(connection.userName)} · ${connection.hasPassword ? copy.preview.withPassword : copy.preview.withoutPassword}`;
+  return [address, credentials, ...networkParts(connection)].join(" · ");
+}
+
+/** O túnel, o SSL e o proxy que a conexão leva, nessa ordem, para o fim da segunda linha (RN-REDE-004 e 008); sem nenhum, nada. */
+export function networkParts(connection: Pick<PreviewConnection, "ssh" | "ssl" | "proxy">): string[] {
+  return [
+    connection.ssh === null ? null : copy.preview.ssh(`${connection.ssh.userName}@${connection.ssh.host}:${connection.ssh.port}`),
+    connection.ssl === null ? null : copy.preview.ssl(connection.ssl.sslMode),
+    connection.proxy === null ? null : copy.preview.proxy(`${connection.proxy.userName === null ? "" : `${connection.proxy.userName}@`}${connection.proxy.host}:${connection.proxy.port}`),
+  ].filter((part) => part !== null);
 }
 
 /** Uma marca à direita da linha, com a explicação na dica (RN-TRANSF-011). `tone` diz a cor: o que não entra, o que muda, ou só informação. */

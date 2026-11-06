@@ -98,13 +98,13 @@ public sealed class ScriptsTests
         var id = body.GetProperty("id").GetGuid();
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
         Assert.That(response.Headers.Location?.ToString(), Is.EqualTo($"{ScriptsPath}/{id}"));
-        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "updatedAt" }));
+        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "declaresVariables", "updatedAt" }));
         Assert.That(body.GetProperty("name").GetString(), Is.EqualTo("Fechamento do mês"));
         Assert.That(body.GetProperty("connectionID").GetGuid(), Is.EqualTo(connectionID));
         Assert.That(body.GetProperty("database").GetString(), Is.EqualTo("vendas"));
         var listed = await ListAsync(host);
         Assert.That(listed, Has.Count.EqualTo(1));
-        Assert.That(listed[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "updatedAt" }));
+        Assert.That(listed[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "declaresVariables", "updatedAt" }));
         Assert.That(listed[0].GetProperty("id").GetGuid(), Is.EqualTo(id));
     }
 
@@ -116,7 +116,7 @@ public sealed class ScriptsTests
 
         var body = await GetAsync(host, id);
 
-        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "sql", "updatedAt" }));
+        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "sql", "runValues", "updatedAt" }));
         Assert.That(body.GetProperty("sql").GetString(), Is.EqualTo("SELECT *\n  FROM pedidos;\n"));
         Assert.That(body.GetProperty("connectionID").ValueKind, Is.EqualTo(JsonValueKind.Null));
         Assert.That(body.GetProperty("database").ValueKind, Is.EqualTo(JsonValueKind.Null));

@@ -1,7 +1,10 @@
 using CSharpFunctionalExtensions;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Journal.Models;
+using Prism.Infrastructure.Journal.Services;
 using Prism.Infrastructure.Transfers.Clients;
+using Prism.Infrastructure.Transfers.Imports;
 using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Transfers.Writers;
 using Prism.Infrastructure.Vault.Services;
@@ -26,13 +29,6 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     /// <summary>RN-EXPORT-014: o limite da área de transferência, em bytes de UTF-8 do texto.</summary>
     internal const long ClipboardLimit = 10L * 1024 * 1024;
 
-    private const string ColumnsChangedMessage = "As colunas do resultado mudaram desde a grade. Execute o comando de novo e exporte outra vez.";
-    private const string StalledMessage = "O banco ficou 2 horas sem responder, e a exportação foi encerrada.";
-    private const string ImportStalledMessage = "O banco ficou 2 horas sem responder, e a importação foi encerrada.";
-    private const string CopyStalledMessage = "O banco ficou 2 horas sem responder, e a cópia foi encerrada.";
-    private const string ClipboardTooLargeMessage = "O texto passou de 10 MiB, o limite da área de transferência. Exporte para um arquivo.";
-    private const string DiskFullMessage = "Não há espaço em disco para o arquivo temporário da exportação, na pasta de dados do Prism.";
-
     private readonly Dictionary<EDatabaseEngine, IDatabaseClient> _clients;
     private readonly ITransferFileClient _files;
     private readonly IImportFileClient _importFiles;
@@ -40,6 +36,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     private readonly TransferSettings _settings;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger _logger;
+    private readonly IJournalRecorder? _journal;
     private readonly ITimer _watch;
 
     /// <summary>Toda leitura e toda mudança de estado de um trabalho passam por esta trava; a leitura do banco e a escrita do arquivo, não.</summary>
@@ -47,7 +44,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
 
     private readonly Dictionary<Guid, Transfer> _transfers = [];
 
-    public TransferService(IEnumerable<IDatabaseClient> clients, ITransferFileClient files, IImportFileClient importFiles, IVaultService vault, TransferSettings settings, TimeProvider timeProvider, ILogger logger)
+    public TransferService(IEnumerable<IDatabaseClient> clients, ITransferFileClient files, IImportFileClient importFiles, IVaultService vault, TransferSettings settings, TimeProvider timeProvider, ILogger logger, IJournalRecorder? journal = null)
     {
         _clients = clients.ToDictionary(client => client.Engine);
         _files = files;
@@ -56,6 +53,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         _settings = settings;
         _timeProvider = timeProvider;
         _logger = logger.ForContext<TransferService>();
+        _journal = journal;
 
         // RN-EXPORT-018: a partida apaga o que sobrou na pasta `transfers` de uma execução que caiu; nenhum trabalho atravessa uma partida.
         _files.Prepare();
@@ -79,7 +77,10 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             if (_transfers.Values.Count(running => running.State == ETransferState.Running) >= _settings.Limit)
                 return ETransferStartFailure.LimitReached;
 
-            transfer = new Transfer(Guid.CreateVersion7(), ETransferKind.Export, job.ConnectionID, job.WindowID, job.VaultGeneration, _timeProvider.GetUtcNow(), now);
+            transfer = new Transfer(Guid.CreateVersion7(), ETransferKind.Export, job.ConnectionID, job.WindowID, job.VaultGeneration, _timeProvider.GetUtcNow(), now)
+            {
+                JournalEntryID = job.JournalEntryID
+            };
             _transfers[transfer.ID] = transfer;
             transfer.Task = Task.Run(() => RunExportAsync(transfer, job));
         }
@@ -103,7 +104,8 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             {
                 TargetConnectionID = job.ConnectionID,
                 Target = (job.Settings, job.Schema, job.Table),
-                Committed = 0
+                Committed = 0,
+                JournalEntryID = job.JournalEntryID
             };
 
             // RN-IMPORT-014: a API toma o arquivo; dali em diante ele é do trabalho. O que sumiu antes da troca (o processo principal o soltou) é 404, e o
@@ -142,7 +144,8 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             {
                 TargetConnectionID = job.TargetConnectionID,
                 Target = (job.TargetSettings, job.Schema, job.Table),
-                Committed = 0
+                Committed = 0,
+                JournalEntryID = job.JournalEntryID
             };
 
             _transfers[transfer.ID] = transfer;
@@ -361,7 +364,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
                 else if (transfer.State == ETransferState.Running && _timeProvider.GetElapsedTime(transfer.LastProgress) >= _settings.StallAfter)
                 {
                     transfer.Uncertain = transfer.InDoubt;
-                    End(transfer, ETransferState.Failed, StalledFailure(transfer.Kind), null);
+                    End(transfer, ETransferState.Failed, StalledFailure(transfer), null);
                     stalled.Add(transfer);
                 }
             }
@@ -381,12 +384,13 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     }
 
     /// <summary>RN-EXPORT-016 e RN-IMPORT-014: a falta de progresso, com o código e a frase de cada tipo de trabalho.</summary>
-    private static TransferFailure StalledFailure(ETransferKind kind)
-        => kind switch
+    /// A frase sai no idioma do pedido que criou o trabalho (<see cref="Transfer.Culture"/>): o temporizador que confere o registro não é um pedido.
+    private static TransferFailure StalledFailure(Transfer transfer)
+        => transfer.Kind switch
         {
-            ETransferKind.Export => new TransferFailure(ETransferError.Stalled, StalledMessage),
-            ETransferKind.Import => new TransferFailure(ETransferError.ImportStalled, ImportStalledMessage) { Side = ETransferSide.Target },
-            _ => new TransferFailure(ETransferError.ImportStalled, CopyStalledMessage)
+            ETransferKind.Export => new TransferFailure(ETransferError.Stalled, TransferMessages.SayIn(transfer.Culture, "StalledExport")),
+            ETransferKind.Import => new TransferFailure(ETransferError.ImportStalled, TransferMessages.SayIn(transfer.Culture, "StalledImport")) { Side = ETransferSide.Target },
+            _ => new TransferFailure(ETransferError.ImportStalled, TransferMessages.SayIn(transfer.Culture, "StalledCopy"))
         };
 
     /// <summary>
@@ -443,7 +447,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         var columns = started.Value;
         IReadOnlyList<int> ordinals = job.CheckColumns ? [.. job.Columns.Select(column => column.Position)] : [.. Enumerable.Range(0, columns.Count)];
         if (columns.Count == 0 || (job.CheckColumns && job.Columns.Any(column => column.Position >= columns.Count || columns[column.Position].Name != column.Name)))
-            return (null, new TransferFailure(ETransferError.ColumnsChanged, ColumnsChangedMessage), null);
+            return (null, new TransferFailure(ETransferError.ColumnsChanged, TransferMessages.Say("ColumnsChangedExport")), null);
 
         var written = ordinals.Select(ordinal => new ExportColumn(columns[ordinal].Name, columns[ordinal].Type, columns[ordinal].Kind)).ToList();
         var skipped = job.Options.Binary == EExportBinary.Null ? ordinals.Where(ordinal => columns[ordinal].Kind == "binary").ToHashSet() : [];
@@ -479,7 +483,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             Advance(transfer, ETransferPhase.Reading, rows, file.Bytes);
 
             if (job.Clipboard && file.Bytes > ClipboardLimit)
-                return (null, new TransferFailure(ETransferError.ClipboardTooLarge, ClipboardTooLargeMessage), file);
+                return (null, new TransferFailure(ETransferError.ClipboardTooLarge, TransferMessages.Say("ClipboardTooLarge")), file);
 
             if (batch.Value.Finished)
                 break;
@@ -491,7 +495,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             return (null, WriteFailureOf(completed.Error), file);
 
         if (job.Clipboard && completed.Value > ClipboardLimit)
-            return (null, new TransferFailure(ETransferError.ClipboardTooLarge, ClipboardTooLargeMessage), file);
+            return (null, new TransferFailure(ETransferError.ClipboardTooLarge, TransferMessages.Say("ClipboardTooLarge")), file);
 
         var counts = file.Writer.Counts;
 
@@ -502,7 +506,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     private async Task RunImportAsync(Transfer transfer, ImportJob job)
     {
         var run = new ImportRun(transfer.ID, job, ConnectAsync, _importFiles, new TransferProgress(transfer, _gate, _timeProvider), _logger, transfer.Cancellation.Token);
-        var end = await SafelyAsync(transfer, run.RunAsync, "a importação");
+        var end = await SafelyAsync(transfer, run.RunAsync, "UnexpectedImport");
         var state = FinishLoad(transfer, end);
         var (elapsedMs, rows, committed, bytes, error) = LoadLog(transfer);
 
@@ -518,7 +522,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     private async Task RunCopyAsync(Transfer transfer, CopyJob job)
     {
         var run = new CopyRun(job, ConnectAsync, new TransferProgress(transfer, _gate, _timeProvider), transfer.Cancellation.Token);
-        var end = await SafelyAsync(transfer, run.RunAsync, "a cópia");
+        var end = await SafelyAsync(transfer, run.RunAsync, "UnexpectedCopy");
         var state = FinishLoad(transfer, end);
         var (elapsedMs, rows, committed, _, error) = LoadLog(transfer);
 
@@ -534,7 +538,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     /// Prism, termina o trabalho como `failed`, com `INTERNAL_SERVER_ERROR` e uma frase fixa, e não o deixa `Running` para sempre, com o arquivo no disco,
     /// a tabela ocupada e a vaga do limite tomada. O log recebe a classe e a pilha, nunca a mensagem, que pode trazer um valor do arquivo (RN-LOG-001).
     /// </summary>
-    private async Task<LoadEnd> SafelyAsync(Transfer transfer, Func<Task<LoadEnd>> run, string what)
+    private async Task<LoadEnd> SafelyAsync(Transfer transfer, Func<Task<LoadEnd>> run, string unexpectedKey)
     {
         try
         {
@@ -544,7 +548,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         {
             _logger.Error("O trabalho {TransferID} parou por um defeito ({ExceptionType}).{NewLine}{StackTrace}", transfer.ID, exception.GetType().Name, Environment.NewLine, exception.StackTrace);
 
-            return LoadEnd.Of(LoadSteps.Prism(ETransferError.Unexpected, $"Um erro inesperado do Prism parou {what}."));
+            return LoadEnd.Of(LoadSteps.Prism(ETransferError.Unexpected, TransferMessages.Say(unexpectedKey)));
         }
     }
 
@@ -683,7 +687,46 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             if (transfer.Kind != ETransferKind.Export)
                 transfer.Committed = summary.Committed;
         }
+
+        if (transfer.JournalEntryID > 0 && _journal is not null)
+        {
+            var entryId = transfer.JournalEntryID;
+            transfer.JournalEntryID = -1;
+            var outcome = state switch
+            {
+                ETransferState.Done => EJournalOutcome.Ok,
+                ETransferState.Canceled => EJournalOutcome.Cancelled,
+                _ => EJournalOutcome.Error
+            };
+            var rowCount = state == ETransferState.Done
+                ? (transfer.Kind == ETransferKind.Export ? transfer.Rows : transfer.Committed)
+                : transfer.Committed;
+
+            _journal.Complete(entryId, new JournalEntryEnd(outcome, rowCount, failure is not null ? ToJournalErrorCode(failure.Code) : null, failure?.SqlState, failure?.Message));
+        }
     }
+
+    private static string ToJournalErrorCode(ETransferError error)
+        => error switch
+        {
+            ETransferError.DatabaseConnectionFailed => "DATABASE_CONNECTION_FAILED",
+            ETransferError.SqlExecutionFailed => "SQL_EXECUTION_FAILED",
+            ETransferError.ColumnsChanged => "EXPORT_COLUMNS_CHANGED",
+            ETransferError.ValueTooLarge => "EXPORT_VALUE_TOO_LARGE",
+            ETransferError.Stalled => "EXPORT_STALLED",
+            ETransferError.ClipboardTooLarge => "EXPORT_CLIPBOARD_TOO_LARGE",
+            ETransferError.WriteFailed => "EXPORT_WRITE_FAILED",
+            ETransferError.ImportValueInvalid => "IMPORT_VALUE_INVALID",
+            ETransferError.ImportValueTooLarge => "IMPORT_VALUE_TOO_LARGE",
+            ETransferError.ImportFileUnreadable => "IMPORT_FILE_UNREADABLE",
+            ETransferError.ImportTableNotFound => "IMPORT_TABLE_NOT_FOUND",
+            ETransferError.ImportTargetNotTable => "IMPORT_TARGET_NOT_TABLE",
+            ETransferError.ImportTableChanged => "IMPORT_TABLE_CHANGED",
+            ETransferError.ImportMappingInvalid => "IMPORT_MAPPING_INVALID",
+            ETransferError.ImportStalled => "IMPORT_STALLED",
+            ETransferError.ImportSourceGrowing => "IMPORT_SOURCE_GROWING",
+            _ => "INTERNAL_SERVER_ERROR"
+        };
 
     /// <summary>RN-EXPORT-016: uma fase nova ou um lote escrito é progresso, e adia o fim por falta dele.</summary>
     private void Advance(Transfer transfer, ETransferPhase phase, long? rows = null, long? bytes = null)
@@ -707,7 +750,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     private Task<Result<IDatabaseConnection, DatabaseFailure>> ConnectAsync(ConnectionSettings settings, CancellationToken cancellationToken)
         => _clients.TryGetValue(settings.Engine, out var client)
             ? client.OpenAsync(settings, cancellationToken)
-            : Task.FromResult(Result.Failure<IDatabaseConnection, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ConnectionFailed, $"O Prism para {RuntimeInformation.RuntimeIdentifier} ainda não conecta em Db2 e Informix: a IBM não publica o driver para ela.")));
+            : Task.FromResult(Result.Failure<IDatabaseConnection, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ConnectionFailed, TransferMessages.Say("NoClient", RuntimeInformation.RuntimeIdentifier))));
 
     /// <summary>RN-EXPORT-017: a recusa do banco ou do driver ao contar e ao ler, com a mensagem como veio e o SQLSTATE (decisão 4 da seção 8).</summary>
     private static TransferFailure DatabaseFailureOf(DatabaseFailure failure)
@@ -715,17 +758,13 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
 
     /// <summary>RN-EXPORT-018: o disco cheio tem a frase dele; o resto leva o motivo do sistema, sem o caminho.</summary>
     private static TransferFailure WriteFailureOf(TransferFileFailure failure)
-        => new(ETransferError.WriteFailed, failure.DiskFull ? DiskFullMessage : $"Não foi possível gravar o arquivo temporário da exportação: {failure.Reason}.");
+        => new(ETransferError.WriteFailed, TransferMessages.Say(failure.DiskFull ? "DiskFull" : "WriteFailed", failure.Reason));
 
     /// <summary>RN-EXPORT-017: o valor ou a linha acima do teto, com o número da linha na ordem da origem e o nome da coluna (que vão à tela, e não ao log).</summary>
     private static TransferFailure OversizeOf(ExportOversize oversize, long row, IReadOnlyList<ExportColumn> columns)
         => new(ETransferError.ValueTooLarge, oversize.WholeRow
-            ? $"A linha {Thousands(row)} passa de 256 MiB de valores, e o Prism não a exporta. Deixe colunas de fora na Extração, ou o binário vazio na Formatação."
-            : $"Um valor da coluna {columns[oversize.Column].Name}, na linha {Thousands(row)}, passa de 64 MiB, e o Prism não o exporta. Deixe a coluna de fora na Extração, ou o binário vazio na Formatação.");
-
-    /// <summary>O número com o ponto de milhar do português ("1.234"), sem depender da cultura da máquina.</summary>
-    private static string Thousands(long value)
-        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');
+            ? TransferMessages.Say("ExportRowTooLarge", ImportText.Thousands(row))
+            : TransferMessages.Say("ExportValueTooLarge", columns[oversize.Column].Name, ImportText.Thousands(row)));
 
     /// <summary>Com a trava tomada.</summary>
     private static TransferInfo Snapshot(Transfer transfer)

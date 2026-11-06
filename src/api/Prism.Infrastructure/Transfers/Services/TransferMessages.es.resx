@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ColumnsChangedExport" xml:space="preserve">
+    <value>Las columnas del resultado cambiaron desde la cuadrícula. Ejecuta la sentencia de nuevo y exporta otra vez.</value>
+  </data>
+  <data name="ColumnsChangedCopy" xml:space="preserve">
+    <value>Las columnas del resultado cambiaron desde la cuadrícula. Ejecuta la sentencia de nuevo y copia otra vez.</value>
+  </data>
+  <data name="StalledExport" xml:space="preserve">
+    <value>La base de datos estuvo 2 horas sin responder, y se terminó la exportación.</value>
+  </data>
+  <data name="StalledImport" xml:space="preserve">
+    <value>La base de datos estuvo 2 horas sin responder, y se terminó la importación.</value>
+  </data>
+  <data name="StalledCopy" xml:space="preserve">
+    <value>La base de datos estuvo 2 horas sin responder, y se terminó la copia.</value>
+  </data>
+  <data name="ClipboardTooLarge" xml:space="preserve">
+    <value>El texto superó los 10 MiB, el límite del portapapeles. Exporta a un archivo.</value>
+  </data>
+  <data name="DiskFull" xml:space="preserve">
+    <value>No hay espacio en disco para el archivo temporal de la exportación, en la carpeta de datos de Prism.</value>
+  </data>
+  <data name="WriteFailed" xml:space="preserve">
+    <value>No se pudo escribir el archivo temporal de la exportación: {0}.</value>
+  </data>
+  <data name="ReasonDiskFull" xml:space="preserve">
+    <value>no hay espacio en disco</value>
+  </data>
+  <data name="ReasonDenied" xml:space="preserve">
+    <value>sin permiso para escribir en la carpeta de datos de Prism</value>
+  </data>
+  <data name="ReasonFolderGone" xml:space="preserve">
+    <value>la carpeta de las transferencias ya no existe</value>
+  </data>
+  <data name="ReasonSystem" xml:space="preserve">
+    <value>el sistema rechazó la escritura (código {0})</value>
+  </data>
+  <data name="ReasonOther" xml:space="preserve">
+    <value>no se pudo escribir el archivo ({0})</value>
+  </data>
+  <data name="UnexpectedImport" xml:space="preserve">
+    <value>Un error inesperado de Prism detuvo la importación.</value>
+  </data>
+  <data name="UnexpectedCopy" xml:space="preserve">
+    <value>Un error inesperado de Prism detuvo la copia.</value>
+  </data>
+  <data name="TableGone" xml:space="preserve">
+    <value>La tabla {0} ya no existe.</value>
+  </data>
+  <data name="TargetNotTable" xml:space="preserve">
+    <value>Solo una tabla recibe filas: {0} {1}.</value>
+  </data>
+  <data name="TableChangedImport" xml:space="preserve">
+    <value>Las columnas de {0} cambiaron desde la vista previa. Abre la importación de nuevo.</value>
+  </data>
+  <data name="TableChangedCopy" xml:space="preserve">
+    <value>Las columnas de {0} cambiaron desde la vista previa. Abre la copia de nuevo.</value>
+  </data>
+  <data name="CopyValueTooLarge" xml:space="preserve">
+    <value>Un valor supera los 64 MiB, y Prism no lo copia.</value>
+  </data>
+  <data name="CopyRowTooLarge" xml:space="preserve">
+    <value>La fila supera los 256 MiB de valores, y Prism no la copia.</value>
+  </data>
+  <data name="SourceGrowing" xml:space="preserve">
+    <value>El origen sigue creciendo: la copia leyó más filas que las {0} contadas y se terminó.</value>
+  </data>
+  <data name="ImportFileGone" xml:space="preserve">
+    <value>El archivo de la importación ya no está en la carpeta de Prism.</value>
+  </data>
+  <data name="PreviewFileMissing" xml:space="preserve">
+    <value>El archivo elegido ya no está con Prism. Elige el archivo de nuevo.</value>
+  </data>
+  <data name="PreviewReadFailed" xml:space="preserve">
+    <value>No se pudo leer el archivo copiado.</value>
+  </data>
+  <data name="NoClient" xml:space="preserve">
+    <value>Prism para {0} todavía no se conecta a Db2 e Informix: IBM no publica el driver para ella.</value>
+  </data>
+  <data name="ExportRowTooLarge" xml:space="preserve">
+    <value>La fila {0} supera los 256 MiB de valores, y Prism no la exporta. Deja columnas fuera en Extracción, o el binario vacío en Formato.</value>
+  </data>
+  <data name="ExportValueTooLarge" xml:space="preserve">
+    <value>Un valor de la columna {0}, en la fila {1}, supera los 64 MiB, y Prism no lo exporta. Deja la columna fuera en Extracción, o el binario vacío en Formato.</value>
+  </data>
+</root>

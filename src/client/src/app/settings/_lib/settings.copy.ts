@@ -1,5 +1,10 @@
+import { pickCopy, type Localized } from "@/lib/i18n";
+
+import { settingsCopyEn } from "./settings.copy.en";
+import { settingsCopyEs } from "./settings.copy.es";
+
 /** Os textos da tela de Configurações, num lugar só (RN-CONFIG-001). Os do canvas (`Configuracoes.dc.html`) estão como ele os escreve. */
-export const settingsCopy = {
+const pt = {
   title: "Configurações",
   /** A dica do ícone da barra superior. */
   titleWithShortcut: "Configurações (Ctrl+,)",
@@ -24,6 +29,7 @@ export const settingsCopy = {
     import: "Importar",
     transactions: "Transações",
     security: "Segurança",
+    audit: "Auditoria",
   },
 
   appearance: {
@@ -95,6 +101,13 @@ export const settingsCopy = {
       reset: "Restaurar 100%",
       hint: (mod: string) => `${mod} + e ${mod} − mudam o zoom em qualquer tela, e ${mod} 0 volta a 100%. Vale para todas as janelas, já na abertura, e para todos que entram no Prism nesta conta do computador, não só para você.`,
     },
+    // O idioma do programa: como o zoom, desta instalação (`electron/locale.ts`). Cada opção tem o nome no próprio idioma (`localeNames`).
+    language: {
+      label: "Idioma",
+      hint: "Vale para todas as janelas e para todos que entram no Prism nesta conta do computador. Muda na próxima vez que o Prism abrir.",
+      pending: "Feche e abra o Prism de novo para trocar o idioma.",
+      failed: "Não foi possível gravar o idioma.",
+    },
     // RN-NAV-011: a densidade do navegador, a da árvore e a da lista de scripts.
     density: {
       label: "Densidade do navegador",
@@ -163,6 +176,7 @@ export const settingsCopy = {
   },
 
   plugins: {
+    byAuthor: (author: string) => `por ${author}`,
     title: "Plugins de terceiros",
     subtitle: "Estenda o Prism com plugins públicos ou internos via repositório Git (HTTPS ou SSH usando as credenciais da sua máquina) ou pasta local.",
     restrictedBadge: "Modo restrito ativo",
@@ -191,6 +205,11 @@ export const settingsCopy = {
     removeButton: "Remover",
     enabledLabel: "Ativo",
     disabledLabel: "Inativo",
+    sourceLocal: "Local",
+    enableAction: "Ativar",
+    disableAction: "Desativar",
+    unlockedInVault: "Plugins de terceiros liberados neste cofre.",
+    operationFailed: "Não foi possível concluir a operação.",
   },
 
   // RN-CONFIG-005: o que a grade lê. "Linhas por busca" depende da API (RN-SQL-016) e fica "em breve", sem campo.
@@ -240,6 +259,11 @@ export const settingsCopy = {
   // As seções "em breve": dizem o que virá. Nenhuma tem campo nem botão (RN-CONFIG-001): o que depende da API não finge funcionar.
   transactions: {
     title: "Transações",
-    description: "Aqui você vai escolher o modo padrão das novas abas (commit manual ou auto-commit) e o nível de isolamento padrão.",
+    defaultMode: "Modo padrão nas novas abas",
+    defaultIsolation: "Nível de isolamento padrão",
+    note: "Vale para cada aba nova de consulta ou de registros. As abas já abertas continuam como estão; quando o nível escolhido não existe no banco da aba, ela abre em Padrão do banco.",
   },
 } as const;
+
+export type SettingsCopy = Localized<typeof pt>;
+export const settingsCopy = pickCopy({ "pt-BR": pt, en: settingsCopyEn, es: settingsCopyEs });

@@ -1,5 +1,6 @@
 import { lightPaths, markColors, PrismMark, PrismMarkGroup } from "@/components/layout/prism-mark";
 import { CheckUpdatesButton } from "@/components/update/check-updates-button";
+import { updateCopy } from "@/components/update/update.copy";
 
 import { signInCopy } from "../_lib/sign-in.copy";
 
@@ -92,7 +93,7 @@ export function BrandPanel({ version }: { version: string }) {
         <span>Prism</span>
         {version !== "" && (
           <span data-app-version className="ml-1 font-mono text-xs font-normal tracking-normal text-muted">
-            versão {version}
+            {updateCopy.version(version)}
           </span>
         )}
         {/* RN-ATUALIZA-002: a consulta manual fica junto da versão, e não depende do cofre. */}

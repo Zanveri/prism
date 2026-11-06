@@ -3,7 +3,7 @@ import type { SelectOption } from "@/components/ui";
 import type { ApiError } from "@/lib/api/prism-api";
 
 import { markedLeaves, validMarks, type CheckTree } from "./check-tree";
-import { allImportable, connectionTags, folderTags, importCounter, invalidReason, type PreviewIndex, type PreviewTag } from "./import-model";
+import { allImportable, connectionTags, folderTags, importCounter, invalidReason, networkParts, type PreviewIndex, type PreviewTag } from "./import-model";
 import { dbeaverCopy } from "./dbeaver.copy";
 import type { DbeaverDrdaPort, DbeaverImportResult, DbeaverNotes, DbeaverPreview, DbeaverPreviewConnection, DbeaverPreviewFolder, DbeaverScan, DbeaverScanProject } from "./dbeaver.schema";
 import type { ConflictPolicy } from "./transfer.schema";
@@ -292,8 +292,8 @@ export function drdaPortFor(connection: DbeaverPreviewConnection, values: Readon
 /** As linhas da árvore ------------------------------------------------------------------------------------------------------------------------------- */
 
 /**
- * A segunda linha da conexão (RN-DBEAVER-015): "pg-dev.exemplo.invalid:5432 / pedidos · usuário fulano · com senha", e no Informix o servidor depois do banco.
- * `drdaPort`, quando a pessoa a digitou, aparece no lugar da porta do DBeaver.
+ * A segunda linha da conexão (RN-DBEAVER-015): "pg-dev.exemplo.invalid:5432 / pedidos · usuário fulano · com senha", e no Informix o servidor depois do banco;
+ * o túnel e o proxy que vêm do DBeaver no fim, como na importação do arquivo (RN-REDE-008). `drdaPort`, quando a pessoa a digitou, aparece no lugar da porta do DBeaver.
  */
 export function connectionLine(connection: DbeaverPreviewConnection, drdaPort: number | null): string {
   const port = drdaPort ?? connection.port;
@@ -303,7 +303,7 @@ export function connectionLine(connection: DbeaverPreviewConnection, drdaPort: n
     connection.userName === ""
       ? transferCopy.import.preview.noCredentials
       : `${transferCopy.import.preview.user(connection.userName)} · ${connection.hasPassword ? transferCopy.import.preview.withPassword : transferCopy.import.preview.withoutPassword}`;
-  return [address, server, credentials].filter((part) => part !== null).join(" · ");
+  return [address, server, credentials, ...networkParts(connection)].filter((part) => part !== null).join(" · ");
 }
 
 const leftOutText = (connection: DbeaverPreviewConnection): { items: string[]; tunnel: boolean } => {
@@ -319,6 +319,7 @@ const leftOutText = (connection: DbeaverPreviewConnection): { items: string[]; t
         break;
       case "sshTunnel":
       case "proxy":
+      case "ssl":
       case "driverProperties":
       case "bootstrap":
       case "autocommitOff":

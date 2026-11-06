@@ -324,7 +324,7 @@ public sealed partial class AdoDatabaseConnectionTests
     /// <summary>Um banco que abre a transação da coluna inteira no retrato, como o PostgreSQL.</summary>
     private sealed class SnapshotEngineConnection(DbConnection driver, Func<Exception?> beginProbe, Func<Exception?> probeRoundTrip, ILogger logger) : FakeEngineConnection(driver, beginProbe, probeRoundTrip, logger)
     {
-        protected override IsolationLevel? WholeColumnIsolation => IsolationLevel.RepeatableRead;
+        protected override System.Data.IsolationLevel? WholeColumnIsolation => System.Data.IsolationLevel.RepeatableRead;
     }
 
     /// <summary>Um banco como os da IBM, em que a exceção sem nenhum erro do banco conta como interrupção.</summary>

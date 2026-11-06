@@ -31,6 +31,7 @@ import type { RunTarget } from "../_lib/use-query-runner";
 import { variablesCompletion, type VariablesCompletion } from "../_lib/variables-completion";
 import { connectVariables, reanalyzeVariables, setShowVariableValues, variablesEditor, type VariablesStore } from "../_lib/variables-extension";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { insertAtCursor } from "../_lib/history";
 import { JoinSuggestionsDialog } from "./join-suggestions-dialog";
 
 /** Quanto o editor espera, depois da última tecla, para entregar o texto a quem o guarda. */
@@ -224,6 +225,8 @@ export type SqlEditorHandle = {
   /** RN-SQL-019: "Executar script" (o botão e o Alt+X): os comandos da seleção ou do texto inteiro (`scriptTargets`), e o foco volta ao editor. */
   runScript: () => void;
   focus: () => void;
+  /** RN-HIST-006: insere o comando na posição do cursor (ou substitui a seleção), numa única ação de desfazer. */
+  insertText: (text: string) => void;
 };
 
 type SqlEditorProps = {
@@ -600,6 +603,19 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
         editor.focus();
       },
       focus: () => view.current?.focus(),
+      insertText: (text: string) => {
+        const editor = view.current;
+        if (editor === null) return;
+        const current = editor.state.doc.toString();
+        const sel = editor.state.selection.main;
+        const res = insertAtCursor(current, sel.head, text);
+        editor.dispatch({
+          changes: { from: 0, to: current.length, insert: res.doc },
+          selection: EditorSelection.cursor(res.cursor),
+          scrollIntoView: true,
+        });
+        editor.focus();
+      },
     }),
     [onRun, onRunScript],
   );

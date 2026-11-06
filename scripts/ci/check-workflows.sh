@@ -146,9 +146,7 @@ for file in "${workflows[@]}"; do
       *:read | *:none) ;;
       contents:write) [ "$name:$job" = lancar.yml:publicar ] || [ "$name:$job" = pipeline.yml:lancar ] || problem "$file: o job $job pede contents: write; escrita só no job de lançamento." ;;
       security-events:write) [ "$name:$job" = seguranca.yml:codeql ] || [ "$name:$job" = pipeline.yml:seguranca ] || problem "$file: o job $job pede security-events: write; essa escrita só no job do CodeQL." ;;
-      pages:write) [ "$name:$job" = paginas.yml:publicar ] || [ "$name:$job" = pipeline.yml:paginas ] || problem "$file: o job $job pede pages: write; essa escrita só no job que publica as páginas." ;;
-      id-token:write) [ "$name:$job" = paginas.yml:publicar ] || [ "$name:$job" = pipeline.yml:paginas ] || problem "$file: o job $job pede id-token: write; essa escrita só no job que publica as páginas." ;;
-      *) problem "$file: o job $job pede \"$scope: $level\": escrita só no job de lançamento (contents), no do CodeQL (security-events) e no que publica as páginas (pages e id-token), e nunca read-all ou write-all." ;;
+      *) problem "$file: o job $job pede \"$scope: $level\": escrita só no job de lançamento (contents) e no do CodeQL (security-events), e nunca read-all ou write-all." ;;
     esac
   done < "$tmp/perms"
 

@@ -279,7 +279,7 @@ describe("a densidade do navegador na linha (RN-NAV-011)", () => {
   const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 0, hasChildren: true };
   const [table] = objectNodes("c1", "public", "tables", [{ name: "pedido", kind: "table" }]);
   const loading: NavNode = { key: "k#loading", kind: "loading", label: "Carregando…", depth: 2, hasChildren: false };
-  const rowClass = (markup: string) => /^<div[^>]* class="([^"]*)"/.exec(markup)?.[1].split(" ") ?? [];
+  const rowClass = (markup: string) => /<div[^>]* class="([^"]*)"/.exec(markup)?.[1].split(" ") ?? [];
   const paddingOf = (markup: string) => Number(/padding-left:(\d+)px/.exec(markup)?.[1]);
   const actionSizes = (markup: string) => [...markup.matchAll(/<button type="button" aria-label="[^"]*" title="[^"]*" class="([^"]*)"/g)].map((match) => match[1].split(" ").filter((name) => name.startsWith("size-")));
 
@@ -304,10 +304,10 @@ describe("a densidade do navegador na linha (RN-NAV-011)", () => {
     expect(markup).toContain("--actions-width:74px");
   });
 
-  it("na compacta a etiqueta do banco, a do ambiente e o ponto de estado continuam na linha", () => {
+  it("na compacta a logo do banco, a etiqueta do ambiente e o ponto de estado continuam na linha", () => {
     const markup = render(connectionNode, { connection, status: "connected", density: "compact", environment: { name: "Produção", color: "#FF8A7A", folder: null } });
 
-    expect(markup).toContain(">PG</span>");
+    expect(markup).toContain('alt="PG"');
     expect(markup).toContain(">Produção</span>");
     expect(markup).toContain('aria-label="Conectada"');
   });

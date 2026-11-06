@@ -1,5 +1,7 @@
 using CSharpFunctionalExtensions;
+using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
+using System.Resources;
 
 namespace Prism.Infrastructure.Databases.Services;
 
@@ -16,6 +18,9 @@ namespace Prism.Infrastructure.Databases.Services;
 /// </summary>
 internal sealed class ResultCells(long capacity = QueryPaging.MaxFullValueBytes)
 {
+    /// <summary>Os textos, no idioma do pedido: <c>ResultCells.resx</c> (português) e as traduções ao lado.</summary>
+    private static readonly ResourceManager Texts = new(typeof(ResultCells));
+
     private readonly Lock _lock = new();
     private readonly Dictionary<CellPosition, FullCellValue> _values = [];
     private long _bytes;
@@ -81,10 +86,10 @@ internal sealed class ResultCells(long capacity = QueryPaging.MaxFullValueBytes)
             foreach (var cell in cells)
             {
                 if (cell.Row < 0 || cell.Row >= _rows)
-                    return new DatabaseFailure(EDatabaseFailure.CellsInvalid, $"A linha {cell.Row} não está entre as {_rows} que o resultado entregou.");
+                    return new DatabaseFailure(EDatabaseFailure.CellsInvalid, Texts.Get("RowOutOfResult", cell.Row, _rows));
 
                 if (cell.Column < 0 || cell.Column >= columns)
-                    return new DatabaseFailure(EDatabaseFailure.CellsInvalid, $"A coluna {cell.Column} não existe no resultado, que tem {columns}.");
+                    return new DatabaseFailure(EDatabaseFailure.CellsInvalid, Texts.Get("ColumnOutOfResult", cell.Column, columns));
             }
 
             found = [.. cells.Select(cell => _values.GetValueOrDefault(cell))];
