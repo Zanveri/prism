@@ -6,6 +6,67 @@ Todas as mudanças relevantes do Prism são registradas aqui. O formato segue o
 
 ## Não lançado
 
+## [0.7.0] - 2026-11-06
+
+A 0.7.0 reúne tudo o que foi testado nos betas desde a 0.6.0. Os betas saíram só para Windows e Linux: no macOS, esta é a primeira
+versão desde a 0.6.0. O cofre continua no mesmo formato, e a 0.6.0 ainda o abre; mas, se você voltar a ela, ela não guarda o que é
+novo: os modelos do Construir, o túnel SSH, o SSL e o proxy das conexões, os valores lembrados dos scripts e a chave do histórico e
+da auditoria (de volta à 0.7.0, os dois recomeçam vazios).
+
+### Adicionado
+
+- **Modo Construir (beta):** desenhe tabelas, relações e índices e gere o DDL para PostgreSQL, Db2 e Informix. Troque entre "Área
+  de trabalho" e "Construir" no seletor de modo da barra superior; trocar não perde nada, os modelos abertos voltam no dia seguinte
+  e tudo é salvo sozinho no seu cofre. O modo ainda está em beta, com o selo "beta" no seletor: pode ter defeitos.
+- **Comece do zero ou das tabelas que já existem:** um modelo novo pode partir das tabelas de uma conexão, e "Reler do banco"
+  atualiza essa leitura quando você quiser.
+- **Edite pelo diagrama, pelo formulário ou pelo texto:** arraste as tabelas, arraste de uma coluna a outra para criar a chave
+  estrangeira, edite colunas, chaves e índices no editor da tabela (arrastando para mudar a ordem das colunas), ou escreva o modelo
+  em SQL ou em DBML; as vistas se acompanham, e dá para desfazer e refazer.
+- **Problemas enquanto você desenha:** erros e avisos, como a tabela sem chave primária, a chave estrangeira com tipo diferente da
+  coluna referenciada, a que não tem índice ou o comando que apaga dados, aparecem num cartão, muitos com a correção em um clique.
+- **O DDL pronto:** gere o esquema inteiro ou só as alterações (`ALTER` e `DROP`) em relação ao que foi lido do banco, salve em
+  arquivo ou abra numa aba de consulta da Área de trabalho para revisar e executar.
+- **Histórico de comandos (Ctrl+Shift+H):** o botão "Histórico", na barra do editor, mostra o que você executou, agrupado por dia,
+  com busca, resultado, duração e linhas, desta conexão ou de todas. Enter insere o comando no editor, e Shift+Enter o abre numa
+  aba nova. Tirar um item do histórico não o apaga da auditoria.
+- **Auditoria, em Configurações › Auditoria:** tudo o que foi executado e as ações da conta e das conexões (entradas, senha
+  revelada, conexão criada ou excluída, proteções mudadas, exportações e importações), cada comando com o nível de perigo
+  (Informativo, Atenção, Alto ou Crítico) e o motivo. Filtre por período, conexão, ambiente, nível, tipo e resultado, e abra o
+  detalhe com o comando inteiro, "Copiar" e "Abrir no editor". Você escolhe por quanto tempo guardar (de 30 dias a Sempre; o
+  padrão é 90 dias), e apagar registros pede a senha do Prism.
+- **Histórico e auditoria cifrados:** ficam num diário cifrado de cada usuário, que só abre com o cofre dele e troca de chave quando
+  você troca a senha.
+- **Túnel SSH, SSL e proxy SOCKS5 nas conexões**, em abas novas do diálogo da conexão. O túnel aceita senha ou chave privada
+  (OpenSSH, PEM e PuTTY, também cifrada), confere a impressão digital do servidor SSH (aceita no primeiro acesso e conferida dali em
+  diante) e pode pedir a frase secreta a cada conexão. Sem "Salvar credenciais", o Prism pede o segredo ao conectar e o esquece
+  quando você desconecta.
+- **O túnel e o proxy vão junto com a conexão:** exportar e importar conexões levam o túnel, o SSL e o proxy (os segredos, só com
+  as senhas), a prévia da importação os mostra, e a importação do DBeaver passa a trazer o túnel SSH, por senha ou por chave, e o
+  proxy SOCKS.
+- **Variáveis com `interface` e `type`**, como no TypeScript (`interface Cliente { id: number; nome: string }`, com `extends`,
+  campos opcionais e `| null`): o valor é conferido pela forma, uma consulta anotada com a interface devolve as linhas nessa forma,
+  e `@c.id` ou `@c.endereco.cidade` vão ao banco como parâmetros. O editor sugere os campos do tipo.
+- **Variáveis que vêm do banco:** o tipo de uma coluna (`let c: pedido.cliente_id`), a variável que é o resultado de uma consulta,
+  e o `random.of`, que sorteia valores de uma coluna para dados de teste.
+- **Executar com valores… (Shift+Alt+X)**, na barra do editor e no menu do script: pergunta os valores das variáveis declaradas
+  sem valor (o objeto, campo a campo; a variável com o tipo de uma coluna, com a lista dos valores dela), executa numa aba de
+  execução e lembra os valores de cada script para a próxima vez.
+- **`BEGIN`, `COMMIT`, `ROLLBACK` e `SAVEPOINT` escritos no editor** valem em qualquer modo da aba, também em Auto-commit, na forma
+  de cada banco.
+- **Configurações › Transações:** o modo (Auto-commit ou Commit manual) e o nível de isolamento das abas novas.
+- **Inglês e espanhol:** a interface e as mensagens do Prism nos dois idiomas, escolhidos em Configurações › Aparência (vale na
+  próxima abertura). A mensagem que vem do banco continua como o banco a escreve.
+
+### Alterado
+
+- **Os diagramas da Área de trabalho foram redesenhados:** cartões de tabela com a chave primária e as estrangeiras marcadas,
+  relações de coluna a coluna com a notação pé de galinha, a seleção que destaca as tabelas ligadas e um painel com "Abrir dados",
+  "Estrutura" e "Gerar SELECT", além de mini-mapa, "Organizar" e o menu "Exportar" (PNG e Mermaid).
+- As logos dos bancos aparecem no lugar das siglas, na lista de conexões, na árvore e na área de trabalho.
+- Os ícones ganham uma animação curta quando o ponteiro passa sobre eles.
+- No seletor de fontes de Configurações › Aparência, cada fonte aparece escrita nela mesma.
+
 ## [0.5.0] - 2026-10-24
 
 A 0.5.0 reúne tudo o que foi testado nos betas da 0.5.0. Os betas saíram só para Windows e Linux: no macOS, esta é a primeira
