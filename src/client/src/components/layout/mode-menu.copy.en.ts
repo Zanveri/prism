@@ -9,5 +9,6 @@ export const modeMenuCopyEn: ModeMenuCopy = {
   build: {
     label: "Build",
     hint: "Design tables, relationships and indexes and generate the DDL",
+    badge: "beta",
   },
 };

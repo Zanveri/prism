@@ -149,11 +149,22 @@ describe("ContextMenuItems (o que o menu desenha e o que um clique em cada item 
     expect(markup.match(/Enter/g)).toHaveLength(1);
   });
 
+  it("o selo vem logo depois do rótulo, só no item que tem um, com ou sem dica, e entra no nome que o leitor de tela ouve", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ContextMenuItems, { groups: [[item("a", "Construir", { badge: "beta", hint: "Desenhar tabelas" }), item("b", "Exportar", { badge: "novo" }), item("c", "Copiar")]], onChoose: () => {} }),
+    );
+
+    expect(markup).toMatch(/Construir(?:(?!<\/button>).)*>beta<(?:(?!<\/button>).)*Desenhar tabelas/s);
+    expect(markup).toMatch(/Exportar(?:(?!<\/button>).)*>novo</s);
+    expect(markup.match(/border-accent/g)).toHaveLength(2);
+  });
+
   it("rótulo e atalho entram como texto: marcação neles não vira elemento", () => {
-    const markup = renderToStaticMarkup(createElement(ContextMenuItems, { groups: [[item("a", "<img src=x onerror=alert(1)>", { shortcut: "<b>x</b>" })]], onChoose: () => {} }));
+    const markup = renderToStaticMarkup(createElement(ContextMenuItems, { groups: [[item("a", "<img src=x onerror=alert(1)>", { shortcut: "<b>x</b>", badge: "<i>y</i>" })]], onChoose: () => {} }));
 
     expect(markup).not.toContain("<img");
     expect(markup).not.toContain("<b>");
+    expect(markup).not.toContain("<i>");
     expect(markup).toContain("&lt;img");
   });
 });

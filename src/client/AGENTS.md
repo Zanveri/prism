@@ -1830,7 +1830,8 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   Enter e Espaço (o clique do botão), Esc e Tab fecham, e clique fora, rolar e trocar o foco da janela também. `placeMenu` (abre com
   o canto no ponto, ou do outro lado dele quando não cabe, e nunca sai da janela) e `nextItemIndex` são puras e testadas, e os itens
   e os separadores são uma view sem hooks (`ContextMenuItems`) que o teste renderiza: o item desabilitado sai com `aria-disabled` e o
-  clique nele não chama nada. Abre por botão direito, Shift+F10 e tecla de menu (no pé da linha, com o foco no primeiro item).
+  clique nele não chama nada. O `badge` do item é um selo curto logo depois do rótulo (`StatusBadge` de tom `warning`): o "beta" do
+  Construir no seletor de modo (RN-CONSTRUIR-001). Abre por botão direito, Shift+F10 e tecla de menu (no pé da linha, com o foco no primeiro item).
   **A tecla de menu ainda gera um `contextmenu` no keyup** (o Shift+F10 não gera), em cima do menu que ela abriu, e o `preventDefault`
   do keydown não o impede: por isso um menu aberto pelo teclado ignora o `contextmenu` do ponteiro que vier enquanto estiver aberto
   (`ignoresContextMenu`, pura), e a linha só toma o foco quando o menu vai abrir (o `onContextMenu` dela devolve se vai: um pedido

@@ -21,6 +21,18 @@ describe("o seletor de modo (RN-CONSTRUIR-001)", () => {
     ]);
   });
 
+  it("só o Construir leva o selo beta, depois do nome e antes da dica", () => {
+    const [group] = modeMenuGroups("workbench");
+    expect(group.items.map((item) => [item.id, item.badge])).toEqual([
+      ["workbench", undefined],
+      ["build", "beta"],
+    ]);
+
+    const markup = renderToStaticMarkup(createElement(ContextMenuItems, { groups: modeMenuGroups("workbench"), onChoose: () => {} }));
+    expect(markup.match(/>beta</g)).toHaveLength(1);
+    expect(markup).toMatch(/Construir(?:(?!<\/button>).)*>beta<(?:(?!<\/button>).)*Desenhar tabelas/s);
+  });
+
   it("quando o item marcado também tem ícone, o ícone fica à esquerda e o visto fica depois do texto", () => {
     const markup = renderToStaticMarkup(createElement(ContextMenuItems, { groups: modeMenuGroups("build"), onChoose: () => {} }));
     expect(markup.indexOf("Desenhar tabelas")).toBeLessThan(markup.indexOf("M3.5 8.5l3 3 6-7"));

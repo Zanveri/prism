@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils/cn";
 
 import { HostProvider, useHost, useOnHostGone } from "./host-context";
 import { CheckIcon } from "./icons";
+import { StatusBadge } from "./status-badge";
 
 export type ContextMenuItem = {
   id: string;
@@ -18,6 +19,11 @@ export type ContextMenuItem = {
   disabled?: boolean;
   /** Por que a ação não se aplica, embaixo do rótulo (a célula só leitura, com o motivo). Faz parte do texto do item, que o leitor de tela lê. */
   hint?: string;
+  /**
+   * Um selo curto depois do rótulo, como o "beta" do modo Construir (RN-CONSTRUIR-001): o `StatusBadge` de tom `warning`, o mesmo das versões beta no
+   * diálogo de atualização. Faz parte do texto do item, que o leitor de tela lê.
+   */
+  badge?: string;
   /**
    * O item é uma escolha de um grupo de escolha única (o intervalo da atualização automática, na grade): `menuitemradio`, com `aria-checked`, e a marca de
    * escolhido no lugar do ícone. Sem a propriedade, é um item comum.
@@ -106,6 +112,20 @@ type ItemsProps = {
   onHover?: (item: ContextMenuItem, element: HTMLElement) => void;
 };
 
+/** O rótulo do item e, logo depois dele, o selo (`badge`), se há: o rótulo encurta com reticências, o selo fica inteiro. */
+function ItemLabel({ item, className }: { item: ContextMenuItem; className?: string }) {
+  if (item.badge === undefined) return <span className={cn("min-w-0 truncate", className)}>{item.label}</span>;
+
+  return (
+    <span className={cn("flex min-w-0 items-center gap-1.5", className)}>
+      <span className="min-w-0 truncate">{item.label}</span>
+      <StatusBadge tone="warning" className="flex-none">
+        {item.badge}
+      </StatusBadge>
+    </span>
+  );
+}
+
 /**
  * Os itens do menu e os separadores entre os grupos, sem portal nem posição (e sem hooks): o que se desenha e o que um clique em cada item chama.
  * O item desabilitado sai com `aria-disabled` e o clique nele não chama `onChoose`: o menu continua aberto. Se algum item tem ícone, os outros
@@ -139,10 +159,10 @@ export function ContextMenuItems({ groups, onChoose, expanded = null, onHover }:
     >
       {hasIcons ? <span className="flex size-4 flex-none items-center justify-center text-muted">{item.icon ?? (item.checked === true ? <CheckIcon /> : null)}</span> : null}
       {item.hint === undefined ? (
-        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        <ItemLabel item={item} className="flex-1" />
       ) : (
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate">{item.label}</span>
+          <ItemLabel item={item} />
           <span className="max-w-72 text-xs whitespace-normal text-muted">{item.hint}</span>
         </span>
       )}

@@ -12,6 +12,8 @@ const pt = {
   build: {
     label: "Construir",
     hint: "Desenhar tabelas, relações e índices e gerar o DDL",
+    // O modo ainda está em beta: o selo avisa que pode ter defeitos (pedido do dono em 2026-11-06).
+    badge: "beta",
   },
 } as const;
 
