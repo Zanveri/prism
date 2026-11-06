@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answersOf, declaresAtTop, emptyInput, entryOf, fieldsOf, fullFieldsOf, helpOf, inputOf, inputOfEntry, pastedItems, rememberedLimit, rememberedOf, valueOf, type VariableField } from "./variable-fields";
+import { answersOf, changedInput, declaresAtTop, emptyInput, entryOf, expanded, fieldLabel, fieldsOf, flatFields, fullFieldsOf, helpOf, inputAt, inputOf, inputOfEntry, pastedItems, rememberedLimit, rememberedOf, valueAt, valueOf, type FieldInput, type VariableField } from "./variable-fields";
 import { readScript } from "./variables/script";
 import { displayValue, nullValue, numberType, stringValue, type Type } from "./variables/values";
 
@@ -140,7 +140,7 @@ describe("os campos do Executar com valores (RN-VAR-027)", () => {
     const { fields } = full("let n = 10\nconst d = random.int(1, 6)\nlet x: number\nselect @n, @d, @x;");
     const inputs = new Map([[0, { ...emptyInput, text: "10" }], [1, { ...emptyInput, text: "4" }], [2, { ...emptyInput, text: "7" }]]);
     expect([...answersOf(fields, inputs, new Set([1])).answers.keys()]).toEqual([1, 2]);
-    expect(answersOf(fields, new Map(), new Set()).problems).toEqual(new Map([[2, "Escreva um valor para x."]]));
+    expect(answersOf(fields, new Map(), new Set()).problems).toEqual(new Map([["2", "Escreva um valor para x."]]));
   });
 
   it("o script declara variáveis no topo só quando o primeiro item é uma declaração", () => {
@@ -219,5 +219,66 @@ describe("o campo de uma interface (RN-VAR-004 e 027)", () => {
   it("as interfaces no topo não escondem o Executar com valores", () => {
     expect(declaresAtTop(read("interface A { a: number }\ntype B = { b: string }\nlet x: A\nselect @x.a;"))).toBe(true);
     expect(declaresAtTop(read("interface A { a: number }\nselect 1;"))).toBe(false);
+  });
+});
+
+describe("o objeto campo a campo (RN-VAR-041)", () => {
+  const script = "interface Endereco { cidade: string; uf?: string }\ninterface Cliente { id: number; nome?: string; endereco: Endereco; ativo: boolean }\nlet c: Cliente\nlet l: Cliente[]\nlet n: Cliente | null\nselect @c.id;";
+  const fields = () => fieldOf(script).fields;
+  const client = () => fields()[0];
+  const filled = (changes: [readonly string[], Partial<FieldInput>][]) => changes.reduce((input, [path, change]) => changedInput(input, path, change), expanded(client(), emptyInput));
+
+  it("o objeto que não é lista nem | null tem um campo por membro, e o membro objeto tem os dele", () => {
+    const shape = (field: VariableField): unknown => [field.key, field.name, field.optional, field.kind, field.typeText, field.members?.map(shape) ?? null];
+    expect(shape(client())).toEqual([
+      "2",
+      "c",
+      false,
+      "object",
+      "Cliente",
+      [
+        ["2.0", "c.id", false, "number", "number", null],
+        ["2.1", "c.nome", true, "string", "string", null],
+        ["2.2", "c.endereco", false, "object", "Endereco", [["2.2.0", "c.endereco.cidade", false, "string", "string", null], ["2.2.1", "c.endereco.uf", true, "string", "string", null]]],
+        ["2.3", "c.ativo", false, "boolean", "boolean", null],
+      ],
+    ]);
+    expect(fields().slice(1).map((field) => [field.name, field.members])).toEqual([["l", null], ["n", null]]);
+    expect(flatFields(fields()).map((field) => field.key)).toEqual(["2", "2.0", "2.1", "2.2", "2.2.0", "2.2.1", "2.3", "3", "4"]);
+    expect(fieldLabel(client().members![1])).toBe("nome? · string");
+  });
+
+  it("os membros compõem o objeto, e o opcional vazio fica de fora", () => {
+    const read = valueOf(client(), filled([[["id"], { text: "7" }], [["endereco", "cidade"], { text: "Lages" }], [["ativo"], { checked: true }]]));
+    expect(read.ok && displayValue(read.value)).toBe("{ id: 7, endereco: { cidade: 'Lages' }, ativo: true }");
+  });
+
+  it("a frase vai no membro que falta, com o caminho inteiro", () => {
+    const { answers, problems } = answersOf(fields().slice(0, 1), new Map([[2, filled([[["id"], { text: "7" }]])]]));
+    expect(answers.size).toBe(0);
+    expect([...problems]).toEqual([["2.2.0", "Escreva um valor para c.endereco.cidade."]]);
+    expect(valueOf(client(), filled([[["id"], { text: "x" }]]))).toEqual({ ok: false, message: "Escreva um número, como 42 ou 3.5.", at: "2.0" });
+  });
+
+  it("o objeto escrito (o lembrado, o da vez anterior) se reparte nos membros", () => {
+    const input = expanded(client(), { ...emptyInput, text: "{ id: 7, nome: 'Ana', endereco: { cidade: 'Lages', uf: null }, ativo: true }" });
+    expect([inputAt(input, ["id"]).text, inputAt(input, ["nome"]).text, inputAt(input, ["endereco", "cidade"]).text, inputAt(input, ["endereco", "uf"]).isNull, inputAt(input, ["ativo"]).checked]).toEqual(["7", "Ana", "Lages", true, true]);
+    expect(expanded(client(), { ...emptyInput, text: "{ id: " }).members?.get("id")).toEqual(emptyInput);
+    const back = valueOf(client(), input);
+    expect(back.ok && entryOf(back.value)).toEqual({ type: "object", value: "{ id: 7, nome: 'Ana', endereco: { cidade: 'Lages', uf: null }, ativo: true }" });
+    expect(valueAt(back.ok ? back.value : undefined, ["endereco", "cidade"])).toEqual(stringValue("Lages"));
+  });
+
+  it("o membro de tipo de coluna traz a coluna, para a escolha pela chave (RN-VAR-030)", () => {
+    const { fields: found } = fieldOf("interface P { cliente: pedido.cliente_id }\nlet p: P\nselect @p.cliente;", new Map([["pedido.cliente_id", { type: numberType }]]));
+    expect(found[0].members?.map((member) => [member.name, member.kind, member.column])).toEqual([["p.cliente", "number", "pedido.cliente_id"]]);
+  });
+
+  it("no Executar com valores, o objeto do script vem repartido", () => {
+    const model = read("interface A { x: number; y?: string }\nlet a: A = { x: 1 }\nselect @a.x;");
+    const [field] = fullFieldsOf(model, 1, undefined, new Set()).fields;
+    if (field.fallback.kind !== "literal") throw new Error(field.fallback.kind);
+    const input = expanded(field, field.fallback.input);
+    expect([inputAt(input, ["x"]).text, inputAt(input, ["y"]).isNull]).toEqual(["1", true]);
   });
 });

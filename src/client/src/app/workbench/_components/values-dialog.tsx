@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils/cn";
 import { executionTabCopy } from "../_lib/execution-tab.copy";
 import { getScript, saveRunValues } from "../_lib/scripts.service";
 import { columnChoiceOf, missingMessage, missingValues, type Choice, type ChoiceScope } from "../_lib/value-choice";
-import { answersOf, emptyInput, fieldLabel, inputOf, inputOfEntry, pastedItems, rememberedOf, valueOf, type FieldInput, type ValuesQuestion, type VariableField } from "../_lib/variable-fields";
+import { answersOf, changedInput, emptyInput, expanded, fieldLabel, flatFields, inputAt, inputOf, inputOfEntry, pastedItems, rememberedOf, valueAt, valueOf, type FieldInput, type ValuesQuestion, type VariableField } from "../_lib/variable-fields";
 import { variableFieldsCopy as copy } from "../_lib/variable-fields.copy";
 import type { Value } from "../_lib/variables/values";
 import { ValueChoice } from "./value-choice";
@@ -30,7 +30,7 @@ type ValuesDialogProps = {
 function inputsFrom(fields: readonly VariableField[], values: Readonly<Record<string, unknown>>): (readonly [number, FieldInput])[] {
   return fields.flatMap((field) => {
     const input = Object.hasOwn(values, field.name) ? inputOfEntry(values[field.name]) : null;
-    return input !== null && valueOf(field, input).ok ? [[field.index, input] as const] : [];
+    return input !== null && valueOf(field, input).ok ? [[field.index, expanded(field, input)] as const] : [];
   });
 }
 
@@ -49,7 +49,7 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
   // No "Executar com valores…" o campo vem com o padrão do script (o literal preenchido, a expressão vazia); na pergunta, com o valor da vez anterior nesta aba.
   // RN-VAR-029: no "Mudar os valores…" da aba de execução, os valores dela vêm no lugar dos lembrados, e vão como escritos.
   const prefill = full ? (question.prefill ?? null) : null;
-  const [inputs, setInputs] = useState(() => new Map([...fields.map((field) => [field.index, full ? (field.fallback.kind === "literal" ? field.fallback.input : emptyInput) : inputOf(question.tab.get(field.name)?.value, field.kind)] as const), ...(prefill === null ? [] : inputsFrom(fields, prefill))]));
+  const [inputs, setInputs] = useState(() => new Map([...fields.map((field) => [field.index, expanded(field, full ? (field.fallback.kind === "literal" ? field.fallback.input : emptyInput) : inputOf(question.tab.get(field.name)?.value, field.kind))] as const), ...(prefill === null ? [] : inputsFrom(fields, prefill))]));
   const [touched, setTouched] = useState<ReadonlySet<number>>(() => new Set(prefill === null ? [] : inputsFrom(fields, prefill).map(([index]) => index)));
   // RN-VAR-028: os campos que vieram dos valores lembrados ("da última vez"), até a pessoa mexer neles ou voltar ao valor do script.
   const [remembered, setRemembered] = useState<ReadonlySet<number>>(new Set());
@@ -73,21 +73,22 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
       live = false;
     };
   }, [recalled, fields]);
-  const [problems, setProblems] = useState<ReadonlyMap<number, string>>(new Map());
-  const [warnings, setWarnings] = useState<ReadonlyMap<number, string>>(new Map());
-  const [choices, setChoices] = useState<ReadonlyMap<number, Choice>>(new Map());
+  // Os erros, os avisos e a escolha são de cada campo da tela, pela chave dele: o membro de um objeto tem os seus (RN-VAR-041).
+  const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
+  const [warnings, setWarnings] = useState<ReadonlyMap<string, string>>(new Map());
+  const [choices, setChoices] = useState<ReadonlyMap<string, Choice>>(new Map());
   const [pending, setPending] = useState(false);
 
   // RN-VAR-030: o tipo de coluna diz a coluna, e o catálogo dela diz de onde vêm os valores.
   useEffect(() => {
     if (scope === null) return;
     let live = true;
-    for (const field of fields) {
+    for (const field of flatFields(fields)) {
       const read = field.column === null ? undefined : question.reads?.get(field.column);
       if (read?.ok !== true) continue;
       const written = /^(?:"[^"]*"|[^."]+)\.(?:"[^"]*"|[^."]+)\./.test(field.column ?? "");
       void columnChoiceOf(scope, read, written).then((choice) => {
-        if (live && choice !== null) setChoices((current) => new Map(current).set(field.index, choice));
+        if (live && choice !== null) setChoices((current) => new Map(current).set(field.key, choice));
       });
     }
     return () => {
@@ -95,26 +96,27 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
     };
   }, [fields, question.reads, scope]);
 
-  const idOf = (field: VariableField) => `${base}-${field.index}`;
+  const idOf = (key: string) => `${base}-${key}`;
+  // O membro muda dentro do campo da declaração, e a declaração inteira passa a ir (RN-VAR-027 e 041).
   const update = (field: VariableField, change: Partial<FieldInput>) => {
-    setInputs((current) => new Map(current).set(field.index, { ...(current.get(field.index) ?? emptyInput), ...change }));
+    setInputs((current) => new Map(current).set(field.index, changedInput(current.get(field.index) ?? emptyInput, field.path, change)));
     setTouched((current) => (current.has(field.index) ? current : new Set(current).add(field.index)));
     setRemembered((current) => (current.has(field.index) ? new Set([...current].filter((index) => index !== field.index)) : current));
-    setProblems((current) => (current.has(field.index) ? new Map([...current].filter(([index]) => index !== field.index)) : current));
+    setProblems((current) => (current.has(field.key) ? new Map([...current].filter(([key]) => key !== field.key)) : current));
   };
 
   /** RN-VAR-031: o valor digitado que não existe na coluna é recusado no campo; na restrição pela chave primária da própria coluna, só um aviso. */
-  async function checkChoices(answers: ReadonlyMap<number, Value>): Promise<{ problems: Map<number, string>; warnings: Map<number, string> }> {
-    const found = { problems: new Map<number, string>(), warnings: new Map<number, string>() };
+  async function checkChoices(answers: ReadonlyMap<number, Value>): Promise<{ problems: Map<string, string>; warnings: Map<string, string> }> {
+    const found = { problems: new Map<string, string>(), warnings: new Map<string, string>() };
     if (scope === null) return found;
     await Promise.all(
-      fields.map(async (field) => {
-        const choice = choices.get(field.index);
-        const value = answers.get(field.index);
+      flatFields(fields).map(async (field) => {
+        const choice = choices.get(field.key);
+        const value = valueAt(answers.get(field.index), field.path);
         if (choice === undefined || value === undefined || value.kind === "null") return;
         const missing = await missingValues(scope, choice, value.kind === "list" ? value.items : [value]);
         if (missing === null || missing.length === 0) return;
-        (choice.strict ? found.problems : found.warnings).set(field.index, missingMessage(choice, missing));
+        (choice.strict ? found.problems : found.warnings).set(field.key, missingMessage(choice, missing));
       }),
     );
     return found;
@@ -135,7 +137,7 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
 
   /** "Voltar ao valor do script" (↺): o campo volta ao padrão e deixa de ir. */
   function reset(field: VariableField) {
-    setInputs((current) => new Map(current).set(field.index, field.fallback.kind === "literal" ? field.fallback.input : emptyInput));
+    setInputs((current) => new Map(current).set(field.index, expanded(field, field.fallback.kind === "literal" ? field.fallback.input : emptyInput)));
     setTouched((current) => new Set([...current].filter((index) => index !== field.index)));
     setRemembered((current) => new Set([...current].filter((index) => index !== field.index)));
   }
@@ -166,9 +168,95 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
       read.problems = checked.problems;
     }
     setProblems(read.problems);
-    const first = fields.find((field) => read.problems.has(field.index));
+    const first = flatFields(fields).find((field) => read.problems.has(field.key));
     // A aba pode estar na janela do resultado (RN-ABAS-017): o campo é procurado na página do diálogo.
-    if (first !== undefined) host.document?.getElementById(idOf(first))?.focus();
+    if (first !== undefined) host.document?.getElementById(idOf(first.key))?.focus();
+  }
+
+  /** Um campo: o rótulo, a ajuda, o controle pelo tipo e a frase; o objeto com membros é um grupo com um campo para cada um (RN-VAR-041). */
+  function renderField(field: VariableField, autoFocus: boolean): ReactNode {
+    const input = inputAt(inputs.get(field.index), field.path);
+    const problem = problems.get(field.key) ?? null;
+    const warning = warnings.get(field.key) ?? null;
+    const id = idOf(field.key);
+    const helpId = `${id}-ajuda`;
+    const problemId = `${id}-erro`;
+    const describedBy = [field.help === null ? null : helpId, problem === null && warning === null ? null : problemId].filter((at) => at !== null).join(" ") || undefined;
+    const header = (
+      <div className="flex items-center justify-between gap-3">
+        {field.members === null ? (
+          <label htmlFor={id} className="font-mono text-sm text-ink">
+            {fieldLabel(field)}
+          </label>
+        ) : (
+          <span id={`${id}-rotulo`} className="font-mono text-sm text-ink">
+            {fieldLabel(field)}
+          </span>
+        )}
+        {field.path.length === 0 && remembered.has(field.index) ? (
+          <span className="ml-auto flex items-center gap-1 text-xs text-muted">
+            {copy.lastTime}
+            <button type="button" aria-label={copy.resetToScript} title={copy.resetToScript} className="text-muted hover:text-ink" onClick={() => reset(field)}>
+              <UndoIcon className="size-3.5" aria-hidden="true" />
+            </button>
+          </span>
+        ) : null}
+        {field.nullable ? (
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <input type="checkbox" checked={input.isNull} onChange={(event) => update(field, { isNull: event.target.checked })} />
+            {copy.nullLabel}
+          </label>
+        ) : null}
+      </div>
+    );
+    const help =
+      field.help === null ? null : (
+        <p id={helpId} className="text-xs text-muted">
+          {field.help}
+        </p>
+      );
+    if (field.members !== null)
+      return (
+        <div role="group" aria-labelledby={`${id}-rotulo`} aria-describedby={field.help === null ? undefined : helpId} className="flex flex-col gap-1.5">
+          {header}
+          {help}
+          {field.fallback.kind === "expression" ? <p className="text-xs text-muted">{copy.computed(field.fallback.text)}</p> : null}
+          <div className="flex flex-col gap-3 border-l border-border pl-3">
+            {field.members.map((member, at) => (
+              <div key={member.key} className="flex flex-col gap-1.5">
+                {renderField(member, autoFocus && at === 0)}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    return (
+      <>
+        {header}
+        {help}
+        <FieldControl
+          id={id}
+          field={field}
+          input={input}
+          choice={choices.get(field.key) ?? null}
+          scope={scope}
+          invalid={problem !== null}
+          describedBy={describedBy}
+          autoFocus={autoFocus}
+          hint={field.fallback.kind === "expression" ? copy.computed(field.fallback.text) : null}
+          onChange={(change) => update(field, change)}
+        />
+        {problem !== null ? (
+          <FieldError id={problemId} role="alert">
+            {problem}
+          </FieldError>
+        ) : warning !== null ? (
+          <p id={problemId} className="text-xs text-accent" role="status">
+            {warning}
+          </p>
+        ) : null}
+      </>
+    );
   }
 
   const footer = (
@@ -207,65 +295,12 @@ export function ValuesDialog({ question, title, script, scope, onRun, onCancel }
           </section>
         ) : null}
         {full && fields.length > 0 ? <h3 className="-mb-2 text-sm font-semibold">{copy.values}</h3> : null}
-        {fields.map((field, position) => {
-          const input = inputs.get(field.index) ?? emptyInput;
-          const problem = problems.get(field.index) ?? null;
-          const warning = warnings.get(field.index) ?? null;
-          const helpId = `${idOf(field)}-ajuda`;
-          const problemId = `${idOf(field)}-erro`;
-          const describedBy = [field.help === null ? null : helpId, problem === null && warning === null ? null : problemId].filter((id) => id !== null).join(" ") || undefined;
-          const firstBelow = field.below && !fields[position - 1]?.below;
-          return (
-            <div key={field.index} className="flex flex-col gap-1.5">
-              {firstBelow ? <h3 className="mt-2 text-sm font-semibold">{copy.below}</h3> : null}
-              <div className="flex items-center justify-between gap-3">
-                <label htmlFor={idOf(field)} className="font-mono text-sm text-ink">
-                  {fieldLabel(field)}
-                </label>
-                {remembered.has(field.index) ? (
-                  <span className="ml-auto flex items-center gap-1 text-xs text-muted">
-                    {copy.lastTime}
-                    <button type="button" aria-label={copy.resetToScript} title={copy.resetToScript} className="text-muted hover:text-ink" onClick={() => reset(field)}>
-                      <UndoIcon className="size-3.5" aria-hidden="true" />
-                    </button>
-                  </span>
-                ) : null}
-                {field.nullable ? (
-                  <label className="flex items-center gap-1.5 text-xs text-muted">
-                    <input type="checkbox" checked={input.isNull} onChange={(event) => update(field, { isNull: event.target.checked })} />
-                    {copy.nullLabel}
-                  </label>
-                ) : null}
-              </div>
-              {field.help === null ? null : (
-                <p id={helpId} className="text-xs text-muted">
-                  {field.help}
-                </p>
-              )}
-              <FieldControl
-                id={idOf(field)}
-                field={field}
-                input={input}
-                choice={choices.get(field.index) ?? null}
-                scope={scope}
-                invalid={problem !== null}
-                describedBy={describedBy}
-                autoFocus={position === 0}
-                hint={field.fallback.kind === "expression" ? copy.computed(field.fallback.text) : null}
-                onChange={(change) => update(field, change)}
-              />
-              {problem !== null ? (
-                <FieldError id={problemId} role="alert">
-                  {problem}
-                </FieldError>
-              ) : warning !== null ? (
-                <p id={problemId} className="text-xs text-accent" role="status">
-                  {warning}
-                </p>
-              ) : null}
-            </div>
-          );
-        })}
+        {fields.map((field, position) => (
+          <div key={field.key} className="flex flex-col gap-1.5">
+            {field.below && !fields[position - 1]?.below ? <h3 className="mt-2 text-sm font-semibold">{copy.below}</h3> : null}
+            {renderField(field, position === 0)}
+          </div>
+        ))}
         {full && question.calculated.length > 0 ? (
           <p className="text-xs text-muted" title={question.calculated.join(", ")}>
             {copy.calculated(question.calculated.length)}

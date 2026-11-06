@@ -85,6 +85,19 @@ describe("depois de um @ no SQL (RN-CONFIG-004 e RN-VAR-025)", () => {
     expect(propose("let a = 1\nSELECT * FROM t WHERE b = |").quiet).toBe(false);
     expect(propose("SELECT @co|").quiet).toBe(false);
   });
+
+  it("depois de @c. e de @c.endereco., os campos do tipo anotado; o objeto sem anotação, nada (RN-VAR-040)", () => {
+    const types = "interface E { cidade: string; uf?: string }\ninterface C { id: number; endereco: E }\nlet c: C\nconst s = { id: 1 }\n";
+    const { result, from, doc, quiet } = propose(`${types}SELECT @c.|`);
+
+    expect(result?.options.map((option) => [option.label, option.detail])).toEqual([["id", "number"], ["endereco", "E"]]);
+    expect(from).toBe(doc.length);
+    expect(quiet).toBe(true);
+    expect(propose(`${types}SELECT @c.endereco.ci|`).labels).toEqual(["cidade", "uf"]);
+    expect(propose(`${types}SELECT @c.id.|`).result).toBeNull();
+    expect(propose(`${types}SELECT @s.|`).result).toBeNull();
+    expect(propose(`${types}SELECT @s.|`).quiet).toBe(false);
+  });
 });
 
 describe("o @ que é operador do PostgreSQL não completa nem cala o SQL (RN-VAR-015)", () => {
@@ -123,6 +136,12 @@ describe("dentro das declarações (RN-CONFIG-004 e RN-VAR-025)", () => {
     expect(propose("let a = date.|").labels).toEqual(expect.arrayContaining(["today", "addDays", "format"]));
     expect(propose("let a = Date.n|").labels).toEqual(["now"]);
     expect(propose("let a = Number.|").labels).toEqual(["isInteger"]);
+  });
+
+  it("depois de um ponto numa variável anotada com um objeto, os campos do tipo (RN-VAR-040)", () => {
+    const types = "interface E { cidade: string }\ninterface C { id: number; endereco: E }\nlet c: C\n";
+    expect(propose(`${types}let x = c.|`).labels).toEqual(["id", "endereco"]);
+    expect(propose(`${types}let x = 1 + c.endereco.ci|`).labels).toEqual(["cidade"]);
   });
 
   it("depois de um ponto, os métodos da espécie do valor, quando ela se sabe: pela anotação ou pelo tipo do armazém", () => {

@@ -2985,7 +2985,8 @@ da pessoa; o que vai ao banco é o comando trocado pelos marcadores (RN-VAR-017)
 ## Os valores pedidos e a aba de execução (seções 41 e 45: RN-VAR-021, 026 a 029, 031, 041)
 
 - **Onde mora**: os campos do diálogo saem do script em `variable-fields.ts` (`fullFieldsOf` monta a pergunta inteira do "Executar com valores…"; o objeto anotado
-  é um campo só, escrito como no script), o diálogo é `values-dialog.tsx` e quem o abre é `use-values-question.ts` (`ask`, `askWith` com `prefill` e
+  que não é lista nem `| null` tem `members`, um campo por membro, e o `FieldInput` dele guarda os dos membros em `members`, pelo nome: `expanded` reparte o
+  texto lembrado, `changedInput` muda um membro e `valueOf` compõe o objeto, com a frase na chave do membro (`key`)), o diálogo é `values-dialog.tsx` e quem o abre é `use-values-question.ts` (`ask`, `askWith` com `prefill` e
   `offerNewTab`, `open`). A escolha pela chave é `value-choice.ts`/`value-choice.tsx`, e os valores lembrados no cofre vão pelo `saveRunValues` (RN-VAR-028).
 - **A aba de execução** é uma aba de consulta com `execution` (`ExecutionTarget` em `workbench-model.ts`): sem editor, com `execution-header.tsx` no lugar da
   barra. O navegador deixa um `pending` na aba (`requestExecution`), e o cabeçalho o atende uma vez (o ref `handled`, por causa do modo estrito); a aba nascida do

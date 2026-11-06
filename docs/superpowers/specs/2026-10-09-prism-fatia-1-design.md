@@ -13213,14 +13213,24 @@ As duas primeiras partes não mudam regra: são as regras da seção 41 que a te
   (objeto): use um campo, como @c.endereco.cidade." e "todos é uma lista de linhas, que não vai para o SQL: faça a
   consulta com uma coluna só.". O campo de um objeto `null` é "c.endereco é null, e não tem o campo cidade.". O
   caminho para no primeiro valor que não é objeto, e o resto é SQL (`@p.e.x` é `$1.x`).
+  - Completa a RN-VAR-025: no editor, a cor do `@c.endereco.cidade` vai até o último campo que o tipo anotado tem (o
+    resto do caminho fica na cor do SQL), e depois de `@c.` no SQL, ou de `c.` no valor de uma declaração, o
+    autocompletar sugere os campos do tipo anotado, com o tipo escrito de cada um; ali as palavras-chave e as colunas
+    se calam.
 
 - **RN-VAR-041.** A pergunta e o "Executar com valores…" de um objeto. Completa a RN-VAR-021 e a 027: a declaração sem
-  valor anotada com uma interface, um `type` de objeto, um objeto escrito ou a lista deles (`let c: Cliente`) é um
-  campo só, uma caixa de texto na fonte do editor, em que se escreve o valor como no script: `{ id: 7, nome: 'Ana',
-  desde: new Date('2026-10-20') }`. Só valem os valores escritos (número, texto, `true`, `false`, `null`, `new
-  Date('…')`, a lista e o objeto deles): "Escreva só valores: números, textos, true, false, null, new Date('…'), listas
-  e objetos."; a forma é conferida na execução, com as frases da RN-VAR-038. O valor da vez anterior e o lembrado voltam
-  escritos do mesmo jeito.
+  valor anotada com uma interface, um `type` de objeto ou um objeto escrito (`let c: Cliente`) é perguntada campo a
+  campo: um grupo com o nome e o tipo da variável e, dentro dele, um campo por membro, na ordem do tipo (os herdados
+  primeiro), pelo tipo do membro, como os campos da RN-VAR-027. O membro que é objeto é outro grupo com os campos dele;
+  o de tipo de coluna tem a escolha pela chave (RN-VAR-030 e 031); o opcional (`uf?:`) vazio não vai, e fica `null`.
+  A frase vai no campo do membro, com o caminho inteiro: "Escreva um valor para c.endereco.cidade.". O "da última vez"
+  e o "Voltar ao valor do script" são do grupo inteiro.
+  - O objeto `| null` (`Cliente | null`), a lista de objetos (`Cliente[]`) e o membro que é lista de objetos são uma
+    caixa de texto na fonte do editor, em que se escreve o valor como no script: `{ id: 7, nome: 'Ana', desde: new
+    Date('2026-10-20') }`. Só valem os valores escritos (número, texto, `true`, `false`, `null`, `new Date('…')`, a lista
+    e o objeto deles): "Escreva só valores: números, textos, true, false, null, new Date('…'), listas e objetos.".
+  - A forma é conferida na execução, com as frases da RN-VAR-038. O valor da vez anterior, o lembrado e o literal do
+    script voltam repartidos nos campos dos membros (o texto que não se lê mais deixa os campos vazios).
   - Altera a RN-VAR-028: a entrada lembrada de um objeto, e da lista de objetos, é `{ type: "object", value }`, com o
     texto escrito como no script; a API confere só a forma, como nas outras, e a mensagem do tipo errado passa a ser "O
     tipo é number, text, boolean, date, timestamp, sql, object, null ou list.".
@@ -13232,12 +13242,14 @@ As duas primeiras partes não mudam regra: são as regras da seção 41 que a te
 
 - Os casos das interfaces, escritos à mão, em `src/client/src/app/workbench/_lib/variables/interfaces.cases.json`:
   onde o tipo é item, o valor na forma do tipo, os erros e a troca dos campos.
-- A linha da consulta na forma do tipo (`query-value.test.ts`) e o campo de objeto do diálogo
+- A linha da consulta na forma do tipo (`query-value.test.ts`) e o campo de objeto do diálogo, também campo a campo
   (`variable-fields.test.ts`).
+- A cor e o autocompletar dos campos no editor (`variables-analysis.test.ts` e `variables-completion.test.ts`).
 - O `declaresVariables` pela fixture `src/test-fixtures/variables/declares.json`, com os casos de `interface` e
   `type`; e a entrada `object` dos valores lembrados nos testes da API.
 
 ### 45.3. Fica para depois
 
-- O diálogo com um campo por campo da interface, no lugar da caixa de texto do objeto.
-- O realce e o autocompletar dos campos de uma interface no editor (`@c.` sugerindo os campos do tipo).
+- O objeto `| null` e a lista de objetos campo a campo no diálogo (hoje, a caixa de texto da RN-VAR-041).
+- A cor e o autocompletar dos campos do objeto sem anotação (`const c = { id: 1 }`, a consulta sem tipo): a forma dele
+  só se sabe na execução.

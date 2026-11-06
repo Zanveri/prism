@@ -8,10 +8,10 @@ import { canonicalNumberText } from "./variables/numbers";
 import type { Node } from "./variables/ast";
 import { Random } from "./variables/random";
 import { annotationType, ScriptRun, type TabValues } from "./variables/run";
-import { resolveAnnotation } from "./variables/named-types";
+import { objectMembers, resolveAnnotation } from "./variables/named-types";
 import type { RunValueEntry } from "./scripts.schema";
 import { readScript, staticDiagnostics, type ModelItem, type ScriptModel } from "./variables/script";
-import { booleanValue, dateValue, displayValue, listValue, nullValue, numberValue, quoted, sqlValue, stringValue, typeLabel, withoutNull, type Type, type Value } from "./variables/values";
+import { booleanValue, dateValue, displayValue, listValue, nullValue, numberValue, objectValue, quoted, sqlValue, stringValue, typeLabel, withoutNull, type Type, type Value } from "./variables/values";
 import type { TypeAnnotation } from "./variables/ast";
 
 /*
@@ -27,9 +27,21 @@ import type { TypeAnnotation } from "./variables/ast";
 export type FieldKind = "number" | "string" | "boolean" | "day" | "instant" | "date" | "sql" | "object";
 
 export type VariableField = {
-  /** O índice da declaração no script. */
+  /** O índice da declaração no script; o campo de um membro tem o da declaração dele. */
   index: number;
+  /** O campo na tela: o índice da declaração e, no membro, a posição dele em cada nível (`3.0.2`). Serve de id e de chave dos erros e da escolha. */
+  key: string;
+  /** O nome da variável; no membro, o caminho inteiro (`c.endereco.cidade`), que é como as frases o citam. */
   name: string;
+  /** Os nomes dos membros da declaração até este (`["endereco", "cidade"]`); vazio no campo da declaração. */
+  path: readonly string[];
+  /** O membro opcional (`uf?: string`): vazio, ele não vai, e fica `null` (RN-VAR-038). */
+  optional: boolean;
+  /**
+   * RN-VAR-041: os campos dos membros do objeto, na ordem do tipo, quando ele não é lista nem `| null` (`Cliente`, `{ de: number }`): o diálogo pergunta campo a
+   * campo, e o membro que é objeto tem os dele. Nulo nos outros, e no objeto `| null` e na lista de objetos, que se escrevem como no script.
+   */
+  members: readonly VariableField[] | null;
   /** O tipo como a pessoa o escreveu (`number`, `pedido.cliente_id`, `Date[] | null`). */
   typeText: string;
   declared: Type;
@@ -48,8 +60,11 @@ export type VariableField = {
 
 export type FieldDefault = { kind: "literal"; input: FieldInput } | { kind: "expression"; text: string } | { kind: "none" };
 
-/** O que o campo tem: o texto (o número, o texto, a data `aaaa-mm-dd`), a hora (`hh:mm[:ss]`), os itens da lista, a caixa do booleano e a do `NULL`. */
-export type FieldInput = { text: string; time: string; items: string[]; checked: boolean; isNull: boolean };
+/**
+ * O que o campo tem: o texto (o número, o texto, a data `aaaa-mm-dd`), a hora (`hh:mm[:ss]`), os itens da lista, a caixa do booleano e a do `NULL`. No campo com
+ * membros, `members` tem o de cada um, pelo nome; sem ele, o `text` é o objeto escrito como no script (o lembrado, o da vez anterior), e `expanded` o reparte.
+ */
+export type FieldInput = { text: string; time: string; items: string[]; checked: boolean; isNull: boolean; members?: ReadonlyMap<string, FieldInput> };
 
 export const emptyInput: FieldInput = { text: "", time: "", items: [], checked: false, isNull: false };
 
@@ -122,7 +137,7 @@ export function fieldsOf(model: ScriptModel, indices: readonly number[], columns
       errors.push({ ...locate(model.source, annotation.start), message: declared.error, offset: annotation.start });
       continue;
     }
-    fields.push(fieldOf(model, item, parsed.name, annotation.text, declared, annotation.column?.text ?? null, { kind: "none" }, false));
+    fields.push(fieldOf(model, item, parsed.name, annotation, declared, { kind: "none" }, false));
   }
   return { fields, errors };
 }
@@ -134,11 +149,107 @@ function declaredOf(model: ScriptModel, annotation: TypeAnnotation, columns: Col
   return annotationType(annotation);
 }
 
-function fieldOf(model: ScriptModel, item: ModelItem, name: string, typeText: string, declared: Type, column: string | null, fallback: FieldDefault, below: boolean): VariableField {
+function fieldOf(model: ScriptModel, item: ModelItem, name: string, annotation: TypeAnnotation | null, declared: Type, fallback: FieldDefault, below: boolean): VariableField {
   const base = withoutNull(declared);
   const kind = kindOf(declared);
-  // O campo de objeto é um texto só, também o da lista de objetos: os itens se escrevem nele, entre [ ].
-  return { index: item.index, name, typeText, declared, kind, list: base.tag === "list" && kind !== "object", nullable: declared.tag === "nullable", help: helpOf(model.source, item), column, fallback, below };
+  // A lista de objetos e o objeto `| null` são um texto só: os itens se escrevem nele, entre [ ].
+  const field: VariableField = {
+    index: item.index,
+    key: String(item.index),
+    name,
+    path: [],
+    optional: false,
+    members: null,
+    typeText: annotation?.text ?? typeLabel(declared),
+    declared,
+    kind,
+    list: base.tag === "list" && kind !== "object",
+    nullable: declared.tag === "nullable",
+    help: helpOf(model.source, item),
+    column: annotation?.column?.text ?? null,
+    fallback,
+    below,
+  };
+  return { ...field, members: memberFields(model, field, annotation) };
+}
+
+/**
+ * RN-VAR-041: os campos dos membros de um objeto que não é lista nem `| null`, na ordem do tipo resolvido (os herdados primeiro). O tipo como foi escrito e a coluna
+ * (para a escolha pela chave, RN-VAR-030) vêm da anotação, quando há; o objeto sem anotação (o valor do script) tem só o tipo.
+ */
+function memberFields(model: ScriptModel, parent: VariableField, annotation: TypeAnnotation | null): VariableField[] | null {
+  const declared = parent.declared;
+  if (declared.tag !== "object") return null;
+  const written = new Map((annotation === null || annotation.list || annotation.nullable ? null : objectMembers(model, annotation))?.map((member) => [member.name, member] as const) ?? []);
+  return [...declared.fields].map(([name, type], position) => {
+    const member = written.get(name);
+    const optional = declared.optional?.has(name) ?? false;
+    const kind = kindOf(type);
+    const field: VariableField = {
+      index: parent.index,
+      key: `${parent.key}.${position}`,
+      name: `${parent.name}.${name}`,
+      path: [...parent.path, name],
+      optional,
+      members: null,
+      typeText: member?.type.text ?? typeLabel(optional ? withoutNull(type) : type),
+      declared: type,
+      kind,
+      list: withoutNull(type).tag === "list" && kind !== "object",
+      nullable: type.tag === "nullable",
+      help: null,
+      column: member?.type.column?.text ?? null,
+      fallback: { kind: "none" },
+      below: parent.below,
+    };
+    return { ...field, members: memberFields(model, field, member?.type ?? null) };
+  });
+}
+
+/** O campo e os dos membros dele, na ordem da tela. */
+export const flatFields = (fields: readonly VariableField[]): VariableField[] => fields.flatMap((field) => [field, ...flatFields(field.members ?? [])]);
+
+/** O valor de um membro dentro do valor da declaração (`c.endereco.cidade`); indefinido quando o caminho não chega lá. */
+export function valueAt(value: Value | undefined, path: readonly string[]): Value | undefined {
+  let current = value;
+  for (const name of path) current = current?.kind === "object" ? current.fields.get(name) : undefined;
+  return current;
+}
+
+/** O campo com membros repartido: cada membro com o valor dele no objeto (o escrito no `text`, o da vez anterior, o lembrado). Os outros campos ficam como estão. */
+export function expanded(field: VariableField, input: FieldInput): FieldInput {
+  if (field.members === null || input.members !== undefined) return input;
+  const read = input.text.trim() === "" ? null : objectOf(field, input.text);
+  return membersInput(field, read?.ok === true ? read.value : undefined);
+}
+
+function membersInput(field: VariableField, value: Value | undefined): FieldInput {
+  const members = new Map((field.members ?? []).map((member) => {
+    const inner = valueAt(value, [member.path[member.path.length - 1]]);
+    return [member.path[member.path.length - 1], member.members === null ? inputOf(inner, member.kind) : membersInput(member, inner)] as const;
+  }));
+  return { ...emptyInput, members };
+}
+
+/** O campo com a mudança no membro do caminho `path` (o do campo mudado, a partir da declaração). */
+export function changedInput(input: FieldInput, path: readonly string[], change: Partial<FieldInput>): FieldInput {
+  if (path.length === 0) return { ...input, ...change };
+  const [head, ...rest] = path;
+  return { ...input, members: new Map(input.members ?? []).set(head, changedInput(input.members?.get(head) ?? emptyInput, rest, change)) };
+}
+
+/** O que o campo de um membro tem lá dentro (`emptyInput` quando nada). */
+export function inputAt(input: FieldInput | undefined, path: readonly string[]): FieldInput {
+  let current = input ?? emptyInput;
+  for (const name of path) current = current.members?.get(name) ?? emptyInput;
+  return current;
+}
+
+/** O membro opcional sem nada escrito não vai (RN-VAR-038: fica `null`); o booleano sempre tem valor. */
+function isBlank(field: VariableField, input: FieldInput): boolean {
+  if (input.isNull) return false;
+  if (field.members !== null) return input.members === undefined ? input.text.trim() === "" : field.members.every((member) => isBlank(member, inputAt(input, [member.path[member.path.length - 1]])));
+  return field.kind !== "boolean" && input.text.trim() === "" && input.time.trim() === "" && input.items.length === 0;
 }
 
 /** O literal do script (RN-VAR-027): o número, o texto, o booleano, o `null` e a lista deles; o que vem preenchido no campo. */
@@ -205,7 +316,7 @@ export function fullFieldsOf(model: ScriptModel, engine: Engine | undefined, col
       continue;
     }
     const fallback: FieldDefault = isLiteral(value) && dry.ok ? { kind: "literal", input: inputOf(dry.stored.value, kindOf(declared)) } : { kind: "expression", text: model.source.slice(value.start, value.end) };
-    fields.push(fieldOf(model, item, parsed.name, annotation?.text ?? typeLabel(declared), declared, annotation?.column?.text ?? null, fallback, false));
+    fields.push(fieldOf(model, item, parsed.name, annotation, declared, fallback, false));
   }
   return { fields, errors, calculated };
 }
@@ -307,8 +418,9 @@ function scalarOf(field: VariableField, text: string, time: string, checked: boo
  * O valor do campo (RN-VAR-027): o `NULL` marcado, a lista (cada item pelo tipo dela) ou o valor simples. A frase vai no campo: "Escreva um valor para cliente_id.",
  * "Escreva um número, como 42 ou 3.5.", "Escolha uma data.". O tipo errado que passa daqui (o `| null` dos itens) a avaliação recusa, com a frase da linguagem.
  */
-export function valueOf(field: VariableField, input: FieldInput): { ok: true; value: Value } | { ok: false; message: string } {
+export function valueOf(field: VariableField, input: FieldInput): { ok: true; value: Value } | { ok: false; message: string; at?: string } {
   if (field.nullable && input.isNull) return { ok: true, value: nullValue };
+  if (field.members !== null && input.members !== undefined) return composedOf(field.members, input.members);
   if (field.kind === "object") return objectOf(field, input.text);
   if (!field.list) return scalarOf(field, input.text, input.time, input.checked, field.name);
   const items: Value[] = [];
@@ -318,6 +430,23 @@ export function valueOf(field: VariableField, input: FieldInput): { ok: true; va
     items.push(read.value);
   }
   return { ok: true, value: listValue(items) };
+}
+
+/**
+ * RN-VAR-041: o objeto dos campos dos membros, na ordem do tipo; o opcional vazio fica de fora (e a conferência da forma o põe `null`). A frase vai no membro que não
+ * serve (`at`, a chave do campo dele), com o caminho inteiro: "Escreva um valor para c.endereco.cidade.".
+ */
+function composedOf(members: readonly VariableField[], inputs: ReadonlyMap<string, FieldInput>): { ok: true; value: Value } | { ok: false; message: string; at: string } {
+  const entries: [string, Value][] = [];
+  for (const member of members) {
+    const name = member.path[member.path.length - 1];
+    const input = inputs.get(name) ?? emptyInput;
+    if (member.optional && isBlank(member, input)) continue;
+    const read = valueOf(member, input);
+    if (!read.ok) return { ok: false, message: read.message, at: read.at ?? member.key };
+    entries.push([name, read.value]);
+  }
+  return { ok: true, value: objectValue(entries) };
 }
 
 /**
@@ -342,16 +471,17 @@ function objectOf(field: VariableField, text: string): { ok: true; value: Value 
 
 /**
  * Os valores dos campos, pelo índice da declaração, ou a frase de cada campo que não serve (RN-VAR-027: a conferência antes de executar). Com `touched`, o campo com
- * valor padrão que a pessoa não mexeu não vai: o literal fica o do script, e a expressão se avalia na vez dela.
+ * valor padrão que a pessoa não mexeu não vai: o literal fica o do script, e a expressão se avalia na vez dela. A frase vai pela chave do campo (`key`), a do membro
+ * no campo de objeto repartido.
  */
-export function answersOf(fields: readonly VariableField[], inputs: ReadonlyMap<number, FieldInput>, touched?: ReadonlySet<number>): { answers: Map<number, Value>; problems: Map<number, string> } {
+export function answersOf(fields: readonly VariableField[], inputs: ReadonlyMap<number, FieldInput>, touched?: ReadonlySet<number>): { answers: Map<number, Value>; problems: Map<string, string> } {
   const answers = new Map<number, Value>();
-  const problems = new Map<number, string>();
+  const problems = new Map<string, string>();
   for (const field of fields) {
     if (touched !== undefined && field.fallback.kind !== "none" && !touched.has(field.index)) continue;
     const read = valueOf(field, inputs.get(field.index) ?? emptyInput);
     if (read.ok) answers.set(field.index, read.value);
-    else problems.set(field.index, read.message);
+    else problems.set(read.at ?? field.key, read.message);
   }
   return { answers, problems };
 }
@@ -420,8 +550,8 @@ export function pastedItems(field: Pick<VariableField, "kind">, text: string): s
   return field.kind === "string" || field.kind === "sql" ? lines : lines.filter((line) => line.trim() !== "");
 }
 
-/** O rótulo do campo: "cliente_id · number". */
-export const fieldLabel = (field: VariableField) => `${field.name} · ${field.typeText}`;
+/** O rótulo do campo: "cliente_id · number"; o do membro, dentro do grupo do objeto, só com o nome dele: "uf? · string". */
+export const fieldLabel = (field: VariableField) => `${field.path.length === 0 ? field.name : `${field.path[field.path.length - 1]}${field.optional ? "?" : ""}`} · ${field.typeText}`;
 
 /** O tipo mostrado, como o painel (RN-VAR-024). */
 export const fieldType = (field: VariableField) => typeLabel(field.declared);

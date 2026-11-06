@@ -236,6 +236,20 @@ export function objectMembers(model: ScriptModel, annotation: TypeAnnotation): r
   return members === null ? null : [...members.values()];
 }
 
+/**
+ * Os campos do objeto no fim do caminho (`c.endereco` → os de `Endereco`), pelo tipo escrito, para o realce e o autocompletar do editor (RN-VAR-025 e 040); nulo
+ * quando o caminho sai do objeto: o campo que o tipo não tem, a lista, o tipo de coluna. O `| null` não para o caminho: quem diz que o valor é `null` é a execução.
+ */
+export function membersAt(model: ScriptModel, annotation: TypeAnnotation, path: readonly string[]): readonly TypeMember[] | null {
+  let current = annotation;
+  for (const name of path) {
+    const member = current.list ? undefined : objectMembers(model, current)?.find((candidate) => candidate.name === name);
+    if (member === undefined) return null;
+    current = member.type;
+  }
+  return current.list ? null : objectMembers(model, current);
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 // O tipo (RN-VAR-004).
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------

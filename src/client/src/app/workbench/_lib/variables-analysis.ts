@@ -2,6 +2,7 @@ import type { Engine } from "@/components/ui/engine-tag";
 
 import { commandStart, statementHasBody, visitCode } from "./sql-statements";
 import { childrenOf, type Node } from "./variables/ast";
+import { membersAt } from "./variables/named-types";
 import { checkScript } from "./variables/run";
 import { readScript, staticDiagnostics, type ItemDiagnostic, type ModelItem, type ScriptModel } from "./variables/script";
 import { variablesEditorCopy as copy } from "./variables-editor.copy";
@@ -383,7 +384,11 @@ function readStatement(model: ScriptModel, item: ModelItem, analysis: EditorAnal
   for (const reference of scan.references) {
     const declared = model.declarations.get(reference.name);
     const isSql = declared?.annotation?.base === "sql";
-    marks.push({ from: item.start + reference.start, to: item.start + reference.end, kind: isSql ? "sqlVariable" : "variable", name: reference.name });
+    // RN-VAR-040: a cor vai até o último campo que o tipo anotado tem (`@c.endereco.cidade`); o resto do caminho é SQL (`@p.e.x` é `$1.x`).
+    let depth = 0;
+    const annotation = declared?.annotation ?? null;
+    while (annotation !== null && depth < reference.path.length && membersAt(model, annotation, reference.path.slice(0, depth).map((field) => field.name))?.some((member) => member.name === reference.path[depth].name) === true) depth++;
+    marks.push({ from: item.start + reference.start, to: item.start + (depth === 0 ? reference.end : reference.path[depth - 1].end), kind: isSql ? "sqlVariable" : "variable", name: reference.name });
     if (isSql) continue;
 
     const before = text.slice(Math.max(0, reference.start - 400), reference.start);

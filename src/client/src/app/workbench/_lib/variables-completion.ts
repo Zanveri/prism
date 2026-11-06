@@ -7,6 +7,7 @@ import { visitCode } from "./sql-statements";
 import { allowedBefore } from "./variables/at-names";
 import { closedNames, namespaceMembers } from "./variables/catalog";
 import { methodNames } from "./variables/functions";
+import { membersAt } from "./variables/named-types";
 import { readScript, type ModelItem, type ScriptModel } from "./variables/script";
 import { analysisMaxChars } from "./variables-analysis";
 import { variablesEditorCopy as copy } from "./variables-editor.copy";
@@ -125,6 +126,14 @@ function createModelCache() {
 
 const variable = (name: string, detail: string): Completion => ({ label: name, type: "variable", detail });
 
+const word = /^[\p{ID_Continue}$]*$/u;
+
+/** O caminho de campos antes do cursor num valor: `c.endereco.ci` → `{ root: "c", path: ["endereco"], partial: "ci" }`; nulo sem ponto. */
+const valueChain = /([\p{ID_Start}_$][\p{ID_Continue}$]*)((?:\.[\p{ID_Start}_$][\p{ID_Continue}$]*)*)\.([\p{ID_Continue}$]*)$/u;
+
+/** O mesmo depois do `@` no SQL, colado ao nome como a troca o lê (RN-VAR-016): `@c.endereco.ci`. */
+const atChain = /@([\p{ID_Start}_$][\p{ID_Continue}$]*)((?:\.[\p{ID_Continue}$]*)+)$/u;
+
 export type VariablesCompletion = {
   /** As fontes que entram na lista do autocompletar. */
   sources: CompletionSource[];
@@ -141,9 +150,20 @@ export function variablesCompletion(options: VariablesCompletionOptions): Variab
 
   const declaredAbove = (model: ScriptModel, item: ModelItem) => [...model.declarations.values()].filter((declaration) => declaration.itemIndex < item.index);
 
+  /**
+   * RN-VAR-025 e 040: os campos do tipo da variável declarada acima, no fim do caminho (`c.endereco.` → os de `Endereco`), pela anotação; nulo quando ela não é de
+   * objeto ali. ponytail: o objeto sem anotação (`let c = { id: 1 }`, a consulta) só se sabe na execução, e não completa.
+   */
+  function fieldOptions(model: ScriptModel, item: ModelItem, name: string, path: readonly string[]): Completion[] | null {
+    const declaration = model.declarations.get(name);
+    const annotation = declaration !== undefined && declaration.itemIndex < item.index ? declaration.annotation : null;
+    const members = annotation === null ? null : membersAt(model, annotation, path);
+    return members === null || members.length === 0 ? null : members.map((member): Completion => ({ label: member.name, type: "property", detail: member.type.text }));
+  }
+
   /** O `@nome` no SQL: os nomes declarados acima do comando. */
   function afterAt(context: CompletionContext, model: ScriptModel, item: ModelItem): CompletionResult | null {
-    const match = context.matchBefore(/@[\p{ID_Continue}$]*/u);
+    const match = context.matchBefore(/@[\p{ID_Continue}$]*(?:\.[\p{ID_Continue}$]*)*/u);
     if (match === null || item.atScan === null || item.atScan.inBody) return null;
 
     // O `@` tem de ser SQL de verdade: dentro de um texto, de um comentário ou de um nome entre aspas ele não é variável.
@@ -153,6 +173,14 @@ export function variablesCompletion(options: VariablesCompletionOptions): Variab
     });
     // E o caractere de antes tem de deixar o `@` ser variável: no PostgreSQL o `<@x` é o operador `<@` (RN-VAR-015), e ali não há nome a completar.
     if (!isCode || !allowedBefore(item.text, match.from - item.start, options.engine())) return null;
+
+    // `@c.` e `@c.endereco.`: os campos do tipo (RN-VAR-040).
+    const [name, ...path] = match.text.slice(1).split(".");
+    if (path.length > 0) {
+      const partial = path.pop() ?? "";
+      const fields = fieldOptions(model, item, name, path);
+      return fields === null ? null : { from: match.to - partial.length, options: fields, validFor: word };
+    }
 
     const options_ = declaredAbove(model, item).map((declaration) => variable(declaration.name, typeOf(model, declaration.name) ?? copy.completion.variable));
     return options_.length === 0 ? null : { from: match.from + 1, options: options_, validFor: /^[\p{ID_Continue}$]*$/u };
@@ -165,6 +193,11 @@ export function variablesCompletion(options: VariablesCompletionOptions): Variab
 
     const { owner, partial } = memberContext(valueText);
     const from = context.pos - partial.length;
+
+    // `c.` e `c.endereco.` de uma variável anotada com um objeto: os campos do tipo.
+    const chain = valueChain.exec(valueText);
+    const fields = chain === null ? null : fieldOptions(model, item, chain[1], chain[2] === "" ? [] : chain[2].slice(1).split("."));
+    if (fields !== null) return { from, options: fields, validFor: word };
 
     if (owner !== null) {
       const members = namespaceMembers.get(owner);
@@ -205,6 +238,10 @@ export function variablesCompletion(options: VariablesCompletionOptions): Variab
     const item = itemAtPosition(model, position);
     if (item === null) return false;
     if (item.kind !== "statement") return true;
+
+    // Depois de `@c.`, com campos a propor: o que vem é campo da variável, e não coluna (RN-VAR-040).
+    const chain = atChain.exec(state.sliceDoc(Math.max(0, position - 400), position));
+    if (chain !== null && item.atScan?.inBody !== true && allowedBefore(item.text, position - chain[0].length - item.start, options.engine()) && fieldOptions(model, item, chain[1], chain[2].slice(1).split(".").slice(0, -1)) !== null) return true;
 
     // Depois do `@`, com variáveis declaradas: o nome é de uma variável (sem variáveis, `@coluna` é o valor absoluto do PostgreSQL, e as colunas continuam a completar).
     const start = position - (/[\p{ID_Continue}$]*$/u.exec(state.sliceDoc(Math.max(0, position - 80), position))?.[0].length ?? 0);
