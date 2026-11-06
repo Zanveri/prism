@@ -13225,8 +13225,8 @@ As duas primeiras partes não mudam regra: são as regras da seção 41 que a te
   o de tipo de coluna tem a escolha pela chave (RN-VAR-030 e 031); o opcional (`uf?:`) vazio não vai, e fica `null`.
   A frase vai no campo do membro, com o caminho inteiro: "Escreva um valor para c.endereco.cidade.". O "da última vez"
   e o "Voltar ao valor do script" são do grupo inteiro.
-  - O objeto `| null` (`Cliente | null`), a lista de objetos (`Cliente[]`) e o membro que é lista de objetos são uma
-    caixa de texto na fonte do editor, em que se escreve o valor como no script: `{ id: 7, nome: 'Ana', desde: new
+  - O objeto `| null` (`Cliente | null`), a lista de objetos (`Cliente[]`), e o membro que é objeto opcional, objeto
+    `| null` ou lista de objetos são uma caixa de texto na fonte do editor, em que se escreve o valor como no script: `{ id: 7, nome: 'Ana', desde: new
     Date('2026-10-20') }`. Só valem os valores escritos (número, texto, `true`, `false`, `null`, `new Date('…')`, a lista
     e o objeto deles): "Escreva só valores: números, textos, true, false, null, new Date('…'), listas e objetos.".
   - A forma é conferida na execução, com as frases da RN-VAR-038. O valor da vez anterior, o lembrado e o literal do
@@ -13250,6 +13250,7 @@ As duas primeiras partes não mudam regra: são as regras da seção 41 que a te
 
 ### 45.3. Fica para depois
 
-- O objeto `| null` e a lista de objetos campo a campo no diálogo (hoje, a caixa de texto da RN-VAR-041).
+- O objeto `| null`, o membro objeto opcional e a lista de objetos campo a campo no diálogo (hoje, a caixa de texto da
+  RN-VAR-041).
 - A cor e o autocompletar dos campos do objeto sem anotação (`const c = { id: 1 }`, a consulta sem tipo): a forma dele
   só se sabe na execução.

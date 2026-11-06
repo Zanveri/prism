@@ -3006,6 +3006,9 @@ Parte 9, frente 4: o editor lê o script com a linguagem acima e pinta, confere,
   (`AnalysisScheduler`), a dica do ponteiro (`hoverAt`) e o valor no fim da linha. `variables-completion.ts` é o autocompletar. `variables-editor.copy.ts` tem as frases das dicas
   (as dos erros são as da linguagem, `variables/variables.copy.ts`). `sql-keyword-case.ts` ganhou a regra das declarações. `sql-completion.ts` aceita `variables` (as fontes e a pergunta
   que cala as palavras-chave e os nomes da árvore onde o SQL não completa).
+- **Os campos de uma interface no editor (RN-VAR-040).** `membersAt` (`variables/named-types.ts`) dá os campos do tipo anotado no fim de um caminho. Com ele, a
+  marca do `@c.endereco.cidade` vai até o último campo que o tipo tem (o resto fica SQL), e `@c.` no SQL e `c.` no valor completam os campos, com o SQL calado
+  ali. O objeto sem anotação não completa: a forma dele só se sabe na execução.
 - **A prop.** `SqlEditor` recebe `variables?: VariablesStore` (`variables-extension.ts`): `{ snapshot(): ReadonlyMap<string, { type: string; value: string; stale: boolean }>; subscribe(listener: () => void): () => void }`.
   É o armazém dos valores da aba (frente 3, RN-VAR-023); o editor só lê. A chave é o nome da variável. `type` é o tipo como o painel o escreve (`number`, `string[]`, `Date (dia)`, `number | null`:
   o autocompletar deduz daí os métodos); `value` é o texto do valor como o painel o escreve (`7`, `'Ana'`, `[1, 2, 3]`), que o editor só corta (200 caracteres na dica do ponteiro, 60 com `…` no

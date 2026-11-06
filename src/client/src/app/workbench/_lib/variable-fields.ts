@@ -3,7 +3,7 @@ import type { Engine } from "@/components/ui/engine-tag";
 import { variableFieldsCopy as copy } from "./variable-fields.copy";
 import { columnAnnotationType, type ColumnRead, type ColumnTypes } from "./variables/column-types";
 import { parseDateText } from "./variables/dates";
-import { locate } from "./variables/errors";
+import { locate, VariableError } from "./variables/errors";
 import { canonicalNumberText } from "./variables/numbers";
 import type { Node } from "./variables/ast";
 import { Random } from "./variables/random";
@@ -446,7 +446,13 @@ function composedOf(members: readonly VariableField[], inputs: ReadonlyMap<strin
     if (!read.ok) return { ok: false, message: read.message, at: read.at ?? member.key };
     entries.push([name, read.value]);
   }
-  return { ok: true, value: objectValue(entries) };
+  // O `extends` de duas interfaces grandes passa dos 100 campos de um objeto: a recusa da linguagem vira a frase do primeiro membro, e o diálogo não cai.
+  try {
+    return { ok: true, value: objectValue(entries) };
+  } catch (error) {
+    if (!(error instanceof VariableError)) throw error;
+    return { ok: false, message: error.message, at: members[0].key };
+  }
 }
 
 /**

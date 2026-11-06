@@ -269,6 +269,12 @@ describe("o objeto campo a campo (RN-VAR-041)", () => {
     expect(valueAt(back.ok ? back.value : undefined, ["endereco", "cidade"])).toEqual(stringValue("Lages"));
   });
 
+  it("o objeto que passa de 100 campos pelo extends é a frase da linguagem, no primeiro membro", () => {
+    const names = (prefix: string) => Array.from({ length: 60 }, (_, at) => `${prefix}${at}: boolean`).join("; ");
+    const [field] = fieldOf(`interface A { ${names("a")} }\ninterface B { ${names("b")} }\ninterface C extends A, B {}\nlet c: C\nselect @c.a0;`).fields;
+    expect(valueOf(field, expanded(field, emptyInput))).toEqual({ ok: false, message: "O objeto passou de 100 campos.", at: field.members![0].key });
+  });
+
   it("o membro de tipo de coluna traz a coluna, para a escolha pela chave (RN-VAR-030)", () => {
     const { fields: found } = fieldOf("interface P { cliente: pedido.cliente_id }\nlet p: P\nselect @p.cliente;", new Map([["pedido.cliente_id", { type: numberType }]]));
     expect(found[0].members?.map((member) => [member.name, member.kind, member.column])).toEqual([["p.cliente", "number", "pedido.cliente_id"]]);
