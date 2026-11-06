@@ -21,7 +21,7 @@ export function modeOf(pathname: string, last: AppMode): AppMode {
   return last;
 }
 
-/** Os itens do menu de modo (RN-CONSTRUIR-001): escolha única (`menuitemradio`) com o ícone à esquerda, a dica abaixo do nome e o visto no modo ativo. */
+/** Os itens do menu de modo (RN-CONSTRUIR-001): escolha única (`menuitemradio`) com o ícone à esquerda, a dica abaixo do nome, o selo "beta" no Construir e o visto no modo ativo. */
 export function modeMenuGroups(current: AppMode, onSelect?: (mode: AppMode) => void): Array<{ label: string; items: ContextMenuItem[] }> {
   return [
     {
@@ -39,6 +39,7 @@ export function modeMenuGroups(current: AppMode, onSelect?: (mode: AppMode) => v
           id: "build",
           label: copy.build.label,
           hint: copy.build.hint,
+          badge: copy.build.badge,
           icon: <BuildIcon />,
           checked: current === "build",
           onSelect: () => onSelect?.("build"),
