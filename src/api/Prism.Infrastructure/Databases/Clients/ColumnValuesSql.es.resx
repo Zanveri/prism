@@ -12,7 +12,7 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="NotAvailable" xml:space="preserve">
+  <data name="NotAvailableMessage" xml:space="preserve">
     <value>Los valores de una columna solo se listan en PostgreSQL, Db2 e Informix.</value>
   </data>
   <data name="TableNotInCatalog" xml:space="preserve">
@@ -24,7 +24,7 @@
   <data name="ColumnBinary" xml:space="preserve">
     <value>La columna es binaria o de objeto grande, y sus valores no se listan.</value>
   </data>
-  <data name="DescriptionIsColumn" xml:space="preserve">
+  <data name="DescriptionIsTheColumn" xml:space="preserve">
     <value>La descripción es otra columna de la tabla, y no la propia columna de los valores.</value>
   </data>
   <data name="DescriptionNotInTable" xml:space="preserve">

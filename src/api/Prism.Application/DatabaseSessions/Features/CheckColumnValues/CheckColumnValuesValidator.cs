@@ -14,10 +14,9 @@ namespace Prism.Application.DatabaseSessions.Features.CheckColumnValues;
 /// </summary>
 public sealed class CheckColumnValuesValidator : AbstractValidator<CheckColumnValuesCommand>
 {
-    private const string QueryInvalidCode = "QUERY_INVALID";
-
-    /// <summary>Os textos, no idioma do pedido: <c>CheckColumnValuesValidator.resx</c> (português) e as traduções ao lado.</summary>
     private static readonly ResourceManager Texts = new(typeof(CheckColumnValuesValidator));
+
+    private const string QueryInvalidCode = "QUERY_INVALID";
 
     public CheckColumnValuesValidator()
         => RuleFor(request => request).Custom((request, context) =>

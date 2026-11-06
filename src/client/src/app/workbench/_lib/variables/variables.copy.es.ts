@@ -112,7 +112,6 @@ export const phraseEs: VariablesPhrase = {
   sqlUnbalanced: (name: string) => `El valor de ${name} (sql) no tiene los paréntesis equilibrados y se tragaría el resto de la sentencia.`,
   sqlVariableInExpression: (name: string) => `${name} es sql, y una variable sql solo entra en el SQL (@${name}).`,
 
-  // Las interfaces y los `type` (RN-VAR-002 a 004): la forma comprobada contra los valores, con la semántica de TypeScript.
   typeNameReserved: (name: string) => `${name} no puede ser nombre de tipo: elige otro.`,
   expectedTypeName: () => "Se esperaba el nombre del tipo.",
   expectedOpenBrace: (name: string) => `Se esperaba { después de ${name}: interface ${name} { campo: tipo }.`,
@@ -128,23 +127,20 @@ export const phraseEs: VariablesPhrase = {
   typeHasError: (name: string, line: number) => `El tipo ${name} tiene un error (línea ${line}).`,
   excessField: (field: string, type: string) => `El campo ${field} no existe en ${type}.`,
   missingFields: (name: string, fields: readonly string[], type: string) =>
-    fields.length === 1 ? `A ${name} le falta el campo ${fields[0]}, que ${type} pide.` : `A ${name} le faltan los campos ${fields.slice(0, -1).join(", ")} y ${fields[fields.length - 1]}, que ${type} pide.`,
+    fields.length === 1 ? `${name} no tiene el campo ${fields[0]}, que ${type} pide.` : `${name} no tiene los campos ${fields.slice(0, -1).join(", ")} y ${fields[fields.length - 1]}, que ${type} pide.`,
   queryNullColumn: (column: string, name: string, type: string, field: string, fieldType: string) => `La columna ${column} de ${name} vino nula, y ${type}.${field} es ${fieldType}.`,
 
-  // El `random.of` (RN-VAR-010): `written` es la llamada como está en el script, `random.of(cliente.id)` o `random.of(cliente.id, 10)`.
   sampleEmpty: (written: string) => `${written}: la columna no tiene valores.`,
   sampleTooFew: (written: string, total: number) => `${written}: la columna solo tiene ${total === 1 ? "1 valor" : `${group(total)} valores`}.`,
-  sampleCountInvalid: (shown: string) => `random.of: cuántos tiene que ser un entero de 1 a 100, y recibió ${shown}.`,
+  sampleCountInvalid: (shown: string) => `random.of: la cantidad tiene que ser un entero de 1 a 100, y recibió ${shown}.`,
   sampleTruncated: (written: string) => `${written}: el valor sorteado pasa de 10.000 caracteres y no viene entero de la base de datos.`,
   sampleChanged: (written: string) => `${written}: la columna cambió durante el sorteo; ejecuta de nuevo.`,
   sampleNotEvaluatedHere: (name: string) => `El random.of de ${name} se ejecuta en la base de datos, en su turno en el script.`,
 
-  // El tipo de una columna (RN-VAR-004).
   columnMissing: (written: string) => `La columna ${written} no existe.`,
   columnIsList: (column: string) => `La columna ${column} es una lista de la base de datos, y el tipo de columna no guarda listas.`,
   columnNotRead: (written: string) => `El tipo de la columna ${written} no se leyó del catálogo.`,
 
-  // La variable de consulta (RN-VAR-011 y 013).
   queryTooManyRows: (name: string, rows: number, type: string) => `La consulta de ${name} devolvió ${group(rows)} filas, y ${name} es ${type}: anota ${type}[] para una lista.`,
   queryBinaryColumn: (column: string) => `La columna ${column} es binaria, y una variable no guarda binarios.`,
   queryNotJsNumber: (value: string, column: string) => `El valor ${value} de la columna ${column} no es un número de JavaScript.`,

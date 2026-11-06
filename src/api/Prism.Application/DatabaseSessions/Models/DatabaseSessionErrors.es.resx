@@ -96,6 +96,9 @@
   <data name="VariableQueryTooLargeTitle" xml:space="preserve">
     <value>La consulta de la variable pasó del límite.</value>
   </data>
+  <data name="ValuesInvalidTitle" xml:space="preserve">
+    <value>Error al enviar datos a la API.</value>
+  </data>
   <data name="ValuesTableNotFoundTitle" xml:space="preserve">
     <value>Tabla no encontrada.</value>
   </data>

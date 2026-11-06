@@ -12,7 +12,7 @@ export const executionTabCopyEn: ExecutionTabCopy = {
   openScript: "Open the script",
   cancel: "Cancel",
   values: "Values used",
-  sqlChip: "Goes into the statement as it is, without quotes.",
+  sqlChip: "Goes into the statement as is, without quotes.",
   missing: (name: string) => `The script ${name} no longer exists.`,
   newTab: "Run in a new tab",
 };

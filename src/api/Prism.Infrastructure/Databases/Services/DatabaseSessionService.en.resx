@@ -67,6 +67,12 @@
     <value>A variable's query is a single statement, and the text has more than one; nothing was run.</value>
   </data>
   <data name="VariableQueryNotRead" xml:space="preserve">
-    <value>A variable's query must be a read: {0}.</value>
+    <value>A variable's query has to be a read: {0}.</value>
+  </data>
+  <data name="NotAReadEnding" xml:space="preserve">
+    <value> is not a read</value>
+  </data>
+  <data name="NotAReadShortEnding" xml:space="preserve">
+    <value> is not</value>
   </data>
 </root>

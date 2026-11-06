@@ -15,10 +15,9 @@ namespace Prism.Application.DatabaseSessions.Features.ExecuteVariableQuery;
 /// </summary>
 public sealed class ExecuteVariableQueryValidator : AbstractValidator<ExecuteVariableQueryCommand>
 {
-    private const string Code = "QUERY_INVALID";
-
-    /// <summary>Os textos, no idioma do pedido: <c>ExecuteVariableQueryValidator.resx</c> (português) e as traduções ao lado.</summary>
     private static readonly ResourceManager Texts = new(typeof(ExecuteVariableQueryValidator));
+
+    private const string Code = "QUERY_INVALID";
 
     public ExecuteVariableQueryValidator()
         => RuleFor(request => request).Custom((request, context) =>

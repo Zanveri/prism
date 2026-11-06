@@ -16,9 +16,9 @@
     <value>Enter the variable's query.</value>
   </data>
   <data name="SqlTooLarge" xml:space="preserve">
-    <value>A variable's query can have up to 1 MB.</value>
+    <value>A variable's query can be up to 1 MB.</value>
   </data>
   <data name="MaxRowsInvalid" xml:space="preserve">
-    <value>The query's rows are an integer from 1 to 10,000.</value>
+    <value>The query rows are an integer from 1 to 10,000.</value>
   </data>
 </root>

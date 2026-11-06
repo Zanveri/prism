@@ -116,7 +116,6 @@ export const scriptsCopyEs: ScriptsCopy = {
   },
   menu: {
     open: "Abrir",
-    // RN-VAR-026: justo después de "Abrir", en los scripts que declaran variables al principio.
     runWithValues: "Ejecutar con valores…",
     rename: "Renombrar",
     edit: "Editar script…",

@@ -69,4 +69,10 @@
   <data name="VariableQueryNotRead" xml:space="preserve">
     <value>A consulta de uma variável tem de ser uma leitura: {0}.</value>
   </data>
+  <data name="NotAReadEnding" xml:space="preserve">
+    <value> não é leitura</value>
+  </data>
+  <data name="NotAReadShortEnding" xml:space="preserve">
+    <value> não é</value>
+  </data>
 </root>

@@ -50,7 +50,6 @@ export const commandConfirmationCopyEs: CommandConfirmationCopy = {
   },
 
   filter: (filter: string) => `Con el filtro del resultado: ${filter}`,
-  // RN-VAR-020: las consultas de variable que se ejecutan antes de la sentencia del Ctrl+Enter.
   queries: (count: number) => (count === 1 ? "Antes, se ejecuta la consulta de la variable:" : "Antes, se ejecutan las consultas de las variables:"),
 
   save: {

@@ -38,10 +38,10 @@ export const variableFieldsCopyEs: VariableFieldsCopy = {
   nullLabel: "NULL",
   time: "Hora",
   timeOptional: "Hora (opcional)",
-  sqlWarning: "Entra en la sentencia tal como está, sin comillas: revisa lo que escribes.",
+  sqlWarning: "Entra en la sentencia tal cual, sin comillas: revisa lo que escribes.",
   items: (count: number) => formatCount(count, "elemento", "elementos"),
   removeItem: (item: string) => `Quitar ${item}`,
-  itemsHint: "Enter o coma cierran el elemento; pegar varias líneas crea un elemento por línea.",
+  itemsHint: "Enter o una coma cierran el elemento; pegar varias líneas crea un elemento por línea.",
   edgeSpace: (start: boolean, end: boolean) => (start && end ? "Espacio al principio y al final" : start ? "1 espacio al principio" : "1 espacio al final"),
 
   choiceNote: (table: string, column: string, described: boolean) => `Valores de ${table} (${column})${described ? ", con el nombre" : ""}`,

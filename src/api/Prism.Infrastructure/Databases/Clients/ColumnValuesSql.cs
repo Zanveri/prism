@@ -16,13 +16,12 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// </summary>
 internal static partial class ColumnValuesSql
 {
+    private static readonly ResourceManager Texts = new(typeof(ColumnValuesSql));
+
     /// <summary>RN-VAR-035: a descrição de um valor chega cortada nisto.</summary>
     public const int MaxDescriptionLength = 200;
 
-    /// <summary>Os textos, no idioma do pedido: <c>ColumnValuesSql.resx</c> (português) e as traduções ao lado.</summary>
-    private static readonly ResourceManager Texts = new(typeof(ColumnValuesSql));
-
-    public static string NotAvailableMessage => Texts.Get("NotAvailable");
+    public static string NotAvailableMessage => Texts.Get(nameof(NotAvailableMessage));
 
     /// <summary>RN-VAR-035: o caractere de escape do `LIKE`. Não quer dizer nada num texto de nenhum dos três bancos; a barra quereria no PostgreSQL com `standard_conforming_strings` desligado.</summary>
     private const char LikeEscape = '!';
@@ -61,7 +60,7 @@ internal static partial class ColumnValuesSql
             return null;
 
         if (string.Equals(description, column, StringComparison.Ordinal))
-            return Invalid("description", Texts.Get("DescriptionIsColumn"));
+            return Invalid("description", Texts.Get("DescriptionIsTheColumn"));
 
         if (Find(columns, description) is not { } described)
             return Invalid("description", Texts.Get("DescriptionNotInTable"));

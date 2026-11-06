@@ -112,9 +112,8 @@ export const phraseEn: VariablesPhrase = {
   sqlUnbalanced: (name: string) => `The value of ${name} (sql) does not have balanced parentheses and would swallow the rest of the statement.`,
   sqlVariableInExpression: (name: string) => `${name} is sql, and a sql variable only goes into the SQL (@${name}).`,
 
-  // The interfaces and the `type` (RN-VAR-002 to 004): the shape checked against the values, with TypeScript's semantics.
   typeNameReserved: (name: string) => `${name} cannot be a type name: choose another.`,
-  expectedTypeName: () => "Expected the type's name.",
+  expectedTypeName: () => "Expected the type name.",
   expectedOpenBrace: (name: string) => `Expected { after ${name}: interface ${name} { field: type }.`,
   expectedColonInMember: (name: string) => `Expected : after the field ${name}, as in ${name}: string.`,
   duplicateMember: (name: string) => `The field ${name} appears twice.`,
@@ -128,23 +127,20 @@ export const phraseEn: VariablesPhrase = {
   typeHasError: (name: string, line: number) => `The type ${name} has an error (line ${line}).`,
   excessField: (field: string, type: string) => `The field ${field} does not exist in ${type}.`,
   missingFields: (name: string, fields: readonly string[], type: string) =>
-    fields.length === 1 ? `${name} is missing the field ${fields[0]}, which ${type} requires.` : `${name} is missing the fields ${fields.slice(0, -1).join(", ")} and ${fields[fields.length - 1]}, which ${type} requires.`,
+    fields.length === 1 ? `${name} lacks the field ${fields[0]}, which ${type} requires.` : `${name} lacks the fields ${fields.slice(0, -1).join(", ")} and ${fields[fields.length - 1]}, which ${type} requires.`,
   queryNullColumn: (column: string, name: string, type: string, field: string, fieldType: string) => `The column ${column} of ${name} came back null, and ${type}.${field} is ${fieldType}.`,
 
-  // `random.of` (RN-VAR-010): `written` is the call as it is in the script, `random.of(customer.id)` or `random.of(customer.id, 10)`.
   sampleEmpty: (written: string) => `${written}: the column has no values.`,
   sampleTooFew: (written: string, total: number) => `${written}: the column only has ${total === 1 ? "1 value" : `${group(total)} values`}.`,
-  sampleCountInvalid: (shown: string) => `random.of: how many must be an integer from 1 to 100, and got ${shown}.`,
+  sampleCountInvalid: (shown: string) => `random.of: the count must be an integer from 1 to 100, and it got ${shown}.`,
   sampleTruncated: (written: string) => `${written}: the drawn value goes over 10,000 characters and does not come whole from the database.`,
   sampleChanged: (written: string) => `${written}: the column changed during the draw; run again.`,
   sampleNotEvaluatedHere: (name: string) => `The random.of of ${name} runs in the database, at its turn in the script.`,
 
-  // A column's type (RN-VAR-004).
   columnMissing: (written: string) => `The column ${written} does not exist.`,
-  columnIsList: (column: string) => `The column ${column} is a database list, and a column type does not hold a list.`,
+  columnIsList: (column: string) => `The column ${column} is a database list, and the column type does not hold a list.`,
   columnNotRead: (written: string) => `The type of the column ${written} was not read from the catalog.`,
 
-  // The query variable (RN-VAR-011 and 013).
   queryTooManyRows: (name: string, rows: number, type: string) => `The query of ${name} returned ${group(rows)} rows, and ${name} is ${type}: annotate ${type}[] for a list.`,
   queryBinaryColumn: (column: string) => `The column ${column} is binary, and a variable does not hold binary.`,
   queryNotJsNumber: (value: string, column: string) => `The value ${value} of the column ${column} is not a JavaScript number.`,

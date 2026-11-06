@@ -50,7 +50,6 @@ export const commandConfirmationCopyEn: CommandConfirmationCopy = {
   },
 
   filter: (filter: string) => `With the result filter: ${filter}`,
-  // RN-VAR-020: the variable queries that run before the Ctrl+Enter statement.
   queries: (count: number) => (count === 1 ? "First, the variable's query runs:" : "First, the variables' queries run:"),
 
   save: {

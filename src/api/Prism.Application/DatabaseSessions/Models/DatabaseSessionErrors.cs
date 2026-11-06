@@ -95,7 +95,7 @@ internal static class DatabaseSessionErrors
             EDatabaseFailure.VariableQueryTooLarge => ApiErrorDto.CreateUnprocessableEntity(Texts.Get("VariableQueryTooLargeTitle"), "VARIABLE_QUERY_TOO_LARGE", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = failure.Reason, ["limit"] = failure.Limit }),
 
             // RN-VAR-035: a coluna ou a descrição que o catálogo da sessão recusa vem na forma do erro de campo, como a do validator; a tabela que não existe é 404.
-            EDatabaseFailure.ValuesInvalid => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "VALUES_INVALID", failure.Field ?? "column", failure.Message),
+            EDatabaseFailure.ValuesInvalid => ApiErrorDto.CreateUnprocessableEntityOnField(Texts.Get("ValuesInvalidTitle"), "VALUES_INVALID", failure.Field ?? "column", failure.Message),
             EDatabaseFailure.ValuesTableNotFound => ApiErrorDto.CreateNotFound(Texts.Get("ValuesTableNotFoundTitle"), "VALUES_TABLE_NOT_FOUND", failure.Message),
 
             // RN-PROT-002: nada foi ao banco, e o resultado anterior continua (sem `executed`).

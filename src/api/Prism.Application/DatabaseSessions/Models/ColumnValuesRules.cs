@@ -11,10 +11,9 @@ namespace Prism.Application.DatabaseSessions.Models;
 /// </summary>
 internal static class ColumnValuesRules
 {
-    public const string InvalidCode = "VALUES_INVALID";
-
-    /// <summary>Os textos, no idioma do pedido: <c>ColumnValuesRules.resx</c> (português) e as traduções ao lado.</summary>
     private static readonly ResourceManager Texts = new(typeof(ColumnValuesRules));
+
+    public const string InvalidCode = "VALUES_INVALID";
 
     public const int MaxSearchLength = 200;
     public const int MaxOffset = 1_000_000;
@@ -48,7 +47,7 @@ internal static class ColumnValuesRules
         if (!IsAbsent(limit) && !IsIntegerIn(limit!.Value, 0, MaxLimit))
             refusals.Add(("limit", Texts.Get("LimitInvalid")));
         else if (!IsAbsent(limit) && limit!.Value.GetInt32() == 0 && !WantsTotal(total))
-            refusals.Add(("limit", Texts.Get("LimitZeroNeedsTotal")));
+            refusals.Add(("limit", Texts.Get("LimitZeroWithoutTotal")));
 
         return refusals;
     }

@@ -23,10 +23,11 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
     private readonly ForwardedPortLocal? _forwardedPort;
     private readonly TcpListener? _socksListener;
 
-    private ConnectionTunnel(string boundHost, int boundPort, SshClient? sshClient, ForwardedPortLocal? forwardedPort, TcpListener? socksListener, string? firstUseHostKey = null)
+    private ConnectionTunnel(string boundHost, int boundPort, string targetHost, SshClient? sshClient, ForwardedPortLocal? forwardedPort, TcpListener? socksListener, string? firstUseHostKey = null)
     {
         BoundHost = boundHost;
         BoundPort = boundPort;
+        TargetHost = targetHost;
         FirstUseHostKey = firstUseHostKey;
         _sshClient = sshClient;
         _forwardedPort = forwardedPort;
@@ -36,6 +37,12 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
     public string BoundHost { get; }
 
     public int BoundPort { get; }
+
+    /// <summary>
+    /// O host do banco que o túnel alcança, do outro lado: o nome que o certificado do servidor tem de trazer. O driver conecta em
+    /// <see cref="BoundHost"/> (o loopback), e sem este nome o `verify-full` conferiria o certificado contra `127.0.0.1` e nunca passaria.
+    /// </summary>
+    public string TargetHost { get; }
 
     /// <summary>RN-REDE-005: a impressão digital (`SHA256:...`) da chave que o servidor SSH apresentou e foi aceita por ser o primeiro acesso; nula nos outros casos.</summary>
     public string? FirstUseHostKey { get; }
@@ -48,8 +55,12 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
         if (settings.Proxy is { } proxy)
             return await OpenSocksAsync(settings.Host, settings.Port, proxy, cancellationToken);
 
-        return new ConnectionTunnel(settings.Host, settings.Port, null, null, null);
+        return new ConnectionTunnel(settings.Host, settings.Port, settings.Host, null, null, null);
     }
+
+    /// <summary>O destino do encaminhamento pelo SSH: o "Host remoto" das configurações avançadas, ou o host da conexão.</summary>
+    internal static string RemoteHostOf(ConnectionSettings settings, ConnectionSshSettings ssh)
+        => string.IsNullOrWhiteSpace(ssh.RemoteHost) ? settings.Host : ssh.RemoteHost.Trim();
 
     private static async Task<ConnectionTunnel> OpenSshAsync(ConnectionSettings settings, ConnectionSshSettings ssh, CancellationToken cancellationToken)
     {
@@ -92,14 +103,25 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
 
         var boundHost = string.IsNullOrWhiteSpace(ssh.LocalHost) ? "127.0.0.1" : ssh.LocalHost.Trim();
         var localPort = ssh.LocalPort > 0 ? (uint)ssh.LocalPort : 0u;
-        var remoteHost = string.IsNullOrWhiteSpace(ssh.RemoteHost) ? settings.Host : ssh.RemoteHost.Trim();
+        var remoteHost = RemoteHostOf(settings, ssh);
         var remotePort = ssh.RemotePort > 0 ? (uint)ssh.RemotePort : (uint)settings.Port;
 
         var forwardedPort = new ForwardedPortLocal(boundHost, localPort, remoteHost, remotePort);
-        client.AddForwardedPort(forwardedPort);
-        forwardedPort.Start();
+        try
+        {
+            client.AddForwardedPort(forwardedPort);
+            forwardedPort.Start();
+        }
+        catch
+        {
+            // A porta local fixa em uso (ou o endereço local que não existe) não deixa a sessão SSH já aberta viva e sem dono.
+            forwardedPort.Dispose();
+            client.Disconnect();
+            client.Dispose();
+            throw;
+        }
 
-        return new ConnectionTunnel(forwardedPort.BoundHost, (int)forwardedPort.BoundPort, client, forwardedPort, null, firstUseKey);
+        return new ConnectionTunnel(forwardedPort.BoundHost, (int)forwardedPort.BoundPort, remoteHost, client, forwardedPort, null, firstUseKey);
     }
 
     /// <summary>
@@ -176,7 +198,7 @@ internal sealed class ConnectionTunnel : IAsyncDisposable
         listener.Start();
         _ = AcceptThroughSocksAsync(listener, first, targetHost, targetPort, proxy);
 
-        return new ConnectionTunnel("127.0.0.1", ((IPEndPoint)listener.LocalEndpoint).Port, null, null, listener);
+        return new ConnectionTunnel("127.0.0.1", ((IPEndPoint)listener.LocalEndpoint).Port, targetHost, null, null, listener);
     }
 
     /// <summary>Uma conexão com o destino pelo proxy, já negociada. Na falha, o socket é descartado e a exceção sobe como veio.</summary>

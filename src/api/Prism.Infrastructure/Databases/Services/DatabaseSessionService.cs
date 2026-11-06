@@ -353,6 +353,14 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         return outcome;
     }
 
+    /// <summary>"um DELETE não é leitura" vira "um DELETE não é": o detalhe já diz "tem de ser uma leitura". O fim de cada idioma está no `.resx`.</summary>
+    private static string WithoutTheRepeatedRead(string reason)
+    {
+        var ending = Texts.Get("NotAReadEnding");
+
+        return reason.EndsWith(ending, StringComparison.Ordinal) ? reason[..^ending.Length] + Texts.Get("NotAReadShortEnding") : reason;
+    }
+
     /// <summary>
     /// RN-VAR-034: a consulta de uma variável, com a vez tomada como um comando. As recusas pelo texto vêm na ordem da regra; depois dela a sessão continua com o
     /// resultado, os guardados e o comando da contagem de antes (só o cursor fechou), e a transação manual não conta um comando a mais.
@@ -372,7 +380,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             // RN-PROT-005: a mesma lista do somente leitura, em qualquer conexão. No PostgreSQL em Auto-commit o banco também recusa, na transação só de leitura.
             // O detalhe é o da regra ("...: um DELETE não é."), sem repetir a "leitura" do motivo; o `reason` vai como o somente leitura o escreve.
             if (ReadOnlySql.Refusal(sql, engine) is { } reason)
-                return new DatabaseFailure(EDatabaseFailure.VariableQueryNotRead, Texts.Get("VariableQueryNotRead", reason.EndsWith(" não é leitura", StringComparison.Ordinal) ? reason[..^" leitura".Length] : reason), Reason: reason);
+                return new DatabaseFailure(EDatabaseFailure.VariableQueryNotRead, Texts.Get("VariableQueryNotRead", WithoutTheRepeatedRead(reason)), Reason: reason);
 
             if (session.Connection.Transaction == ETransactionState.Failed)
                 return TransactionFailed(session);

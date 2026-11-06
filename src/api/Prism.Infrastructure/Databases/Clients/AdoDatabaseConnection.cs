@@ -206,6 +206,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     protected int EffectivePort => _tunnel?.BoundPort ?? TunnelSettings?.Port ?? 0;
 
+    /// <summary>Com túnel SSH ou proxy, o host do banco do outro lado, que o TLS confere no certificado no lugar do loopback do túnel; sem túnel, nulo.</summary>
+    protected string? TunneledHost => _tunnel?.TargetHost;
+
     public string ServerVersion { get; private set; } = string.Empty;
 
     public bool IsOpen => !_discarded && _connection?.State == ConnectionState.Open;
@@ -2401,7 +2404,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private async Task<Result<FullRows, DatabaseFailure>> ReadFullRowsAsync(DbDataReader reader, long started, int? maxRows, CancellationToken cancellationToken)
     {
         if (maxRows is not null && reader.FieldCount > QueryPaging.MaxVariableColumns)
-            return TooLarge("columns", QueryPaging.MaxVariableColumns, Texts.Get("VariableTooManyColumns", QueryPaging.MaxVariableColumns, reader.FieldCount));
+            return TooLarge("columns", QueryPaging.MaxVariableColumns, Texts.Get("VariableQueryTooManyColumns", QueryPaging.MaxVariableColumns, reader.FieldCount));
 
         IReadOnlyList<QueryColumn> columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal)))];
         var rows = new List<string?[]>();
@@ -2412,7 +2415,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         {
             _rowPending = false;
             if (rows.Count == maxRows)
-                return TooLarge("rows", maxRows.Value, Texts.Get("VariableTooManyRows", Thousands(maxRows.Value)));
+                return TooLarge("rows", maxRows.Value, Texts.Get("VariableQueryTooManyRows", Thousands(maxRows.Value)));
 
             var row = new string?[columns.Count];
             for (var column = 0; column < row.Length; column++)
@@ -2422,7 +2425,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             }
 
             if (maxRows is not null && bytes > QueryPaging.MaxVariableBytes)
-                return TooLarge("bytes", QueryPaging.MaxVariableBytes, Texts.Get("VariableTooManyBytes"));
+                return TooLarge("bytes", QueryPaging.MaxVariableBytes, Texts.Get("VariableQueryTooManyBytes"));
 
             rows.Add(row);
         }
@@ -2435,9 +2438,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private static DatabaseFailure TooLarge(string reason, long limit, string message)
         => new(EDatabaseFailure.VariableQueryTooLarge, message, Reason: reason, Limit: limit);
 
-    /// <summary>O número com o ponto dos milhares, como a especificação o escreve (`10.000`).</summary>
+    /// <summary>O número com o separador dos milhares do idioma do pedido: o ponto em português e espanhol, como a especificação o escreve (`10.000`), e a vírgula em inglês.</summary>
     private static string Thousands(long value)
-        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');
+        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en" ? ',' : '.');
 
     /// <summary>A transação em que os comandos da sessão entram: a do "Salvar" em Auto-commit e da carga, ou a do Commit manual.</summary>
     private DbTransaction? CommandTransaction => _editTransaction ?? _manualTransaction;

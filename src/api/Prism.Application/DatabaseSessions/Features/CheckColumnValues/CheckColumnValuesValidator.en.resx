@@ -13,6 +13,6 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="ValuesInvalid" xml:space="preserve">
-    <value>Send from 1 to 1,000 values, as a list of { type, value }.</value>
+    <value>Enter 1 to 1,000 values, as a list of { type, value }.</value>
   </data>
 </root>

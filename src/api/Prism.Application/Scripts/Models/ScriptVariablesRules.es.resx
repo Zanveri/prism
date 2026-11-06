@@ -12,7 +12,7 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="ValuesNotObject" xml:space="preserve">
+  <data name="ValuesNotAnObject" xml:space="preserve">
     <value>Indica los valores como un objeto del nombre de cada variable a { type, value }.</value>
   </data>
   <data name="ValuesTooLarge" xml:space="preserve">
@@ -27,28 +27,28 @@
   <data name="NameRepeated" xml:space="preserve">
     <value>Un nombre aparece dos veces en los valores.</value>
   </data>
-  <data name="EntryInvalid" xml:space="preserve">
+  <data name="ValueNotAnObject" xml:space="preserve">
     <value>Cada valor es un objeto { type, value }, o { type: "list", items }.</value>
   </data>
   <data name="ListInList" xml:space="preserve">
     <value>Una lista no lleva otra lista dentro.</value>
   </data>
-  <data name="ItemsInvalid" xml:space="preserve">
+  <data name="ItemsNotAList" xml:space="preserve">
     <value>Los elementos de la lista son una lista de { type, value }.</value>
   </data>
   <data name="TypeInvalid" xml:space="preserve">
     <value>El tipo es number, text, boolean, date, timestamp, sql, object, null o list.</value>
   </data>
-  <data name="EntryKeysInvalid" xml:space="preserve">
+  <data name="ValueWithoutTypeAndValue" xml:space="preserve">
     <value>Cada valor es un objeto con type y value.</value>
   </data>
-  <data name="NullValueInvalid" xml:space="preserve">
+  <data name="NullNotNull" xml:space="preserve">
     <value>El valor del tipo null es nulo.</value>
   </data>
   <data name="ValueNotText" xml:space="preserve">
     <value>El valor es un texto.</value>
   </data>
-  <data name="TextInvalid" xml:space="preserve">
-    <value>El texto tiene la mitad de un par UTF-16 o UTF-8 no válido.</value>
+  <data name="TextHalfPair" xml:space="preserve">
+    <value>El texto tiene la mitad de un par UTF-16 o UTF-8 inválido.</value>
   </data>
 </root>

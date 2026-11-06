@@ -27,7 +27,7 @@
   <data name="LimitInvalid" xml:space="preserve">
     <value>O limite é um número inteiro de 0 a 200.</value>
   </data>
-  <data name="LimitZeroNeedsTotal" xml:space="preserve">
+  <data name="LimitZeroWithoutTotal" xml:space="preserve">
     <value>O limite 0 só vale com total.</value>
   </data>
 </root>

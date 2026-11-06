@@ -12,7 +12,7 @@ export const executionTabCopyEs: ExecutionTabCopy = {
   openScript: "Abrir el script",
   cancel: "Cancelar",
   values: "Valores usados",
-  sqlChip: "Entra en la sentencia tal como está, sin comillas.",
+  sqlChip: "Entra en la sentencia tal cual, sin comillas.",
   missing: (name: string) => `El script ${name} ya no existe.`,
   newTab: "Ejecutar en una pestaña nueva",
 };

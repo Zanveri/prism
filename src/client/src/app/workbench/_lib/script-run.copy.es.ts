@@ -10,7 +10,6 @@ export const scriptRunCopyEs: ScriptRunCopy = {
     shortcut: "Alt+X",
     shortcutMac: "Cmd+Option+X",
     title: (shortcut: string) => `Ejecuta las sentencias de la selección o, sin selección, de todo el texto, una tras otra (${shortcut})`,
-    // RN-VAR-026: el "Ejecutar con valores…", al lado del "Ejecutar script"; el atajo es el del script con Shift.
     withValues: "Ejecutar con valores…",
     withValuesTitle: (shortcut: string) => `Ejecutar con valores… (${shortcut})`,
     withValuesShortcut: "Shift+Alt+X",
