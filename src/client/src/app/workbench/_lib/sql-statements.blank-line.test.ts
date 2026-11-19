@@ -420,6 +420,19 @@ describe("o cursor numa linha em branco que separou executa o comando de cima, c
   it("na linha do comentário solto, fora da linha em branco, vale a regra de antes: o comando seguinte", () => {
     expect(at("SELECT 1\n\n-- sol§to\n\nSELECT 2")).toBe("SELECT 2");
   });
+
+  it("na linha em branco entre múltiplos comentários soltos continua no comando de cima, sem pular para o de baixo", () => {
+    expect(at("SELECT 1\n\n-- c1\n§\n-- c2\n\nSELECT 2")).toBe("SELECT 1");
+    expect(at("SELECT 1\n-- c1\n§\n-- c2\n\nSELECT 2")).toBe("SELECT 1\n-- c1");
+  });
+
+  it("no comentário solto do topo separado por linha em branco (ex.: consulta comentada com Ctrl+/), não executa o comando de baixo", () => {
+    expect(at("-- §SELECT /* x */ FROM a\n\nSELECT * FROM b")).toBeNull();
+    expect(at("-- SELECT * FROM a§\n\nSELECT * FROM b")).toBeNull();
+    expect(at("/* SELECT * FROM a§ */\n\nSELECT * FROM b")).toBeNull();
+    // Sem linha em branco entre o comentário do topo e o comando, o comentário é cabeçalho dele
+    expect(at("-- cabeçalho§\nSELECT * FROM b\n\nSELECT * FROM c")).toBe("-- cabeçalho\nSELECT * FROM b");
+  });
 });
 
 describe("o `;` continua como antes, com a linha em branco ligada (RN-SQL-002 e RN-SQL-018)", () => {

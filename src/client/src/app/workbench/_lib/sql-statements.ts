@@ -841,17 +841,20 @@ function isBlankLine(sql: string, offset: number): boolean {
   return onlyWhitespace(sql, start, found < 0 ? sql.length : found);
 }
 
-/**
- * Se o cursor está numa das linhas em branco onde a RN-SQL-018 separou: a linha dele só tem espaços, e entre ela e a de um corte (o começo de uma
- * linha em branco, de `blankLineCuts`) só há outras linhas em branco. A linha em branco depois de um `;` não separou nada.
- */
-function onBlankLineCut(sql: string, offset: number, cuts: readonly number[]): boolean {
-  if (cuts.length === 0 || !isBlankLine(sql, offset)) return false;
+/** Se entre `from` e `to` há um `;` fora de texto, de nome entre aspas, de comentário e de `$tag$`. */
+function hasSemicolonBetween(sql: string, from: number, to: number, dialect: Dialect): boolean {
+  for (const token of tokens(sql, dialect, from)) {
+    if (token.start >= to) return false;
+    if (token.text === ";") return true;
+  }
+  return false;
+}
 
-  const after = cuts.findIndex((cut) => cut > offset);
-  const before = after < 0 ? cuts.at(-1) : cuts[after - 1];
-  const next = after < 0 ? undefined : cuts[after];
-  return (before !== undefined && onlyWhitespace(sql, before, offset)) || (next !== undefined && onlyWhitespace(sql, offset, next));
+/** Avança pelos espaços e tabulações do resto da mesma linha depois de uma declaração, sem invadir `limit`. */
+function endOfDeclarationLine(sql: string, end: number, limit: number): number {
+  let position = end;
+  while (position < limit && (sql.charCodeAt(position) === 32 || sql.charCodeAt(position) === 9 || sql.charCodeAt(position) === 13)) position++;
+  return position;
 }
 
 /**
@@ -900,7 +903,15 @@ function locatedItems(sql: string, view: ReturnType<typeof viewOf>): Located[] {
     const statement = statements[index];
     if (closers.has(statement.boundary)) statements[index] = { ...statement, boundary: Math.max(statement.end, statement.boundary - 2) };
   }
-  return mergeItems(sql, statements, view.regions, (region) => ({ ...declarationItem(sql, region), boundary: region.end, cut: false }));
+  const merged = mergeItems(sql, statements, view.regions, (region) => ({ ...declarationItem(sql, region), boundary: region.end, cut: false }));
+  for (let index = 0; index < merged.length; index++) {
+    const item = merged[index];
+    if (item.kind !== "statement") {
+      const limit = merged[index + 1]?.start ?? sql.length;
+      merged[index] = { ...item, boundary: endOfDeclarationLine(sql, item.end, limit) };
+    }
+  }
+  return merged;
 }
 
 /** O item de uma declaração: o texto desde o primeiro caractere que não é espaço (os `//` de cima vão com ela). */
@@ -936,11 +947,24 @@ export function itemAt(sql: string, offset: number, engine?: Engine, options: St
   if ((offset < found.start || offset > found.end) && isBlankLine(sql, offset)) {
     const previous = items.findLast((item) => item.end <= offset);
     if (previous === undefined) return blankLines ? null : result(found);
-    if (previous.kind !== "statement" && onlyWhitespace(sql, previous.end, offset)) return result(previous);
+    if (
+      previous.kind !== "statement" &&
+      (onlyWhitespace(sql, previous.end, offset) || (!previous.text.trimEnd().endsWith(";") && !hasSemicolonBetween(sql, previous.end, offset, view.dialect)))
+    ) {
+      return result(previous);
+    }
     // O de cima que terminou no `;` não é desta regra: vale a resposta de antes.
-    if (blankLines && previous.cut && onBlankLineCut(sql, offset, view.cuts)) return result(previous);
+    if (blankLines && !hasSemicolonBetween(sql, previous.end, offset, view.dialect) && (previous.cut || found.kind !== "statement")) {
+      return result(previous);
+    }
     // Sem a preferência a resposta é a de antes: o comando seguinte.
   }
+
+  // Comentário no topo do arquivo separado do primeiro comando por linha em branco (ex.: consulta comentada com Ctrl+/): não há comando acima nem abaixo.
+  if (blankLines && offset < found.start && items.findLast((item) => item.end <= offset) === undefined && view.cuts.some((cut) => cut >= offset && cut <= found.start)) {
+    return null;
+  }
+
   return result(found);
 }
 

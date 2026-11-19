@@ -174,4 +174,19 @@ describe("planItem: o item do cursor é o do Ctrl+Enter de sempre (RN-SQL-001, R
     const text = "let id = 7\n\nselect 1;";
     expect(textItem(text, "let id = 7\n".length)).toEqual(["let id = 7"]);
   });
+
+  it("espaços no fim da linha da declaração ou linha em branco após comentário permanecem na declaração, sem pular para o SQL abaixo", () => {
+    const trailingSpaces = "let id = 7   \n\nselect 1";
+    expect(textItem(trailingSpaces, "let id = 7   ".length)).toEqual(["let id = 7"]);
+
+    const withComment = "let id = 7\n-- nota\n\nselect 1";
+    expect(textItem(withComment, "let id = 7\n-- nota\n".length)).toEqual(["let id = 7"]);
+  });
+
+  it("selecionar apenas um trecho comentado acima de outro comando devolve nothing em vez de executar o comando de baixo", () => {
+    const text = "let id = 7\n\n-- select 1\n\nselect @id";
+    const from = text.indexOf("-- select 1");
+    const to = from + "-- select 1".length;
+    expect(planItem(doc(text), 1, from, to, none)).toEqual({ ok: false, reason: "nothing" });
+  });
 });

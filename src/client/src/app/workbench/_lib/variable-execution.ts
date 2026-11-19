@@ -136,9 +136,10 @@ export function planItem(doc: ScriptDoc, engine: Engine | undefined, from: numbe
   const text = slice.trim();
   if (text === "") return { ok: false, reason: "nothing" };
   const count = scriptItemCount(text, engine);
+  if (count === 0) return { ok: false, reason: "nothing" };
   if (count > 1) return { ok: false, reason: "tooMany", count };
   const start = from + (slice.length - slice.trimStart().length);
-  const item = model.items.find((candidate) => candidate.start <= start && start < candidate.end) ?? model.items.find((candidate) => candidate.start >= start);
+  const item = model.items.find((candidate) => candidate.start <= start && start < candidate.end) ?? model.items.find((candidate) => candidate.start >= start && candidate.start < to);
   if (item === undefined) return { ok: false, reason: "nothing" };
   if (item.kind === "type") return checkTypeItem(model, item);
   const same = item.start === start && item.text === text;
