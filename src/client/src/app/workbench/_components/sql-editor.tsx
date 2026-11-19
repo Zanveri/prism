@@ -1,9 +1,23 @@
 import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState, useSyncExternalStore, type Ref } from "react";
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { PostgreSQL, sql, StandardSQL } from "@codemirror/lang-sql";
-import { bracketMatching, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import { bracketMatching, foldGutter, foldKeymap, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { Compartment, EditorSelection, EditorState, Prec, StateEffect, StateField, type Text } from "@codemirror/state";
-import { Decoration, drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
+import {
+  crosshairCursor,
+  Decoration,
+  drawSelection,
+  dropCursor,
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  keymap,
+  lineNumbers,
+  rectangularSelection,
+  scrollPastEnd,
+  type DecorationSet,
+} from "@codemirror/view";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
@@ -26,13 +40,33 @@ import { flashRun, runFlash } from "../_lib/run-flash";
 import { scriptMark, scriptMarkEffects } from "../_lib/script-mark";
 import { formatSql, type SqlFormatOptions } from "../_lib/sql-format";
 import { keywordCase } from "../_lib/sql-keyword-case";
-import { hasStatement, scriptStatements, statementAt } from "../_lib/sql-statements";
+import { hasStatement, scriptStatements, splitStatements, statementAt } from "../_lib/sql-statements";
 import type { RunTarget } from "../_lib/use-query-runner";
 import { variablesCompletion, type VariablesCompletion } from "../_lib/variables-completion";
 import { connectVariables, reanalyzeVariables, setShowVariableValues, variablesEditor, type VariablesStore } from "../_lib/variables-extension";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { insertAtCursor } from "../_lib/history";
+import {
+  applySearchQueryState,
+  defaultFindOptions,
+  findNextState,
+  goToLineOffset,
+  indentGuides,
+  insertBlankLineAbove,
+  replaceAllState,
+  replaceNextState,
+  searchState,
+  selectAllOccurrencesState,
+  selectFullLine,
+  selectionMatchHighlight,
+  selectNextOccurrenceState,
+  setSearchQuery,
+  skipLastOccurrenceState,
+  sqlIndentationFold,
+  type FindOptions,
+} from "../_lib/sql-editor-vscode";
 import { JoinSuggestionsDialog } from "./join-suggestions-dialog";
+import { SqlEditorFindBar, type EditorOverlayMode } from "./sql-editor-find-bar";
 
 /** Quanto o editor espera, depois da última tecla, para entregar o texto a quem o guarda. */
 const changeDelayMs = 400;
@@ -59,17 +93,46 @@ const editorTheme = (preferences: EditorPreferences, dark: boolean) => {
 
   return EditorView.theme(
     {
-      "&": { height: "100%", backgroundColor: "var(--color-background)", color: "var(--color-ink)", fontSize: font.fontSize },
+      "&": {
+        height: "100%",
+        backgroundColor: "var(--color-background)",
+        color: "var(--color-ink)",
+        fontSize: font.fontSize,
+        "--cm-indent-step": `${preferences.tabSize}ch`,
+      },
       "&.cm-focused": { outline: "none" },
       ".cm-scroller": { fontFamily: font.fontFamily, lineHeight: font.lineHeight },
       ".cm-content": { padding: "12px 16px 12px 0", caretColor: "var(--color-accent)", outline: "none" },
       ".cm-gutters": { backgroundColor: "var(--color-background)", color: "var(--color-subtle)", border: "none" },
-      ".cm-lineNumbers .cm-gutterElement": { minWidth: "56px", padding: "0 16px 0 0" },
+      ".cm-lineNumbers .cm-gutterElement": { minWidth: "48px", padding: "0 4px 0 0" },
+      ".cm-foldGutter .cm-gutterElement": { padding: "0 6px 0 2px", color: "var(--color-subtle)", userSelect: "none" },
+      ".cm-foldGutter span": { display: "inline-block", opacity: "0", cursor: "pointer", transition: "opacity 120ms ease" },
+      "&:hover .cm-foldGutter span, .cm-foldGutter span[data-folded]": { opacity: "1" },
+      ".cm-foldGutter span:hover": { color: "var(--color-ink)" },
+      ".cm-foldPlaceholder": {
+        backgroundColor: "var(--color-raised)",
+        border: "1px solid var(--color-border-strong)",
+        color: "var(--color-muted)",
+        borderRadius: "4px",
+        padding: "0 5px",
+        margin: "0 3px",
+      },
       ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--color-ink) 3%, transparent)" },
       ".cm-activeLineGutter": { backgroundColor: "var(--color-panel)", color: "var(--color-ink)" },
-      ".cm-cursor": { borderLeftColor: "var(--color-accent)" },
+      ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-accent)" },
       ".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": { backgroundColor: "var(--color-selection)" },
       ".cm-matchingBracket, &.cm-focused .cm-matchingBracket": { backgroundColor: "transparent", outline: "1px solid var(--color-subtle)" },
+      ".cm-indent-guides": {
+        backgroundImage: "repeating-linear-gradient(to right, var(--color-border) 0 1px, transparent 1px var(--cm-indent-step))",
+        backgroundRepeat: "repeat-y",
+      },
+      ".cm-selection-match": {
+        backgroundColor: "color-mix(in srgb, var(--color-accent) 22%, transparent)",
+        outline: "1px solid color-mix(in srgb, var(--color-accent) 55%, transparent)",
+        borderRadius: "2px",
+      },
+      ".cm-search-match": { backgroundColor: "color-mix(in srgb, var(--color-accent) 22%, transparent)", borderRadius: "2px" },
+      ".cm-search-match-current": { backgroundColor: "color-mix(in srgb, var(--color-accent) 40%, transparent)", outline: "1px solid var(--color-accent)" },
       // RN-LINK-001: o nome de uma tabela com o Ctrl apertado. A cor de link do tema também por cima da cor de sintaxe do que estiver dentro (o nome entre aspas).
       ".cm-table-link": { color: "var(--color-link)", textDecoration: "underline", textUnderlineOffset: "3px", cursor: "pointer" },
       ".cm-table-link *": { color: "var(--color-link)", cursor: "pointer" },
@@ -94,6 +157,7 @@ const completionSlot = new Compartment();
 const caseSlot = new Compartment();
 /** A gramática do banco (as cores e o que o `lang-sql` lê): troca quando a aba passa a ter outro banco, como a aba sem conexão que recebe uma (RN-SCRIPT-003). */
 const languageSlot = new Compartment();
+const wrapSlot = new Compartment();
 
 /** A largura da tabulação: a de um caractere de tabulação e o que a tecla Tab insere (em espaços). */
 const tabSettings = (tabSize: number) => [EditorState.tabSize.of(tabSize), indentUnit.of(" ".repeat(tabSize))];
@@ -160,6 +224,37 @@ export function formatTarget(state: EditorState, options: SqlFormatOptions): { f
   if (raw.trim().length === 0) return null;
   const insert = formatSql(raw, options);
   return insert === raw ? null : { from: rangeFrom, to: rangeTo, insert };
+}
+
+/**
+ * Mantém o cursor no mesmo comando após formatar o documento inteiro sem seleção, evitando que o encolhimento de espaços/linhas
+ * jogue o offset bruto para dentro do comando seguinte separado por linha em branco.
+ */
+export function formatCursor(state: EditorState, insert: string, options: SqlFormatOptions): number {
+  const { head } = state.selection.main;
+  const raw = state.doc.toString();
+  const splitOpts = { blankLines: options.blankLines ?? false };
+  const beforeList = splitStatements(raw, options.engine, splitOpts);
+  const afterList = splitStatements(insert, options.engine, splitOpts);
+
+  if (beforeList.length > 0 && afterList.length > 0 && head < beforeList[0].start) {
+    return Math.min(head, afterList[0].start > 0 ? afterList[0].start - 1 : 0);
+  }
+
+  const target = statementAt(raw, head, options.engine, splitOpts);
+  if (target !== null && beforeList.length === afterList.length) {
+    const index = beforeList.findIndex((item) => item.start === target.start && item.end === target.end);
+    if (index >= 0) {
+      const mapped = afterList[index];
+      if (head <= target.start) return mapped.start;
+      if (head >= target.end) return Math.min(mapped.end, insert.length);
+      const ratio = (head - target.start) / Math.max(1, target.end - target.start);
+      const offsetInMapped = Math.round(ratio * (mapped.end - mapped.start));
+      return mapped.start + Math.min(Math.max(0, offsetInMapped), mapped.end - mapped.start);
+    }
+  }
+
+  return Math.min(head, insert.length);
 }
 
 export function flashRangeOf(state: EditorState, target: RunTarget): { from: number; to: number } | null {
@@ -325,6 +420,148 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     sql: string;
     cursorOffset: number;
   } | null>(null);
+  const focusSeqRef = useRef(0);
+  const wordWrapRef = useRef(false);
+  const [overlayState, setOverlayState] = useState<{
+    mode: EditorOverlayMode;
+    showReplace: boolean;
+    focusRequest: { target: "find" | "replace" | "goto"; seq: number };
+  } | null>(null);
+  const [findQuery, setFindQuery] = useState("");
+  const [findReplacement, setFindReplacement] = useState("");
+  const [findOptions, setFindOptions] = useState<FindOptions>(defaultFindOptions);
+  const [goToValue, setGoToValue] = useState("");
+  const [searchStats, setSearchStats] = useState(() => ({
+    total: 0,
+    active: -1,
+    invalidRegex: false,
+    lineCount: Math.max(1, initialSql.split("\n").length),
+  }));
+
+  function syncStatsFromEditor(editor: EditorView) {
+    const search = editor.state.field(searchState);
+    const next = {
+      total: search.matches.length,
+      active: search.activeIndex,
+      invalidRegex: search.invalidRegex,
+      lineCount: editor.state.doc.lines,
+    };
+    setSearchStats((prev) =>
+      prev.total === next.total &&
+      prev.active === next.active &&
+      prev.invalidRegex === next.invalidRegex &&
+      prev.lineCount === next.lineCount
+        ? prev
+        : next,
+    );
+  }
+
+  function openOverlay(mode: EditorOverlayMode, showReplace = false, preferSelection = true) {
+    const editor = view.current;
+    let nextQuery = findQuery;
+    if (editor !== null && mode === "find") {
+      if (preferSelection && !editor.state.selection.main.empty) {
+        const selected = editor.state.sliceDoc(editor.state.selection.main.from, editor.state.selection.main.to);
+        if (!selected.includes("\n") && selected.length <= 200) {
+          nextQuery = selected;
+          setFindQuery(selected);
+        }
+      }
+      editor.dispatch(applySearchQueryState(editor.state, nextQuery, findOptions, false));
+      syncStatsFromEditor(editor);
+    } else if (editor !== null && mode === "goto") {
+      if (editor.state.field(searchState).query !== "") {
+        editor.dispatch({ effects: setSearchQuery.of(null) });
+      }
+      const line = editor.state.doc.lineAt(editor.state.selection.main.head);
+      setGoToValue(String(line.number));
+      syncStatsFromEditor(editor);
+    }
+    const target = mode === "goto" ? "goto" : showReplace && overlayState?.mode === "find" && !overlayState.showReplace ? "replace" : "find";
+    setOverlayState({
+      mode,
+      showReplace: mode === "find" ? showReplace : false,
+      focusRequest: { target, seq: ++focusSeqRef.current },
+    });
+  }
+
+  function closeOverlay() {
+    setOverlayState(null);
+    const editor = view.current;
+    if (editor !== null) {
+      if (editor.state.field(searchState).query !== "") {
+        editor.dispatch({ effects: setSearchQuery.of(null) });
+      }
+      editor.focus();
+    }
+  }
+
+  function handleQueryChange(nextQuery: string) {
+    setFindQuery(nextQuery);
+    const editor = view.current;
+    if (editor === null) return;
+    editor.dispatch(applySearchQueryState(editor.state, nextQuery, findOptions, true));
+    syncStatsFromEditor(editor);
+  }
+
+  function handleOptionsChange(nextOptions: FindOptions) {
+    setFindOptions(nextOptions);
+    const editor = view.current;
+    if (editor === null || overlayState?.mode !== "find") return;
+    editor.dispatch(applySearchQueryState(editor.state, findQuery, nextOptions, true));
+    syncStatsFromEditor(editor);
+  }
+
+  function stepFind(direction: 1 | -1): boolean {
+    const editor = view.current;
+    if (editor === null) return false;
+    let query = findQuery;
+    if (query === "" && !editor.state.selection.main.empty) {
+      const selected = editor.state.sliceDoc(editor.state.selection.main.from, editor.state.selection.main.to);
+      if (!selected.includes("\n") && selected.length <= 200) {
+        query = selected;
+        setFindQuery(selected);
+      }
+    }
+    const spec = findNextState(editor.state, direction, { query, options: findOptions });
+    if (spec === null) return false;
+    editor.dispatch(spec);
+    if (overlayState !== null) syncStatsFromEditor(editor);
+    return true;
+  }
+
+  function handleReplaceOne() {
+    const editor = view.current;
+    if (editor === null) return;
+    const spec = replaceNextState(editor.state, findReplacement);
+    if (spec !== null) {
+      editor.dispatch(spec);
+      syncStatsFromEditor(editor);
+    }
+  }
+
+  function handleReplaceAll() {
+    const editor = view.current;
+    if (editor === null) return;
+    const spec = replaceAllState(editor.state, findReplacement);
+    if (spec !== null) {
+      editor.dispatch(spec);
+      syncStatsFromEditor(editor);
+    }
+  }
+
+  function handleSubmitGoToLine() {
+    const editor = view.current;
+    if (editor === null) return;
+    const offset = goToLineOffset(editor.state, goToValue);
+    if (offset === null) return;
+    setOverlayState(null);
+    editor.dispatch({
+      selection: EditorSelection.cursor(offset),
+      effects: EditorView.scrollIntoView(offset, { y: "center" }),
+    });
+    editor.focus();
+  }
 
   const emitRun = useEffectEvent((target: RunTarget, flash: FlashRun) => onRun(target, flash));
   const emitChange = useEffectEvent((text: string) => onChange(text));
@@ -357,6 +594,34 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     const rect = editor.dom.getBoundingClientRect();
     const point = coords !== null ? { x: coords.left, y: coords.bottom + 4 } : { x: rect.left + 32, y: rect.top + 32 };
     setContextMenuState({ point, initialFocus: "first", cursorOffset });
+  });
+  const openOverlayFromShortcut = useEffectEvent((mode: EditorOverlayMode, showReplace = false) => {
+    openOverlay(mode, showReplace, true);
+  });
+  const closeOverlayFromShortcut = useEffectEvent((editor: EditorView) => {
+    // Com múltiplos cursores, Esc colapsa primeiro para o cursor principal (`simplifySelection`), como no VS Code.
+    if (editor.state.selection.ranges.length > 1 || overlayState === null) return false;
+    closeOverlay();
+    return true;
+  });
+  const stepFindFromShortcut = useEffectEvent((direction: 1 | -1) => stepFind(direction));
+  const selectNextFromShortcut = useEffectEvent((editor: EditorView) => {
+    const spec = selectNextOccurrenceState(editor.state, findOptions.matchCase);
+    if (spec !== null) editor.dispatch(spec);
+    return true;
+  });
+  const skipOccurrenceFromShortcut = useEffectEvent((editor: EditorView) => {
+    const spec = skipLastOccurrenceState(editor.state, findOptions.matchCase);
+    if (spec !== null) editor.dispatch(spec);
+    return true;
+  });
+  const selectAllOccurrencesFromShortcut = useEffectEvent((editor: EditorView) => {
+    const spec = selectAllOccurrencesState(editor.state, findOptions.matchCase);
+    if (spec !== null) editor.dispatch(spec);
+    return true;
+  });
+  const syncOverlayStats = useEffectEvent((editor: EditorView) => {
+    if (overlayState !== null) syncStatsFromEditor(editor);
   });
   const openContextMenuFromPointer = useEffectEvent((event: MouseEvent, editor: EditorView) => {
     event.preventDefault();
@@ -410,20 +675,21 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     }
 
     function formatEditorSql(view: EditorView) {
-      const change = formatTarget(view.state, {
+      const options: SqlFormatOptions = {
         style: formatStyleNow.current,
         uppercaseKeywords: uppercaseKeywordsNow.current,
         tabSize: tabSizeNow.current,
         engine: engineNow.current,
         blankLines: blankLinesNow.current,
-      });
+      };
+      const change = formatTarget(view.state, options);
       if (change !== null) {
         const hadSelection = !view.state.selection.main.empty;
         view.dispatch({
           changes: change,
           selection: hadSelection
             ? EditorSelection.single(change.from, change.from + change.insert.length)
-            : EditorSelection.cursor(Math.min(view.state.selection.main.head, change.insert.length)),
+            : EditorSelection.cursor(formatCursor(view.state, change.insert, options)),
         });
       }
       return true;
@@ -434,6 +700,13 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
       return true;
     }
 
+    function toggleWordWrap(view: EditorView) {
+      wordWrapRef.current = !wordWrapRef.current;
+      view.dispatch({ effects: wrapSlot.reconfigure(wordWrapRef.current ? EditorView.lineWrapping : []) });
+      return true;
+    }
+
+    const ownerDoc = host.current.ownerDocument;
     const clamp = (position: number) => Math.min(position, initial.sql.length);
     const editor = new EditorView({
       parent: host.current,
@@ -441,33 +714,99 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
         doc: initial.sql,
         ...(initial.selection === null ? {} : { selection: EditorSelection.single(clamp(initial.selection.anchor), clamp(initial.selection.head)) }),
         extensions: [
+          EditorState.allowMultipleSelections.of(true),
+          EditorState.phrases.of({
+            "folded code": workbenchCopy.editor.foldedCode,
+            unfold: workbenchCopy.editor.unfold,
+          }),
+          EditorView.clickAddsSelectionRange.of((event) => !event.shiftKey && (event.altKey || (isMac ? event.metaKey : event.ctrlKey))),
+          rectangularSelection({ eventFilter: (event) => event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey }),
+          crosshairCursor({ key: "Alt" }),
+          dropCursor(),
+          scrollPastEnd(),
+          closeBrackets(),
+          sqlIndentationFold,
           lineNumbers(),
+          foldGutter({
+            markerDOM(open) {
+              const marker = ownerDoc.createElement("span");
+              marker.textContent = open ? "▾" : "▸";
+              if (!open) marker.dataset.folded = "";
+              return marker;
+            },
+          }),
           highlightActiveLineGutter(),
           highlightActiveLine(),
           drawSelection(),
           history(),
           bracketMatching(),
           indentOnInput(),
+          indentGuides,
+          searchState,
+          selectionMatchHighlight,
           languageSlot.of(sql({ dialect: dialectOf(initial.engine) })),
           syntaxHighlighting(highlight),
           themeSlot.of(editorTheme(initial.editor, initial.dark)),
           tabSlot.of(tabSettings(initial.editor.tabSize)),
           caseSlot.of(initial.uppercaseKeywords ? keywordCase(initial.engine, () => blankLinesNow.current) : []),
+          wrapSlot.of([]),
           errorMark,
           variablesEditor({ engine: () => engineNow.current, blankLines: () => blankLinesNow.current }),
           runFlash,
           scriptMark,
           tableLinks({ engine: () => engineNow.current, find: (sql, offset, tokens) => findLink(sql, offset, tokens), open: (link) => openLink(link), mac: isMac }),
-          // À frente do mapa padrão, que usa Ctrl+Enter para abrir uma linha em branco, e Ctrl+. para abrir o menu de contexto do editor.
+          // À frente do mapa padrão: preserva o Ctrl+Enter (Executar SQL), o Ctrl+. (menu do editor) e adiciona os atalhos de edição/busca do VS Code.
           Prec.highest(
             keymap.of([
               { key: "Mod-Enter", run },
+              { key: "Mod-Shift-Enter", run: insertBlankLineAbove },
               { key: "Mod-.", run: openContextMenuShortcut },
               { key: "Mod-Shift-f", run: formatEditorSql },
+              {
+                key: "Mod-f",
+                run: () => {
+                  openOverlayFromShortcut("find", false);
+                  return true;
+                },
+              },
+              {
+                key: "Mod-h",
+                mac: "Mod-Alt-f",
+                run: () => {
+                  openOverlayFromShortcut("find", true);
+                  return true;
+                },
+              },
+              {
+                key: "Ctrl-g",
+                run: () => {
+                  openOverlayFromShortcut("goto");
+                  return true;
+                },
+              },
+              {
+                key: "F3",
+                mac: "Mod-g",
+                run: () => stepFindFromShortcut(1),
+                shift: () => stepFindFromShortcut(-1),
+              },
+              { key: "Mod-d", run: selectNextFromShortcut },
+              { key: "Mod-k Mod-d", run: skipOccurrenceFromShortcut },
+              { key: "Mod-Shift-l", run: selectAllOccurrencesFromShortcut },
+              { key: "Mod-F2", run: selectAllOccurrencesFromShortcut },
+              { key: "Mod-l", run: selectFullLine },
+              { key: "Alt-z", run: toggleWordWrap },
             ]),
           ),
           completionSlot.of(initial.autocomplete ? completionFor() : []),
-          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          keymap.of([
+            { key: "Escape", run: closeOverlayFromShortcut },
+            ...closeBracketsKeymap,
+            ...foldKeymap,
+            ...defaultKeymap,
+            ...historyKeymap,
+            indentWithTab,
+          ]),
           EditorView.contentAttributes.of({ "aria-label": workbenchCopy.editor.label, "data-sql-editor": "" }),
           EditorView.domEventHandlers({
             blur: flush,
@@ -484,6 +823,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
             }
 
             if (!update.docChanged && !update.selectionSet) return;
+            syncOverlayStats(update.view);
             const next = isRunnable(update.state, engineNow.current);
             if (next !== runnable) emitRunnable((runnable = next));
           }),
@@ -640,7 +980,53 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
 
   return (
     <>
-      <div ref={host} className="h-full" />
+      <div className="relative h-full">
+        <div ref={host} className="h-full" />
+
+        {overlayState !== null && (
+          <SqlEditorFindBar
+            mode={overlayState.mode}
+            showReplace={overlayState.showReplace}
+            focusRequest={overlayState.focusRequest}
+            query={findQuery}
+            replacement={findReplacement}
+            options={findOptions}
+            totalMatches={searchStats.total}
+            activeMatch={searchStats.active}
+            invalidRegex={searchStats.invalidRegex}
+            goToValue={goToValue}
+            lineCount={searchStats.lineCount}
+            mac={isMac}
+            onQueryChange={handleQueryChange}
+            onReplacementChange={setFindReplacement}
+            onToggleReplace={() => {
+              const seq = ++focusSeqRef.current;
+              setOverlayState((prev) =>
+                prev === null
+                  ? null
+                  : {
+                      ...prev,
+                      showReplace: !prev.showReplace,
+                      focusRequest: { target: !prev.showReplace ? "replace" : "find", seq },
+                    },
+              );
+            }}
+            onOptionsChange={handleOptionsChange}
+            onFindNext={() => {
+              stepFind(1);
+            }}
+            onFindPrevious={() => {
+              stepFind(-1);
+            }}
+            onReplaceOne={handleReplaceOne}
+            onReplaceAll={handleReplaceAll}
+            onGoToValueChange={setGoToValue}
+            onSubmitGoToLine={handleSubmitGoToLine}
+            onSwitchMode={(mode, showReplace = false) => openOverlay(mode, showReplace, false)}
+            onClose={closeOverlay}
+          />
+        )}
+      </div>
 
       {contextMenuState !== null && (
         <ContextMenu
@@ -663,20 +1049,21 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
                   const editor = view.current;
                   setContextMenuState(null);
                   if (editor === null) return;
-                  const change = formatTarget(editor.state, {
+                  const options: SqlFormatOptions = {
                     style: formatStyleNow.current,
                     uppercaseKeywords: uppercaseKeywordsNow.current,
                     tabSize: tabSizeNow.current,
                     engine: engineNow.current,
                     blankLines: blankLinesNow.current,
-                  });
+                  };
+                  const change = formatTarget(editor.state, options);
                   if (change !== null) {
                     const hadSelection = !editor.state.selection.main.empty;
                     editor.dispatch({
                       changes: change,
                       selection: hadSelection
                         ? EditorSelection.single(change.from, change.from + change.insert.length)
-                        : EditorSelection.cursor(Math.min(editor.state.selection.main.head, change.insert.length)),
+                        : EditorSelection.cursor(formatCursor(editor.state, change.insert, options)),
                     });
                   }
                   editor.focus();
@@ -698,6 +1085,41 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
                     sql: editor.state.doc.toString(),
                     cursorOffset,
                   });
+                },
+              },
+            ],
+            [
+              {
+                id: "find",
+                label: workbenchCopy.editor.contextMenu.find,
+                shortcut: isMac
+                  ? workbenchCopy.editor.contextMenu.findShortcutMac
+                  : workbenchCopy.editor.contextMenu.findShortcut,
+                onSelect: () => {
+                  setContextMenuState(null);
+                  openOverlay("find", false, true);
+                },
+              },
+              {
+                id: "replace",
+                label: workbenchCopy.editor.contextMenu.replace,
+                shortcut: isMac
+                  ? workbenchCopy.editor.contextMenu.replaceShortcutMac
+                  : workbenchCopy.editor.contextMenu.replaceShortcut,
+                onSelect: () => {
+                  setContextMenuState(null);
+                  openOverlay("find", true, true);
+                },
+              },
+              {
+                id: "go-to-line",
+                label: workbenchCopy.editor.contextMenu.goToLine,
+                shortcut: isMac
+                  ? workbenchCopy.editor.contextMenu.goToLineShortcutMac
+                  : workbenchCopy.editor.contextMenu.goToLineShortcut,
+                onSelect: () => {
+                  setContextMenuState(null);
+                  openOverlay("goto");
                 },
               },
             ],

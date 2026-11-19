@@ -5,7 +5,7 @@ import type { Engine } from "@/components/ui";
 
 import { flashedRange, runFlash } from "../_lib/run-flash";
 import { scriptMark, scriptMarkEffects, scriptMarkedRange } from "../_lib/script-mark";
-import { flashEffect, flashRangeOf, formatTarget, runTarget, scriptTargets } from "./sql-editor";
+import { flashEffect, flashRangeOf, formatCursor, formatTarget, runTarget, scriptTargets } from "./sql-editor";
 
 const postgres: Engine = 1;
 const informix: Engine = 3;
@@ -212,5 +212,25 @@ describe("formatação com Ctrl+Shift+F (formatTarget)", () => {
         blankLines: true,
       }),
     ).toBeNull();
+  });
+
+  it("mantém o cursor no primeiro comando quando a formatação encolhe espaços antes de linha em branco", () => {
+    const state = stateOf("SELECT     *     FROM     clientes     WHERE     ativo = 1§\n\nSELECT * FROM pedidos");
+    const options = {
+      style: "compact" as const,
+      uppercaseKeywords: true,
+      tabSize: 2,
+      engine: informix,
+      blankLines: true,
+    };
+    const change = formatTarget(state, options);
+    expect(change).not.toBeNull();
+
+    const cursor = formatCursor(state, change!.insert, options);
+    const formattedState = EditorState.create({
+      doc: change!.insert,
+      selection: EditorSelection.cursor(cursor),
+    });
+    expect(runTarget(formattedState, informix, true).sql).toBe("SELECT * FROM clientes WHERE ativo = 1");
   });
 });
