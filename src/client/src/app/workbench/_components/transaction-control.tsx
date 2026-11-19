@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 
-import { Button, Dialog, Select, type Engine } from "@/components/ui";
+import { Button, CheckIcon, Dialog, Select, TransactionIcon, UndoIcon, type Engine } from "@/components/ui";
+import { cn } from "@/lib/utils/cn";
 
 import { engineIsolationLevels, useTabTransaction, type IsolationLevel } from "../_lib/transaction";
 import { transactionCopy } from "../_lib/transaction.copy";
@@ -35,14 +36,20 @@ export function TransactionControl({ transaction, engine, busy }: TransactionCon
     // RN-TX-013: no banco sem log de transação, o Commit manual aparece desabilitado, com o motivo.
     { value: "manual", label: copy.manual, disabled: !state.available, ...(state.available ? {} : { hint: copy.notAvailable }) },
   ];
+  const isolationReasonId = useId();
   const allowedLevels = engineIsolationLevels(engine);
   const currentLevel: IsolationLevel = allowedLevels.includes(state.isolationLevel) ? state.isolationLevel : "default";
-  const isolationOptions = allowedLevels.map((level) => ({
-    value: level,
-    label: copy.levels[level],
-    disabled: level !== "default" && !state.available,
-    ...(level === "default" || state.available ? {} : { hint: copy.notAvailable }),
-  }));
+  const levelDisabled = (level: IsolationLevel) => level !== "default" && !state.available && !(engine === 3 && level === "readUncommitted");
+  const isolationOptions = allowedLevels.map((level) => {
+    const disabled = levelDisabled(level);
+    return {
+      value: level,
+      label: copy.levels[level],
+      disabled,
+      ...(disabled ? { hint: copy.notAvailable } : {}),
+    };
+  });
+  const isolationBlocker = blocked ? copy.busy : state.open ? copy.openIsolation : !state.available && engine !== 3 ? copy.notAvailable : null;
   const endBlocker = blocked ? copy.busy : state.open ? null : copy.nothingToEnd;
   const commitBlocker = endBlocker ?? (state.failed ? copy.failedCommit : null);
 
@@ -65,13 +72,41 @@ export function TransactionControl({ transaction, engine, busy }: TransactionCon
     setAsking(false);
   }
 
+  const modeTitle = blocked ? copy.busy : `${copy.label}: ${state.mode === "manual" ? copy.manual : copy.autoCommit}`;
+  const isolationTitle = isolationBlocker ?? `${copy.isolationLabel}: ${copy.levels[currentLevel]}`;
+
   return (
-    <div className="ml-auto flex items-center gap-2">
-      <label htmlFor={id} className="text-xs text-muted">
+    <div
+      className={cn(
+        "flex min-h-7 flex-wrap items-center gap-0.5 rounded-md border border-border bg-raised/70 p-0.5",
+        state.open && (state.failed ? "border-danger/45" : "border-accent/45"),
+      )}
+    >
+      <span title={copy.label} className="flex h-[22px] items-center pr-0.5 pl-1.5 text-subtle">
+        <TransactionIcon className="size-3.5" />
+      </span>
+      {state.open ? (
+        <span aria-hidden="true" className={cn("mr-0.5 size-1.5 flex-none rounded-full", state.failed ? "bg-danger" : "bg-accent")} />
+      ) : null}
+      <label htmlFor={id} className="sr-only">
         {copy.label}
       </label>
-      <Select id={id} value={state.mode} options={options} onChange={choose} aria-disabled={blocked || undefined} aria-label={copy.modeLabel} wideList className="min-h-8 w-40 py-1 text-sm" />
-      <label htmlFor={isolationId} className="text-xs text-muted">
+      <Select
+        id={id}
+        value={state.mode}
+        options={options}
+        onChange={choose}
+        title={modeTitle}
+        aria-disabled={blocked || undefined}
+        aria-label={copy.modeLabel}
+        wideList
+        className={cn(
+          "h-[22px] min-h-[22px] w-auto rounded border-0 bg-transparent px-1.5 py-0 text-xs hover:bg-selected focus-visible:ring-1",
+          state.mode === "manual" && "[&>span:first-child]:font-medium [&>span:first-child]:text-accent",
+        )}
+      />
+      <span aria-hidden="true" className="h-3.5 w-px flex-none bg-border" />
+      <label htmlFor={isolationId} className="sr-only">
         {copy.isolationLabel}
       </label>
       <Select
@@ -79,13 +114,21 @@ export function TransactionControl({ transaction, engine, busy }: TransactionCon
         value={currentLevel}
         options={isolationOptions}
         onChange={chooseIsolation}
-        aria-disabled={blocked || !state.available || undefined}
+        title={isolationTitle}
+        aria-disabled={isolationBlocker !== null || undefined}
+        aria-describedby={isolationBlocker !== null ? isolationReasonId : undefined}
         aria-label={copy.isolationLabel}
         wideList
-        className="min-h-8 w-44 py-1 text-sm"
+        className="h-[22px] min-h-[22px] w-auto max-w-40 rounded border-0 bg-transparent px-1.5 py-0 text-xs hover:bg-selected focus-visible:ring-1 [&>span:first-child]:truncate"
       />
-      <EndButton label={copy.commit} blocker={commitBlocker} onEnd={() => void transaction.end(true)} />
-      <EndButton label={copy.rollback} blocker={endBlocker} onEnd={() => void transaction.end(false)} />
+      {isolationBlocker !== null ? (
+        <span id={isolationReasonId} className="sr-only">
+          {isolationBlocker}
+        </span>
+      ) : null}
+      <span aria-hidden="true" className="h-3.5 w-px flex-none bg-border" />
+      <EndButton kind="commit" label={copy.commit} blocker={commitBlocker} onEnd={() => void transaction.end(true)} />
+      <EndButton kind="rollback" label={copy.rollback} blocker={endBlocker} onEnd={() => void transaction.end(false)} />
       {asking ? (
         <Dialog
           open
@@ -115,7 +158,17 @@ export function TransactionControl({ transaction, engine, busy }: TransactionCon
   );
 }
 
-function EndButton({ label, blocker, onEnd }: { label: string; blocker: string | null; onEnd: () => void }) {
+function EndButton({
+  kind,
+  label,
+  blocker,
+  onEnd,
+}: {
+  kind: "commit" | "rollback";
+  label: string;
+  blocker: string | null;
+  onEnd: () => void;
+}) {
   const reasonId = useId();
   const blocked = blocker !== null;
 
@@ -123,17 +176,25 @@ function EndButton({ label, blocker, onEnd }: { label: string; blocker: string |
     <>
       <Button
         type="button"
-        variant="secondary"
+        variant="ghost"
         size="compact"
         aria-disabled={blocked || undefined}
         aria-describedby={blocked ? reasonId : undefined}
-        title={blocker ?? undefined}
+        title={blocker ?? label}
         onClick={() => {
           if (!blocked) onEnd();
         }}
-        className="px-3 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        className={cn(
+          "h-[22px] gap-1 rounded px-2 text-xs",
+          blocked
+            ? "border border-transparent bg-transparent font-normal text-muted aria-disabled:cursor-not-allowed aria-disabled:opacity-45 enabled:hover:bg-transparent enabled:hover:text-muted"
+            : kind === "commit"
+              ? "border border-success/40 bg-success/15 font-semibold text-success enabled:hover:bg-success/25 enabled:hover:text-success"
+              : "border border-danger/35 bg-danger/10 font-medium text-danger enabled:hover:bg-danger/20 enabled:hover:text-danger",
+        )}
       >
-        {label}
+        {kind === "commit" ? <CheckIcon className="size-3" /> : <UndoIcon className="size-3" />}
+        <span>{label}</span>
       </Button>
       {blocked ? (
         <span id={reasonId} className="sr-only">

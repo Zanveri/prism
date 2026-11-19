@@ -184,6 +184,16 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
                 builder["SSLClientKeystash"] = ssl.ClientKeyPath;
         }
 
+        if (Dialect == ESqlDialect.Informix)
+        {
+            var (driverIsolation, accessResolution) = IsolationLevels.InformixConnectionOptions(EffectiveIsolationLevel);
+            if (driverIsolation is not null)
+                builder["IsolationLevel"] = driverIsolation;
+
+            if (accessResolution is not null)
+                builder["ConcurrentAccessResolution"] = accessResolution;
+        }
+
         return new DB2Connection(builder.ConnectionString);
     }
 

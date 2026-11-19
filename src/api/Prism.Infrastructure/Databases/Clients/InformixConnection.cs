@@ -17,8 +17,17 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// RN-SQL-003 pega o comando escrito assim, e a da RN-SQL-001 o que vem depois de outro comando no mesmo envio; a rotina que abre a
 /// transação por dentro (`EXECUTE PROCEDURE`), e o que mais escapar das duas, quem pega é a sonda.
 /// </summary>
-internal sealed class InformixConnection(ConnectionSettings settings, ILogger logger) : IbmDatabaseConnection(settings, logger)
+internal sealed class InformixConnection : IbmDatabaseConnection
 {
+    public InformixConnection(ConnectionSettings settings, ILogger logger) : base(settings, logger)
+    {
+        if (settings.IsolationLevel is { } level && IsolationLevels.IsKnown(level))
+        {
+            var normalized = IsolationLevels.Normalize(level);
+            if (IsolationLevels.IsSupportedBy(EDatabaseEngine.Informix, normalized))
+                IsolationLevel = normalized;
+        }
+    }
     /// <summary>Os números nativos do Informix que a sonda de transação lê: "Already in transaction" e "Transaction not available" (banco sem log).</summary>
     private const int AlreadyInTransaction = -535;
     private const int TransactionNotAvailable = -256;
@@ -74,6 +83,8 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     private const string RoutineModes = "'D', 'O', 'P', 'R', 'T'";
 
     protected override ESqlDialect Dialect => ESqlDialect.Informix;
+
+    protected override bool ReopensDriverForIsolation => true;
 
     /// <summary>RN-TX-009: o banco desfaz só o comando que falhou, menos na transação longa, que ele aborta inteira.</summary>
     protected override bool UndoesTheTransaction(DatabaseFailure failure)

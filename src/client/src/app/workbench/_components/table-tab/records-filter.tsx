@@ -62,10 +62,10 @@ export function RecordsFilter({ ref, draft, onDraft, applied, problem, busy, com
   }
 
   return (
-    <div className="flex flex-none flex-col gap-1.5 border-b border-border bg-panel px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <form onSubmit={handleSubmit} className="flex min-w-60 flex-1 flex-wrap items-center gap-2">
-          <label title={field.hint} className="flex h-8 min-w-60 flex-1 items-center rounded-md border border-border bg-raised px-2.5 has-[.cm-focused]:outline-2 has-[.cm-focused]:outline-accent">
+    <div className="flex flex-none flex-col gap-1.5 border-b border-border bg-panel px-2.5 py-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <form onSubmit={handleSubmit} className="flex min-w-60 flex-1 flex-wrap items-center gap-1.5">
+          <label title={field.hint} className="flex h-7 min-w-60 flex-1 items-center rounded-md border border-border bg-raised px-2.5 has-[.cm-focused]:outline-2 has-[.cm-focused]:outline-accent">
             <FilterField
               ref={ref}
               value={draft}
@@ -86,10 +86,10 @@ export function RecordsFilter({ ref, draft, onDraft, applied, problem, busy, com
           <span id={hintId} className="sr-only">
             {field.hint}
           </span>
-          <Button type="submit" variant="secondary" size="compact" className="h-8 px-3" disabled={busy}>
+          <Button type="submit" variant="secondary" size="compact" className="h-7 border-border bg-raised/70 px-2.5 text-xs hover:border-border-strong" disabled={busy}>
             {text.apply}
           </Button>
-          <Button type="button" variant="secondary" size="compact" className="h-8 px-3" disabled={!canClear(draft, applied)} onClick={onClear}>
+          <Button type="button" variant="secondary" size="compact" className="h-7 border-border bg-raised/70 px-2.5 text-xs hover:border-border-strong" disabled={!canClear(draft, applied)} onClick={onClear}>
             {text.clear}
           </Button>
         </form>

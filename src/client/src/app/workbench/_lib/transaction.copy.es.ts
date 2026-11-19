@@ -23,6 +23,7 @@ export const transactionCopyEs: TransactionCopy = {
       serializable: "Serializable",
     },
     notAvailable: "Esta base de datos no tiene registro de transacciones",
+    openIsolation: "Termina la transacción con Commit o Rollback para cambiar el nivel",
     commit: "Commit",
     rollback: "Rollback",
     nothingToEnd: "No hay ninguna transacción abierta",

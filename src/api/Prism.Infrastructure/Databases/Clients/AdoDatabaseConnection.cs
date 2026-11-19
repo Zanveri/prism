@@ -218,11 +218,18 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     public bool ManualCommit { get; set; }
 
-    public string IsolationLevel { get; private set; } = IsolationLevels.Default;
+    private string? _pendingIsolationLevel;
+
+    public string IsolationLevel { get; protected set; } = IsolationLevels.Default;
+
+    protected string EffectiveIsolationLevel => _pendingIsolationLevel ?? IsolationLevel;
+
+    /// <summary>RN-ISOL-004: no Informix sobre DRDA, trocar o isolamento reabre a conexão do driver com os atributos DRDA correspondentes.</summary>
+    protected virtual bool ReopensDriverForIsolation => false;
 
     public ETransactionState Transaction => _manualTransaction is null ? ETransactionState.None : _manualFailed ? ETransactionState.Failed : ETransactionState.Open;
 
-    private EDatabaseEngine Engine => QueryDialect switch
+    protected virtual EDatabaseEngine Engine => QueryDialect switch
     {
         ESqlDialect.PostgreSql => EDatabaseEngine.PostgreSql,
         ESqlDialect.Db2 => EDatabaseEngine.Db2,
@@ -757,7 +764,14 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     public async Task<UnitResult<DatabaseFailure>> SetIsolationLevelAsync(string isolationLevel, CancellationToken cancellationToken)
     {
-        if (!IsolationLevels.IsKnown(isolationLevel) || !IsolationLevels.IsSupportedBy(Engine, isolationLevel))
+        if (!IsolationLevels.IsKnown(isolationLevel))
+            return new DatabaseFailure(EDatabaseFailure.IsolationLevelInvalid, Texts.Get("IsolationLevelInvalid", isolationLevel));
+
+        var normalized = IsolationLevels.Normalize(isolationLevel);
+        if (!HasTransactions && normalized != IsolationLevels.Default)
+            return new DatabaseFailure(EDatabaseFailure.TransactionsNotAvailable, Texts.Get("NoTransactionLogForIsolation"));
+
+        if (!IsolationLevels.IsSupportedBy(Engine, normalized))
             return new DatabaseFailure(EDatabaseFailure.IsolationLevelInvalid, Texts.Get("IsolationLevelInvalid", isolationLevel));
 
         if (_manualTransaction is not null)
@@ -772,25 +786,63 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
                 loggingMode = modes.Count > 0 ? modes[0].Trim() : null;
             }
 
-            if (Engine == EDatabaseEngine.Informix && !IsolationLevels.IsSupportedByInformixLogging(loggingMode, isolationLevel))
+            if (Engine == EDatabaseEngine.Informix && !IsolationLevels.IsSupportedByInformixLogging(loggingMode, normalized))
                 return UnitResult.Failure(new DatabaseFailure(EDatabaseFailure.TransactionsNotAvailable, Texts.Get("NoTransactionLogForIsolation")));
+
+            if (ReopensDriverForIsolation)
+                return await ReopenDriverForIsolationAsync(normalized, token);
 
             var sql = Engine switch
             {
-                EDatabaseEngine.PostgreSql => IsolationLevels.PostgresSessionSql(isolationLevel),
-                EDatabaseEngine.Db2 => IsolationLevels.Db2SessionSql(isolationLevel),
-                EDatabaseEngine.Informix => IsolationLevels.InformixSessionSql(isolationLevel, loggingMode),
-                _ => null,
+                EDatabaseEngine.PostgreSql => IsolationLevels.PostgresSessionSql(normalized),
+                EDatabaseEngine.Db2 => IsolationLevels.Db2SessionSql(normalized),
+                EDatabaseEngine.Informix => IsolationLevels.InformixSessionSql(normalized, loggingMode),
+                _ => IsolationLevels.ManagedSessionSql(Engine, normalized),
             };
 
             if (sql is not null)
                 await NonQueryAsync(sql, token);
 
-            IsolationLevel = isolationLevel;
+            IsolationLevel = normalized;
+            _executed = true;
             return UnitResult.Success<DatabaseFailure>();
         }, cancellationToken);
 
         return applied.IsFailure ? applied.Error : applied.Value;
+    }
+
+    private async Task<UnitResult<DatabaseFailure>> ReopenDriverForIsolationAsync(string normalized, CancellationToken cancellationToken)
+    {
+        if (IsolationLevel == normalized || _connection is not { } previousConnection)
+        {
+            IsolationLevel = normalized;
+            _executed = true;
+            return UnitResult.Success<DatabaseFailure>();
+        }
+
+        _pendingIsolationLevel = normalized;
+        var replacement = CreateConnection();
+        var opened = await Send(nameof(SetIsolationLevelAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            await replacement.OpenAsync(cancellationToken);
+            return true;
+        });
+        _pendingIsolationLevel = null;
+
+        if (opened.IsFailure)
+        {
+            await TryAsync(nameof(SetIsolationLevelAsync), () => replacement.DisposeAsync().AsTask());
+            return opened.Error;
+        }
+
+        _connection = replacement;
+        ServerVersion = replacement.ServerVersion;
+        _readOnlyMode = null;
+        IsolationLevel = normalized;
+        _executed = true;
+        await TryAsync(nameof(SetIsolationLevelAsync), () => previousConnection.DisposeAsync().AsTask());
+
+        return UnitResult.Success<DatabaseFailure>();
     }
 
     /// <summary>

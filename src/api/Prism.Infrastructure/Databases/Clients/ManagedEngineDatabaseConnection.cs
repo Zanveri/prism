@@ -17,6 +17,8 @@ internal sealed class ManagedEngineDatabaseConnection(EDatabaseEngine engine, Co
 {
     private const int ConnectTimeoutSeconds = 15;
 
+    protected override EDatabaseEngine Engine => engine;
+
     protected override ESqlDialect QueryDialect => ReadOnlySql.DialectOf(engine);
 
     protected override string? BeginReadOnlySql => null;

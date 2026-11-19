@@ -540,12 +540,12 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         }
 
         // RN-SQL-006: em conexão separada, para o cursor da sessão continuar como está e a sessão continuar livre para "carregar mais".
-        var opened = await ConnectAsync(session.Settings, counting.Token);
+        var opened = await ConnectAsync(session.Settings with { IsolationLevel = session.Connection.IsolationLevel }, counting.Token);
         if (opened.IsFailure)
             return opened.Error;
 
         await using var connection = opened.Value;
-        if (session.Connection.IsolationLevel != IsolationLevels.Default)
+        if (connection.IsolationLevel != session.Connection.IsolationLevel)
         {
             var isolated = await connection.SetIsolationLevelAsync(session.Connection.IsolationLevel, counting.Token);
             if (isolated.IsFailure)
@@ -766,7 +766,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
     private async Task<Result<TransactionInfo, DatabaseFailure>> ChangeIsolationLevelAsync(Session session, string isolationLevel, CancellationToken cancellationToken)
     {
-        if (isolationLevel == session.Connection.IsolationLevel)
+        if (IsolationLevels.IsKnown(isolationLevel) && IsolationLevels.Normalize(isolationLevel) == session.Connection.IsolationLevel)
             return TransactionOf(session);
 
         if (session.Connection.Transaction != ETransactionState.None)
@@ -776,7 +776,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         if (changed.IsFailure)
             return changed.Error with { Transaction = TransactionOf(session) };
 
-        _logger.Information("Sessão {SessionID}: nível de isolamento {IsolationLevel}.", session.Info.ID, isolationLevel);
+        _logger.Information("Sessão {SessionID}: nível de isolamento {IsolationLevel}.", session.Info.ID, session.Connection.IsolationLevel);
 
         return TransactionOf(session);
     }

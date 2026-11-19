@@ -64,13 +64,13 @@ export function ConnectionButtonView({ connection, environment, readOnly = null,
       aria-controls={open ? panelId : undefined}
       aria-keyshortcuts={shortcut.aria}
       onClick={onToggle}
-      className={cn("flex h-8 max-w-80 min-w-0 cursor-pointer items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-sm text-ink hover:border-border-strong", open && "border-accent")}
+      className={cn("flex h-7 max-w-64 min-w-0 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-raised px-2 text-xs text-ink transition-colors hover:border-border-strong", open && "border-accent")}
     >
       {connection === undefined ? (
         <span className="text-muted">{copy.loading}</span>
       ) : connection === null ? (
         <>
-          <PlugIcon className="flex-none text-subtle" />
+          <PlugIcon className="size-3.5 flex-none text-subtle" />
           <span className="text-muted">{copy.none}</span>
         </>
       ) : (
@@ -82,7 +82,7 @@ export function ConnectionButtonView({ connection, environment, readOnly = null,
           {view === null ? null : <CheckDot view={view} />}
         </>
       )}
-      <ChevronIcon aria-hidden className="flex-none text-subtle" />
+      <ChevronIcon aria-hidden className="size-3.5 flex-none text-subtle" />
     </button>
   );
 }

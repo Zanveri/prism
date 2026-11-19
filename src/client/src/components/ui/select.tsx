@@ -39,6 +39,8 @@ type SelectProps = {
   invalid?: boolean;
   /** Rótulo acessível quando o controle não tem um `<label htmlFor>`. */
   "aria-label"?: string;
+  /** Dica nativa ao passar o mouse sobre o gatilho fechado. */
+  title?: string;
   /** O texto que explica o controle (o motivo de ele estar desabilitado, por exemplo). */
   "aria-describedby"?: string;
   /** Identificador de teste repassado ao gatilho combobox. */
@@ -90,7 +92,7 @@ export function panelWidthOf(trigger: { left: number; width: number }, viewportW
  * `position: fixed` em `document.body`, para o `overflow-hidden` de um painel não a recortar.
  * Teclado como o de um `<select>`: setas, Home, End, Enter, espaço, Esc e a inicial da opção.
  */
-export function Select({ id, name, value, onChange, options, placeholder, disabled = false, "aria-disabled": ariaDisabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, "data-testid": dataTestId, onOpen, wideList = false, triggerRef, className }: SelectProps) {
+export function Select({ id, name, value, onChange, options, placeholder, disabled = false, "aria-disabled": ariaDisabled = false, invalid = false, "aria-label": ariaLabel, title, "aria-describedby": ariaDescribedBy, "data-testid": dataTestId, onOpen, wideList = false, triggerRef, className }: SelectProps) {
   const generatedId = useId();
   const triggerId = id ?? `select-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
@@ -271,6 +273,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         data-testid={dataTestId}
         disabled={disabled}
         aria-label={ariaLabel}
+        title={title}
         aria-describedby={ariaDescribedBy}
         aria-disabled={ariaDisabled || undefined}
         aria-haspopup="listbox"

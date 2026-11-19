@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
-import { Select, useToast, type Engine } from "@/components/ui";
+import { DatabaseIcon, Select, useToast, type Engine } from "@/components/ui";
 
 import { loadServerDatabases, treeQuery } from "../_lib/database-sessions.service";
 import { databaseChoices, databaseOfValue, type DatabaseChoices } from "../_lib/tab-database";
@@ -28,29 +28,34 @@ type DatabasePickerViewProps = {
  */
 export function DatabasePickerView({ id, choices, loading, busy, onOpen, onChange }: DatabasePickerViewProps) {
   const reasonId = `${id}-motivo`;
+  const selectedLabel = choices.options.find((option) => option.value === choices.value)?.label;
 
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <label htmlFor={id} className="text-xs text-muted">
+    <div className="flex min-w-0 items-center gap-1.5">
+      <label htmlFor={id} className="sr-only">
         {copy.label}
       </label>
-      <Select
-        id={id}
-        value={choices.value}
-        options={choices.options}
-        onChange={onChange}
-        onOpen={onOpen}
-        disabled={choices.locked || busy}
-        aria-describedby={choices.locked ? reasonId : undefined}
-        wideList
-        className="min-h-8 w-52 py-1 text-sm [&>span:first-child]:truncate"
-      />
+      <div className="relative flex min-w-0 items-center">
+        <DatabaseIcon className="pointer-events-none absolute top-1/2 left-2 z-10 size-3.5 -translate-y-1/2 text-subtle" />
+        <Select
+          id={id}
+          value={choices.value}
+          options={choices.options}
+          onChange={onChange}
+          onOpen={onOpen}
+          disabled={choices.locked || busy}
+          title={selectedLabel === undefined ? copy.label : `${copy.label}: ${selectedLabel}`}
+          aria-describedby={choices.locked ? reasonId : undefined}
+          wideList
+          className="h-7 min-h-7 w-auto max-w-48 min-w-28 border-border py-0 pr-2 pl-7 text-xs transition-colors hover:border-border-strong [&>span:first-child]:truncate"
+        />
+      </div>
       {choices.locked ? (
         <span id={reasonId} className="text-xs text-muted">
           {copy.locked}
         </span>
       ) : null}
-      <span role="status" className="text-xs text-muted">
+      <span role="status" className={loading ? "text-xs text-muted" : "sr-only"}>
         {loading ? copy.loading : null}
       </span>
     </div>

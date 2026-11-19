@@ -30,6 +30,8 @@ const pt = {
     },
     // RN-TX-013: o banco sem log de transação não tem Commit manual.
     notAvailable: "Este banco não tem log de transação",
+    // RN-ISOL-003: com transação aberta o seletor de isolamento fica desabilitado.
+    openIsolation: "Termine a transação com Commit ou Rollback para trocar o nível",
     commit: "Commit",
     rollback: "Rollback",
     // RN-TX-003: sem transação, os dois botões ficam desabilitados; com erro, só o Rollback resta.
